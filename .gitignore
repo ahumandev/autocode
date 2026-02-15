@@ -1,0 +1,39 @@
+# Runtime state (not source code)
+.autocode/
+
+# Node/npm
+node_modules/
+package-lock.json
+.npm
+.yarn
+
+# Bun
+.bun
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+
+# Test coverage
+coverage/

@@ -1,0 +1,23 @@
+{
+  "name": "autocode",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "init": "bun run src/setup.ts",
+    "install:global": "bun run src/install.ts --global",
+    "uninstall:global": "bun run src/install.ts --uninstall"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "latest",
+    "@opencode-ai/plugin": "latest",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.5.0"
+  }
+}
