@@ -4,7 +4,7 @@ import path from "path"
 
 /**
  * Initialize the .autocode/ directory structure in a project.
- * Creates all stage directories, skill directory, and a sample idea.
+ * Creates all stage directories and a sample idea.
  *
  * @param projectRoot - The project root directory
  */
@@ -34,10 +34,6 @@ export async function initAutocode(projectRoot: string): Promise<void> {
     }
   }
 
-  // Create skill directory for plan specs
-  await mkdir(path.join(projectRoot, ".opencode", "skill", "plan"), {
-    recursive: true,
-  })
 
   // Create README
   const readmePath = path.join(autocodeDir, "README.md")
