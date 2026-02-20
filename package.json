@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist",
+    "build": "bun build src/plugin.ts --outdir dist --target bun && tsc --emitDeclarationOnly --noEmit false",
+    "watch": "bun build src/plugin.ts --outdir dist --target bun --watch & tsc --emitDeclarationOnly --noEmit false --watch",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "init": "bun run src/setup.ts",
     "install:global": "bun run src/install.ts --global",
     "uninstall:global": "bun run src/install.ts --uninstall"
   },

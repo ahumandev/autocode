@@ -18,15 +18,6 @@ export interface AutocodeConfig {
   rootDir: string
 }
 
-export interface IdeaFile {
-  /** Filename without .md extension */
-  name: string
-  /** Full filesystem path */
-  path: string
-  /** Markdown content of the idea */
-  content: string
-}
-
 export interface Plan {
   /** Plan directory name (lowercase_underscored) */
   name: string

@@ -8,12 +8,12 @@ import path from "path"
  *
  * @param projectRoot - The project root directory
  */
-export async function initAutocode(projectRoot: string): Promise<void> {
+export async function initAutocode(projectRoot: string, verbose = false): Promise<void> {
   const autocodeDir = path.join(projectRoot, ".autocode")
 
   // Check if already initialized
   const existing = await stat(autocodeDir).catch(() => null)
-  if (existing) {
+  if (existing && verbose) {
     console.log("⚠️  .autocode/ directory already exists at", autocodeDir)
     console.log("   Ensuring all subdirectories exist...")
   }
@@ -119,17 +119,19 @@ Needed for monitoring and load balancer health checks.
     )
   }
 
-  console.log("✅ Autocode initialized at", autocodeDir)
-  console.log("")
-  console.log("Next steps:")
-  console.log("  1. Add idea .md files to .autocode/analyze/")
-  console.log("  2. Run /autocode-analyze in OpenCode to start planning")
+  if (verbose) {
+    console.log("✅ Autocode initialized at", autocodeDir)
+    console.log("")
+    console.log("Next steps:")
+    console.log("  1. Add idea .md files to .autocode/analyze/")
+    console.log("  2. Run /autocode-analyze in OpenCode to start planning")
+  }
 }
 
-// Allow running directly: bun run src/setup.ts
+// Allow running directly: bun run src/setup.ts [projectRoot]
 if (import.meta.main) {
   const projectRoot = process.argv[2] || process.cwd()
-  initAutocode(projectRoot).catch((err) => {
+  initAutocode(projectRoot, true).catch((err) => {
     console.error("Failed to initialize autocode:", err)
     process.exit(1)
   })
