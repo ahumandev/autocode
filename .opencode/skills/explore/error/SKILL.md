@@ -10,12 +10,12 @@ Errors surface as user-visible `❌ …` strings from tools; no custom exception
 ## Error Handling & Logging
 
 - **Plugin init guard** (`src/plugin.ts`): `.catch()` on `initAutocode` — logs via `console.warn`, never throws to host.
-- **Tool execute blocks** (`src/tools/build.ts`, `src/tools/analyze.ts`): All filesystem-mutating tool `execute()` functions wrap their body in `try/catch (err: any)` and return `❌ <message>: ${err.message}` strings to the agent instead of throwing.
-- **Filesystem probes** (`src/setup.ts`, `src/tools/build.ts`, `src/tools/analyze.ts`, `src/install.ts`): `stat(…).catch(() => null)` and `readdir(…).catch(() => [])` are the canonical pattern for optional filesystem checks — they swallow ENOENT silently.
+- **Tool execute blocks** (`src/tools/build.ts`, `src/tools/plan.ts`): All filesystem-mutating tool `execute()` functions wrap their body in `try/catch (err: any)` and return `❌ <message>: ${err.message}` strings to the agent instead of throwing.
+- **Filesystem probes** (`src/setup.ts`, `src/tools/build.ts`, `src/tools/plan.ts`, `src/install.ts`): `stat(…).catch(() => null)` and `readdir(…).catch(() => [])` are the canonical pattern for optional filesystem checks — they swallow ENOENT silently.
 - **Config loading** (`src/core/config.ts`): Bare `catch {}` on `readFile`/`JSON.parse` — any failure silently falls back to `DEFAULTS`. No error is logged.
 - **Install/uninstall CLI** (`src/install.ts`): Per-symlink `try/catch`; failures logged via `console.error` with `❌` prefix; execution continues for remaining links.
 - **CLI entry point** (`src/setup.ts` `import.meta.main`): Top-level `.catch` calls `console.error` then `process.exit(1)`.
-- **SDK calls** (`src/tools/session.ts`, `src/tools/analyze.ts`): `throwOnError: true` passed to all OpenCode SDK client calls — SDK errors propagate as thrown exceptions (caught by the tool's outer `try/catch` where present, or bubble to the plugin host).
+- **SDK calls** (`src/tools/session.ts`, `src/tools/plan.ts`): `throwOnError: true` passed to all OpenCode SDK client calls — SDK errors propagate as thrown exceptions (caught by the tool's outer `try/catch` where present, or bubble to the plugin host).
 
 ## Error-Related Types
 

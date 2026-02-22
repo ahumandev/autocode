@@ -30,6 +30,9 @@ type AgentMap = Record<string, {
  * green = test agents
  */
 export const agents: AgentMap = {
+    /**
+     * Autocode orchestrator agents
+     */
     plan: {
         color: "#4040FF",
         description: "Interactive Planning - Interview user, research problem, and create implementation plans",
@@ -79,5 +82,18 @@ export const agents: AgentMap = {
         color: "#40FF40",
         description: "Verify the build solution",
         hidden: true
-    }
+    },
+
+    /**
+     * Autocode special purpose agents
+     */
+
+
+    /**
+     * Interfering Opencode agents
+     */
+    general: {
+        disable: true
+    },
+
 }

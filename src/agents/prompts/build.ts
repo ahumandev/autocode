@@ -16,43 +16,44 @@ Read the plan. Break it into a flat list of tasks. Each task must:
 
 Write your task list before calling any tools. For each task, note:
 - **Name**: lowercase with underscores (e.g. \`create_user_model\`)
-- **Type**: \`sequential\` or \`parallel\` (see rules below)
+- **Type**: \`sequential\` or \`concurrent\` (see rules below)
 
-### How to choose sequential vs parallel
+### How to choose sequential vs concurrent
 
 A task is **sequential** if it needs output from an earlier task:
 - It uses code, files, types, or config created by an earlier task
 - It extends or modifies something an earlier task builds
 
-A task is **parallel** if it is fully independent from its siblings:
+A task is **concurrent** if it is fully independent from its siblings:
 - It touches different files than its siblings
 - It does not import from or depend on any sibling task
 
-### When to use parallel tasks
+### When to use concurrent tasks
 
-Parallel tasks run at the same time. Use them when multiple independent pieces of work can happen concurrently. Consecutive calls to \`add_parallel_task\` automatically group into the same parallel slot. Once you call \`create_next_task\`, a new sequential step begins and the next \`add_parallel_task\` call will open a new parallel slot.
+Concurrent tasks run at the same time. Use them when multiple independent pieces of work can happen concurrently. Call \`autocode_build_concurrent_task_group\` once to open a new concurrent group, then call \`autocode_build_concurrent_task\` for each task in that group. Once you call \`autocode_build_create_next_task\`, a new sequential step begins and the next concurrent group must be opened with a fresh \`autocode_build_concurrent_task_group\` call.
 
 Example — a plan to "add user authentication":
 
 \`\`\`
 Task list:
-1. install_auth_deps     — sequential   → call create_next_task
-2. create_user_model     — sequential   → call create_next_task
-3. login_endpoint        — parallel     → call add_parallel_task
-4. register_endpoint     — parallel     → call add_parallel_task  (grouped with #3)
-5. logout_endpoint       — parallel     → call add_parallel_task  (grouped with #3 and #4)
-6. add_auth_middleware   — sequential   → call create_next_task
+1. install_auth_deps     — sequential   → call autocode_build_create_next_task
+2. create_user_model     — sequential   → call autocode_build_create_next_task
+3. login_endpoint        — concurrent   → call autocode_build_concurrent_task_group, then autocode_build_concurrent_task
+4. register_endpoint     — concurrent   → call autocode_build_concurrent_task  (same group as #3)
+5. logout_endpoint       — concurrent   → call autocode_build_concurrent_task  (same group as #3 and #4)
+6. add_auth_middleware   — sequential   → call autocode_build_create_next_task
 \`\`\`
 
 Tasks 3–5 run concurrently. Task 6 waits for all of them.
 
 The tool call sequence for this example would be:
-1. \`create_next_task\` → creates \`0-install_auth_deps\`
-2. \`create_next_task\` → creates \`1-create_user_model\`
-3. \`add_parallel_task\` → creates \`2-(parallel)/login_endpoint\`
-4. \`add_parallel_task\` → adds \`2-(parallel)/register_endpoint\`
-5. \`add_parallel_task\` → adds \`2-(parallel)/logout_endpoint\`
-6. \`create_next_task\` → creates \`3-add_auth_middleware\`
+1. \`autocode_build_create_next_task\` → creates \`00-install_auth_deps\`
+2. \`autocode_build_create_next_task\` → creates \`01-create_user_model\`
+3. \`autocode_build_concurrent_task_group\` → creates \`02-concurrent_group\`
+4. \`autocode_build_concurrent_task\` → creates \`02-concurrent_group/login_endpoint\`
+5. \`autocode_build_concurrent_task\` → creates \`02-concurrent_group/register_endpoint\`
+6. \`autocode_build_concurrent_task\` → creates \`02-concurrent_group/logout_endpoint\`
+7. \`autocode_build_create_next_task\` → creates \`03-add_auth_middleware\`
 
 ---
 
@@ -89,7 +90,7 @@ Go through your task list from Step 1 in order, calling one tool per task.
 
 ### Sequential task → \`autocode_build_create_next_task\`
 
-Creates the next sequential step. The order number is assigned automatically.
+Creates the next sequential step. The order number is assigned automatically as a zero-padded two-digit prefix (e.g. \`00-\`, \`01-\`).
 
 | Parameter | Description |
 |---|---|
@@ -98,20 +99,30 @@ Creates the next sequential step. The order number is assigned automatically.
 | \`task_prompt\` | The build instructions (see "Writing task_prompt" below) |
 | \`test_prompt\` | The test instructions (see "Writing test_prompt" below) — optional |
 
-Returns \`✅ Sequential task '<order>-<name>' created (order <N>)\` on success or \`❌ Failed ...\` on error.
+Returns \`✅ Sequential task '<NN>-<name>' created (order <N>)\` on success or \`❌ Failed ...\` on error.
 
-### Parallel task → \`autocode_build_add_parallel_task\`
+### Concurrent task group → \`autocode_build_concurrent_task_group\`
 
-Adds a task to the current parallel slot. If the last task created was also parallel, this task joins the same slot and will run concurrently with it. If the last task was sequential, a new parallel slot is opened automatically.
+Opens a new concurrent group directory (e.g. \`02-concurrent_group\`). Call this once before adding concurrent tasks. The order number is assigned automatically.
 
 | Parameter | Description |
 |---|---|
 | \`plan_name\` | Plan name from Step 2 |
-| \`task_name\` | Lowercase underscore name |
+
+Returns \`✅ Concurrent task group '<NN>-concurrent_group' created\` on success or \`❌ Failed ...\` on error.
+
+### Concurrent task → \`autocode_build_concurrent_task\`
+
+Adds a task inside the current concurrent group. Tasks in the same group run in parallel with each other. Always call \`autocode_build_concurrent_task_group\` first to open the group.
+
+| Parameter | Description |
+|---|---|
+| \`plan_name\` | Plan name from Step 2 |
+| \`task_name\` | Lowercase underscore name (no numeric prefix) |
 | \`task_prompt\` | The build instructions (see "Writing task_prompt" below) |
 | \`test_prompt\` | The test instructions (see "Writing test_prompt" below) — optional |
 
-Returns \`✅ Parallel task '<slot>/<name>' created\` on success or \`❌ Failed ...\` on error.
+Returns \`✅ Concurrent task '<NN>-concurrent_group/<name>' created\` on success or \`❌ Failed ...\` on error.
 
 ### Writing task_prompt
 

@@ -4,84 +4,6 @@ import path from "path"
 
 type Client = PluginInput["client"]
 
-/**
- * Tools for the Build agent to scaffold plan directories and task prompt files
- * inside `.autocode/build/<plan_name>/`.
- *
- * Directory layout:
- *
- *   .autocode/build/<plan_name>/
- *     plan.md                          ← full approved plan text
- *     .review.md                       ← human review instructions
- *     accepted/
- *       <order>-<task_name>/           ← sequential task
- *         build.prompt.md
- *         test.prompt.md  (optional)
- *       <slot>-(parallel)/             ← parallel slot directory
- *         <task_name>/                 ← one sub-dir per parallel task
- *           build.prompt.md
- *           test.prompt.md  (optional)
- */
-/**
- * Pure function that sanitizes a raw name proposal into a valid plan name.
- * Exported so it can be unit-tested independently of the tool infrastructure.
- *
- * Rules applied in order:
- * 1. Trim whitespace. If the input is empty after trimming → return null (invalid).
- * 2. Lowercase all letters.
- * 3. Replace every non-alphanumeric character with `_`.
- * 4. Collapse consecutive underscores to a single `_` (repeat until stable).
- * 5. Strip leading / trailing underscores.
- * 6. If the result is now empty (input contained only invalid characters) → return null (invalid).
- * 7. Split on `_` into words (filtering empty tokens).
- *    - Keep first 7 words as-is.
- *    - Words 8, 9, … are abbreviated to their first character each, then
- *      concatenated into a single 8th token.
- * 8. Rejoin with `_`.
- *
- * Returns the sanitized name string, or `null` when the input yields no valid characters.
- */
-export function generatePlanName(raw: string): string | null {
-    const trimmed = raw.trim()
-
-    // Rule 1 — empty input
-    if (trimmed === "") {
-        return null
-    }
-
-    // Rule 2 — lowercase
-    let name = trimmed.toLowerCase()
-
-    // Rule 3 — non-alphanumeric → underscore
-    name = name.replace(/[^a-z0-9]/g, "_")
-
-    // Rule 4 — collapse consecutive underscores
-    while (name.includes("__")) {
-        name = name.replace(/__+/g, "_")
-    }
-
-    // Rule 5 — strip leading / trailing underscores
-    name = name.replace(/^_+|_+$/g, "")
-
-    // Rule 6 — nothing left after stripping
-    if (name === "") {
-        return null
-    }
-
-    // Rule 7 — word limit with abbreviation
-    const words = name.split("_").filter(Boolean)
-    if (words.length > 7) {
-        const kept = words.slice(0, 7)
-        const abbrev = words.slice(7).map(w => w[0]).join("")
-        kept.push(abbrev)
-        name = kept.join("_")
-    } else {
-        name = words.join("_")
-    }
-
-    return name
-}
-
 export function createBuildTools(client: Client): Record<string, ToolDefinition> {
 
     // ─── internal helpers ───────────────────────────────────────────────────
@@ -90,7 +12,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
      * Read the highest numeric prefix that exists inside a directory.
      * Returns -1 when the directory is empty or has no numbered entries.
      */
-    async function maxOrder(dir: string): Promise<number> {
+    async function lastIndex(dir: string): Promise<number> {
         const entries = await readdir(dir).catch(() => [] as string[])
         let max = -1
         for (const e of entries) {
@@ -117,6 +39,102 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             return a.localeCompare(b)
         })
         return entries[entries.length - 1]
+    }
+
+    /**
+     * Tools for the Build agent to scaffold plan directories and task prompt files
+     * inside `.autocode/build/<plan_name>/`.
+     *
+     * Directory layout:
+     *
+     *   .autocode/build/<plan_name>/
+     *     plan.md                          ← full approved plan text
+     *     .review.md                       ← human review instructions
+     *     accepted/
+     *       <order>-<task_name>/           ← sequential task
+     *         build.prompt.md
+     *         test.prompt.md  (optional)
+     *       <order>-(<group_name>)/        ← concurrent task group directory
+     *         <task_name>/                 ← one sub-dir per concurrent task
+     *           build.prompt.md
+     *           test.prompt.md  (optional)
+     */
+    /**
+     * Pure function that sanitizes a raw name proposal into a valid plan name.
+     * Exported so it can be unit-tested independently of the tool infrastructure.
+     *
+     * Rules applied in order:
+     * 1. Trim whitespace. If the input is empty after trimming → return null (invalid).
+     * 2. Lowercase all letters.
+     * 3. Replace every non-alphanumeric character with `_`.
+     * 4. Collapse consecutive underscores to a single `_` (repeat until stable).
+     * 5. Strip leading / trailing underscores.
+     * 6. If the result is now empty (input contained only invalid characters) → return null (invalid).
+     * 7. Split on `_` into words (filtering empty tokens).
+     *    - Keep first 7 words as-is.
+     *    - Words 8, 9, … are abbreviated to their first character each, then
+     *      concatenated into a single 8th token.
+     * 8. Rejoin with `_`.
+     *
+     * Returns the sanitized name string, or `null` when the input yields no valid characters.
+     */
+    function generatePlanName(raw: string): string | null {
+        const trimmed = raw.trim()
+
+        // Rule 1 — lowercase
+        let name = trimmed.toLowerCase()
+
+        // Rule 2 — non-alphanumeric → underscore
+        name = name.replace(/[^a-z0-9]/g, "_")
+
+        // Rule 3 — collapse consecutive underscores
+        while (name.includes("__")) {
+            name = name.replace(/__+/g, "_")
+        }
+
+        // Rule 4 — strip leading / trailing underscores
+        name = name.replace(/^_+|_+$/g, "")
+
+        // Rule 5 — nothing left after stripping
+        if (name === "") {
+            return null
+        }
+
+        // Rule 6 — word limit with abbreviation
+        const words = name.split("_").filter(Boolean)
+        if (words.length > 7) {
+            const kept = words.slice(0, 7)
+            const abbrev = words.slice(7).map(w => w[0]).join("")
+            kept.push(abbrev)
+            name = kept.join("_")
+        } else {
+            name = words.join("_")
+        }
+
+        return name
+    }
+
+    /**
+     * Returns true when a directory name represents a concurrent task group.
+     * Convention: concurrent group dirs are named `<NN>-concurrent_group`
+     * where NN is a zero-padded two-digit order prefix.
+     */
+    function isConcurrentGroup(name: string): boolean {
+        return /^\d{2}-concurrent_group$/.test(name)
+    }
+
+    /**
+     * Creates a new concurrent task group directory inside accepted/.
+     * Directory name: `<NN>-concurrent_group` (NN = zero-padded lastIndex+1).
+     * Returns the full path to the new group directory.
+     */
+    async function createConcurrentGroupDir(acceptedDir: string): Promise<string> {
+        const order = (await lastIndex(acceptedDir)) + 1
+        const padded = String(order).padStart(2, "0")
+        const slotName = `${padded}-concurrent_group`
+        const slotDir = path.join(acceptedDir, slotName)
+        await mkdir(slotDir, { recursive: true })
+        return slotDir
     }
 
     // ─── tool definitions ────────────────────────────────────────────────────
@@ -152,7 +170,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
         args: {
             name: tool.schema
                 .string()
-                .describe("Raw plan name proposal — provide at most 7 words (space- or underscore-separated)"),
+                .describe("Raw plan name proposal — provide at most 7 words (underscore-separated) that summarize the purpose of the plan"),
             plan_md_content: tool.schema
                 .string()
                 .describe("The full approved plan text to write into plan.md"),
@@ -191,25 +209,22 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
      * If the last created entry was a parallel slot, this new sequential task
      * gets the next order number after that slot.
      */
-    const autocode_build_create_next_task: ToolDefinition = tool({
-        description:
-            "Create the next sequential task inside the plan's accepted/ directory. " +
-            "The numeric prefix is assigned automatically. " +
-            "Call this for tasks that must run after all previously created tasks.",
+    const autocode_build_next_task: ToolDefinition = tool({
+        description: "Use this tool to create the first task in the plan or to create tasks that depends on the successful execution of the previous tasks.",
         args: {
             plan_name: tool.schema
                 .string()
                 .describe("Plan name returned by autocode_build_plan"),
             task_name: tool.schema
                 .string()
-                .describe("Lowercase underscore task name (e.g. install_auth_deps)"),
+                .describe("Lowercase underscore task name (e.g. install_auth_deps) - < 10 words"),
             task_prompt: tool.schema
                 .string()
-                .describe("Full build instructions for the execute agent"),
+                .describe("Full task execution instruction include all context and details necessary to complete the task."),
             test_prompt: tool.schema
                 .string()
                 .optional()
-                .describe("Test verification instructions for the test agent (optional)"),
+                .describe("(Optional) Test instruction how to verify that the `task_prompt` (execution instruction) was implemented successfully."),
         },
         async execute(args, context) {
             const acceptedDir = path.join(
@@ -221,8 +236,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             )
 
             try {
-                const order = (await maxOrder(acceptedDir)) + 1
-                const dirName = `${order}-${args.task_name}`
+                const order = (await lastIndex(acceptedDir)) + 1
+                const padded = String(order).padStart(2, "0")
+                const dirName = `${padded}-${args.task_name}`
                 const taskDir = path.join(acceptedDir, dirName)
 
                 await mkdir(taskDir, { recursive: true })
@@ -239,17 +255,50 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
     })
 
     /**
-     * Adds a task to the current parallel slot.
-     *
-     * - If the last entry in accepted/ is a `-(parallel)` directory, the new
-     *   task is placed inside it as a sub-directory (same slot).
-     * - Otherwise a new parallel slot is opened with the next order number.
+     * Creates a new concurrent task group directory.
+     * Subsequent `autocode_build_concurrent_task` calls will place tasks inside this group.
      */
-    const autocode_build_add_parallel_task: ToolDefinition = tool({
+    const autocode_build_concurrent_task_group: ToolDefinition = tool({
         description:
-            "Add a task to the current parallel slot inside the plan's accepted/ directory. " +
-            "Consecutive calls group tasks into the same parallel slot. " +
-            "Call autocode_build_create_next_task first if you need to open a new sequential step.",
+            "Create a new concurrent task group directory. " +
+            "Subsequent calls to autocode_build_concurrent_task will add tasks to this group, " +
+            "allowing them to run in parallel with each other. " +
+            "Call autocode_build_create_next_task first if you need to close the current group and open a new sequential step.",
+        args: {
+            plan_name: tool.schema
+                .string()
+                .describe("Plan name returned by autocode_build_plan"),
+        },
+        async execute(args, context) {
+            const acceptedDir = path.join(
+                context.worktree,
+                ".autocode",
+                "build",
+                args.plan_name,
+                "accepted",
+            )
+
+            try {
+                const slotDir = await createConcurrentGroupDir(acceptedDir)
+                return `✅ Concurrent task group '${path.basename(slotDir)}' created`
+            } catch (err: any) {
+                return `❌ Failed to create concurrent task group: ${err.message}`
+            }
+        },
+    })
+
+    /**
+     * Adds a task to the current concurrent task group.
+     *
+     * - If the last entry in accepted/ is a concurrent group directory, the new
+     *   task is placed inside it as a sub-directory (same group).
+     * - Otherwise a new group is automatically created using task_name as the group_name.
+     */
+    const autocode_build_concurrent_task: ToolDefinition = tool({
+        description:
+            "Add a task to the current concurrent task group so it runs in parallel with other tasks in the same group. " +
+            "If no concurrent task group exists (autocode_build_concurrent_task_group was not called first), " +
+            "a new group is automatically created using task_name as the group_name.",
         args: {
             plan_name: tool.schema
                 .string()
@@ -275,19 +324,16 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             )
 
             try {
-                // Determine whether the last entry is already a parallel slot
+                // Determine whether the last entry is already a concurrent group
                 const last = await lastEntry(acceptedDir)
                 let slotDir: string
 
-                if (last && last.endsWith("-(parallel)")) {
-                    // Re-use existing parallel slot
+                if (last && isConcurrentGroup(last)) {
+                    // Re-use existing concurrent group
                     slotDir = path.join(acceptedDir, last)
                 } else {
-                    // Open a new parallel slot
-                    const order = (await maxOrder(acceptedDir)) + 1
-                    const slotName = `${order}-(parallel)`
-                    slotDir = path.join(acceptedDir, slotName)
-                    await mkdir(slotDir, { recursive: true })
+                    // No group exists — auto-create one using task_name as the group name
+                    slotDir = await createConcurrentGroupDir(acceptedDir)
                 }
 
                 const taskDir = path.join(slotDir, args.task_name)
@@ -298,27 +344,25 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 }
 
                 const slotName = path.basename(slotDir)
-                return `✅ Parallel task '${slotName}/${args.task_name}' created`
+                return `✅ Concurrent task '${slotName}/${args.task_name}' created`
             } catch (err: any) {
-                return `❌ Failed to create parallel task '${args.task_name}': ${err.message}`
+                return `❌ Failed to create concurrent task '${args.task_name}': ${err.message}`
             }
         },
     })
 
     /**
-     * Writes `.review.md` to finalize the plan for human review.
+     * Writes `.review.md` for human review.
      */
-    const autocode_build_finalize_plan: ToolDefinition = tool({
-        description:
-            "Finalize the plan by writing .review.md with human review instructions. " +
-            "Call this after all tasks have been created.",
+    const autocode_build_review: ToolDefinition = tool({
+        description: "Write human review instructions. Call this after all tasks have been created.",
         args: {
             plan_name: tool.schema
                 .string()
                 .describe("Plan name returned by autocode_build_plan"),
             review_md_content: tool.schema
                 .string()
-                .describe("Human review instructions to write into .review.md"),
+                .describe("Human review instructions to write"),
         },
         async execute(args, context) {
             const planDir = path.join(
@@ -343,8 +387,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
 
     return {
         autocode_build_plan,
-        autocode_build_create_next_task,
-        autocode_build_add_parallel_task,
-        autocode_build_finalize_plan,
+        autocode_build_next_task,
+        autocode_build_concurrent_task_group,
+        autocode_build_concurrent_task,
+        autocode_build_review,
     }
 }

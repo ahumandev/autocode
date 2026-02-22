@@ -38,7 +38,7 @@ All tool groups use a **factory function + closure** pattern instead of module-l
 createXxxTools(client: Client): Record<string, ToolDefinition>
 ```
 
-- `createAnalyzeTools(client)` — `src/tools/analyze.ts`
+- `createAnalyzeTools(client)` — `src/tools/plan.ts`
 - `createBuildTools(client)` — `src/tools/build.ts`
 
 The `client` (OpenCode SDK instance) is captured at plugin-init time and injected via closure. This avoids global state and makes tools independently testable. All three factories are composed in `src/plugin.ts` via spread into a single `tool:` map.
@@ -49,7 +49,7 @@ The `client` (OpenCode SDK instance) is captured at plugin-init time and injecte
 
 ## Side-Effect on File Read
 
-**`autocode_analyze_read`** (`src/tools/analyze.ts`): Renames the current OpenCode session title to the selected filename as a side-effect of reading it. Non-obvious — the tool description does not mention this.
+**`autocode_analyze_read`** (`src/tools/plan.ts`): Renames the current OpenCode session title to the selected filename as a side-effect of reading it. Non-obvious — the tool description does not mention this.
 
 ## Naming Discrepancy (Known Bug / Alias)
 

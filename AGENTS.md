@@ -4,7 +4,7 @@ OpenCode plugin that orchestrates fire-and-forget AI task execution via file-bas
 
 - `src/agents/` — Agent implementations (`plan`, `build`)
 - `src/commands/` — Command handlers (`autocode-analyze`, `autocode-review`, etc.)
-- `src/tools/` — OpenCode tool implementations (`session.ts`, `analyze.ts`, `build.ts`)
+- `src/tools/` — OpenCode tool implementations (`session.ts`, `plan.ts`, `build.ts`)
 - `src/core/` — Core config, types, and constants (`config.ts`, `types.ts`)
 - `src/utils/` — Common utilities that can be reused throughout the project
 

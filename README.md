@@ -111,7 +111,7 @@ plan agent (interactive) → plan_exit → build agent (task generator)
 - **Commands** (`src/commands/`) — CLI commands (`autocode-analyze`, `autocode-review`, etc.)
 - **Tools** (`src/tools/`) — OpenCode tool implementations:
   - `session.ts` — session lifecycle (`spawn_session`)
-  - `analyze.ts` — plan analysis tools
+  - `plan.ts` — plan analysis tools
   - `build.ts` — plan→task conversion tools
 - **Core** (`src/core/`) — Configuration, types, and constants:
   - `config.ts` — async `loadConfig()` and sync `createConfig()`
