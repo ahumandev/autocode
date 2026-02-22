@@ -24,157 +24,24 @@ Autocode introduces a structured workflow with 4 stages:
 5. **Review** — Run `/autocode-review` → approve or reject completed work
 6. **Specs** — Approved plans become OpenCode skills under `/plan-*` for future reference
 
-## Installation
+## Installation & Usage
 
-### Option A: Local Installation (Development)
+See [INSTALL.md](INSTALL.md) for detailed setup instructions (local dev, global install, npm).
 
-Install directly from your local folder without publishing to npm:
-
-**1. Clone or copy the autocode project:**
-```bash
-git clone <repo> ~/path/to/autocode
-# or just use your local development copy
-```
-
-**2. Install dependencies:**
+Quick start:
 ```bash
 cd ~/path/to/autocode
-npm install
+bun install
+bun run src/install.ts --global  # symlink to ~/.config/opencode/
 ```
 
-**3. Add to your global OpenCode config (`~/.config/opencode/opencode.jsonc`):**
-
-```jsonc
-{
-  // ... your existing config ...
-
-  // Autocode agents
-  "agent": {
-    "build": {
-      "mode": "primary",
-      "description": "Converts approved plans into autocode task structure.",
-      "prompt": "{file:~/path/to/autocode/.opencode/agent/build.md}"
-    },
-    "autocode": {
-      "mode": "primary",
-      "description": "Autocode orchestrator.",
-      "prompt": "{file:~/path/to/autocode/.opencode/agent/autocode.md}",
-      "tools": { "write": true, "edit": true, "bash": true, "task": true, "question": true },
-      "permission": { "edit": "allow", "bash": { "*": "allow" }, "task": { "solve": "allow", "test": "allow", "*": "deny" } }
-    },
-    "solve": {
-      "mode": "subagent",
-      "description": "Executes coding instructions.",
-      "prompt": "{file:~/path/to/autocode/.opencode/agent/solve.md}",
-      "tools": { "write": true, "edit": true, "bash": true, "task": false, "question": false },
-      "permission": { "edit": "allow", "bash": { "*": "allow" } }
-    }
-  },
-
-  // Autocode commands
-  "command": {
-    "autocode-analyze": {
-      "description": "Scan .autocode/analyze/ and start planning",
-      "agent": "build",
-      "template": "{file:~/path/to/autocode/.opencode/command/autocode-analyze.md} $ARGUMENTS"
-    },
-    "autocode-resume": {
-      "description": "Resume an interrupted autocode orchestration",
-      "agent": "autocode",
-      "template": "{file:~/path/to/autocode/.opencode/command/autocode-resume.md} $ARGUMENTS"
-    },
-    "autocode-review": {
-      "description": "Review completed plans",
-      "agent": "autocode",
-      "template": "{file:~/path/to/autocode/.opencode/command/autocode-review.md} $ARGUMENTS"
-    },
-    "autocode-status": {
-      "description": "Show status of all autocode stages",
-      "agent": "autocode",
-      "template": "{file:~/path/to/autocode/.opencode/command/autocode-status.md} $ARGUMENTS"
-    },
-    "autocode-abort": {
-      "description": "Emergency abort all running autocode tasks",
-      "agent": "autocode",
-      "template": "{file:~/path/to/autocode/.opencode/command/autocode-abort.md} $ARGUMENTS"
-    },
-    "autocode-init": {
-      "description": "Initialize .autocode/ directory structure",
-      "agent": "build",
-      "template": "{file:~/path/to/autocode/.opencode/command/autocode-init.md} $ARGUMENTS"
-    }
-  },
-
-  // Grant plan/analyze/explore agents access to plan/* skills
-  "permission": {
-    "skill": {
-      "plan-*": "allow"
-    }
-  }
-}
-```
-
-**4. Initialize autocode in your project:**
+Then in your project:
 ```bash
-cd your-project
-opencode  # start OpenCode
-# Then run: /autocode-init
+opencode
+# Run: /autocode-init
 ```
 
-### Option B: Install as OpenCode Plugin (Auto-discovery)
-
-OpenCode auto-discovers plugins from `~/.config/opencode/plugin/` or `.opencode/plugin/`. 
-
-**1. Symlink the plugin file:**
-```bash
-mkdir -p ~/.config/opencode/plugin
-ln -s ~/path/to/autocode/.opencode/plugin/autocode-plugin.ts ~/.config/opencode/plugin/autocode-plugin.ts
-```
-
-**2. Symlink agent, command, and tool directories:**
-```bash
-# Agents
-mkdir -p ~/.config/opencode/agent
-for f in ~/path/to/autocode/.opencode/agent/*.md; do
-  ln -s "$f" ~/.config/opencode/agent/$(basename "$f")
-done
-
-# Commands
-mkdir -p ~/.config/opencode/command
-for f in ~/path/to/autocode/.opencode/command/*.md; do
-  ln -s "$f" ~/.config/opencode/command/$(basename "$f")
-done
-
-# Tools
-mkdir -p ~/.config/opencode/tool
-for f in ~/path/to/autocode/.opencode/tool/*.ts; do
-  ln -s "$f" ~/.config/opencode/tool/$(basename "$f")
-done
-```
-
-### Option C: Install Script
-
-Run the provided install script:
-```bash
-cd ~/path/to/autocode
-bun run src/install.ts --global
-```
-
-This will automatically symlink all files to `~/.config/opencode/`.
-
-### Future: npm Installation (Once Published)
-
-Once published to npm, installation will be:
-```bash
-# Add to opencode.jsonc plugin array:
-{
-  "plugin": ["autocode@latest"]
-}
-```
-
-## Usage
-
-### Commands
+## Commands
 
 | Command | Description |
 |---------|-------------|
@@ -214,39 +81,75 @@ Once published to npm, installation will be:
 
 ## Architecture
 
+### Workflow Diagram
+
 ```
 User
   ↓
 /autocode-analyze
   ↓
 plan agent (interactive) → plan_exit → build agent (task generator)
-                                              ↓
-                                       autocode agent (orchestrator)
-                                              ↓
-                                    ┌─────────────────┐
-                                    │  solve (build)  │ → test agent
-                                    │  (concurrent    │    (sequential
-                                    │   for parallel  │     per task)
-                                    │   tasks)        │
-                                    └─────────────────┘
-                                              ↓
-                                       review → approve
-                                              ↓
-                                    git commit + spec + skill
+                                               ↓
+                                        autocode agent (orchestrator)
+                                               ↓
+                                     ┌─────────────────┐
+                                     │  solve (build)  │ → test agent
+                                     │  (concurrent    │    (sequential
+                                     │   for parallel  │     per task)
+                                     │   tasks)        │
+                                     └─────────────────┘
+                                               ↓
+                                        review → approve
+                                               ↓
+                                     git commit + spec + skill
 ```
+
+### Core Components
+
+- **Plugin** (`src/plugin.ts`) — OpenCode plugin entry point; initializes config and tool factories
+- **Agents** (`src/agents/`) — `plan` (interview/research) and `build` (plan→tasks conversion)
+- **Commands** (`src/commands/`) — CLI commands (`autocode-analyze`, `autocode-review`, etc.)
+- **Tools** (`src/tools/`) — OpenCode tool implementations:
+  - `session.ts` — session lifecycle (`spawn_session`)
+  - `analyze.ts` — plan analysis tools
+  - `build.ts` — plan→task conversion tools
+- **Core** (`src/core/`) — Configuration, types, and constants:
+  - `config.ts` — async `loadConfig()` and sync `createConfig()`
+  - `types.ts` — Zod enums for `Stage` and `TaskStatus`
+- **Setup** (`src/setup.ts`) — Idempotent `.autocode/` directory initialization
+
+### Tool Factories
+
+Tools are created via closure-based dependency injection:
+- `createSessionTools()` — session management
+- `createAnalyzeTools()` — plan analysis
+- `createBuildTools()` — plan→task conversion
+
+Each factory captures the OpenCode client at plugin initialization.
+
+### Error Handling
+
+Autocode uses distributed error handling (no custom exception hierarchy):
+- Pattern: `try/catch` → return `❌ message` strings to agents
+- `src/plugin.ts`: `.catch()` on `initAutocode` → `console.warn`
+- `src/tools/session.ts`: NO try/catch — uses `throwOnError: true`
+- `src/core/config.ts`: bare `catch {}` silently falls back to defaults
+- Error data: `TaskSessionInfo.lastError`, `TaskExecutionResult.error`, `AutocodeConfig.retryCount`
+
+See [SECURITY.md](SECURITY.md) for authorization and input validation details.
 
 ## Development
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Run tests
 bun test
 
-# Type check
-npx tsc --noEmit
+# Watch mode
+bun run watch
 
-# Initialize in a project
-bun run src/setup.ts /path/to/project
+# Build (bundles + generates .d.ts)
+bun run build
 ```

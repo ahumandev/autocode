@@ -1,6 +1,7 @@
 import { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { createSessionTools } from "./tools/session"
 import { createAnalyzeTools } from "./tools/analyze"
+import { createBuildTools } from "./tools/build"
 import { commands } from "./commands"
 import { agents } from "./agents"
 import { initAutocode } from "./setup"
@@ -46,9 +47,9 @@ const autocode: Plugin = async (input: PluginInput) => {
         },
 
         tool: {
-            // Client-dependent tools
             ...createSessionTools(input.client),
             ...createAnalyzeTools(input.client),
+            ...createBuildTools(input.client),
         },
     }
 }

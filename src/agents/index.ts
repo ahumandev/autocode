@@ -13,7 +13,7 @@
  */
 
 import { planPrompt } from "./prompts/plan"
-import { toets2Prompt } from "./prompts/toets2"
+import { buildPrompt } from "./prompts/build"
 
 type AgentMap = Record<string, {
     color?: string
@@ -24,19 +24,14 @@ type AgentMap = Record<string, {
     [key: string]: unknown
 }>
 
+/**
+ * blue = planning/researching agents
+ * red = modifiers
+ * green = test agents
+ */
 export const agents: AgentMap = {
-    toets2: {
-        color: "#DF20DF",
-        description: "Toets",
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            "spawn_session": "allow",
-        },
-        prompt: toets2Prompt,
-    },
     plan: {
-        color: "#DF20DF",
+        color: "#4040FF",
         description: "Interactive Planning - Interview user, research problem, and create implementation plans",
         mode: "primary",
         permission: {
@@ -64,4 +59,25 @@ export const agents: AgentMap = {
         },
         prompt: planPrompt,
     },
+    build: {
+        color: "#FF4040",
+        description: "Build autocode tasks from approved plans with ordered directories and prompt files",
+        hidden: false,
+        mode: "primary",
+        permission: {
+            "*": "deny",
+            "autocode_build*": "allow",
+            question: "allow",
+            skill: {
+                "*": "deny",
+                "plan-*": "allow",
+            },
+        },
+        prompt: buildPrompt,
+    },
+    verify: {
+        color: "#40FF40",
+        description: "Verify the build solution",
+        hidden: true
+    }
 }

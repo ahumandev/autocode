@@ -239,6 +239,22 @@ The **LAST TASK** must be verification. Choose appropriate method:
 - **Commands/scripts** → Use \`os\` agent to verify execution
 - **Config changes** → Use \`explore\` or \`os\` to verify settings
 
+### Proposed Plan Name:
+
+If the plan was derived from an idea file read via \`autocode_analyze_read\`, check whether that file's **base name** (excluding the \`.md\` extension) is already in the correct format: **2 to 7 lowercase alphanumeric words joined by single underscores** (e.g. \`fix_login_auth_bug\`).
+
+- The name is in the correct format when it matches **all** of these criteria:
+  - Contains only lowercase letters, digits, and underscores
+  - Does **not** start or end with an underscore
+  - Contains **no** consecutive underscores
+  - Has between **2 and 7** underscore-separated tokens (words)
+- **If the base name matches** — append the following line verbatim at the very end of the plan text (after all other content):
+  \`\`\`
+  <!-- autocode:plan_name:<base_name_here> -->
+  \`\`\`
+  Replace \`<base_name_here>\` with the actual base name (e.g. \`fix_login_auth_bug\`).
+- **If no idea file was used**, or the base name does **not** match the format — do **not** add any \`<!-- autocode:plan_name:... -->\` line to the plan.
+
 ### After Creating Plan:
 **YOU MUST use the \`submit_plan\` tool** to show the plan to the user.
 
