@@ -14,6 +14,8 @@
 
 import { planPrompt } from "./prompts/plan"
 import { buildPrompt } from "./prompts/build"
+import { orchestratePrompt } from "./prompts/orchestrate"
+import { executePrompt } from "@/agents/prompts/execute";
 
 type AgentMap = Record<string, {
     color?: string
@@ -30,9 +32,7 @@ type AgentMap = Record<string, {
  * green = test agents
  */
 export const agents: AgentMap = {
-    /**
-     * Autocode orchestrator agents
-     */
+
     plan: {
         color: "#4040FF",
         description: "Interactive Planning - Interview user, research problem, and create implementation plans",
@@ -62,6 +62,7 @@ export const agents: AgentMap = {
         },
         prompt: planPrompt,
     },
+
     build: {
         color: "#FF4040",
         description: "Build autocode tasks from approved plans with ordered directories and prompt files",
@@ -70,24 +71,50 @@ export const agents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_build*": "allow",
-            question: "allow",
-            skill: {
-                "*": "deny",
-                "plan-*": "allow",
-            },
+            question: "allow"
         },
         prompt: buildPrompt,
     },
+
+    /**
+     * Orchestrate: drives plan task execution in the correct sequential/concurrent order.
+     * Spawned by the build agent after plan creation.
+     * Only allowed to call autocode_orchestrate_* tools — no direct filesystem access.
+     */
+    "build/orchestrate": {
+        color: "#FF8040",
+        description: "Orchestrate plan task execution — runs tasks in order, concurrently where possible",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            "autocode_orchestrate*": "allow",
+        },
+        prompt: orchestratePrompt,
+    },
+
+    "build/execute": {
+        color: "#FFFF40",
+        description: "Execute a task",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "allow",
+            "autocode*": "deny",
+            "general": "deny",
+            "plan": "deny",
+            "todo*": "deny",
+            "autocode_execute*": "allow",
+            "document/*": "deny"
+        },
+        prompt: executePrompt,
+    },
+
     verify: {
         color: "#40FF40",
         description: "Verify the build solution",
         hidden: true
     },
-
-    /**
-     * Autocode special purpose agents
-     */
-
 
     /**
      * Interfering Opencode agents

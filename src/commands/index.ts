@@ -23,6 +23,33 @@ type CommandMap = Record<string, {
 
 export const commands: CommandMap = {
 
+    "autocode-orchestrate": {
+        description: "List available plans in .autocode/build/ and start orchestrating one with the build/orchestrate agent",
+        agent: "build/orchestrate",
+        template: `
+Follow this workflow:
+
+Use the \`autocode_orchestrate_list\` tool to list all plans available in \`.autocode/build/\`.
+
+- If no plans are found:
+    1. Inform the user that the \`.autocode/build/\` directory contains no plans.
+    2. Ask the user to run the build agent first to create a plan.
+    3. Stop here.
+
+- If only 1 plan is found:
+    1. Inform the user of the plan name and start orchestrating it immediately.
+    2. Call \`autocode_orchestrate_resume\` with that plan name.
+
+- If multiple plans are found:
+    1. Use the \`question\` tool to ask the user which plan to orchestrate:
+        - Header: "Select a Plan"
+        - Question: "Which plan would you like to orchestrate?"
+        - Options: One option per plan directory name found in \`.autocode/build/\`
+    2. Only after the user selects a plan, call \`autocode_orchestrate_resume\` with that plan name.
+    3. Use only the selected plan name for all subsequent tool calls — do not reference any other plan.
+`.trim(),
+    },
+
     "autocode-analyze": {
         description: "Find ideas in .autocode/analyze/ and start planning one with the plan agent",
         agent: "plan",

@@ -81,27 +81,39 @@ opencode
 
 ## Architecture
 
-### Workflow Diagram
+### Idea to Spec flow
 
-```
-User
-  ↓
-/autocode-analyze
-  ↓
-plan agent (interactive) → plan_exit → build agent (task generator)
-                                               ↓
-                                        autocode agent (orchestrator)
-                                               ↓
-                                     ┌─────────────────┐
-                                     │  solve (build)  │ → test agent
-                                     │  (concurrent    │    (sequential
-                                     │   for parallel  │     per task)
-                                     │   tasks)        │
-                                     └─────────────────┘
-                                               ↓
-                                        review → approve
-                                               ↓
-                                     git commit + spec + skill
+```mermaid
+flowchart TB
+  analyst["analyst (human)"] .->|idea| analyze_dir[".autocode/analyze"]
+
+  analyze_dir -->|idea| plan
+
+  plan -->|plan| plannatator
+  plan .->|queries| plan_agents["multiple subagents"]
+  plan_agents .->|results| plan
+  plannatator -->|feedback| plan
+  plannatator -->|approved plan| build
+
+  build .->|new tasks| build_dir[".autocode/build"]
+  build -->|instruction| orchestrate
+
+  build_dir .->|task| orchestrate
+
+  orchestrate .->|task| execute
+  execute .->|instructions| execute_agents["multiple subagents"]
+  execute_agents .->|results| execute
+  execute .->|results| orchestrate
+  orchestrate .->|report| review_dir[".autocode/review"]
+  orchestrate -->|review request| reviewer
+
+  review_dir .->|report| reviewer["reviewer (human)"]
+  reviewer .->|approved work| specs_dir[".autocode/specs"]
+  reviewer -->|reject work| revise
+  revise .->|revised tasks| build_dir
+  revise -->|instruction| orchestrate
+
+  specs_dir .->|specs| plan
 ```
 
 ### Core Components

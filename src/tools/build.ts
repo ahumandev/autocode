@@ -385,11 +385,59 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
         },
     })
 
+    /**
+     * Spawns a new `build/orchestrate` agent session to orchestrate execution of a plan.
+     *
+     * Creates a fresh session titled "Orchestrate: <plan_name>", sends the plan name
+     * as the initial prompt, and returns the session ID so it can be monitored.
+     * The build/orchestrate agent takes over from there autonomously.
+     */
+    const autocode_build_orchestrate: ToolDefinition = tool({
+        description:
+            "Spawn a new `build/orchestrate` agent session to autonomously execute all tasks " +
+            "for the given plan. The orchestrate agent runs tasks in the correct order " +
+            "(sequential then concurrent), handles failures with investigation and fixing, " +
+            "and promotes the plan to .autocode/review/ when all tasks complete. " +
+            "Returns { session_id } of the spawned session.",
+        args: {
+            plan_name: tool.schema
+                .string()
+                .describe("Plan name as returned by autocode_build_plan"),
+        },
+        async execute(args, _context) {
+            try {
+                const created = await client.session.create({
+                    body: { title: `Orchestrate: ${args.plan_name}` },
+                    throwOnError: true,
+                })
+                const sessionId = created.data.id
+
+                // Fire-and-forget: send the plan name to kick off the orchestrate agent.
+                // We do NOT await the prompt — the agent runs independently.
+                client.session.prompt({
+                    path: { id: sessionId },
+                    body: {
+                        agent: "build/orchestrate",
+                        parts: [{ type: "text", text: args.plan_name }],
+                    },
+                    throwOnError: true,
+                }).catch(() => {
+                    // Ignore errors — the orchestrate agent session handles its own failures.
+                })
+
+                return JSON.stringify({ session_id: sessionId })
+            } catch (err: any) {
+                return `❌ Failed to spawn orchestrate session: ${err.message}`
+            }
+        },
+    })
+
     return {
         autocode_build_plan,
         autocode_build_next_task,
         autocode_build_concurrent_task_group,
         autocode_build_concurrent_task,
         autocode_build_review,
+        autocode_build_orchestrate,
     }
 }
