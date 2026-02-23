@@ -1,18 +1,16 @@
-import { describe, test, expect } from "bun:test"
-import { generatePlanName } from "./build"
+import { describe, test, expect, beforeEach, afterEach } from "bun:test"
+import { mkdtemp, mkdir, rm } from "fs/promises"
+import { tmpdir } from "os"
+import path from "path"
+import { generatePlanName, isConcurrentGroup, createBuildTools } from "./build"
 
 /**
- * Unit tests for the `generatePlanName` pure function.
- *
- * This function is used internally by the `autocode_build_plan` tool, which
- * combines name sanitization + plan directory initialization into a single call:
- * - If `generatePlanName` returns null → tool returns { valid: false } (no filesystem changes)
- * - If `generatePlanName` returns a string → tool creates the plan directory and
- *   returns { valid: true, name: finalName }
- *
- * The tool also de-duplicates by appending `_<timestamp>` when the directory
- * already exists, but that behavior is not tested here (requires filesystem).
+ * Unit tests for exported pure functions and the auto-detection behavior of
+ * autocode_build_concurrent_task.
  */
+
+// ─── generatePlanName ────────────────────────────────────────────────────────
+
 describe("generatePlanName", () => {
 
     // ── empty / whitespace-only inputs ──────────────────────────────────────
@@ -187,5 +185,191 @@ describe("generatePlanName", () => {
 
     test("mix of underscores and spaces as word separators", () => {
         expect(generatePlanName("one_two three")).toBe("one_two_three")
+    })
+})
+
+// ─── isConcurrentGroup ────────────────────────────────────────────────────────
+
+describe("isConcurrentGroup", () => {
+    test("returns true for valid concurrent group directory names", () => {
+        expect(isConcurrentGroup("00-concurrent_group")).toBe(true)
+        expect(isConcurrentGroup("01-concurrent_group")).toBe(true)
+        expect(isConcurrentGroup("10-concurrent_group")).toBe(true)
+        expect(isConcurrentGroup("99-concurrent_group")).toBe(true)
+    })
+
+    test("returns false for sequential task directory names", () => {
+        expect(isConcurrentGroup("00-my_task")).toBe(false)
+        expect(isConcurrentGroup("01-login_endpoint")).toBe(false)
+        expect(isConcurrentGroup("02-setup_database")).toBe(false)
+    })
+
+    test("returns false for malformed names", () => {
+        expect(isConcurrentGroup("concurrent_group")).toBe(false)         // no numeric prefix
+        expect(isConcurrentGroup("0-concurrent_group")).toBe(false)       // single-digit prefix
+        expect(isConcurrentGroup("001-concurrent_group")).toBe(false)     // three-digit prefix
+        expect(isConcurrentGroup("01-concurrent_group_extra")).toBe(false) // trailing text
+        expect(isConcurrentGroup("")).toBe(false)
+    })
+})
+
+// ─── autocode_build_concurrent_task auto-detection ───────────────────────────
+
+/**
+ * Integration tests for the auto-detection logic inside autocode_build_concurrent_task.
+ *
+ * We use a real temp directory so the filesystem behaviour is exact.
+ * The tool's `execute` function is called directly via createBuildTools.
+ */
+describe("autocode_build_concurrent_task — auto-detection", () => {
+    // Minimal mock client — these tests never call client methods
+    const mockClient = {} as any
+
+    let tmpDir: string
+    let planName: string
+    let acceptedDir: string
+
+    beforeEach(async () => {
+        tmpDir = await mkdtemp(path.join(tmpdir(), "autocode-test-"))
+        planName = "test_plan"
+        acceptedDir = path.join(tmpDir, ".autocode", "build", planName, "accepted")
+        await mkdir(acceptedDir, { recursive: true })
+    })
+
+    afterEach(async () => {
+        await rm(tmpDir, { recursive: true, force: true })
+    })
+
+    function makeContext() {
+        return { worktree: tmpDir } as any
+    }
+
+    function tools() {
+        return createBuildTools(mockClient)
+    }
+
+    test("creates a new concurrent group when accepted/ is empty", async () => {
+        const { autocode_build_concurrent_task } = tools()
+
+        const result = await autocode_build_concurrent_task.execute(
+            { plan_name: planName, task_name: "task_a", task_prompt: "do task a" },
+            makeContext(),
+        )
+
+        expect(result).toContain("✅")
+        expect(result).toContain("00-concurrent_group/task_a")
+    })
+
+    test("creates a new concurrent group when last entry is a sequential task", async () => {
+        // Pre-create a sequential task directory
+        await mkdir(path.join(acceptedDir, "00-sequential_task"), { recursive: true })
+
+        const { autocode_build_concurrent_task } = tools()
+
+        const result = await autocode_build_concurrent_task.execute(
+            { plan_name: planName, task_name: "task_b", task_prompt: "do task b" },
+            makeContext(),
+        )
+
+        expect(result).toContain("✅")
+        // Should create group at order 01 (after the sequential at 00)
+        expect(result).toContain("01-concurrent_group/task_b")
+    })
+
+    test("adds to existing concurrent group when last entry is already a concurrent group", async () => {
+        // Pre-create a concurrent group (as if a previous task already created it)
+        const groupDir = path.join(acceptedDir, "00-concurrent_group")
+        await mkdir(path.join(groupDir, "task_a"), { recursive: true })
+
+        const { autocode_build_concurrent_task } = tools()
+
+        const result = await autocode_build_concurrent_task.execute(
+            { plan_name: planName, task_name: "task_b", task_prompt: "do task b" },
+            makeContext(),
+        )
+
+        expect(result).toContain("✅")
+        // Must re-use group 00, NOT create group 01
+        expect(result).toContain("00-concurrent_group/task_b")
+        expect(result).not.toContain("01-concurrent_group")
+    })
+
+    test("two consecutive concurrent task calls share the same group", async () => {
+        const { autocode_build_concurrent_task } = tools()
+        const ctx = makeContext()
+
+        const r1 = await autocode_build_concurrent_task.execute(
+            { plan_name: planName, task_name: "task_a", task_prompt: "do a" },
+            ctx,
+        )
+        const r2 = await autocode_build_concurrent_task.execute(
+            { plan_name: planName, task_name: "task_b", task_prompt: "do b" },
+            ctx,
+        )
+
+        expect(r1).toContain("00-concurrent_group/task_a")
+        expect(r2).toContain("00-concurrent_group/task_b")
+    })
+
+    test("sequential task after concurrent group creates new order slot", async () => {
+        // First add a concurrent group with one task
+        const groupDir = path.join(acceptedDir, "00-concurrent_group")
+        await mkdir(path.join(groupDir, "task_a"), { recursive: true })
+
+        const { autocode_build_next_task } = tools()
+
+        const result = await autocode_build_next_task.execute(
+            { plan_name: planName, task_name: "next_sequential", instructions: "do it" },
+            makeContext(),
+        )
+
+        const parsed = JSON.parse(result)
+        expect(parsed.success).toBe(true)
+
+        // Verify the directory was created at order 01
+        const { readdir } = await import("fs/promises")
+        const entries = await readdir(acceptedDir)
+        expect(entries).toContain("01-next_sequential")
+    })
+
+    test("writes build.prompt.md and optional test.prompt.md", async () => {
+        const { autocode_build_concurrent_task } = tools()
+
+        await autocode_build_concurrent_task.execute(
+            {
+                plan_name: planName,
+                task_name: "task_a",
+                task_prompt: "build instructions",
+                test_prompt: "test instructions",
+            },
+            makeContext(),
+        )
+
+        const { readFile } = await import("fs/promises")
+        const buildContent = await readFile(
+            path.join(acceptedDir, "00-concurrent_group", "task_a", "build.prompt.md"),
+            "utf-8",
+        )
+        const testContent = await readFile(
+            path.join(acceptedDir, "00-concurrent_group", "task_a", "test.prompt.md"),
+            "utf-8",
+        )
+
+        expect(buildContent).toBe("build instructions")
+        expect(testContent).toBe("test instructions")
+    })
+
+    test("omits test.prompt.md when test_prompt is not provided", async () => {
+        const { autocode_build_concurrent_task } = tools()
+
+        await autocode_build_concurrent_task.execute(
+            { plan_name: planName, task_name: "task_a", task_prompt: "build instructions" },
+            makeContext(),
+        )
+
+        const { stat } = await import("fs/promises")
+        const testFile = path.join(acceptedDir, "00-concurrent_group", "task_a", "test.prompt.md")
+        const exists = await stat(testFile).catch(() => null)
+        expect(exists).toBeNull()
     })
 })

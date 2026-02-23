@@ -1,47 +1,88 @@
 export const buildPrompt = `
 Your purpose is to convert the plan you had received into executable tasks by calling the build tools in sequence.
 
-Follow Steps 1 through 6 in order. Do not skip steps.
+## Step 1 — Initialize the Plan
+
+Before calling the tool, determine what name to propose:
+
+1. **Check for a plan-name hint** — scan the plan text for a line in this exact format:
+   \`\`\`
+   <!-- autocode:plan_name:{name} -->
+   \`\`\`
+   If found, extract \`{name}\` and use it as your proposed name.
+
+2. **No hint present** — summarize the purpose of the plan or user instructions are with at most 7 words and use that as your proposed name.
+
+3. **Unclear Plan Purpose** — The plan's purpose is unclear when:
+        - The plan-name was omitted AND
+        - It is unclear what the user is trying to build AND 
+        - The user provided no instruction to action anything except to request info/data
+    
+With *unclear plan purpose* (#3):
+     1. use the \`plan_enter\` tool to enter into planning mode. 
+     2. SKIP ALL REMAINING STEPS and respond only to the user's query in planning mode.
+
+Otherwise, with a *clear plan purpose* (#1 or #2) call \`autocode_build_plan\` with that proposed name and the full plan text:
+
+| Parameter | Description |
+|---|---|
+| \`name\` | Proposed name — at most 7 words (space- or underscore-separated) |
+| \`plan_md_content\` | The full approved plan text, copied exactly |
+
+The tool sanitizes your input automatically (lowercases, replaces invalid chars with \`_\`, collapses double underscores, strips leading/trailing underscores, abbreviates words beyond the 7th). The returned name may differ from what you passed. If the name already exists, a timestamp suffix is appended automatically.
+
+The tool returns JSON:
+- \`{ "valid": true, "plan_name": "my_plan" }\` → the plan directory has been created and \`plan.md\` written; **always use the returned \`name\` value in all later steps**, not the name you proposed
+- \`{ "valid": false }\` → your input contained no valid characters after sanitization; no directory was created; choose a different name that describes the plan and call \`autocode_build_plan\` again; repeat until \`valid\` is \`true\`
 
 ---
 
-## Step 1 — Determine Execution Mode
+## Step 2 — Determine Execution Mode
 
 Decide whether to break the input into multiple tasks or treat it as a single task.
 
 **Single-task mode** — use this when the input is a plain user query or request that:
-- Has no headings, no task breakdown, and no clear implementation steps
+- No task breakdown, and no clear implementation steps
 - Can be fully expressed as one self-contained unit of work
 
 In single-task mode: skip the task-decomposition work in Step 2. Your task list is one item whose name summarizes the request and whose \`task_prompt\` is the user's query verbatim, kept fully self-contained with all necessary context.
 
 **Multi-task mode** — use this when the input is a structured plan that:
-- Has headings, numbered steps, or an explicit list of things to build
-- Contains tasks that depend on each other or can run in parallel
+- Has multiple steps/instructions, or an explicit list of things to build
 
 In multi-task mode: proceed normally through Step 2 to decompose the plan into individual tasks.
 
 ---
 
-## Step 2 — Read the Plan and List Tasks
+## Step 3 — Read the Plan and List Tasks
 
 Read the plan. Break it into a flat list of tasks. Each task must:
 - Do one testable thing
 - Be testable on its own (clear pass/fail)
-- Not need code from a task that hasn't run yet
 
-Write your task list before calling any tools. For each task, note:
-- **Name**: lowercase with underscores (e.g. \`create_user_model\`)
-- **Type**: \`sequential\` or \`concurrent\` (see rules below)
+---
+
+## Step 4 — Create Tasks
+
+Go through your task list from Step 3 in order, calling one tool per task.
+
+For each task think about:
+- What background and instructions would an agent with zero context need to perform this task correctly? - This will become the next task's \`instruction\`.
+- What would be the agent's limitations or boundaries? - Add these rules to the \`instruction\`.
+- How would a successful execution look? - Add the expected outcome to the \`instruction\`.
+- Would it be possible to test if the agent completed the task correctly? If so, add test steps to the \`instruction\`.
+- Summarize what the task should accomplish in < 10 words - This will be the \`task_name\`.
+- Decide if this task is sequential or concurrent:       
 
 ### How to choose sequential vs concurrent
 
-A task is **sequential** if it needs output from an earlier task:
-- It uses code, files, types, or config created by an earlier task
+A task is **sequential** if it depends on an earlier task:
+- It depends on the execution of an earlier task
+- It uses code, files, types, config, logs, system state or a report created by an earlier task
 - It extends or modifies something an earlier task builds
 
-A task is **concurrent** if it is fully independent from its siblings:
-- It touches different files than its siblings
+A task is **concurrent** if it is fully independent of its siblings:
+- It touches different files or systems than the earlier tasks
 - It does not import from or depend on any sibling task
 
 ### When to use concurrent tasks
@@ -52,93 +93,48 @@ Example — a plan to "add user authentication":
 
 \`\`\`
 Task list:
-1. install_auth_deps     — sequential   → call autocode_build_create_next_task
-2. create_user_model     — sequential   → call autocode_build_create_next_task
-3. login_endpoint        — concurrent   → call autocode_build_concurrent_task_group, then autocode_build_concurrent_task
-4. register_endpoint     — concurrent   → call autocode_build_concurrent_task  (same group as #3)
-5. logout_endpoint       — concurrent   → call autocode_build_concurrent_task  (same group as #3 and #4)
-6. add_auth_middleware   — sequential   → call autocode_build_create_next_task
+1. install_auth_deps     — sequential   → call autocode_build_next_task
+2. create_user_model     — sequential   → call autocode_build_next_task
+3. login_endpoint        — concurrent   → call autocode_build_concurrent_task
+4. register_endpoint     — concurrent   → call autocode_build_concurrent_task
+5. logout_endpoint       — concurrent   → call autocode_build_concurrent_task
+6. add_auth_middleware   — sequential   → call autocode_build_next_task
 \`\`\`
 
-Tasks 3–5 run concurrently. Task 6 waits for all of them.
+* Tasks 1-2 runs sequentially.
+* Tasks 3–5 run concurrently. 
+* Task 6 waits for all of them to complete before it would execute.
 
-The tool call sequence for this example would be:
-1. \`autocode_build_create_next_task\` → creates \`00-install_auth_deps\`
-2. \`autocode_build_create_next_task\` → creates \`01-create_user_model\`
-3. \`autocode_build_concurrent_task_group\` → creates \`02-concurrent_group\`
-4. \`autocode_build_concurrent_task\` → creates \`02-concurrent_group/login_endpoint\`
-5. \`autocode_build_concurrent_task\` → creates \`02-concurrent_group/register_endpoint\`
-6. \`autocode_build_concurrent_task\` → creates \`02-concurrent_group/logout_endpoint\`
-7. \`autocode_build_create_next_task\` → creates \`03-add_auth_middleware\`
+### Tool response codes
 
----
+Every build tool returns one of the following response shapes:
 
-## Step 3 — Initialize the Plan
+| Response | Meaning | What to do |
+|---|---|---|
+| \`{ retry: true, error: "..." }\` | You provided wrong or missing input parameters | Fix the parameters and call the tool again |
+| \`{ abort: true, error: "..." }\` | Internal system failure — not your fault | **Stop immediately.** Report the exact error to the user and wait for their action. Do NOT call any more tools. |
+| Any success shape | Tool completed successfully | Continue to the next step |
 
-Before calling the tool, determine what name to propose:
+> **CRITICAL — abort handling**: If any tool ever returns \`{ "abort": true, "error": "..." }\`, you MUST:
+> 1. Stop all further tool calls immediately.
+> 2. Tell the user clearly: "The workflow has been aborted due to an internal error: <error>. The plan has been moved to .autocode/failed/. Please investigate and let me know how to proceed."
+> 3. Do not attempt to retry or continue the workflow on your own.
 
-1. **Check for a plan-name hint** — scan the plan text for a line in this exact format:
-   \`\`\`
-   <!-- autocode:plan_name:<name> -->
-   \`\`\`
-   If found, extract \`<name>\` and use it as your proposed name.
+### Sequential task → Use the tool \`autocode_build_next_task\` to creates the next sequential step.
 
-2. **No hint present** — summarize the objective of the plan in fewer than 7 words and use that as your proposed name.
-
-Then call \`autocode_build_plan\` with that proposed name and the full plan text:
-
-| Parameter | Description |
-|---|---|
-| \`name\` | Proposed name — at most 7 words (space- or underscore-separated) |
-| \`plan_md_content\` | The full approved plan text, copied exactly |
-
-The tool sanitizes your input automatically (lowercases, replaces invalid chars with \`_\`, collapses double underscores, strips leading/trailing underscores, abbreviates words beyond the 7th). The returned name may differ from what you passed. If the name already exists, a timestamp suffix is appended automatically.
-
-The tool returns JSON:
-- \`{ "valid": true, "name": "my_plan" }\` → the plan directory has been created and \`plan.md\` written; **always use the returned \`name\` value in all later steps**, not the name you proposed
-- \`{ "valid": false }\` → your input contained no valid characters after sanitization; no directory was created; choose a different name that describes the plan and call \`autocode_build_plan\` again; repeat until \`valid\` is \`true\`
-
----
-
-## Step 4 — Create Tasks
-
-Go through your task list from Step 2 in order, calling one tool per task.
-
-### Sequential task → \`autocode_build_create_next_task\`
-
-Creates the next sequential step. The order number is assigned automatically as a zero-padded two-digit prefix (e.g. \`00-\`, \`01-\`).
-
-| Parameter | Description |
-|---|---|
-| \`plan_name\` | Plan name from Step 3 |
-| \`task_name\` | Lowercase underscore name |
-| \`task_prompt\` | The build instructions (see "Writing task_prompt" below) |
-| \`test_prompt\` | The test instructions (see "Writing test_prompt" below) — optional |
-
-Returns \`✅ Sequential task '<NN>-<name>' created (order <N>)\` on success or \`❌ Failed ...\` on error.
-
-### Concurrent task group → \`autocode_build_concurrent_task_group\`
-
-Opens a new concurrent group directory (e.g. \`02-concurrent_group\`). Call this once before adding concurrent tasks. The order number is assigned automatically.
-
-| Parameter | Description |
-|---|---|
-| \`plan_name\` | Plan name from Step 3 |
-
-Returns \`✅ Concurrent task group '<NN>-concurrent_group' created\` on success or \`❌ Failed ...\` on error.
+Returns:
+ - \`{success: true}\` on success → move on to the next task
+ - \`{ retry: true, error: "..." }\` → fix the parameters and call the tool again
+ - \`{ abort: true, error: "..." }\` → stop immediately and report to the user (see abort handling above)
 
 ### Concurrent task → \`autocode_build_concurrent_task\`
 
-Adds a task inside the current concurrent group. Tasks in the same group run in parallel with each other. Always call \`autocode_build_concurrent_task_group\` first to open the group.
+Adds a task inside the last concurrent task group. Tasks in the same concurrent task group run in concurrently with each other.
 
-| Parameter | Description |
-|---|---|
-| \`plan_name\` | Plan name from Step 3 |
-| \`task_name\` | Lowercase underscore name (no numeric prefix) |
-| \`task_prompt\` | The build instructions (see "Writing task_prompt" below) |
-| \`test_prompt\` | The test instructions (see "Writing test_prompt" below) — optional |
-
-Returns \`✅ Concurrent task '<NN>-concurrent_group/<name>' created\` on success or \`❌ Failed ...\` on error.
+Returns:
+ - \`✅ ...\` on success → move on to the next task
+ - \`{ retry: true, error: "..." }\` → fix the parameters and call the tool again
+ - \`{ abort: true, error: "..." }\` → stop immediately and report to the user (see abort handling above)
 
 ### Writing task_prompt
 

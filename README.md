@@ -81,38 +81,29 @@ opencode
 
 ## Architecture
 
-### Idea to Spec flow
+### Idea to Implementation flow
 
 ```mermaid
 flowchart TB
-  analyst["analyst (human)"] .->|idea| analyze_dir[".autocode/analyze"]
-
-  analyze_dir -->|idea| plan
-
+  analyst["analyst (human)"] <.->|interview| plan
+    
   plan -->|plan| plannatator
   plan .->|queries| plan_agents["multiple subagents"]
   plan_agents .->|results| plan
   plannatator -->|feedback| plan
   plannatator -->|approved plan| build
 
-  build .->|new tasks| build_dir[".autocode/build"]
-  build -->|instruction| orchestrate
-
-  build_dir .->|task| orchestrate
+  build -->|new tasks| orchestrate
 
   orchestrate .->|task| execute
-  execute .->|instructions| execute_agents["multiple subagents"]
+  execute["multiple executors"] .->|instructions| execute_agents["multiple subagents"]
   execute_agents .->|results| execute
   execute .->|results| orchestrate
-  orchestrate .->|report| review_dir[".autocode/review"]
-  orchestrate -->|review request| reviewer
+  orchestrate -->|report| reviewer["reviewer (human)"]
 
-  review_dir .->|report| reviewer["reviewer (human)"]
-  reviewer .->|approved work| specs_dir[".autocode/specs"]
-  reviewer -->|reject work| revise
-  revise .->|revised tasks| build_dir
+  reviewer -->|reject| revise
   revise -->|instruction| orchestrate
-
+  reviewer -->|approve| specs_dir[(".autocode/specs")]
   specs_dir .->|specs| plan
 ```
 
