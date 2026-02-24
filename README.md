@@ -130,16 +130,38 @@ Tools are created via closure-based dependency injection:
 
 Each factory captures the OpenCode client at plugin initialization.
 
+### Common Utilities
+
+All tools use shared validation, response helpers, and error formatting:
+
+**Response Helpers** (`src/utils/validation.ts`):
+- `successResponse()` — Returns result and resets retry counter
+- `retryResponse()` — Returns retry error with escalation to abort after 5 attempts
+- `abortResponse()` — Returns abort error for system failures
+
+**Retry Tracking** (`src/utils/retry-tracker.ts`):
+- Per-session retry counter with `MAX_RETRIES = 5`
+- Automatic escalation from retry → abort when max retries exceeded
+- Implicit reset when switching tools within a session
+
+**Parameter Validators & Formatters** (`src/utils/validation.ts`):
+- 6 validators for null-or-error-string pattern (non-empty, max words, length, format, alphanumeric)
+- String formatters: `toIdentifier()` pipeline for normalizing plan names and identifiers
+
+See [Common Utilities & Cross-Cutting Concerns](.Claude/skills/code/common/SKILL.md) for details.
+
 ### Error Handling
 
-Autocode uses distributed error handling (no custom exception hierarchy):
-- Pattern: `try/catch` → return `❌ message` strings to agents
-- `src/plugin.ts`: `.catch()` on `initAutocode` → `console.warn`
-- `src/tools/session.ts`: NO try/catch — uses `throwOnError: true`
+Autocode uses a unified error contract: all tools return `{ error: "..." }` JSON on failure.
+- **Retry prefix** (`"Retry <tool> again..."`): agent provided bad input — fix and retry up to 5 times
+- **Abort prefix** (`"You MUST abort..."`): internal system failure — stop immediately
+- Distributed error handling (no custom exception hierarchy)
+- `src/plugin.ts`: `.catch()` on `initAutocode` → `console.warn` (silent failure)
+- `src/tools/session.ts`: NO try/catch — uses `throwOnError: true` (propagates errors)
 - `src/core/config.ts`: bare `catch {}` silently falls back to defaults
-- Error data: `TaskSessionInfo.lastError`, `TaskExecutionResult.error`, `AutocodeConfig.retryCount`
+- `failPlan()` helper moves failed plans to `.autocode/failed/` with idempotency guard
 
-See [SECURITY.md](SECURITY.md) for authorization and input validation details.
+See [Error Handling](.Claude/skills/explore/error/SKILL.md) for the full error contract and [SECURITY.md](SECURITY.md) for authorization and input validation details.
 
 ## Development
 

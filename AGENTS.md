@@ -26,8 +26,14 @@ Tools are created via factory functions that capture the OpenCode client at plug
 - TypeScript camelCase ↔ JSON snake_case mapping
 - Zod enums for `Stage` and `TaskStatus`
 
-### Error Handling
-- **Pattern**: `try/catch` → return `❌ message` strings to agents
+### Error Handling & Response Helpers
+- **Unified contract**: All tools return `{ error: "..." }` JSON on failure
+- **Response helpers** (`src/utils/validation.ts`):
+  - `successResponse(sid, toolName, result?)` — Returns result and resets retry counter
+  - `retryResponse(sid, toolName, paramName, constraint, onMaxRetries?)` — Increments retry counter; escalates to abort after 5 retries
+  - `abortResponse(toolName, reason)` — Stateless; used for system/IO failures
+- **Retry tracking** (`src/utils/retry-tracker.ts`):
+- **Parameter validators**: validators for null-or-error-string pattern (non-empty, max words, length, format, alphanumeric)
 - **No custom exceptions** — distributed error handling
 - **Gotchas**:
   - `src/plugin.ts`: `.catch()` on `initAutocode` → `console.warn` (silent failure)

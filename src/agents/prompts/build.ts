@@ -31,9 +31,7 @@ Otherwise, with a *clear plan purpose* (#1 or #2) call \`autocode_build_plan\` w
 
 The tool sanitizes your input automatically (lowercases, replaces invalid chars with \`_\`, collapses double underscores, strips leading/trailing underscores, abbreviates words beyond the 7th). The returned name may differ from what you passed. If the name already exists, a timestamp suffix is appended automatically.
 
-The tool returns JSON:
-- \`{ "valid": true, "plan_name": "my_plan" }\` → the plan directory has been created and \`plan.md\` written; **always use the returned \`name\` value in all later steps**, not the name you proposed
-- \`{ "valid": false }\` → your input contained no valid characters after sanitization; no directory was created; choose a different name that describes the plan and call \`autocode_build_plan\` again; repeat until \`valid\` is \`true\`
+The tool returns JSON: \`{ "plan_name": "my_plan" }\` → the plan directory has been created; **always use the returned \`plan_name\` value in all later steps**, not the name you proposed
 
 ---
 
@@ -111,21 +109,26 @@ Every build tool returns one of the following response shapes:
 
 | Response | Meaning | What to do |
 |---|---|---|
-| \`{ retry: true, error: "..." }\` | You provided wrong or missing input parameters | Fix the parameters and call the tool again |
-| \`{ abort: true, error: "..." }\` | Internal system failure — not your fault | **Stop immediately.** Report the exact error to the user and wait for their action. Do NOT call any more tools. |
-| Any success shape | Tool completed successfully | Continue to the next step |
+| \`{ "error": "Retry <tool> again with a valid <param> parameter which must ..." }\` | You provided wrong or missing parameters | Read the error message, fix the specified parameter, and call the same tool again — retry up to **5 times** per tool call |
+| \`{ "error": "You MUST abort your workflow immediately because ..." }\` | Internal system failure — not your fault | **Stop immediately.** Report the exact error to the user and wait for their action. Do NOT call any more tools. |
+| Any response **without** an \`error\` field | Tool completed successfully | Continue to the next step |
 
-> **CRITICAL — abort handling**: If any tool ever returns \`{ "abort": true, "error": "..." }\`, you MUST:
+> **CRITICAL — abort handling**: If any tool ever returns \`{ "error": "You MUST abort your workflow immediately because ..." }\`, you MUST:
 > 1. Stop all further tool calls immediately.
 > 2. Tell the user clearly: "The workflow has been aborted due to an internal error: <error>. The plan has been moved to .autocode/failed/. Please investigate and let me know how to proceed."
 > 3. Do not attempt to retry or continue the workflow on your own.
 
+> **Retry handling**: If any tool returns \`{ "error": "Retry <tool> again with a valid ..." }\`, you MUST:
+> 1. Read the full error message to understand exactly which parameter is wrong and what constraint it must satisfy.
+> 2. Fix only the specified parameter and call the same tool again.
+> 3. Repeat up to **5 times** total. If the tool still returns an error after 5 attempts, treat it as an abort: report it to the user and stop.
+
 ### Sequential task → Use the tool \`autocode_build_next_task\` to creates the next sequential step.
 
 Returns:
- - \`{success: true}\` on success → move on to the next task
- - \`{ retry: true, error: "..." }\` → fix the parameters and call the tool again
- - \`{ abort: true, error: "..." }\` → stop immediately and report to the user (see abort handling above)
+ - \`{ "success": true }\` on success → move on to the next task
+ - \`{ "error": "Retry ..." }\` → fix the specified parameter and call the tool again (up to 5 times)
+ - \`{ "error": "You MUST abort ..." }\` → stop immediately and report to the user (see abort handling above)
 
 ### Concurrent task → \`autocode_build_concurrent_task\`
 
@@ -133,8 +136,8 @@ Adds a task inside the last concurrent task group. Tasks in the same concurrent 
 
 Returns:
  - \`✅ ...\` on success → move on to the next task
- - \`{ retry: true, error: "..." }\` → fix the parameters and call the tool again
- - \`{ abort: true, error: "..." }\` → stop immediately and report to the user (see abort handling above)
+ - \`{ "error": "Retry ..." }\` → fix the specified parameter and call the tool again (up to 5 times)
+ - \`{ "error": "You MUST abort ..." }\` → stop immediately and report to the user (see abort handling above)
 
 ### Writing task_prompt
 
@@ -178,14 +181,14 @@ Report as PASS or FAIL with details for each check.
 
 ## Step 5 — Finalize the Plan
 
-Call \`autocode_build_finalize_plan\`:
+Call \`autocode_build_review\`:
 
 | Parameter | Description |
 |---|---|
-| \`plan_name\` | Plan name from Step 3 |
+| \`plan_name\` | Plan name from Step 1 |
 | \`review_md_content\` | Human review instructions in the format below |
 
-Returns \`✅ Plan '...' finalized ...\` on success or \`❌ Failed ...\` on error.
+Returns \`✅ Plan '...' finalized ...\` on success or \`{ "error": "..." }\` on error.
 
 Write the \`review_md_content\` in this exact format:
 
@@ -223,9 +226,23 @@ After all tools returned success:
    - **Start orchestration** — spawn the orchestrate agent now to execute all tasks autonomously
    - **Review tasks first** — let the user read the task prompts before execution begins
 3. If the user chooses **Start orchestration**:
-   - Call \`autocode_build_orchestrate\` with the plan name from Step 3.
+   - Call \`autocode_build_orchestrate\` with the plan name from Step 1.
    - Confirm to the user that the orchestrate agent has been spawned and will run all tasks automatically.
    - Do not wait for the orchestrate session to finish — it runs independently.
 4. If the user chooses **Review tasks first**:
    - Wait for the user to signal they are ready, then call \`autocode_build_orchestrate\` when they confirm.
+   
+ ---  
+ 
+ ## Error Handling
+
+Every tool you call could return one of the following response shapes:
+
+| Response | Meaning | What to do |
+|---|---|---|
+| \`{ "error": "Retry <tool> again with a valid <param> parameter which must ..." }\` | You provided wrong or missing parameters | Read the error to understand your mistake and follow the instructions provided by the tool's error message. |
+| \`{ "error": "You MUST abort your workflow immediately because ..." }\` | Internal system failure or max retries exceeded | **Stop immediately.** Tell the user why you had to abort. |
+| Any response **without** an \`error\` field | Tool completed successfully | Continue to the next instruction |
+
+---
 `.trim()

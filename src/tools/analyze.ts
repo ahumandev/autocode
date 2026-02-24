@@ -1,5 +1,11 @@
 import { tool, ToolDefinition, PluginInput } from "@opencode-ai/plugin"
 import path from "path"
+import {
+    validateNonEmpty,
+    retryResponse,
+    abortResponse,
+    successResponse,
+} from "../utils/validation"
 
 type Client = PluginInput["client"]
 
@@ -14,11 +20,22 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
             "List all files in the .autocode/analyze/ directory, each with their name and a short description (first non-empty line, up to 100 characters)",
         args: {},
         async execute(_args, context) {
+            const sid = context.sessionID
             const analyzeDir = path.join(context.worktree, ".autocode", "analyze")
             const { readdir, readFile } = await import("fs/promises")
-            const entries = await readdir(analyzeDir).catch(() => [] as string[])
-            const files = entries.filter((e) => !e.startsWith("."))
 
+            let entries: string[]
+            try {
+                entries = await readdir(analyzeDir)
+            } catch (err: any) {
+                // Directory does not exist or is unreadable — treat as empty (normal state)
+                if (err.code === "ENOENT") {
+                    return successResponse(sid, "autocode_analyze_list", "No files found in .autocode/analyze/")
+                }
+                return abortResponse("autocode_analyze_list", `failed to read .autocode/analyze/ directory: ${err.message}`)
+            }
+
+            const files = entries.filter((e) => !e.startsWith("."))
             const results: { name: string; description: string }[] = []
 
             await Promise.all(
@@ -33,15 +50,15 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
                         const description = firstLine.length > 100 ? firstLine.slice(0, 100) + "..." : firstLine
                         results.push({ name: file, description })
                     } catch {
-                        // skip unreadable files
+                        // skip individual unreadable files — others may still be listed
                     }
                 }),
             )
 
             if (results.length === 0) {
-                return "No files found in .autocode/analyze/"
+                return successResponse(sid, "autocode_analyze_list", "No files found in .autocode/analyze/")
             }
-            return JSON.stringify(results, null, 2)
+            return successResponse(sid, "autocode_analyze_list", results)
         },
     })
 
@@ -54,21 +71,41 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
                 .describe("File name to read from .autocode/analyze/"),
         },
         async execute(args, context) {
+            const sid = context.sessionID
+
+            // ── input validation ──────────────────────────────────────────────
+            const fileNameErr = validateNonEmpty(args.file_name, sid, "autocode_analyze_read", "file_name")
+            if (fileNameErr) return fileNameErr
+
             const analyzeDir = path.join(context.worktree, ".autocode", "analyze")
             const filePath = path.join(analyzeDir, args.file_name)
             const { readFile } = await import("fs/promises")
+
+            let content: string
             try {
-                const content = await readFile(filePath, "utf-8")
-                // Update the current session title to the filename after a successful read
-                await client.session.update({
-                    path: { id: context.sessionID },
-                    body: { title: args.file_name },
-                    throwOnError: true,
-                })
-                return content
+                content = await readFile(filePath, "utf-8")
             } catch (err: any) {
-                return `❌ Failed to read file '${args.file_name}': ${err.message}`
+                if (err.code === "ENOENT") {
+                    return retryResponse(
+                        sid,
+                        "autocode_analyze_read",
+                        "file_name",
+                        `be a file that exists in .autocode/analyze/ — '${args.file_name}' was not found; call autocode_analyze_list to see available files`,
+                    )
+                }
+                return abortResponse("autocode_analyze_read", `failed to read '${args.file_name}': ${err.message}`)
             }
+
+            // Update the current session title to the filename — non-critical, ignore failure
+            client.session.update({
+                path: { id: context.sessionID },
+                body: { title: args.file_name },
+                throwOnError: true,
+            }).catch(() => {
+                // Session title update is best-effort; do not surface this error
+            })
+
+            return successResponse(sid, "autocode_analyze_read", content)
         },
     })
 

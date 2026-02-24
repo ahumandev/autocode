@@ -5,58 +5,76 @@ description: Use this skill to discover common utilities and helpers, or to unde
 
 # Common Utilities & Cross-Cutting Concerns
 
-Shared configuration loading, domain types, filesystem scaffolding, and tool-factory patterns for the Autocode OpenCode plugin.
+Validation, error formatting, and string-normalization helpers shared across all tool implementations.
 
 ## Utilities
 
-### Configuration (`src/core/config.ts`)
-- **`loadConfig(projectRoot)`** (`src/core/config.ts`): Reads `opencode.json`'s `"autocode"` section with JSONC comment-stripping; silently falls back to defaults on any error.
-- **`createConfig(worktree, overrides?)`** (`src/core/config.ts`): Synchronous alternative for tools that already have `worktree` from OpenCode context — avoids async I/O.
-- **DEFAULTS** (`src/core/config.ts`): `retryCount=3`, `autoInstallDependencies=true`, `parallelSessionsLimit=4`. `rootDir` is always derived as `<projectRoot>/.autocode` — never configurable directly.
+### Response Helpers (`src/utils/validation.ts`)
 
-### Domain Types (`src/core/types.ts`)
-- **`Stage`** (`src/core/types.ts`): Zod enum (`"analyze" | "build" | "review" | "specs"`) — dual-use as runtime validator and TypeScript type via `z.infer`.
-- **`TaskStatus`** (`src/core/types.ts`): Zod enum (`"accepted" | "busy" | "tested"`) — maps directly to filesystem subdirectory names inside a plan.
-- **`TaskTree`** (`src/core/types.ts`): Groups of tasks where each group runs in parallel but groups are sequential. Numbered dirs (`0-foo`, `1-bar`) create separate sequential groups; unnumbered dirs share one parallel group. Numeric sort is explicit to avoid `"10" < "2"` alphabetic ordering bug.
-- **`SessionMeta`** (`src/core/types.ts`): Tracks OpenCode session IDs per plan and per task for resumability across interruptions.
+Three functions cover every possible tool return path. All return a `string` (JSON or plain text) ready to `return` directly from `execute`.
 
-### Filesystem Scaffolding (`src/setup.ts`)
-- **`initAutocode(projectRoot, verbose?)`** (`src/setup.ts`): Idempotent — uses `stat()` guards before every `writeFile`; safe to call on every plugin startup. Creates `.gitkeep` files to preserve empty stage dirs in git.
+- **`successResponse(sessionID, toolName, result?)`** — Resets the retry counter for the tool, then returns `result` serialised. Objects are `JSON.stringify`-ed; strings pass through unchanged. Default `result` is `{ success: true }`. **Always call this on success** so a later failure starts from zero retries.
 
-### Plan Name Sanitization (`src/tools/build.ts`)
-- **`generatePlanName(raw)`** (`src/tools/build.ts`): Pure, exported function — 7-word limit with abbreviation of overflow words to initials. Empty input → 40 random hex chars. Exported separately from the tool so it can be unit-tested without the OpenCode tool infrastructure.
+- **`retryResponse(sessionID, toolName, paramName, constraint, onMaxRetries?)`** — Increments the retry counter via `trackFailure`. Returns `{ error: "Retry <toolName> again with a valid <paramName> parameter which must <constraint>" }`. Once `MAX_RETRIES` (5) is reached, calls `onMaxRetries()` instead — default escalates to `abortResponse`. Use for **agent-correctable** parameter errors.
 
-### Directory Order Helpers (`src/tools/build.ts`)
-- **`maxOrder(dir)`** (`src/tools/build.ts`): Internal async helper — reads highest numeric prefix (`N-`) in a directory; returns `-1` when empty. Used to auto-assign sequential task order numbers.
-- **`lastEntry(dir)`** (`src/tools/build.ts`): Internal async helper — sorts entries numerically then alphabetically; detects whether the last entry is a `-(parallel)` slot to decide whether to reuse or open a new slot.
+- **`abortResponse(toolName, reason)`** — Stateless. Returns `{ error: "You **MUST ABORT** your workflow immediately and prompt the user to investigate the failure of the tool call '<toolName>' with reason: <reason>" }`. Use for **system/IO failures** that the agent cannot fix by retrying.
 
-## Tool Factory Pattern (Cross-Cutting)
+### Retry Tracker (`src/utils/retry-tracker.ts`)
 
-All tool groups use a **factory function + closure** pattern instead of module-level singletons:
+Module-level `Map` keyed by `sessionID`. Each session stores **one** `{ tool, count }` entry — switching to a different `toolName` implicitly resets the count to 0 for that new tool.
+
+- **`MAX_RETRIES`** — `5`. Exported constant; `shouldAbort` becomes `true` when `retriesLeft <= 0`.
+- **`trackFailure(sessionID, toolName)`** — Increments count, returns `{ retriesLeft, shouldAbort }`. Called internally by `retryResponse`; do not call directly from tools.
+- **`resetTool(sessionID, toolName)`** — Zeroes the count for a specific tool. Called internally by `successResponse`.
+- **`resetSession(sessionID)`** — Deletes the session entry entirely. Useful in tests.
+- **`getStatus(sessionID, toolName)`** — Read-only status check; does not mutate state.
+
+> **Gotcha:** only one tool is tracked per session at a time. If a tool calls `retryResponse` for `tool-a` twice, then `retryResponse` for `tool-b` once, the `tool-a` count is lost. Counts are per-(session, most-recent-tool) pair, not per-(session, tool) pair.
+
+### Parameter Validators (`src/utils/validation.ts`)
+
+Each validator returns **`null` on pass** or a **complete JSON error string on failure** (ready to `return` from `execute`). All failures route through `retryResponse`, so they automatically participate in retry escalation.
+
+| Function | Key behaviour |
+|---|---|
+| `validateNonEmpty(value, sid, toolName, paramName)` | Fails if `undefined`, `null`, or blank after trim |
+| `validateHasAlphanumeric(value, sid, toolName, paramName)` | Strips all non-alphanumeric chars; fails if nothing remains — run **before** `toIdentifier` to catch all-symbol inputs |
+| `validateMaxWords(value, maxWords, sid, toolName, paramName)` | Splits on whitespace **and underscores** — `"foo_bar_baz"` counts as 3 words |
+| `validateMinLength(value, minLength, sid, toolName, paramName)` | Checks trimmed length |
+| `validateMaxLength(value, maxLength, sid, toolName, paramName)` | Checks trimmed length |
+| `validateFormat(value, pattern, formatDesc, sid, toolName, paramName)` | Tests `pattern.test(value)`; `formatDesc` appears verbatim in the error message |
+
+### Parameter Formatters (`src/utils/validation.ts`)
+
+Pure string transforms with no side effects. Intended to be composed in order.
+
+- **`toIdentifier(value)`** — Full pipeline: trim → lowercase → replace non-alphanumeric with `_` → collapse consecutive `_` → strip leading/trailing `_`. Produces a safe filesystem/identifier token.
+- **`toLowercase(value)`** — `value.toLowerCase()`.
+- **`replaceSpecialChars(value, replacement?)`** — Replaces every non-`[a-z0-9]` char with `replacement` (default `_`). Assumes input is already lowercased.
+- **`collapseUnderscores(value)`** — Collapses `__+` to a single `_`.
+- **`stripEdgeUnderscores(value)`** — Removes leading and trailing `_`.
+
+---
+
+## Standard Tool Execute Pattern
+
+Every tool `execute` function follows this exact structure:
 
 ```
-createXxxTools(client: Client): Record<string, ToolDefinition>
+1. const sid = context.sessionID
+2. Run validators in order, returning early on non-null:
+     const err = validateXxx(args.foo, sid, "tool_name", "foo")
+     if (err) return err
+3. Perform business logic / IO inside try/catch:
+     - On IO success:  return successResponse(sid, "tool_name", payload)
+     - On agent error: return retryResponse(sid, "tool_name", "param", "constraint")
+     - On system error: return abortResponse("tool_name", err.message)
 ```
 
-- `createAnalyzeTools(client)` — `src/tools/plan.ts`
-- `createBuildTools(client)` — `src/tools/build.ts`
+`build.ts` tools that touch the filesystem also call `failPlan()` before `abortResponse` to move the plan directory to `.autocode/failed/` as a best-effort cleanup step.
 
-The `client` (OpenCode SDK instance) is captured at plugin-init time and injected via closure. This avoids global state and makes tools independently testable. All three factories are composed in `src/plugin.ts` via spread into a single `tool:` map.
+Note: `autocode_analyze_list` has no `sid` / validators because it takes no parameters; it uses `abortResponse` directly for IO errors.
 
-## Plugin Config Hook (Cross-Cutting)
-
-**`plugin.ts` `config(cfg)` hook** (`src/plugin.ts`): Merges agents with **per-agent spreading** (`{ ...agentDef, ...cfg.agent[name] }`) so a user's partial override (e.g. just `model`) doesn't silently discard the plugin's `prompt` or `permissions`. Commands use a simpler spread (`{ ...commands, ...cfg.command }`) — user commands always win.
-
-## Side-Effect on File Read
-
-**`autocode_analyze_read`** (`src/tools/plan.ts`): Renames the current OpenCode session title to the selected filename as a side-effect of reading it. Non-obvious — the tool description does not mention this.
-
-## Naming Discrepancy (Known Bug / Alias)
-
-**`autocode_build_plan_name`** is the variable name in `build.ts` (line 131) but it is exported under the key **`autocode_build_validate_plan_name`** (line 349). Agent prompts and tool descriptions reference the exported name. The variable name is an internal alias only.
-
-## Install Utility (`src/install.ts`)
-
-**`install.ts`** (`src/install.ts`): Dev-only script — symlinks `.opencode/` agent/command/tool/plugin files into `~/.config/opencode/` for local testing. Not part of the npm package runtime; run via `bun run src/install.ts [--global|--uninstall]`.
+---
 
 **IMPORTANT**: Update `.opencode/skills/code/common/SKILL.md` whenever a common util was added or modified.
