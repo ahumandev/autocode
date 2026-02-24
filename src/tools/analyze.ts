@@ -5,7 +5,7 @@ import {
     retryResponse,
     abortResponse,
     successResponse,
-} from "../utils/validation"
+} from "@/utils/validation"
 
 type Client = PluginInput["client"]
 
@@ -55,9 +55,6 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
                 }),
             )
 
-            if (results.length === 0) {
-                return successResponse(sid, "autocode_analyze_list", "No files found in .autocode/analyze/")
-            }
             return successResponse(sid, "autocode_analyze_list", results)
         },
     })

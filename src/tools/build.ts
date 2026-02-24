@@ -7,7 +7,7 @@ import {
     retryResponse,
     abortResponse,
     successResponse,
-} from "../utils/validation"
+} from "@/utils/validation"
 
 type Client = PluginInput["client"]
 
@@ -478,8 +478,8 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 )
                 return successResponse(sid, "autocode_build_review", `✅ Plan '${args.plan_name}' finalized — .review.md written`)
             } catch (err: any) {
-                await failPlan(context.worktree, args.plan_name, `autocode_build_review failed to write .review.md: ${err.message}`)
-                return abortResponse("autocode_build_review", `failed to write .review.md for plan '${args.plan_name}': ${err.message}`)
+                await failPlan(context.worktree, args.plan_name, `autocode_build_review failed to write review: ${err.message}`)
+                return abortResponse("autocode_build_review", `failed to write review for plan '${args.plan_name}': ${err.message}`)
             }
         },
     })
