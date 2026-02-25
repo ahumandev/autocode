@@ -35,90 +35,27 @@ The tool returns JSON: \`{ "plan_name": "my_plan" }\` → the plan directory has
 
 ---
 
-## Step 2 — Determine Execution Mode
+## Step 2 — Scan the Plan and Prepare a Lightweight Outline
 
-Decide whether to break the input into multiple tasks or treat it as a single task.
+Read the plan to understand its overall scope. Produce a **brief outline only** — a short numbered list where each entry is:
+- A tentative task name (< 10 words)
+- Whether it is **sequential** or **concurrent** with its neighbors
+- A one-line summary of what it covers
 
-**Single-task mode** — use this when the input is a plain user query or request that:
-- No task breakdown, and no clear implementation steps
-- Can be fully expressed as one self-contained unit of work
+**IMPORTANT**: This outline is just a roadmap. Do NOT write detailed instructions yet. Keep each entry to one line. The detailed thinking happens in Step 3 when you create each task.
 
-In single-task mode: skip the task-decomposition work in Step 3. Your task list is one item whose name summarizes the request and whose \`task_prompt\` is the user's query verbatim, kept fully self-contained with all necessary context.
+### How to identify task boundaries
 
-**Multi-task mode** — use this when the input is a structured plan that:
-- Has multiple steps/instructions, or an explicit list of things to build
+Each task MUST preferably:
+- Apply only 1 file change per task, OR
+- Implement only 1 feature per task, OR
+- Fix only 1 problem per task, OR
+- Research only 1 topic per task, OR
+- Write only 1 article per task
 
-In multi-task mode: proceed normally through Step 3 to decompose the plan into individual tasks.
-
----
-
-## Step 3 — Read the Plan and List Tasks
-
-Read the plan. Break it into a flat list of tasks. Each task MUST: 
-    - Preferably:
-        - apply only 1 file change per task or 
-        - implement only 1 feature per task or 
-        - fix only 1 problem per task or
-        - research only 1 topic per task or
-        - write only 1 article per task
-    - Be testable on its own (clear pass/fail): 
-        - combine multiple planned steps (instructions) in the same task only if necessary to have something to testable
-        - some work require manual testing from a human (note those)
-
-Each task should contain these sections:
-
-- Purpose
-- Instructions
-- Constraints
-- Response
-
-### Purpose
-
-< 20 words motivate why this task is necessary and what it should accomplish
-
-### Instructions
-
-Each task must contain these instructions:
-
-- STEP 1 - IMPLEMENTATION: 
-    - detailed step-by-step instructions on exactly what the agent should do
-    - include examples (if available from the original plan)
-- STEP 2 - TEST: 
-    - For coding tasks: instructions on how to proof that STEP 1 was **CORRECTLY** implemented (e.g. unit test, use browser to check UI behaviour, what to expect in logs, which files should exist/removed, expected DB state, etc.)
-    - For reporting tasks: the gathered info is CORRECT, contains all requested info, formatted as expected
-    - For documentation tasks: the updated documentation is CORRECT, relevant, understandable within constraints (not to scares or too much fluff)
-- STEP 3 - TIDY:
-    Add instructions to the task that will prompt the agent to critically review its own changes (NOT other code - ONLY recent changes):
-        - clean up duplicated code/comments/documentation
-        - apply performance and memory optimization on modified code (if applicable)
-        - address potential security vulnerabilities that could have been caused by recent changes
-        - ensure that implemented code conform to standards: readable, maintainable, consistent with existing design patterns
-        - document non-obvious code/config changes: explain reason *WHY* it was necessary - not how
-        (only include the instructions that applies to the purpose of current task)
-- STEP 4 - RESPONSE
-    Add instructions on how the agent must respond to the task orchestrator:
-        - Reporting tasks: should respond only with the final report with no additional comments or instructions.
-        - Execution tasks:
-            1. Respond with a summary explaining what changed in < 20 words
-            2. Respond with instructions to how a human reviewer on how he could potentially verify the task's implementation
-    
-### Constraints      
-
-Some tasks may optionally include this section that defines: Permissions or scope of work, e.g. only modify certain files, fix only this endpoint, etc.
-
----
-
-## Step 4 — Create Tasks
-
-Go through your task list from Step 3 in order, calling one tool per task.
-
-For each task think about:
-- What background and instructions would an agent with zero context need to perform this task correctly? - This will become the next task's \`instruction\`.
-- What would be the agent's limitations or boundaries? - Add these rules to the \`instruction\`.
-- How would a successful execution look? - Add the expected outcome to the \`instruction\`.
-- Would it be possible to test if the agent completed the task correctly? If so, add test steps to the \`instruction\`.
-- Summarize what the task should accomplish in < 10 words - This will be the \`task_name\`.
-- Decide if this task is sequential or concurrent:       
+Each task MUST be testable on its own (clear pass/fail):
+- Combine multiple planned steps in the same task only if necessary to produce something testable
+- Some work requires manual testing from a human — note those
 
 ### How to choose sequential vs concurrent
 
@@ -131,143 +68,103 @@ A task is **concurrent** if it is fully independent of its siblings:
 - It touches different files or systems than the earlier tasks
 - It does not import from or depend on any sibling task
 
-### When to use concurrent tasks
+---
 
-Concurrent tasks run at the same time. Use them when multiple independent pieces of work can happen concurrently. Call \`autocode_build_concurrent_task_group\` once to open a new concurrent group, then call \`autocode_build_concurrent_task\` for each task in that group. Once you call \`autocode_build_create_next_task\`, a new sequential step begins and the next concurrent group must be opened with a fresh \`autocode_build_concurrent_task_group\` call.
+## Step 3 — Create Tasks Incrementally
+
+**CRITICAL — You MUST create tasks incrementally — process one task at a time, think deeply about it, write it to disk via the tool, then move on. NEVER draft all tasks in your head first.**
+
+Work through your outline from Step 2 **one task at a time**. For each task, follow this cycle:
+
+### 3a. Think and Plan This Task
+
+Before calling any tool, think carefully about the current task:
+
+1. **What background does the executing agent need?** — The agent has ZERO context. It cannot see the plan, other tasks, or prior work. Everything it needs must be in the instructions you write.
+2. **What are the exact implementation steps?** — Be specific: file paths, function names, patterns to follow, code examples from the project.
+3. **How will correctness be verified?** — Unit tests, browser checks, log output, file existence, expected DB state, etc.
+4. **What are the boundaries?** — Which files may be touched, what should NOT be changed.
+5. **What would a successful outcome look like?**
+
+### 3b. Write and Submit the Task
+
+Call the appropriate tool (\`autocode_build_next_task\` or \`autocode_build_concurrent_task\`) to create the task immediately.
+
+#### Task instructions format
+
+Every task's instructions MUST contain these sections:
+
+**Purpose** (< 20 words): Why this task is necessary and what it should accomplish.
+
+**Instructions**: Detailed step-by-step instructions organized as:
+
+- STEP 1 — IMPLEMENTATION:
+    - Detailed step-by-step instructions on exactly what the agent should do
+    - Include full code examples (only if original plan included relevant examples for this particular task)
+- STEP 2 — TEST:
+    - For coding tasks: instructions on how to prove that STEP 1 was **CORRECTLY** implemented (e.g. unit test, use browser to check UI behaviour, what to expect in logs, which files should exist/removed, expected DB state, etc.)
+    - For reporting tasks: the gathered info of STEP 1 was contains all requested info and formatted as expected
+    - For documentation tasks: the updated documentation is CORRECT, relevant, understandable within constraints (not too scarce or too much fluff)
+- STEP 3 — TIDY:
+    Instructions for the agent to critically review its own changes (NOT other code — ONLY recent changes):
+        - Clean up duplicated code/comments/documentation
+        - Apply performance and memory optimization on modified code (if applicable)
+        - Address potential security vulnerabilities that could have been caused by recent changes
+        - Ensure implemented code conforms to standards: readable, maintainable, consistent with existing design patterns
+        - Document non-obvious code/config changes: explain reason *WHY* it was necessary — not how
+        (only include the instructions that apply to the purpose of current task)
+- STEP 4 — RESPONSE:
+    Instructions on how the agent must respond to the task orchestrator:
+        - Reporting tasks: respond only with the final report with no additional comments or instructions.
+        - Execution tasks:
+            1. Respond with a summary explaining what changed in < 20 words
+            2. Respond with instructions for a human reviewer on how they could potentially verify the task's implementation
+
+**Constraints** (optional): Permissions or scope of work, e.g. only modify certain files, fix only this endpoint, etc.
+
+#### Sequential task → \`autocode_build_next_task\`
+
+Use this for tasks that depend on earlier tasks.
+
+| Parameter | Description |
+|---|---|
+| \`plan_name\` | Plan name from Step 1 |
+| \`task_name\` | Summarize what the task accomplishes in < 10 words |
+| \`instructions\` | The full self-contained task instructions (see format above) |
+
+#### Concurrent tasks → \`autocode_build_concurrent_task\`
+
+Use this for tasks that are independent of their siblings. Call \`autocode_build_concurrent_task\` for each task in the group. Once you call \`autocode_build_next_task\`, a new sequential step begins and the next concurrent group must be opened with a fresh call.
+
+| Parameter | Description |
+|---|---|
+| \`plan_name\` | Plan name from Step 1 |
+| \`task_name\` | Summarize what the task accomplishes in < 10 words |
+| \`instructions\` | The full self-contained task instructions (see format above) |
 
 Example — a plan to "add user authentication":
 
 \`\`\`
 Task list:
-1. install_auth_deps     — sequential   → call autocode_build_next_task
-2. create_user_model     — sequential   → call autocode_build_next_task
-3. login_endpoint        — concurrent   → call autocode_build_concurrent_task
-4. register_endpoint     — concurrent   → call autocode_build_concurrent_task
-5. logout_endpoint       — concurrent   → call autocode_build_concurrent_task
-6. add_auth_middleware   — sequential   → call autocode_build_next_task
+1. install_auth_deps     — sequential
+2. create_user_model     — sequential
+3. login_endpoint        — concurrent
+4. register_endpoint     — concurrent
+5. logout_endpoint       — concurrent
+6. add_auth_middleware   — sequential
 \`\`\`
 
-* Tasks 1-2 runs sequentially.
-* Tasks 3–5 run concurrently. 
-* Task 6 waits for all of them to complete before it would execute.
+* Tasks 1-2: call \`autocode_build_next_task\` for each
+* Tasks 3-5: call \`autocode_build_concurrent_task\` for each (they form one concurrent group)
+* Task 6: call \`autocode_build_next_task\` (starts a new sequential step after the concurrent group)
 
-### Tool response codes
-
-Every build tool returns one of the following response shapes:
-
-| Response | Meaning | What to do |
-|---|---|---|
-| \`{ "error": "Retry <tool> again with a valid <param> parameter which must ..." }\` | You provided wrong or missing parameters | Read the error message, fix the specified parameter, and call the same tool again — retry up to **5 times** per tool call |
-| \`{ "error": "You MUST abort your workflow immediately because ..." }\` | Internal system failure — not your fault | **Stop immediately.** Report the exact error to the user and wait for their action. Do NOT call any more tools. |
-| Any response **without** an \`error\` field | Tool completed successfully | Continue to the next step |
-
-> **CRITICAL — abort handling**: If any tool ever returns \`{ "error": "You MUST abort your workflow immediately because ..." }\`, you MUST:
-> 1. Stop all further tool calls immediately.
-> 2. Tell the user clearly: "The workflow has been aborted due to an internal error: <error>. The plan has been moved to .autocode/failed/. Please investigate and let me know how to proceed."
-> 3. Do not attempt to retry or continue the workflow on your own.
-
-> **Retry handling**: If any tool returns \`{ "error": "Retry <tool> again with a valid ..." }\`, you MUST:
-> 1. Read the full error message to understand exactly which parameter is wrong and what constraint it must satisfy.
-> 2. Fix only the specified parameter and call the same tool again.
-> 3. Repeat up to **5 times** total. If the tool still returns an error after 5 attempts, treat it as an abort: report it to the user and stop.
-
-### Sequential task → Use the tool \`autocode_build_next_task\` to creates the next sequential step.
-
-Returns:
- - \`{ "success": true }\` on success → move on to the next task
- - \`{ "error": "Retry ..." }\` → fix the specified parameter and call the tool again (up to 5 times)
- - \`{ "error": "You MUST abort ..." }\` → stop immediately and report to the user (see abort handling above)
-
-### Concurrent task → \`autocode_build_concurrent_task\`
-
-Adds a task inside the last concurrent task group. Tasks in the same concurrent task group run in concurrently with each other.
-
-Returns:
- - \`✅ ...\` on success → move on to the next task
- - \`{ "error": "Retry ..." }\` → fix the specified parameter and call the tool again (up to 5 times)
- - \`{ "error": "You MUST abort ..." }\` → stop immediately and report to the user (see abort handling above)
-
-### Writing task_prompt
-
-The execute agent sees ONLY this text — no plan, no other tasks, no context beyond what you write here. Make it completely self-contained:
-
-1. **Context** (2–3 sentences): what project this is and why this task exists
-2. **Objective** (1 sentence): what to accomplish
-3. **Files**: exact file paths to create or modify
-4. **Implementation steps**: numbered list of what to do
-5. **Code examples**: reference patterns from the existing project when possible
-6. **Dependencies**: any packages to install
-
-End every task_prompt with this exact block:
-
-\`\`\`
-## Error Recovery
-If you encounter errors during implementation:
-- Missing dependency → Install it with the appropriate package manager
-- Missing type/interface → Create it in the appropriate location
-- Config not found → Create a default configuration
-- Import error → Check and fix import paths
-- Do NOT ask for help — resolve issues autonomously
-\`\`\`
-
-### Writing test_prompt
-
-The test agent can only run bash commands — it cannot edit files. Write:
-
-1. **What to verify**: bullet list of checks
-2. **Commands to run**: exact shell commands
-3. **Expected outputs**: what success looks like
-
-End every test_prompt with this exact block:
-
-\`\`\`
-## Expected Result
-Report as PASS or FAIL with details for each check.
-\`\`\`
+Repeat the cycle (3a → 3b) until all tasks are created.
 
 ---
 
-## Step 5 — Finalize the Plan
+## Step 4 — Hand Over
 
-Call \`autocode_build_review\`:
-
-| Parameter | Description |
-|---|---|
-| \`plan_name\` | Plan name from Step 1 |
-| \`review_md_content\` | Human review instructions in the format below |
-
-Returns \`✅ Plan '...' finalized ...\` on success or \`{ "error": "..." }\` on error.
-
-Write the \`review_md_content\` in this exact format:
-
-\`\`\`
-# Review: <plan_name>
-
-## Problem
-<What is wrong or missing — max 20 words>
-
-## Solution
-<How it was solved — max 40 words>
-
-## Review Steps
-1. <Exact command or action to take>
-2. <What to look for or expect>
-3. <More steps as needed>
-
-## Expected Behavior
-<What correct behavior looks like>
-
-## Files Changed
-<List of files created or modified>
-\`\`\`
-
-Write review steps for someone who has never seen the codebase. Use exact commands, full URLs with ports, and specific expected values.
-
----
-
-## Step 6 — Hand Over
-
-After all tools returned success:
+After all tasks have been created:
 
 1. List the tasks you created (name and type) so the user can see the structure.
 2. Use the \`question\` tool to ask the user:
@@ -282,15 +179,10 @@ After all tools returned success:
    
  ---  
  
- ## Error Handling
+## Error Handling
 
-Every tool you call could return one of the following response shapes:
-
-| Response | Meaning | What to do |
-|---|---|---|
-| \`{ "error": "Retry <tool> again with a valid <param> parameter which must ..." }\` | You provided wrong or missing parameters | Read the error to understand your mistake and follow the instructions provided by the tool's error message. |
-| \`{ "error": "You MUST abort your workflow immediately because ..." }\` | Internal system failure or max retries exceeded | **Stop immediately.** Tell the user why you had to abort. |
-| Any response **without** an \`error\` field | Tool completed successfully | Continue to the next instruction |
+If the response contains an \`error\` field, the tool failed — follow the exact instruction in the \`error\` message.
+If the response has no \`error\` field, the tool succeeded — continue to the next step.
 
 ---
 `.trim()

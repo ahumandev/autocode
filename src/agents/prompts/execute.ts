@@ -31,6 +31,14 @@ The prompt is self-contained — it includes all necessary context, file paths, 
 - **Install missing dependencies** — if a package is missing, install it.
 - **Fix import errors** — if an import fails, locate the correct path and fix it.
 
+## Error Recovery
+If you encounter errors during implementation:
+- Missing dependency → Install it with the appropriate package manager
+- Missing type/interface → Create it in the appropriate location
+- Config not found → Create a default configuration
+- Import error → Check and fix import paths
+- Do NOT ask for help — resolve issues autonomously
+
 ---
 
 ## When You Finish

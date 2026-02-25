@@ -248,26 +248,34 @@ async function resolveTaskDir(
     planName: string,
     taskName?: string,
 ): Promise<string | null> {
-    const buildBase = path.join(worktree, ".autocode", "build", planName)
+    const bases = [
+        path.join(worktree, ".autocode", "build", planName),
+        path.join(worktree, ".autocode", "review", planName),
+    ]
 
     if (taskName) {
-        const candidates = [
-            path.join(buildBase, "accepted", taskName),
-            path.join(buildBase, "done",     taskName),
-        ]
-        for (const candidate of candidates) {
-            try {
-                await readdir(candidate)
-                return candidate
-            } catch { /* try next */ }
+        for (const base of bases) {
+            const candidates = [
+                path.join(base, "accepted", taskName),
+                path.join(base, "done",     taskName),
+            ]
+            for (const candidate of candidates) {
+                try {
+                    await readdir(candidate)
+                    return candidate
+                } catch { /* try next */ }
+            }
         }
         return null
     }
 
     // No task_name — resolve the current (lowest-numbered) group in accepted/
-    const acceptedDir = path.join(buildBase, "accepted")
-    const next = await findNextGroup(acceptedDir)
-    return next ? path.join(acceptedDir, next) : null
+    for (const base of bases) {
+        const acceptedDir = path.join(base, "accepted")
+        const next = await findNextGroup(acceptedDir)
+        if (next) return path.join(acceptedDir, next)
+    }
+    return null
 }
 
 // ─── tool factory ────────────────────────────────────────────────────────────
@@ -539,10 +547,27 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 if (groupName === null) {
                     await mkdir(path.join(context.worktree, ".autocode", "review"), { recursive: true })
                     await rename(planDir, reviewDir)
+
+                    // Collect completed task names from done/
+                    const completedTasks: string[] = []
+                    const reviewDoneDir = path.join(reviewDir, "done")
+                    const doneEntries = await readdir(reviewDoneDir).catch(() => [] as string[])
+                    for (const entry of doneEntries.filter(e => /^\d{2}-/.test(e)).sort()) {
+                        if (/^\d{2}-concurrent_group$/.test(entry)) {
+                            const subEntries = await readdir(path.join(reviewDoneDir, entry)).catch(() => [] as string[])
+                            for (const sub of subEntries.filter(s => !s.startsWith(".")).sort()) {
+                                completedTasks.push(`${entry}/${sub}`)
+                            }
+                        } else {
+                            completedTasks.push(entry)
+                        }
+                    }
+
                     return successResponse(sid, toolName, {
                         done: true,
                         message: "All tasks completed. Plan promoted to review.",
                         reviewPath: reviewDir,
+                        completed_tasks: completedTasks,
                     })
                 }
 
@@ -975,6 +1000,76 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
     })
 
+    // ─── tool: autocode_orchestrate_review ──────────────────────────────────
+
+    /**
+     * Writes `.review.md` with a human review report for a completed plan.
+     * The plan should already be in `.autocode/review/` (promoted by resume).
+     * Falls back to `.autocode/build/` if the plan hasn't been promoted yet.
+     */
+    const autocode_orchestrate_review: ToolDefinition = tool({
+        description:
+            "Write the final human review report (.review.md) for a completed plan. " +
+            "Call this after all tasks have completed and you have gathered work summaries. " +
+            "The review should describe what was implemented, how to verify it, and any " +
+            "unexpected work discovered during troubleshooting. " +
+            "Returns success confirmation or { error } on failure.",
+        args: {
+            plan_name: tool.schema
+                .string()
+                .describe("Plan name (as returned by autocode_build_plan)"),
+            review_md_content: tool.schema
+                .string()
+                .describe("Human review report content in markdown format"),
+        },
+        async execute(args, context) {
+            const sid = context.sessionID
+            const toolName = "autocode_orchestrate_review"
+
+            // ── input validation ──────────────────────────────────────────────
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
+            if (planNameErr) return planNameErr
+
+            const contentErr = validateNonEmpty(args.review_md_content, sid, toolName, "review_md_content")
+            if (contentErr) return contentErr
+
+            // ── find the plan directory (review/ first, then build/) ──────────
+            const candidates = [
+                path.join(context.worktree, ".autocode", "review", args.plan_name),
+                path.join(context.worktree, ".autocode", "build", args.plan_name),
+            ]
+            let planDir: string | null = null
+            for (const candidate of candidates) {
+                try {
+                    await readdir(candidate)
+                    planDir = candidate
+                    break
+                } catch { /* try next */ }
+            }
+
+            if (!planDir) {
+                return retryResponse(
+                    sid,
+                    toolName,
+                    "plan_name",
+                    `match an existing plan directory — '${args.plan_name}' was not found in review/ or build/`,
+                )
+            }
+
+            // ── write .review.md ──────────────────────────────────────────────
+            try {
+                await writeFile(
+                    path.join(planDir, ".review.md"),
+                    args.review_md_content,
+                    "utf-8",
+                )
+                return successResponse(sid, toolName, `✅ Review report written for plan '${args.plan_name}'`)
+            } catch (err: any) {
+                return abortResponse(toolName, `failed to write review for plan '${args.plan_name}': ${err.message}`)
+            }
+        },
+    })
+
     // ─── tool: autocode_orchestrate_list ────────────────────────────────────
 
     /**
@@ -1015,6 +1110,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         autocode_orchestrate_list,
         autocode_orchestrate_resume,
         autocode_orchestrate_fix_task,
+        autocode_orchestrate_review,
         autocode_orchestrate_read_plan,
         autocode_orchestrate_read_task_prompt,
         autocode_orchestrate_read_task_session,

@@ -137,14 +137,12 @@ async function createConcurrentGroupDir(acceptedDir: string): Promise<string> {
  *
  *   .autocode/build/<plan_name>/
  *     plan.md                          ← full approved plan text
- *     .review.md                       ← human review instructions
  *     accepted/
  *       <order>-<task_name>/           ← sequential task
  *         instructions.md
  *       <order>-concurrent_group/      ← concurrent task group directory
  *         <task_name>/                 ← one sub-dir per concurrent task
  *           build.prompt.md
- *           test.prompt.md  (optional)
  */
 export function createBuildTools(client: Client): Record<string, ToolDefinition> {
 
@@ -366,13 +364,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             task_name: tool.schema
                 .string()
                 .describe("Lowercase underscore task name (e.g. login_endpoint)"),
-            task_prompt: tool.schema
+            instructions: tool.schema
                 .string()
-                .describe("Full build instructions for the execute agent"),
-            test_prompt: tool.schema
-                .string()
-                .optional()
-                .describe("Test verification instructions for the test agent (optional)"),
+                .describe("Task background, instructions, rules and testing steps to ensure the task's instructions was correctly executed."),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -385,7 +379,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             const taskNameErr = validateNonEmpty(args.task_name, sid, toolName, "task_name")
             if (taskNameErr) return taskNameErr
 
-            const taskPromptErr = validateNonEmpty(args.task_prompt, sid, toolName, "task_prompt")
+            const taskPromptErr = validateNonEmpty(args.instructions, sid, toolName, "instructions")
             if (taskPromptErr) return taskPromptErr
 
             // ── check the plan directory exists (input problem if it does not) ──
@@ -423,67 +417,13 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
 
                 const taskDir = path.join(slotDir, args.task_name)
                 await mkdir(taskDir, { recursive: true })
-                await writeFile(path.join(taskDir, "build.prompt.md"), args.task_prompt, "utf-8")
-                if (args.test_prompt) {
-                    await writeFile(path.join(taskDir, "test.prompt.md"), args.test_prompt, "utf-8")
-                }
+                await writeFile(path.join(taskDir, "build.prompt.md"), args.instructions, "utf-8")
 
                 const slotName = path.basename(slotDir)
                 return successResponse(sid, toolName, `✅ Concurrent task '${slotName}/${args.task_name}' created`)
             } catch (err: any) {
                 await failPlan(context.worktree, args.plan_name, `${toolName} failed to create task '${args.task_name}': ${err.message}`)
                 return abortResponse(toolName, `failed to create concurrent task '${args.task_name}' for plan '${args.plan_name}': ${err.message}`)
-            }
-        },
-    })
-
-    /**
-     * Writes `.review.md` for human review.
-     */
-    const autocode_build_review: ToolDefinition = tool({
-        description: "Write human review instructions. Call this after all tasks have been created.",
-        args: {
-            plan_name: tool.schema
-                .string()
-                .describe("Plan name returned by autocode_build_plan"),
-            review_md_content: tool.schema
-                .string()
-                .describe("Human review instructions to write"),
-        },
-        async execute(args, context) {
-            const sid = context.sessionID
-            const toolName = "autocode_build_review"
-
-            // ── input validation ──────────────────────────────────────────────
-            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
-            if (planNameErr) return planNameErr
-
-            const contentErr = validateNonEmpty(args.review_md_content, sid, toolName, "review_md_content")
-            if (contentErr) return contentErr
-
-            // ── check the plan directory exists (input problem if it does not) ──
-            const planDir = path.join(context.worktree, ".autocode", "build", args.plan_name)
-            const planDirStat = await stat(planDir).catch(() => null)
-            if (!planDirStat) {
-                return retryResponse(
-                    sid,
-                    toolName,
-                    "plan_name",
-                    `match an existing plan directory — '${args.plan_name}' does not exist; use the exact plan_name returned by autocode_build_plan`,
-                )
-            }
-
-            // ── filesystem work ───────────────────────────────────────────────
-            try {
-                await writeFile(
-                    path.join(planDir, ".review.md"),
-                    args.review_md_content,
-                    "utf-8",
-                )
-                return successResponse(sid, toolName, `✅ Plan '${args.plan_name}' finalized — .review.md written`)
-            } catch (err: any) {
-                await failPlan(context.worktree, args.plan_name, `${toolName} failed to write review: ${err.message}`)
-                return abortResponse(toolName, `failed to write review for plan '${args.plan_name}': ${err.message}`)
             }
         },
     })
@@ -592,7 +532,6 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
         autocode_build_plan,
         autocode_build_next_task,
         autocode_build_concurrent_task,
-        autocode_build_review,
         autocode_build_orchestrate,
         autocode_build_fail,
     }

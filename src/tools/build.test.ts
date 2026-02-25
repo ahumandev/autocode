@@ -252,7 +252,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const { autocode_build_concurrent_task } = tools()
 
         const result = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_a", task_prompt: "do task a" },
+            { plan_name: planName, task_name: "task_a", instructions: "do task a" },
             makeContext(),
         )
 
@@ -267,7 +267,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const { autocode_build_concurrent_task } = tools()
 
         const result = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_b", task_prompt: "do task b" },
+            { plan_name: planName, task_name: "task_b", instructions: "do task b" },
             makeContext(),
         )
 
@@ -284,7 +284,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const { autocode_build_concurrent_task } = tools()
 
         const result = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_b", task_prompt: "do task b" },
+            { plan_name: planName, task_name: "task_b", instructions: "do task b" },
             makeContext(),
         )
 
@@ -299,11 +299,11 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const ctx = makeContext()
 
         const r1 = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_a", task_prompt: "do a" },
+            { plan_name: planName, task_name: "task_a", instructions: "do a" },
             ctx,
         )
         const r2 = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_b", task_prompt: "do b" },
+            { plan_name: planName, task_name: "task_b", instructions: "do b" },
             ctx,
         )
 
@@ -332,15 +332,14 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         expect(entries).toContain("01-next_sequential")
     })
 
-    test("writes build.prompt.md and optional test.prompt.md", async () => {
+    test("writes build.prompt.md", async () => {
         const { autocode_build_concurrent_task } = tools()
 
         await autocode_build_concurrent_task.execute(
             {
                 plan_name: planName,
                 task_name: "task_a",
-                task_prompt: "build instructions",
-                test_prompt: "test instructions",
+                instructions: "build instructions",
             },
             makeContext(),
         )
@@ -350,26 +349,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
             path.join(acceptedDir, "00-concurrent_group", "task_a", "build.prompt.md"),
             "utf-8",
         )
-        const testContent = await readFile(
-            path.join(acceptedDir, "00-concurrent_group", "task_a", "test.prompt.md"),
-            "utf-8",
-        )
 
         expect(buildContent).toBe("build instructions")
-        expect(testContent).toBe("test instructions")
-    })
-
-    test("omits test.prompt.md when test_prompt is not provided", async () => {
-        const { autocode_build_concurrent_task } = tools()
-
-        await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_a", task_prompt: "build instructions" },
-            makeContext(),
-        )
-
-        const { stat } = await import("fs/promises")
-        const testFile = path.join(acceptedDir, "00-concurrent_group", "task_a", "test.prompt.md")
-        const exists = await stat(testFile).catch(() => null)
-        expect(exists).toBeNull()
     })
 })
