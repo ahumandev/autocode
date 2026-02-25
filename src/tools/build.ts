@@ -216,38 +216,39 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             "Provide no more than 7 words — if more than 7 words are given, the first 7 are kept " +
             "and all remaining words (8th, 9th, …) are abbreviated to their first letters and " +
             "combined into a single 8th token. " +
-            "Returns { plan_name } on success — the plan directory is created and plan.md is written; " +
+            "Returns { plan_name } on success — the plan is persisted; " +
             "always use the returned plan_name in all subsequent tool calls. " +
             "Returns { error } when the input is invalid or an internal failure occurs.",
         args: {
             name: tool.schema
                 .string()
                 .describe("Raw plan name proposal — provide at most 7 words (underscore-separated) that summarize the purpose of the plan"),
-            plan_md_content: tool.schema
+            plan_content: tool.schema
                 .string()
                 .describe("The full approved plan text to write into plan.md"),
         },
         async execute(args, context) {
+            const toolName = "autocode_build_plan"
             const sid = context.sessionID
 
             // ── input validation ──────────────────────────────────────────────
-            const nameEmptyErr = validateNonEmpty(args.name, sid, "autocode_build_plan", "name")
+            const nameEmptyErr = validateNonEmpty(args.name, sid, toolName, "name")
             if (nameEmptyErr) return nameEmptyErr
 
-            const nameAlphaErr = validateHasAlphanumeric(args.name, sid, "autocode_build_plan", "name")
+            const nameAlphaErr = validateHasAlphanumeric(args.name, sid, toolName, "name")
             if (nameAlphaErr) return nameAlphaErr
 
             const sanitized = generatePlanName(args.name)
             if (sanitized === null) {
                 return retryResponse(
                     sid,
-                    "autocode_build_plan",
+                    toolName,
                     "name",
                     "contain at least one alphanumeric character after sanitization (e.g. 'my_plan')",
                 )
             }
 
-            const contentErr = validateNonEmpty(args.plan_md_content, sid, "autocode_build_plan", "plan_md_content")
+            const contentErr = validateNonEmpty(args.plan_content, sid, toolName, "plan_content")
             if (contentErr) return contentErr
 
             // ── filesystem work ───────────────────────────────────────────────
@@ -262,11 +263,11 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
 
             try {
                 await mkdir(acceptedDir, { recursive: true })
-                await writeFile(path.join(planDir, "plan.md"), args.plan_md_content, "utf-8")
-                return successResponse(sid, "autocode_build_plan", { plan_name: finalName })
+                await writeFile(path.join(planDir, "plan.md"), args.plan_content, "utf-8")
+                return successResponse(sid, toolName, { plan_name: finalName })
             } catch (err: any) {
-                await failPlan(context.worktree, finalName, `autocode_build_plan failed to initialize plan directory: ${err.message}`)
-                return abortResponse("autocode_build_plan", `failed to create plan directory for '${finalName}': ${err.message}`)
+                await failPlan(context.worktree, finalName, `${toolName} failed to initialize plan directory: ${err.message}`)
+                return abortResponse(toolName, `failed to create plan directory for '${finalName}': ${err.message}`)
             }
         },
     })
@@ -293,15 +294,16 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_build_next_task"
 
             // ── input validation ──────────────────────────────────────────────
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_build_next_task", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
-            const taskNameErr = validateNonEmpty(args.task_name, sid, "autocode_build_next_task", "task_name")
+            const taskNameErr = validateNonEmpty(args.task_name, sid, toolName, "task_name")
             if (taskNameErr) return taskNameErr
 
-            const instructionsErr = validateNonEmpty(args.instructions, sid, "autocode_build_next_task", "instructions")
+            const instructionsErr = validateNonEmpty(args.instructions, sid, toolName, "instructions")
             if (instructionsErr) return instructionsErr
 
             // ── check the plan directory exists (input problem if it does not) ──
@@ -309,7 +311,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             if (!planDirStat) {
                 return retryResponse(
                     sid,
-                    "autocode_build_next_task",
+                    toolName,
                     "plan_name",
                     `match an existing plan directory — '${args.plan_name}' does not exist; use the exact plan_name returned by autocode_build_plan`,
                 )
@@ -333,10 +335,10 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 await mkdir(taskDir, { recursive: true })
                 await writeFile(path.join(taskDir, "instructions.md"), args.instructions, "utf-8")
 
-                return successResponse(sid, "autocode_build_next_task")
+                return successResponse(sid, toolName)
             } catch (err: any) {
-                await failPlan(context.worktree, args.plan_name, `autocode_build_next_task failed to create task '${args.task_name}': ${err.message}`)
-                return abortResponse("autocode_build_next_task", `failed to create task '${args.task_name}' for plan '${args.plan_name}': ${err.message}`)
+                await failPlan(context.worktree, args.plan_name, `${toolName} failed to create task '${args.task_name}': ${err.message}`)
+                return abortResponse(toolName, `failed to create task '${args.task_name}' for plan '${args.plan_name}': ${err.message}`)
             }
         }
     })
@@ -374,15 +376,16 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_build_concurrent_task"
 
             // ── input validation ──────────────────────────────────────────────
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_build_concurrent_task", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
-            const taskNameErr = validateNonEmpty(args.task_name, sid, "autocode_build_concurrent_task", "task_name")
+            const taskNameErr = validateNonEmpty(args.task_name, sid, toolName, "task_name")
             if (taskNameErr) return taskNameErr
 
-            const taskPromptErr = validateNonEmpty(args.task_prompt, sid, "autocode_build_concurrent_task", "task_prompt")
+            const taskPromptErr = validateNonEmpty(args.task_prompt, sid, toolName, "task_prompt")
             if (taskPromptErr) return taskPromptErr
 
             // ── check the plan directory exists (input problem if it does not) ──
@@ -390,7 +393,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             if (!planDirStat) {
                 return retryResponse(
                     sid,
-                    "autocode_build_concurrent_task",
+                    toolName,
                     "plan_name",
                     `match an existing plan directory — '${args.plan_name}' does not exist; use the exact plan_name returned by autocode_build_plan`,
                 )
@@ -426,10 +429,10 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 }
 
                 const slotName = path.basename(slotDir)
-                return successResponse(sid, "autocode_build_concurrent_task", `✅ Concurrent task '${slotName}/${args.task_name}' created`)
+                return successResponse(sid, toolName, `✅ Concurrent task '${slotName}/${args.task_name}' created`)
             } catch (err: any) {
-                await failPlan(context.worktree, args.plan_name, `autocode_build_concurrent_task failed to create task '${args.task_name}': ${err.message}`)
-                return abortResponse("autocode_build_concurrent_task", `failed to create concurrent task '${args.task_name}' for plan '${args.plan_name}': ${err.message}`)
+                await failPlan(context.worktree, args.plan_name, `${toolName} failed to create task '${args.task_name}': ${err.message}`)
+                return abortResponse(toolName, `failed to create concurrent task '${args.task_name}' for plan '${args.plan_name}': ${err.message}`)
             }
         },
     })
@@ -449,12 +452,13 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_build_review"
 
             // ── input validation ──────────────────────────────────────────────
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_build_review", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
-            const contentErr = validateNonEmpty(args.review_md_content, sid, "autocode_build_review", "review_md_content")
+            const contentErr = validateNonEmpty(args.review_md_content, sid, toolName, "review_md_content")
             if (contentErr) return contentErr
 
             // ── check the plan directory exists (input problem if it does not) ──
@@ -463,7 +467,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             if (!planDirStat) {
                 return retryResponse(
                     sid,
-                    "autocode_build_review",
+                    toolName,
                     "plan_name",
                     `match an existing plan directory — '${args.plan_name}' does not exist; use the exact plan_name returned by autocode_build_plan`,
                 )
@@ -476,10 +480,10 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                     args.review_md_content,
                     "utf-8",
                 )
-                return successResponse(sid, "autocode_build_review", `✅ Plan '${args.plan_name}' finalized — .review.md written`)
+                return successResponse(sid, toolName, `✅ Plan '${args.plan_name}' finalized — .review.md written`)
             } catch (err: any) {
-                await failPlan(context.worktree, args.plan_name, `autocode_build_review failed to write review: ${err.message}`)
-                return abortResponse("autocode_build_review", `failed to write review for plan '${args.plan_name}': ${err.message}`)
+                await failPlan(context.worktree, args.plan_name, `${toolName} failed to write review: ${err.message}`)
+                return abortResponse(toolName, `failed to write review for plan '${args.plan_name}': ${err.message}`)
             }
         },
     })
@@ -505,8 +509,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_build_orchestrate"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_build_orchestrate", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
             try {
@@ -529,9 +534,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                     // Ignore errors — the orchestrate agent session handles its own failures.
                 })
 
-                return successResponse(sid, "autocode_build_orchestrate", { session_id: sessionId })
+                return successResponse(sid, toolName, { session_id: sessionId })
             } catch (err: any) {
-                return abortResponse("autocode_build_orchestrate", `failed to spawn orchestrate session for plan '${args.plan_name}': ${err.message}`)
+                return abortResponse(toolName, `failed to spawn orchestrate session for plan '${args.plan_name}': ${err.message}`)
             }
         },
     })
@@ -566,19 +571,20 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_build_fail"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_build_fail", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
-            const reasonErr = validateNonEmpty(args.reason, sid, "autocode_build_fail", "reason")
+            const reasonErr = validateNonEmpty(args.reason, sid, toolName, "reason")
             if (reasonErr) return reasonErr
 
             if (failedPlans.has(args.plan_name)) {
-                return successResponse(sid, "autocode_build_fail", `ℹ️ Plan '${args.plan_name}' was already marked as failed — skipping`)
+                return successResponse(sid, toolName, `ℹ️ Plan '${args.plan_name}' was already marked as failed — skipping`)
             }
 
             await failPlan(context.worktree, args.plan_name, args.reason)
-            return successResponse(sid, "autocode_build_fail", `✅ Plan '${args.plan_name}' moved to .autocode/failed/ — failure.md written`)
+            return successResponse(sid, toolName, `✅ Plan '${args.plan_name}' moved to .autocode/failed/ — failure.md written`)
         },
     })
 

@@ -21,6 +21,7 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
         args: {},
         async execute(_args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_analyze_list"
             const analyzeDir = path.join(context.worktree, ".autocode", "analyze")
             const { readdir, readFile } = await import("fs/promises")
 
@@ -30,9 +31,9 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
             } catch (err: any) {
                 // Directory does not exist or is unreadable — treat as empty (normal state)
                 if (err.code === "ENOENT") {
-                    return successResponse(sid, "autocode_analyze_list", "No files found in .autocode/analyze/")
+                    return successResponse(sid, toolName, "No files found in .autocode/analyze/")
                 }
-                return abortResponse("autocode_analyze_list", `failed to read .autocode/analyze/ directory: ${err.message}`)
+                return abortResponse(toolName, `failed to read .autocode/analyze/ directory: ${err.message}`)
             }
 
             const files = entries.filter((e) => !e.startsWith("."))
@@ -55,7 +56,7 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
                 }),
             )
 
-            return successResponse(sid, "autocode_analyze_list", results)
+            return successResponse(sid, toolName, results)
         },
     })
 
@@ -69,9 +70,10 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_analyze_read"
 
             // ── input validation ──────────────────────────────────────────────
-            const fileNameErr = validateNonEmpty(args.file_name, sid, "autocode_analyze_read", "file_name")
+            const fileNameErr = validateNonEmpty(args.file_name, sid, toolName, "file_name")
             if (fileNameErr) return fileNameErr
 
             const analyzeDir = path.join(context.worktree, ".autocode", "analyze")
@@ -85,12 +87,12 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
                 if (err.code === "ENOENT") {
                     return retryResponse(
                         sid,
-                        "autocode_analyze_read",
+                        toolName,
                         "file_name",
                         `be a file that exists in .autocode/analyze/ — '${args.file_name}' was not found; call autocode_analyze_list to see available files`,
                     )
                 }
-                return abortResponse("autocode_analyze_read", `failed to read '${args.file_name}': ${err.message}`)
+                return abortResponse(toolName, `failed to read '${args.file_name}': ${err.message}`)
             }
 
             // Update the current session title to the filename — non-critical, ignore failure
@@ -102,7 +104,7 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
                 // Session title update is best-effort; do not surface this error
             })
 
-            return successResponse(sid, "autocode_analyze_read", content)
+            return successResponse(sid, toolName, content)
         },
     })
 

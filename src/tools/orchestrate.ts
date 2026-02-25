@@ -523,8 +523,9 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_resume"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_orchestrate_resume", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
             const planDir     = path.join(context.worktree, ".autocode", "build", args.plan_name)
@@ -538,7 +539,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 if (groupName === null) {
                     await mkdir(path.join(context.worktree, ".autocode", "review"), { recursive: true })
                     await rename(planDir, reviewDir)
-                    return successResponse(sid, "autocode_orchestrate_resume", {
+                    return successResponse(sid, toolName, {
                         done: true,
                         message: "All tasks completed. Plan promoted to review.",
                         reviewPath: reviewDir,
@@ -563,7 +564,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
 
                     const failures = results.filter(r => r.failure !== null)
                     if (failures.length > 0) {
-                        return successResponse(sid, "autocode_orchestrate_resume", {
+                        return successResponse(sid, toolName, {
                             done: false,
                             success: false,
                             plan_name: args.plan_name,
@@ -585,7 +586,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 } else {
                     const failure = await executeTask(groupDir, groupName)
                     if (failure) {
-                        return successResponse(sid, "autocode_orchestrate_resume", {
+                        return successResponse(sid, toolName, {
                             done: false,
                             success: false,
                             plan_name: args.plan_name,
@@ -640,17 +641,18 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_fix_task"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_orchestrate_fix_task", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
-            const taskNameErr = validateNonEmpty(args.task_name, sid, "autocode_orchestrate_fix_task", "task_name")
+            const taskNameErr = validateNonEmpty(args.task_name, sid, toolName, "task_name")
             if (taskNameErr) return taskNameErr
 
-            const sessionIdErr = validateNonEmpty(args.session_id, sid, "autocode_orchestrate_fix_task", "session_id")
+            const sessionIdErr = validateNonEmpty(args.session_id, sid, toolName, "session_id")
             if (sessionIdErr) return sessionIdErr
 
-            const fixMessageErr = validateNonEmpty(args.fix_message, sid, "autocode_orchestrate_fix_task", "fix_message")
+            const fixMessageErr = validateNonEmpty(args.fix_message, sid, toolName, "fix_message")
             if (fixMessageErr) return fixMessageErr
 
             const dir = taskDirPath(context.worktree, args.plan_name, args.task_name)
@@ -688,9 +690,9 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                         .slice(0, 500)
                     : "(no response)"
 
-                return successResponse(sid, "autocode_orchestrate_fix_task", { success: true, summary, sessionFile: successFile })
+                return successResponse(sid, toolName, { success: true, summary, sessionFile: successFile })
             } catch (err: any) {
-                return abortResponse("autocode_orchestrate_fix_task", `fix session failed for task '${args.task_name}': ${err.message}`)
+                return abortResponse(toolName, `fix session failed for task '${args.task_name}': ${err.message}`)
             }
         },
     })
@@ -708,8 +710,9 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_read_plan"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_orchestrate_read_plan", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
             // Plan may still be in build/ (during execution) or review/ (after completion)
@@ -720,10 +723,10 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             for (const p of candidates) {
                 try {
                     const content = await readFile(p, "utf-8")
-                    return successResponse(sid, "autocode_orchestrate_read_plan", content)
+                    return successResponse(sid, toolName, content)
                 } catch { /* try next */ }
             }
-            return abortResponse("autocode_orchestrate_read_plan", `plan.md not found for plan '${args.plan_name}' in build/ or review/`)
+            return abortResponse(toolName, `plan.md not found for plan '${args.plan_name}' in build/ or review/`)
         },
     })
 
@@ -743,21 +746,22 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_read_task_prompt"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_orchestrate_read_task_prompt", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, "autocode_orchestrate_read_task_prompt", "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse("autocode_orchestrate_read_task_prompt", `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             try {
                 const content = await readFile(path.join(dir, "build.prompt.md"), "utf-8")
-                return successResponse(sid, "autocode_orchestrate_read_task_prompt", content)
+                return successResponse(sid, toolName, content)
             } catch (err: any) {
-                return abortResponse("autocode_orchestrate_read_task_prompt", `build.prompt.md not found in '${dir}': ${err.message}`)
+                return abortResponse(toolName, `build.prompt.md not found in '${dir}': ${err.message}`)
             }
         },
     })
@@ -799,31 +803,32 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_read_task_session"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_orchestrate_read_task_session", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
-            const sessionIdErr = validateNonEmpty(args.session_id, sid, "autocode_orchestrate_read_task_session", "session_id")
+            const sessionIdErr = validateNonEmpty(args.session_id, sid, toolName, "session_id")
             if (sessionIdErr) return sessionIdErr
 
-            const sectionErr = validateNonEmpty(args.section, sid, "autocode_orchestrate_read_task_session", "section")
+            const sectionErr = validateNonEmpty(args.section, sid, toolName, "section")
             if (sectionErr) return sectionErr
 
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, "autocode_orchestrate_read_task_session", "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse("autocode_orchestrate_read_task_session", `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             const filePath = await findSessionFileById(dir, "task", args.session_id)
             if (!filePath) {
-                return retryResponse(sid, "autocode_orchestrate_read_task_session", "session_id", `match an existing task session file in '${dir}' — no file found for session_id '${args.session_id}'`)
+                return retryResponse(sid, toolName, "session_id", `match an existing task session file in '${dir}' — no file found for session_id '${args.session_id}'`)
             }
             try {
                 const content = await readFile(filePath, "utf-8")
-                return successResponse(sid, "autocode_orchestrate_read_task_session", extractSection(content, args.section, args.offset ?? 1, args.limit ?? 200))
+                return successResponse(sid, toolName, extractSection(content, args.section, args.offset ?? 1, args.limit ?? 200))
             } catch (err: any) {
-                return abortResponse("autocode_orchestrate_read_task_session", `failed to read session file '${filePath}': ${err.message}`)
+                return abortResponse(toolName, `failed to read session file '${filePath}': ${err.message}`)
             }
         },
     })
@@ -844,21 +849,22 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_read_test_prompt"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_orchestrate_read_test_prompt", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, "autocode_orchestrate_read_test_prompt", "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse("autocode_orchestrate_read_test_prompt", `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             try {
                 const content = await readFile(path.join(dir, "test.prompt.md"), "utf-8")
-                return successResponse(sid, "autocode_orchestrate_read_test_prompt", content)
+                return successResponse(sid, toolName, content)
             } catch (err: any) {
-                return abortResponse("autocode_orchestrate_read_test_prompt", `test.prompt.md not found in '${dir}': ${err.message}`)
+                return abortResponse(toolName, `test.prompt.md not found in '${dir}': ${err.message}`)
             }
         },
     })
@@ -900,31 +906,32 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_read_test_session"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_orchestrate_read_test_session", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
-            const sessionIdErr = validateNonEmpty(args.session_id, sid, "autocode_orchestrate_read_test_session", "session_id")
+            const sessionIdErr = validateNonEmpty(args.session_id, sid, toolName, "session_id")
             if (sessionIdErr) return sessionIdErr
 
-            const sectionErr = validateNonEmpty(args.section, sid, "autocode_orchestrate_read_test_session", "section")
+            const sectionErr = validateNonEmpty(args.section, sid, toolName, "section")
             if (sectionErr) return sectionErr
 
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, "autocode_orchestrate_read_test_session", "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse("autocode_orchestrate_read_test_session", `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             const filePath = await findSessionFileById(dir, "test", args.session_id)
             if (!filePath) {
-                return retryResponse(sid, "autocode_orchestrate_read_test_session", "session_id", `match an existing test session file in '${dir}' — no file found for session_id '${args.session_id}'`)
+                return retryResponse(sid, toolName, "session_id", `match an existing test session file in '${dir}' — no file found for session_id '${args.session_id}'`)
             }
             try {
                 const content = await readFile(filePath, "utf-8")
-                return successResponse(sid, "autocode_orchestrate_read_test_session", extractSection(content, args.section, args.offset ?? 1, args.limit ?? 200))
+                return successResponse(sid, toolName, extractSection(content, args.section, args.offset ?? 1, args.limit ?? 200))
             } catch (err: any) {
-                return abortResponse("autocode_orchestrate_read_test_session", `failed to read session file '${filePath}': ${err.message}`)
+                return abortResponse(toolName, `failed to read session file '${filePath}': ${err.message}`)
             }
         },
     })
@@ -948,21 +955,22 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         },
         async execute(args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_read_work"
 
-            const planNameErr = validateNonEmpty(args.plan_name, sid, "autocode_orchestrate_read_work", "plan_name")
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, "autocode_orchestrate_read_work", "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse("autocode_orchestrate_read_work", `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             try {
                 const content = await readFile(path.join(dir, "work.md"), "utf-8")
-                return successResponse(sid, "autocode_orchestrate_read_work", content)
+                return successResponse(sid, toolName, content)
             } catch (err: any) {
-                return abortResponse("autocode_orchestrate_read_work", `work.md not found in '${dir}': ${err.message}`)
+                return abortResponse(toolName, `work.md not found in '${dir}': ${err.message}`)
             }
         },
     })
@@ -983,6 +991,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         args: {},
         async execute(_args, context) {
             const sid = context.sessionID
+            const toolName = "autocode_orchestrate_list"
             const buildDir = path.join(context.worktree, ".autocode", "build")
             try {
                 const entries = await readdir(buildDir, { withFileTypes: true })
@@ -990,12 +999,12 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     .filter(e => e.isDirectory())
                     .map(e => e.name)
                     .sort()
-                return successResponse(sid, "autocode_orchestrate_list", { plans })
+                return successResponse(sid, toolName, { plans })
             } catch (err: any) {
                 if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-                    return successResponse(sid, "autocode_orchestrate_list", { plans: [] })
+                    return successResponse(sid, toolName, { plans: [] })
                 }
-                return abortResponse("autocode_orchestrate_list", `failed to list plans in .autocode/build/: ${err.message}`)
+                return abortResponse(toolName, `failed to list plans in .autocode/build/: ${err.message}`)
             }
         },
     })

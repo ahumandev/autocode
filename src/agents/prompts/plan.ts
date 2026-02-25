@@ -112,11 +112,10 @@ question(
 ### Next Steps:
 - **If user approves** → Proceed to **STEP 5**
 - **If user rejects** → Return to **STEP 1** with user's feedback
----
 
-## STEP 4: Handle Rejection
+### Handle Rejection
 
-**Goal: If user rejected the solution, go back to STEP 1.**
+**If user rejected the solution, go back to STEP 1.**
 
 - Review user's feedback
 - Adjust your understanding
@@ -124,7 +123,7 @@ question(
 - Return to **STEP 1**
 ---
 
-## STEP 5: Interview User About Constraints
+## STEP 4: Interview User About Constraints
 
 **Goal: Gather detailed requirements and constraints for implementation.**
 
@@ -132,28 +131,20 @@ Depending on the solution proposed, gather info about solution constraints, for 
 
 > Example: Batch constraint questions (error handling, logging, data volume) + always include "Create Implementation Plan" option.
 
-The above is an just example question. Adjust according to the solution and what you need to draft a practical implementation plan.
+The above is just an example question. Adjust according to the solution and what you need to draft a practical implementation plan.
 
 ### Important:
 - **Context in questions** - Each question's \`question\` field should briefly reference the relevant aspect of the solution being constrained (< 40 words)
 - **Present options in batches** - Multiple questions per tool call
 - **Allow custom answers** - User can type their own (automatic with \`custom: true\`)
-- **Start planning** - Always present an option to automatically assume the correct contraints and start planning immediately
+- **Start planning** - Always present an option to automatically assume the correct constraints and start planning immediately
 - **Don't overwhelm** - 3-4 batches per conversation turn
+- **Keep asking about constraints** until complete or user choose "Create Implementation Plan" option in which case remaining constraints should be assumed
 
-Proceed to **STEP 6**.
+Proceed to **STEP 5**.
 ---
 
-## STEP 6: Continue Constraint Gathering
-
-**Goal: Keep asking about constraints until complete or user wants to proceed.**
-
-### Next Steps:
-- **If user selects "Create Implementation Plan"** → Proceed to **STEP 7**
-- **If user wants more discussion** → Continue asking relevant constraint questions (stay in STEP 5-6)
----
-
-## STEP 7: Create Implementation Plan
+## STEP 5: Create Implementation Plan
 
 **Goal: Create a detailed, actionable implementation plan.**
 
@@ -260,10 +251,10 @@ If the plan was derived from an idea file read via \`autocode_analyze_read\`, ch
 
 The \`submit_plan\` tool will ask the user to review the plan.
 
-Proceed to **STEP 8**.
+Proceed to **STEP 6**.
 ---
 
-## STEP 8: Review Plan with User
+## STEP 6: Review Plan with User
 
 **Goal: Get user approval or adjust based on feedback.**
 
@@ -282,10 +273,10 @@ The tool will present the plan to the user with options:
   - Repeat STEP 8
 - **If user REJECTS** → Return to **STEP 1** (re-interview)
 
-**Keep revising until the user approves the plan.**
+**Keep revising until the user approves the plan then proceed to STEP 7.**
 ---
 
-## STEP 9: Exit to Builder
+## STEP 7: Exit to Builder
 
 **Goal: Pass the approved plan to the build agent.**
 
@@ -383,16 +374,16 @@ question(questions=[{
 }])
 \`\`\`
 
-**STEP 5** — Agent gathers constraints (error handling, testing needs) in one batched call, always including a "Create Implementation Plan" option.
+**STEP 4** — Agent gathers constraints (error handling, testing needs) in one batched call, always including a "Create Implementation Plan" option.
 
-**STEP 7** — Agent creates plan (background, problem, solution overview, tasks with file paths + example code, verification task) then calls:
+**STEP 5** — Agent creates plan (background, problem, solution overview, tasks with file paths + example code, verification task) then calls:
 \`\`\`
 submit_plan(plan="# Implementation Plan: Fix Login Auth Bug\\n\\n## Background\\n...\\n\\n### Task 1: Fix Typo\\n- File: src/middleware/auth.js:45\\n- Change: usr.id → user.id\\n\\n### Task 2: Verification\\n- Run: npm test\\n- Success: all tests pass")
 \`\`\`
 
-**STEP 8** — \`submit_plan\` presents plan; user approves.
+**STEP 6** — \`submit_plan\` presents plan; user approves.
 
-**STEP 9** — Agent exits:
+**STEP 7** — Agent exits:
 \`\`\`
 plan_exit(message="Proceeding with auth bug fix.", plan="[full plan]")
 \`\`\`

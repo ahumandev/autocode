@@ -27,7 +27,7 @@ Otherwise, with a *clear plan purpose* (#1 or #2) call \`autocode_build_plan\` w
 | Parameter | Description |
 |---|---|
 | \`name\` | Proposed name — at most 7 words (space- or underscore-separated) |
-| \`plan_md_content\` | The full approved plan text, copied exactly |
+| \`plan_content\` | The full approved plan text, copied exactly |
 
 The tool sanitizes your input automatically (lowercases, replaces invalid chars with \`_\`, collapses double underscores, strips leading/trailing underscores, abbreviates words beyond the 7th). The returned name may differ from what you passed. If the name already exists, a timestamp suffix is appended automatically.
 
@@ -43,20 +43,68 @@ Decide whether to break the input into multiple tasks or treat it as a single ta
 - No task breakdown, and no clear implementation steps
 - Can be fully expressed as one self-contained unit of work
 
-In single-task mode: skip the task-decomposition work in Step 2. Your task list is one item whose name summarizes the request and whose \`task_prompt\` is the user's query verbatim, kept fully self-contained with all necessary context.
+In single-task mode: skip the task-decomposition work in Step 3. Your task list is one item whose name summarizes the request and whose \`task_prompt\` is the user's query verbatim, kept fully self-contained with all necessary context.
 
 **Multi-task mode** — use this when the input is a structured plan that:
 - Has multiple steps/instructions, or an explicit list of things to build
 
-In multi-task mode: proceed normally through Step 2 to decompose the plan into individual tasks.
+In multi-task mode: proceed normally through Step 3 to decompose the plan into individual tasks.
 
 ---
 
 ## Step 3 — Read the Plan and List Tasks
 
-Read the plan. Break it into a flat list of tasks. Each task must:
-- Do one testable thing
-- Be testable on its own (clear pass/fail)
+Read the plan. Break it into a flat list of tasks. Each task MUST: 
+    - Preferably:
+        - apply only 1 file change per task or 
+        - implement only 1 feature per task or 
+        - fix only 1 problem per task or
+        - research only 1 topic per task or
+        - write only 1 article per task
+    - Be testable on its own (clear pass/fail): 
+        - combine multiple planned steps (instructions) in the same task only if necessary to have something to testable
+        - some work require manual testing from a human (note those)
+
+Each task should contain these sections:
+
+- Purpose
+- Instructions
+- Constraints
+- Response
+
+### Purpose
+
+< 20 words motivate why this task is necessary and what it should accomplish
+
+### Instructions
+
+Each task must contain these instructions:
+
+- STEP 1 - IMPLEMENTATION: 
+    - detailed step-by-step instructions on exactly what the agent should do
+    - include examples (if available from the original plan)
+- STEP 2 - TEST: 
+    - For coding tasks: instructions on how to proof that STEP 1 was **CORRECTLY** implemented (e.g. unit test, use browser to check UI behaviour, what to expect in logs, which files should exist/removed, expected DB state, etc.)
+    - For reporting tasks: the gathered info is CORRECT, contains all requested info, formatted as expected
+    - For documentation tasks: the updated documentation is CORRECT, relevant, understandable within constraints (not to scares or too much fluff)
+- STEP 3 - TIDY:
+    Add instructions to the task that will prompt the agent to critically review its own changes (NOT other code - ONLY recent changes):
+        - clean up duplicated code/comments/documentation
+        - apply performance and memory optimization on modified code (if applicable)
+        - address potential security vulnerabilities that could have been caused by recent changes
+        - ensure that implemented code conform to standards: readable, maintainable, consistent with existing design patterns
+        - document non-obvious code/config changes: explain reason *WHY* it was necessary - not how
+        (only include the instructions that applies to the purpose of current task)
+- STEP 4 - RESPONSE
+    Add instructions on how the agent must respond to the task orchestrator:
+        - Reporting tasks: should respond only with the final report with no additional comments or instructions.
+        - Execution tasks:
+            1. Respond with a summary explaining what changed in < 20 words
+            2. Respond with instructions to how a human reviewer on how he could potentially verify the task's implementation
+    
+### Constraints      
+
+Some tasks may optionally include this section that defines: Permissions or scope of work, e.g. only modify certain files, fix only this endpoint, etc.
 
 ---
 
