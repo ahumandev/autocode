@@ -41,42 +41,78 @@ Read the plan to understand its overall scope. Produce a **brief outline only** 
 - A tentative task name (< 10 words)
 - Whether it is **sequential** or **concurrent** with its neighbors
 - A one-line summary of what it covers
+- What it **produces** (files, exports, DB state, config) that later tasks may consume
+- What it **depends on** (task numbers whose output it needs, or "none")
 
-**IMPORTANT**: This outline is just a roadmap. Do NOT write detailed instructions yet. Keep each entry to one line. The detailed thinking happens in Phase 3 when you create each task.
+**IMPORTANT**: This outline is just a roadmap. Do NOT write detailed instructions yet. The detailed thinking happens in Phase 3 when you create each task.
 
-### How to identify task boundaries
+### Extract Shared Context
 
-Each task MUST preferably:
-- Apply only 1 file change per task, OR
-- Implement only 1 feature per task, OR
-- Fix only 1 problem per task, OR
-- Research only 1 topic per task, OR
-- Write only 1 article per task
+You will prepend this block verbatim to every task's instructions in Phase 3.
 
-Each task MUST be testable on its own (clear pass/fail):
-- Combine multiple planned steps in the same task only if necessary to produce something testable
-- Some work requires manual testing from a human — note those
+### How to size a task (check in order, stop at first match)
+
+Create separate task for each identified step in the original plan.
+
+Subdivide a task if it addresses:
+- **Multiple features** - Task implement more than one feature (e.g. login, dashboard, caching, etc) → create separate task for each feature.
+- **Multiple systems** - Task update more than one system (e.g. backend, frontend, db) → create separate tasks for each system.
+- **File spread** — Task updates multiple files in different packages/modules → create separate tasks for each package/module.
+- **Multiple topics** - Task research multiple topics → create separate research task per topic
+- **Troubleshoot multiple issues** - Task address more than 1 problem (e.g. connection timeout and invalid password) → create separate task for each identified problem/symptom (fix obvious problems first, complex problems later)
+- **Multiple document topics** - Task updates multiple independent sections of an article → create separate tasks for each topic.
+- **Multiple optimizations** - Task attempt to optimize multiple resources simultaneously → create separate tasks for item to optimize
+
+Combine a task with another if:
+- It is a simple code maintenance task like cleaning up debug statement, adding comments or formatting code.
+- If it is an atomic action like: "read log file", "remove tmp file", "create directory", "fetch https://somefile.com/from/somewhere", etc.
+- The task cannot be tested in isolation.
+
+Candidate tasks that the untestable task could be combined with:
+- **Neighbouring task** - Combine with related task that is already testable or that would enable testing
+- **Same domain** - Combine with a task that updates the same file/module/package so that it could be tested together
+- **Same purpose** - Combine with a task that focus on the same implementation or problem
+- **No other task** - If no good task combination is found, keep the untestable task as-is and instead of a test instruction, include an instruction in the task that the agent should notify the orchestrator that the task cannot be tested and provide a reason.
 
 ### How to choose sequential vs concurrent
 
-A task is **sequential** if it depends on an earlier task:
-- It depends on the execution of an earlier task
-- It uses code, files, types, config, logs, system state or a report created by an earlier task
+A task is MUST be **sequential** if it depends on an earlier task:
+- It uses code, files, types, config, logs, system state, or a report created by an earlier task
 - It extends or modifies something an earlier task builds
 
-A task is **concurrent** if it is fully independent of its siblings:
-- It touches different files or systems than the earlier tasks
-- It does not import from or depend on any sibling task
+A task is only **concurrent** if it passes ALL of these checks:
+- It touches different files or systems than its siblings
+- Neither task's output is referenced in the other's instructions
+- They don't share a runtime dependency (same DB table, same config key, same API contract)
+- If one task fails, the other's result is still independently valid
+
+If ANY concurrency check fails → make the tasks sequential.
+
+### Common decomposition mistakes to avoid
+
+❌ **Too vague / untestable**: "Set up the project" — no clear pass/fail
+❌ **Too large**: "Implement the entire API" — multiple features in one task
+❌ **False concurrency**: \`login_endpoint\` marked concurrent with \`auth_middleware\` when \`login_endpoint\` calls \`auth_middleware\`
+✅ **Good**: "Create User model with email/password fields and migration" — specific, testable, single responsibility
+
+### Validation checklist (before proceeding to Phase 3)
+
+Work through this checklist after drafting the outline. Fix any failures before moving on.
+
+- [ ] Every task has a concrete, verifiable pass/fail check
+- [ ] No two concurrent tasks share file paths, assets or runtime state
+- [ ] The first task in the outline has no dependencies
+- [ ] Each task's "depends on" one of the previous tasks instead of future tasks
 
 ---
 
 ## Phase 3 — Create Tasks Incrementally
 
-**CRITICAL — You MUST create tasks incrementally — process one task at a time, think deeply about it, write it to disk via the tool, then move on. NEVER draft all tasks in your head first.**
+**CRITICAL — You MUST create tasks incrementally — process one task at a time, complete the checklist, write it to disk via the tool, then move on. NEVER draft all tasks in your head first.**
 
 Work through your outline from Phase 2 **one task at a time**. For each task, follow this cycle:
 
-### 3a. Think and Plan This Task
+### 3a. Task Planning Checklist
 
 Before calling any tool, think carefully about the current task:
 
@@ -102,17 +138,15 @@ Every task's instructions MUST contain these sections:
     - Detailed step-by-step instructions on exactly what the agent should do
     - Include full code examples (only if original plan included relevant examples for this particular task)
 - STEP 2 — TEST:
-    - For coding tasks: instructions on how to prove that STEP 1 was **CORRECTLY** implemented (e.g. unit test, use browser to check UI behaviour, what to expect in logs, which files should exist/removed, expected DB state, etc.)
-    - For reporting tasks: the gathered info of STEP 1 was contains all requested info and formatted as expected
-    - For documentation tasks: the updated documentation is CORRECT, relevant, understandable within constraints (not too scarce or too much fluff)
+    - For coding tasks: complete instructions on how codebase should be updated including examples of the original plan (if available and relevant to the task)
+    - For CLI tasks: exact command(s) to run and what the output must look like to confirm correctness (e.g. unit test pass, specific log line, file exists at path, HTTP 200 on specific route)
+    - For reporting tasks: confirm the gathered information contains all requested data and is formatted as expected
+    - For documentation tasks: confirm the updated documentation is correct, relevant, and appropriately detailed
 - STEP 3 — TIDY:
-    Instructions for the agent to critically review its own changes (NOT other code — ONLY recent changes):
-        - Clean up duplicated code/comments/documentation
-        - Apply performance and memory optimization on modified code (if applicable)
-        - Address potential security vulnerabilities that could have been caused by recent changes
-        - Ensure implemented code conforms to standards: readable, maintainable, consistent with existing design patterns
-        - Document non-obvious code/config changes: explain reason *WHY* it was necessary — not how
-        (only include the instructions that apply to the purpose of current task)
+    Review only your recent changes (not other code). Apply whichever of the following are relevant to this task:
+    - Remove duplicated code, comments or debug statements introduced by this task
+    - Document non-obvious decisions: explain in brief comments *why* the change was necessary, not how it works; Include links to online resources consulted during decision-making process (if applicable)
+    (Skip bullet points that do not apply to this task's scope)
 - STEP 4 — RESPONSE:
     Instructions on how the agent must respond to the task orchestrator:
         - Reporting tasks: respond only with the final report with no additional comments or instructions.
@@ -145,17 +179,17 @@ Use this for tasks that are independent of their siblings. Call \`autocode_build
 Example — a plan to "add user authentication":
 
 \`\`\`
-Task list:
-1. install_auth_deps     — sequential
-2. create_user_model     — sequential
-3. login_endpoint        — concurrent
-4. register_endpoint     — concurrent
-5. logout_endpoint       — concurrent
-6. add_auth_middleware   — sequential
+Outline:
+1. install_auth_deps     — sequential   — depends on: none   — produces: package.json with bcrypt, jsonwebtoken
+2. create_user_model     — sequential   — depends on: #1     — produces: src/models/user.ts, users migration
+3. login_endpoint        — concurrent   — depends on: #2     — produces: POST /auth/login route
+4. register_endpoint     — concurrent   — depends on: #2     — produces: POST /auth/register route
+5. logout_endpoint       — concurrent   — depends on: #2     — produces: POST /auth/logout route
+6. add_auth_middleware   — sequential   — depends on: #3,#4  — produces: src/middleware/auth.ts applied to protected routes
 \`\`\`
 
-* Tasks 1-2: call \`autocode_build_next_task\` for each
-* Tasks 3-5: call \`autocode_build_concurrent_task\` for each (they form one concurrent group)
+* Tasks 1–2: call \`autocode_build_next_task\` for each
+* Tasks 3–5: call \`autocode_build_concurrent_task\` for each (they form one concurrent group)
 * Task 6: call \`autocode_build_next_task\` (starts a new sequential step after the concurrent group)
 
 Repeat the cycle (3a → 3b) until all tasks are created.
@@ -165,8 +199,8 @@ Repeat the cycle (3a → 3b) until all tasks are created.
 ## Phase 4 — Hand Over
 
 After all tasks have been created:
-1. Tell the user what is the plan_namee from Phase 1 of the orchestration tasks you just created. 
-2. Call \`autocode_build_orchestrate\` with the plan_namee from Phase 1 and report the session_id of the orchestration session.
+1. Tell the user the \`plan_name\` from Phase 1 and the list of tasks you created.
+2. Call \`autocode_build_orchestrate\` tool with the \`plan_name\` from Phase 1 and report the session_id of the orchestration session.
 
 ---  
  
