@@ -564,8 +564,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     }
 
                     return successResponse(sid, toolName, {
-                        done: true,
-                        message: "All tasks completed. Plan promoted to review.",
+                        instruction: "Orchestration completed. Ask user to review.",
                         reviewPath: reviewDir,
                         completed_tasks: completedTasks,
                     })

@@ -437,12 +437,13 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
      */
     const autocode_build_orchestrate: ToolDefinition = tool({
         description:
-            "Start the orchestration of tasks for the given plan_name." +
+            "Start the orchestration of tasks for the given plan_name. " +
+            "Spawns a new orchestrate agent session and sends the plan_name as the sole initial message. " +
             "Returns { session_id } of the spawned session.",
         args: {
             plan_name: tool.schema
                 .string()
-                .describe("Plan name as returned by autocode_build_plan"),
+                .describe("Exact plan_name value returned by autocode_build_plan tool"),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -458,13 +459,16 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 })
                 const sessionId = created.data.id
 
-                // Fire-and-forget: send the plan name to kick off the orchestrate agent.
+                // Fire-and-forget: send the plan_name as an XML element in the initial message to the
+                // orchestrate agent. Using <plan_name> XML tags follows Anthropic's recommendation for
+                // unambiguous structured parameter passing in agent prompts. The orchestrate agent parses
+                // the tag content and uses it as the plan_name for all subsequent tool calls.
                 // We do NOT await the prompt — the agent runs independently.
                 client.session.prompt({
                     path: { id: sessionId },
                     body: {
                         agent: "orchestrate",
-                        parts: [{ type: "text", text: args.plan_name }],
+                        parts: [{ type: "text", text: `<plan_name>${args.plan_name}</plan_name>` }],
                     },
                     throwOnError: true,
                 }).catch(() => {

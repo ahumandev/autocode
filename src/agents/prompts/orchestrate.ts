@@ -26,19 +26,22 @@ Every tool you call returns one of the following response shapes:
 |---|---|---|
 | Any response **without** an \`error\` field | Tool completed successfully | Continue to the next step |
 | \`{ "error": "Retry <tool> again with a valid <param> parameter which must ..." }\` | You provided wrong or missing parameters | Read the error, correct the parameter, and retry the same tool |
-| \`{ "error": "You **MUST ABORT** your workflow immediately ..." }\` | Internal system failure or max retries exceeded | **Stop immediately.** Report the failure reason to the user. |
+| \`{ "error": "You **MUST ABORT** your workflow immediately and prompt the user to investigate the failure of the tool call '<tool>' with reason: ..." }\` | Internal system failure or max retries exceeded | **Stop immediately.** Report the tool name and reason to the user. |
 
 > **Retry errors** → fix the parameter and call the tool again.
-> **Abort errors** → stop all work and tell the user what failed and why.
+> **Abort errors** → stop all work and tell the user the tool name and failure reason.
+> **Auto-escalation** → after **5 consecutive retry errors** on the same tool, the system automatically returns an abort error instead. You do not need to count retries yourself.
 
 ---
 
-## Step 0 — Determine the plan name
+## Step 0 — Determine the plan_name
 
-Read the user's message carefully:
+Your first user message contains the \`plan_name\`. Read it carefully:
 
-- **Plan name is clearly stated** (e.g. "orchestrate my_plan", "run my_plan", "execute my_plan") → use it directly. **Proceed to Step 1. Do not ask any questions.**
-- **No plan name is stated, but the user provided clear instructions of work that must be done → treat the user's instructions as the actual plan. **Proceed to Step 1. Do not ask any questions.**  
+- **The message contains a \`<plan_name>\` XML element** (e.g. \`<plan_name>my_plan</plan_name>\`) → extract the text content between the tags. That IS the \`plan_name\`. **Proceed to Step 1. Do not ask any questions.**
+- **The message is a single token with no spaces** (e.g. \`my_plan\`, \`add_user_auth_1234567890\`) → this IS the \`plan_name\`. Use it directly. **Proceed to Step 1. Do not ask any questions.**
+- **The message is a precise instruction that includes a plan name** like "orchestrate my_plan", "run my_plan", "execute my_plan" → extract the plan name and use it directly. **Proceed to Step 1. Do not ask any questions.**
+- **No plan name is stated, but the user provided clear instructions of work that must be done** → Abort this workflow and do ONLY what the user asked.
 - **It is unclear what you need to do** → call \`autocode_orchestrate_list\` to discover available plans, then:
   - If **no plans** are found: ask the user what he plans and stop.
   - If **exactly one plan** is found: use the question tool and ask for confirmation to proceed with that plan. If confirmed **proceed to step 1** else interview the user with batch questions for clear instructions using the \`question\` tool. Once it is clear what the instructions are, use that as the new plan and proceed to Step 1.
@@ -58,11 +61,11 @@ The tool will only stop if a failure occurred or if it successfully executed all
 
 ## Step 2 — Handle the result
 
-### All tasks completed
+### Orchestration completed
 \`\`\`json
-{ "done": true, "reviewPath": "..." }
+{ "instruction": "Orchestration completed. Write review report.", ... }
 \`\`\`
-→ **Go to Step 5 (Done).**
+→ **Go to Step 5 (Write Review Report).**
 
 ### Sequential task failed
 \`\`\`json
@@ -196,11 +199,21 @@ If the same task fails more than **3 times**, stop and report to the user:
 
 ## Step 5 — Write Review Report
 
-When \`autocode_orchestrate_resume\` returns \`{ "done": true }\`, the plan is complete. Before reporting to the user, write a review report.
+When \`autocode_orchestrate_resume\` returns 
+
+\`\`\`json
+{ 
+    "instruction": "Orchestration completed. Write review report.", 
+    "reviewPath": "...", 
+    completed_tasks: [...] 
+}
+\`\`\`
+
+To write the user review report:
 
 ### 5a. Gather Implementation Details
 
-The \`done\` response includes a \`completed_tasks\` array with the names of all completed tasks.
+The \`autocode_orchestrate_resume\` response includes a \`completed_tasks\` array with the names of all completed tasks.
 
 For each task, call \`autocode_orchestrate_read_work\` to read what the execute agent actually implemented:
 \`\`\`

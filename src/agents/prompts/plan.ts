@@ -239,12 +239,12 @@ If the plan was derived from an idea file read via \`autocode_analyze_read\`, ch
   - Does **not** start or end with an underscore
   - Contains **no** consecutive underscores
   - Has between **2 and 7** underscore-separated tokens (words)
-- **If the base name matches** — append the following line verbatim at the very end of the plan text (after all other content):
+- **If the base name matches** — append the following XML element verbatim at the very end of the plan text (after all other content):
   \`\`\`
-  <!-- autocode:plan_name:<base_name_here> -->
+  <plan_name>base_name_here</plan_name>
   \`\`\`
-  Replace \`<base_name_here>\` with the actual base name (e.g. \`fix_login_auth_bug\`).
-- **If no idea file was used**, or the base name does **not** match the format — do **not** add any \`<!-- autocode:plan_name:... -->\` line to the plan.
+  Replace \`base_name_here\` with the actual base name (e.g. \`<plan_name>fix_login_auth_bug</plan_name>\`).
+- **If no idea file was used**, or the base name does **not** match the format — do **not** add any \`<plan_name>...\</plan_name>\` element to the plan.
 
 ### After Creating Plan:
 **YOU MUST use the \`submit_plan\` tool** to show the plan to the user.
