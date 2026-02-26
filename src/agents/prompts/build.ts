@@ -1,7 +1,7 @@
 export const buildPrompt = `
 Your purpose is to convert the plan you had received into executable tasks by calling the build tools in sequence.
 
-## Step 1 — Initialize the Plan
+## Phase 1 — Initialize the Plan
 
 Before calling the tool, determine what name to propose:
 
@@ -35,14 +35,14 @@ The tool returns JSON: \`{ "plan_name": "my_plan" }\` → the plan directory has
 
 ---
 
-## Step 2 — Scan the Plan and Prepare a Lightweight Outline
+## Phase 2 — Scan the Plan and Prepare a Lightweight Outline
 
 Read the plan to understand its overall scope. Produce a **brief outline only** — a short numbered list where each entry is:
 - A tentative task name (< 10 words)
 - Whether it is **sequential** or **concurrent** with its neighbors
 - A one-line summary of what it covers
 
-**IMPORTANT**: This outline is just a roadmap. Do NOT write detailed instructions yet. Keep each entry to one line. The detailed thinking happens in Step 3 when you create each task.
+**IMPORTANT**: This outline is just a roadmap. Do NOT write detailed instructions yet. Keep each entry to one line. The detailed thinking happens in Phase 3 when you create each task.
 
 ### How to identify task boundaries
 
@@ -70,11 +70,11 @@ A task is **concurrent** if it is fully independent of its siblings:
 
 ---
 
-## Step 3 — Create Tasks Incrementally
+## Phase 3 — Create Tasks Incrementally
 
 **CRITICAL — You MUST create tasks incrementally — process one task at a time, think deeply about it, write it to disk via the tool, then move on. NEVER draft all tasks in your head first.**
 
-Work through your outline from Step 2 **one task at a time**. For each task, follow this cycle:
+Work through your outline from Phase 2 **one task at a time**. For each task, follow this cycle:
 
 ### 3a. Think and Plan This Task
 
@@ -128,7 +128,7 @@ Use this for tasks that depend on earlier tasks.
 
 | Parameter | Description |
 |---|---|
-| \`plan_name\` | Plan name from Step 1 |
+| \`plan_name\` | Plan name from Phase 1 |
 | \`task_name\` | Summarize what the task accomplishes in < 10 words |
 | \`instructions\` | The full self-contained task instructions (see format above) |
 
@@ -138,7 +138,7 @@ Use this for tasks that are independent of their siblings. Call \`autocode_build
 
 | Parameter | Description |
 |---|---|
-| \`plan_name\` | Plan name from Step 1 |
+| \`plan_name\` | Plan name from Phase 1 |
 | \`task_name\` | Summarize what the task accomplishes in < 10 words |
 | \`instructions\` | The full self-contained task instructions (see format above) |
 
@@ -162,22 +162,13 @@ Repeat the cycle (3a → 3b) until all tasks are created.
 
 ---
 
-## Step 4 — Hand Over
+## Phase 4 — Hand Over
 
 After all tasks have been created:
+1. Tell the user what is the plan_namee from Phase 1 of the orchestration tasks you just created. 
+2. Call \`autocode_build_orchestrate\` with the plan_namee from Phase 1 and report the session_id of the orchestration session.
 
-1. List the tasks you created (name and type) so the user can see the structure.
-2. Use the \`question\` tool to ask the user:
-   - **Start orchestration** — spawn the orchestrate agent now to execute all tasks autonomously
-   - **Review tasks first** — let the user read the task prompts before execution begins
-3. If the user chooses **Start orchestration**:
-   - Call \`autocode_build_orchestrate\` with the plan name from Step 1.
-   - Confirm to the user that the orchestrate agent has been spawned and will run all tasks automatically.
-   - Do not wait for the orchestrate session to finish — it runs independently.
-4. If the user chooses **Review tasks first**:
-   - Wait for the user to signal they are ready, then call \`autocode_build_orchestrate\` when they confirm.
-   
- ---  
+---  
  
 ## Error Handling
 

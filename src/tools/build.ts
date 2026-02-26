@@ -429,18 +429,15 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
     })
 
     /**
-     * Spawns a new `build/orchestrate` agent session to orchestrate execution of a plan.
+     * Spawns a new `orchestrate` agent session to orchestrate execution of a plan.
      *
      * Creates a fresh session titled "Orchestrate: <plan_name>", sends the plan name
      * as the initial prompt, and returns the session ID so it can be monitored.
-     * The build/orchestrate agent takes over from there autonomously.
+     * The orchestrate agent takes over from there autonomously.
      */
     const autocode_build_orchestrate: ToolDefinition = tool({
         description:
-            "Spawn a new `build/orchestrate` agent session to autonomously execute all tasks " +
-            "for the given plan. The orchestrate agent runs tasks in the correct order " +
-            "(sequential then concurrent), handles failures with investigation and fixing, " +
-            "and promotes the plan to .autocode/review/ when all tasks complete. " +
+            "Start the orchestration of tasks for the given plan_name." +
             "Returns { session_id } of the spawned session.",
         args: {
             plan_name: tool.schema
@@ -466,7 +463,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 client.session.prompt({
                     path: { id: sessionId },
                     body: {
-                        agent: "build/orchestrate",
+                        agent: "orchestrate",
                         parts: [{ type: "text", text: args.plan_name }],
                     },
                     throwOnError: true,

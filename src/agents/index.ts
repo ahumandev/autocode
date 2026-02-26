@@ -81,7 +81,7 @@ export const agents: AgentMap = {
      * Spawned by the build agent after plan creation.
      * Only allowed to call autocode_orchestrate_* tools — no direct filesystem access.
      */
-    "build/orchestrate": {
+    "orchestrate": {
         color: "#FF8040",
         description: "Orchestrate plan task execution — runs tasks in order, concurrently where possible",
         hidden: true,
@@ -93,7 +93,7 @@ export const agents: AgentMap = {
         prompt: orchestratePrompt,
     },
 
-    "build/execute": {
+    "execute": {
         color: "#FFFF40",
         description: "Execute a task",
         hidden: true,

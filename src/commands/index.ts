@@ -24,8 +24,8 @@ type CommandMap = Record<string, {
 export const commands: CommandMap = {
 
     "autocode-orchestrate": {
-        description: "List available plans in .autocode/build/ and start orchestrating one with the build/orchestrate agent",
-        agent: "build/orchestrate",
+        description: "List available plans in .autocode/build/ and start orchestrating one with the orchestrate agent",
+        agent: "orchestrate",
         template: `
 Follow this workflow:
 
