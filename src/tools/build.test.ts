@@ -227,13 +227,13 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
 
     let tmpDir: string
     let planName: string
-    let acceptedDir: string
+    let awaitDir: string
 
     beforeEach(async () => {
         tmpDir = await mkdtemp(path.join(tmpdir(), "autocode-test-"))
         planName = "test_plan"
-        acceptedDir = path.join(tmpDir, ".autocode", "build", planName, "accepted")
-        await mkdir(acceptedDir, { recursive: true })
+        awaitDir = path.join(tmpDir, ".autocode", "build", planName, "awaiting")
+        await mkdir(awaitDir, { recursive: true })
     })
 
     afterEach(async () => {
@@ -248,7 +248,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         return createBuildTools(mockClient)
     }
 
-    test("creates a new concurrent group when accepted/ is empty", async () => {
+    test("creates a new concurrent group when awaiting/ is empty", async () => {
         const { autocode_build_concurrent_task } = tools()
 
         const result = await autocode_build_concurrent_task.execute(
@@ -262,7 +262,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
 
     test("creates a new concurrent group when last entry is a sequential task", async () => {
         // Pre-create a sequential task directory
-        await mkdir(path.join(acceptedDir, "00-sequential_task"), { recursive: true })
+        await mkdir(path.join(awaitDir, "00-sequential_task"), { recursive: true })
 
         const { autocode_build_concurrent_task } = tools()
 
@@ -278,7 +278,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
 
     test("adds to existing concurrent group when last entry is already a concurrent group", async () => {
         // Pre-create a concurrent group (as if a previous task already created it)
-        const groupDir = path.join(acceptedDir, "00-concurrent_group")
+        const groupDir = path.join(awaitDir, "00-concurrent_group")
         await mkdir(path.join(groupDir, "task_a"), { recursive: true })
 
         const { autocode_build_concurrent_task } = tools()
@@ -313,7 +313,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
 
     test("sequential task after concurrent group creates new order slot", async () => {
         // First add a concurrent group with one task
-        const groupDir = path.join(acceptedDir, "00-concurrent_group")
+        const groupDir = path.join(awaitDir, "00-concurrent_group")
         await mkdir(path.join(groupDir, "task_a"), { recursive: true })
 
         const { autocode_build_next_task } = tools()
@@ -328,7 +328,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
 
         // Verify the directory was created at order 01
         const { readdir } = await import("fs/promises")
-        const entries = await readdir(acceptedDir)
+        const entries = await readdir(awaitDir)
         expect(entries).toContain("01-next_sequential")
     })
 
@@ -346,7 +346,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
 
         const { readFile } = await import("fs/promises")
         const buildContent = await readFile(
-            path.join(acceptedDir, "00-concurrent_group", "task_a", "build.prompt.md"),
+            path.join(awaitDir, "00-concurrent_group", "task_a", "build.prompt.md"),
             "utf-8",
         )
 

@@ -4,7 +4,7 @@ import { z } from "zod"
 export const Stage = z.enum(["analyze", "build", "review", "specs"])
 export type Stage = z.infer<typeof Stage>
 
-export const TaskStatus = z.enum(["accepted", "busy", "tested"])
+export const TaskStatus = z.enum(["awaiting", "busy", "tested"])
 export type TaskStatus = z.infer<typeof TaskStatus>
 
 export interface AutocodeConfig {
@@ -29,7 +29,7 @@ export interface Plan {
   reviewMd?: string
   /** Parsed .session.json contents */
   sessionJson?: SessionMeta
-  /** Parsed task tree from accepted/busy/tested directories */
+  /** Parsed task tree from awaiting/busy/tested directories */
   tasks: TaskTree
 }
 
@@ -109,7 +109,7 @@ export interface TaskTree {
  * Summary of task counts per status for display purposes.
  */
 export interface TaskSummary {
-  accepted: number
+  awaiting: number
   busy: number
   tested: number
   total: number

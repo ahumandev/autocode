@@ -66,7 +66,7 @@ export async function initAutocode(projectRoot: string, verbose = false): Promis
 2. Run \`/autocode-analyze\` in OpenCode
 3. Plan interactively with the plan agent + Planatator
 4. Approve the plan → build agent generates task structure
-5. Autocode orchestrator executes tasks → come back when done
+5. Autocode orchestrator executes tasks → come back when finish
 6. Run \`/autocode-review\` to approve or reject results
 
 ## Directory Structure
@@ -77,11 +77,7 @@ export async function initAutocode(projectRoot: string, verbose = false): Promis
 ├── build/            # Active plans with task directories
 │   └── plan_name/
 │       ├── plan.md
-│       ├── .review.md
-│       ├── .session.json
-│       ├── accepted/   # Tasks not yet started
-│       ├── busy/       # Tasks currently executing
-│       └── tested/     # Tasks completed & verified
+│       └── .review.md
 ├── review/           # Plans awaiting manual review
 ├── specs/            # Approved specs (.md + .diff files)
 └── .archive/         # Archived plan directories

@@ -315,15 +315,11 @@ The build agent takes over from here.
 - **Use multiple: true** - When user can select more than one option
 ---
 
-## Tool Response Codes
+## Error Handling
 
-Every tool you call returns one of the following response shapes:
-
-| Response | Meaning | What to do |
-|---|---|---|
-| \`{ "error": "Retry <tool> again with a valid <param> parameter which must ..." }\` | You provided wrong or missing parameters | Read the error to understand your mistake and follow the instructions provided by the tool's error message. |
-| \`{ "error": "You MUST abort your workflow immediately because ..." }\` | Internal system failure or max retries exceeded | **Stop immediately.** Tell the user why you had to abort. |
-| Any response **without** an \`error\` field | Tool completed successfully | Continue to the next instruction |
+If the response contains an \`error\` field, the tool failed — follow the exact instruction in the \`error\` message.
+If the response has no \`error\` field, the tool succeeded.
+If the response has an \`instruction\` field, follow the exact instruction in the \`instruction\` message.
 
 ---
 

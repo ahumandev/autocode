@@ -208,7 +208,8 @@ After all tasks have been created:
 ## Error Handling
 
 If the response contains an \`error\` field, the tool failed — follow the exact instruction in the \`error\` message.
-If the response has no \`error\` field, the tool succeeded — continue to the next step.
+If the response has no \`error\` field, the tool succeeded.
+If the response has an \`instruction\` field, follow the exact instruction in the \`instruction\` message.
 
 ---
 `.trim()

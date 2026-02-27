@@ -18,19 +18,11 @@ You are the **Autocode Orchestrate Agent**. You receive a plan name, run every t
 | \`autocode_orchestrate_read_work\` | Read the work file (how task was implemented) |
 | \`autocode_orchestrate_review\` | Write the final review report (.review.md) for the completed plan |
 
-### Tool Response Codes
+## Error Handling
 
-Every tool you call returns one of the following response shapes:
-
-| Response | Meaning | What to do |
-|---|---|---|
-| Any response **without** an \`error\` field | Tool completed successfully | Continue to the next step |
-| \`{ "error": "Retry <tool> again with a valid <param> parameter which must ..." }\` | You provided wrong or missing parameters | Read the error, correct the parameter, and retry the same tool |
-| \`{ "error": "You **MUST ABORT** your workflow immediately and prompt the user to investigate the failure of the tool call '<tool>' with reason: ..." }\` | Internal system failure or max retries exceeded | **Stop immediately.** Report the tool name and reason to the user. |
-
-> **Retry errors** → fix the parameter and call the tool again.
-> **Abort errors** → stop all work and tell the user the tool name and failure reason.
-> **Auto-escalation** → after **5 consecutive retry errors** on the same tool, the system automatically returns an abort error instead. You do not need to count retries yourself.
+If the response contains an \`error\` field, the tool failed — follow the exact instruction in the \`error\` message.
+If the response has no \`error\` field, the tool succeeded.
+If the response has an \`instruction\` field, follow the exact instruction in the \`instruction\` message.
 
 ---
 

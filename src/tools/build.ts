@@ -114,15 +114,15 @@ async function lastEntry(dir: string): Promise<string | null> {
 }
 
 /**
- * Creates a new concurrent task group directory inside accepted/.
+ * Creates a new concurrent task group directory inside the plan directory.
  * Directory name: `<NN>-concurrent_group` (NN = zero-padded lastIndex+1).
  * Returns the full path to the new group directory.
  */
-async function createConcurrentGroupDir(acceptedDir: string): Promise<string> {
-    const order = (await lastIndex(acceptedDir)) + 1
+async function createConcurrentGroupDir(awaitDir: string): Promise<string> {
+    const order = (await lastIndex(awaitDir)) + 1
     const padded = String(order).padStart(2, "0")
     const slotName = `${padded}-concurrent_group`
-    const slotDir = path.join(acceptedDir, slotName)
+    const slotDir = path.join(awaitDir, slotName)
     await mkdir(slotDir, { recursive: true })
     return slotDir
 }
@@ -137,12 +137,11 @@ async function createConcurrentGroupDir(acceptedDir: string): Promise<string> {
  *
  *   .autocode/build/<plan_name>/
  *     plan.md                          ← full approved plan text
- *     accepted/
- *       <order>-<task_name>/           ← sequential task
- *         instructions.md
- *       <order>-concurrent_group/      ← concurrent task group directory
- *         <task_name>/                 ← one sub-dir per concurrent task
- *           build.prompt.md
+ *     <order>-<task_name>/             ← sequential task (pending, not yet started)
+ *       build.prompt.md
+ *     <order>-concurrent_group/        ← concurrent task group directory (pending)
+ *       <task_name>/                   ← one sub-dir per concurrent task
+ *         build.prompt.md
  */
 export function createBuildTools(client: Client): Record<string, ToolDefinition> {
 
@@ -204,9 +203,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
      *    their first letter and joined as a single 8th token.
      * 8. If the resulting directory already exists, append `_<timestamp>`.
      *
-     * On success: creates .autocode/build/<name>/ with plan.md and accepted/,
-     * then returns { plan_name }.
-     * On invalid name: returns { error } without touching the filesystem.
+     * On success: creates .autocode/build/<name>/ with plan.md,
+         * then returns { plan_name }.
+         * On invalid name: returns { error } without touching the filesystem.
      */
     const autocode_build_plan: ToolDefinition = tool({
         description:
@@ -257,10 +256,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
 
             const finalName = exists ? `${sanitized}_${Date.now()}` : sanitized
             const planDir = path.join(buildDir, finalName)
-            const acceptedDir = path.join(planDir, "accepted")
 
             try {
-                await mkdir(acceptedDir, { recursive: true })
+                await mkdir(planDir, { recursive: true })
                 await writeFile(path.join(planDir, "plan.md"), args.plan_content, "utf-8")
                 return successResponse(sid, toolName, { plan_name: finalName })
             } catch (err: any) {
@@ -273,9 +271,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
     /**
      * Creates the next sequential task directory and its prompt files.
      *
-     * The directory name is `<N>-<task_name>` where N = (current max order + 1).
-     * If the last created entry was a parallel slot, this new sequential task
-     * gets the next order number after that slot.
+     * The directory name is `<NN>-<task_name>` where NN = (current max order + 1),
+     * zero-padded to two digits. Tasks are created directly inside the plan
+     * directory (no `awaiting/` subdirectory).
      */
     const autocode_build_next_task: ToolDefinition = tool({
         description: "Use this tool to create the first task in the plan or to create tasks that depends on the successful execution of the previous tasks.",
@@ -305,7 +303,8 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             if (instructionsErr) return instructionsErr
 
             // ── check the plan directory exists (input problem if it does not) ──
-            const planDirStat = await stat(path.join(context.worktree, ".autocode", "build", args.plan_name)).catch(() => null)
+            const planDir = path.join(context.worktree, ".autocode", "build", args.plan_name)
+            const planDirStat = await stat(planDir).catch(() => null)
             if (!planDirStat) {
                 return retryResponse(
                     sid,
@@ -315,23 +314,15 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 )
             }
 
-            const acceptedDir = path.join(
-                context.worktree,
-                ".autocode",
-                "build",
-                args.plan_name,
-                "accepted",
-            )
-
             // ── filesystem work ───────────────────────────────────────────────
             try {
-                const order = (await lastIndex(acceptedDir)) + 1
+                const order = (await lastIndex(planDir)) + 1
                 const padded = String(order).padStart(2, "0")
                 const dirName = `${padded}-${args.task_name}`
-                const taskDir = path.join(acceptedDir, dirName)
+                const taskDir = path.join(planDir, dirName)
 
                 await mkdir(taskDir, { recursive: true })
-                await writeFile(path.join(taskDir, "instructions.md"), args.instructions, "utf-8")
+                await writeFile(path.join(taskDir, "build.prompt.md"), args.instructions, "utf-8")
 
                 return successResponse(sid, toolName)
             } catch (err: any) {
@@ -345,9 +336,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
      * Adds a task to a concurrent task group.
      *
      * Auto-detection logic:
-     * - If the last entry in accepted/ is already a concurrent group → add this task to it (parallel).
-     * - If the last entry is a sequential task (or accepted/ is empty) → create a new concurrent group
-     *   and place this task inside it.
+     * - If the last entry in the plan dir is already a concurrent group → add this task to it (parallel).
+     * - If the last entry is a sequential task (or the plan dir has no tasks yet) → create a new
+     *   concurrent group and place this task inside it.
      *
      * This means the agent never needs to manually call a separate "create group" tool.
      */
@@ -383,7 +374,8 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             if (taskPromptErr) return taskPromptErr
 
             // ── check the plan directory exists (input problem if it does not) ──
-            const planDirStat = await stat(path.join(context.worktree, ".autocode", "build", args.plan_name)).catch(() => null)
+            const planDir = path.join(context.worktree, ".autocode", "build", args.plan_name)
+            const planDirStat = await stat(planDir).catch(() => null)
             if (!planDirStat) {
                 return retryResponse(
                     sid,
@@ -393,26 +385,18 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 )
             }
 
-            const acceptedDir = path.join(
-                context.worktree,
-                ".autocode",
-                "build",
-                args.plan_name,
-                "accepted",
-            )
-
             // ── filesystem work ───────────────────────────────────────────────
             try {
                 // Determine whether the last entry is already a concurrent group
-                const last = await lastEntry(acceptedDir)
+                const last = await lastEntry(planDir)
                 let slotDir: string
 
                 if (last && isConcurrentGroup(last)) {
                     // Last entry is a concurrent group — add this task to it
-                    slotDir = path.join(acceptedDir, last)
+                    slotDir = path.join(planDir, last)
                 } else {
-                    // Last entry is sequential (or accepted/ is empty) — create a new group
-                    slotDir = await createConcurrentGroupDir(acceptedDir)
+                    // Last entry is sequential (or plan dir has no tasks yet) — create a new group
+                    slotDir = await createConcurrentGroupDir(planDir)
                 }
 
                 const taskDir = path.join(slotDir, args.task_name)

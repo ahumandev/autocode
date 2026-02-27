@@ -175,6 +175,18 @@ function paginate(text: string, offset: number, limit: number): string {
     return slice.join("\n")
 }
 
+/**
+ * Generate a timestamp string in `YYYY-MM-DD_HH-mm-ss` format (local time).
+ */
+function makeTimestamp(): string {
+    const now = new Date()
+    const pad = (n: number, w = 2) => String(n).padStart(w, "0")
+    return [
+        `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
+        `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`,
+    ].join("_")
+}
+
 // ─── async helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -210,38 +222,49 @@ async function findSessionFileById(
 }
 
 /**
- * Resolves the absolute path to a task directory inside `accepted/`.
- * `taskName` may be:
- *   - "01-create_model"                         (sequential)
- *   - "02-concurrent_group/login_endpoint"      (concurrent sub-task)
+ * Returns the directory entry with the lowest numeric prefix in `planDir` that
+ * has not yet started (i.e. still has the `XX-` prefix but no timestamp prefix
+ * and is not hidden with a leading dot).
+ *
+ * Entries are sorted numerically by their leading two-digit order prefix.
+ * Returns null when no pending tasks remain.
  */
-function taskDirPath(worktree: string, planName: string, taskName: string): string {
-    return path.join(worktree, ".autocode", "build", planName, "accepted", taskName)
-}
-
-/**
- * Returns the directory entry with the lowest numeric prefix in `accepted/`,
- * or null if no numbered entries remain (all tasks moved to done/).
- */
-async function findNextGroup(acceptedDir: string): Promise<string | null> {
-    const entries = await readdir(acceptedDir).catch(() => [] as string[])
-    const numbered = entries
+async function findNextGroup(planDir: string): Promise<string | null> {
+    const entries = await readdir(planDir).catch(() => [] as string[])
+    // Pending tasks start with exactly two digits followed by a dash
+    const pending = entries
         .filter(e => /^\d{2}-/.test(e))
         .sort((a, b) => {
             const na = parseInt(a.match(/^(\d+)/)?.[1] ?? "0", 10)
             const nb = parseInt(b.match(/^(\d+)/)?.[1] ?? "0", 10)
             return na - nb
         })
-    return numbered[0] ?? null
+    return pending[0] ?? null
 }
 
 /**
- * Resolve the absolute path to a task directory.
+ * Resolve the absolute path to a task directory within a plan.
  *
- * - With `taskName`: scans `accepted/{taskName}` then `done/{taskName}`.
- *   Returns the first that exists, or null if neither does.
- * - Without `taskName`: returns the directory of the lowest-numbered group
- *   currently in `accepted/` (i.e. the "current" task), or null if none remain.
+ * The plan may live in `.autocode/build/`, `.autocode/execute/`, or
+ * `.autocode/review/`.  Within the plan directory tasks can be in any of
+ * three states:
+ *
+ *   - Pending   — `XX-task_name`                (numeric prefix, no timestamp)
+ *   - In-flight — `YYYY-MM-DD_HH-mm-ss-XX-task` (timestamp prefix)
+ *   - Succeeded — `.YYYY-MM-DD_HH-mm-ss-XX-task` (dot-hidden, timestamp prefix)
+ *   - Failed    — `YYYY-MM-DD_HH-mm-ss-XX-task.failed`
+ *
+ * Concurrent tasks live inside a group directory named `XX-concurrent_group`
+ * (pending) or the timestamped/hidden variants thereof.
+ *
+ * With `taskName`:
+ *   Searches all plan locations and all task states for a directory whose
+ *   *base name* (after stripping the leading dot, timestamp prefix, and
+ *   trailing `.failed`) matches `taskName`.  Returns the first match or null.
+ *
+ * Without `taskName`:
+ *   Returns the directory of the lowest-numbered *pending* group in the plan
+ *   (i.e. the next group to execute), or null if none remain.
  */
 async function resolveTaskDir(
     worktree: string,
@@ -249,33 +272,60 @@ async function resolveTaskDir(
     taskName?: string,
 ): Promise<string | null> {
     const bases = [
-        path.join(worktree, ".autocode", "build", planName),
-        path.join(worktree, ".autocode", "review", planName),
+        path.join(worktree, ".autocode", "build",   planName),
+        path.join(worktree, ".autocode", "execute",  planName),
+        path.join(worktree, ".autocode", "review",   planName),
     ]
 
     if (taskName) {
         for (const base of bases) {
-            const candidates = [
-                path.join(base, "accepted", taskName),
-                path.join(base, "done",     taskName),
-            ]
-            for (const candidate of candidates) {
-                try {
-                    await readdir(candidate)
+            const entries = await readdir(base).catch(() => [] as string[])
+            for (const entry of entries) {
+                const candidate = path.join(base, entry)
+                // Strip leading dot, timestamp prefix, trailing .failed to get logical name
+                const logical = stripTaskNameDecorations(entry)
+                if (logical === taskName) {
                     return candidate
-                } catch { /* try next */ }
+                }
+                // Also search inside concurrent groups
+                if (/concurrent_group/.test(logical)) {
+                    const subEntries = await readdir(candidate).catch(() => [] as string[])
+                    for (const sub of subEntries) {
+                        if (!sub.startsWith(".") && sub === taskName) {
+                            return path.join(candidate, sub)
+                        }
+                    }
+                }
             }
         }
         return null
     }
 
-    // No task_name — resolve the current (lowest-numbered) group in accepted/
+    // No task_name — resolve the current (lowest-numbered pending) group
     for (const base of bases) {
-        const acceptedDir = path.join(base, "accepted")
-        const next = await findNextGroup(acceptedDir)
-        if (next) return path.join(acceptedDir, next)
+        const next = await findNextGroup(base)
+        if (next) return path.join(base, next)
     }
     return null
+}
+
+/**
+ * Strip all runtime decorations from a task directory name to recover the
+ * original logical name (as created by the build tool).
+ *
+ * Decorations removed (in order):
+ *  1. Leading dot (hidden/completed marker)
+ *  2. Leading `YYYY-MM-DD_HH-mm-ss-` timestamp
+ *  3. Trailing `.failed`
+ */
+function stripTaskNameDecorations(name: string): string {
+    // 1. Strip leading dot
+    let n = name.startsWith(".") ? name.slice(1) : name
+    // 2. Strip timestamp prefix: YYYY-MM-DD_HH-mm-ss-
+    n = n.replace(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-/, "")
+    // 3. Strip trailing .failed
+    if (n.endsWith(".failed")) n = n.slice(0, -".failed".length)
+    return n
 }
 
 // ─── tool factory ────────────────────────────────────────────────────────────
@@ -285,7 +335,12 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
     // ─── internal: execute one task directory ────────────────────────────────
 
     /**
-     * Execute a single task directory end-to-end.
+     * Execute a single task directory end-to-end, managing directory renames
+     * to reflect the current state:
+     *
+     *   Pending   → In-flight:  `XX-task`        → `YYYY-MM-DD_HH-mm-ss-XX-task`
+     *   In-flight → Succeeded:  `YYYY-…-XX-task` → `.YYYY-…-XX-task`
+     *   In-flight → Failed:     `YYYY-…-XX-task` → `YYYY-…-XX-task.failed`
      *
      * Build step:
      *   - If `task.success.{id}.md` already exists → skip (prior run succeeded).
@@ -297,41 +352,68 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
      *   - Otherwise spawn a `test` session.
      *   - Write `test.success.{id}.md` on pass, `test.failed.{id}.md` on fail.
      *
-     * Returns null on success, or a TaskFailure object on failure.
+     * Returns { finalDir, failure } where:
+     *  - `finalDir` is the directory path after all renames.
+     *  - `failure`  is null on success, or a TaskFailure object on failure.
+     *
      * Always populates `buildSessionId` so callers can send fix instructions
      * to the build session even when the test is what failed.
      */
     async function executeTask(
         taskDir: string,
         taskDisplayName: string,
-    ): Promise<TaskFailure | null> {
+    ): Promise<{ finalDir: string; failure: TaskFailure | null }> {
+
+        // ── Rename pending → in-flight ────────────────────────────────────────
+        // The directory name may already have a timestamp prefix if this is a
+        // resume after a crash (in-flight state survived).  Only rename when the
+        // entry still looks pending (starts with two digits).
+        const entryName = path.basename(taskDir)
+        let inFlightDir: string
+
+        if (/^\d{2}-/.test(entryName)) {
+            // Still pending — prepend timestamp
+            const ts = makeTimestamp()
+            const newName = `${ts}-${entryName}`
+            inFlightDir = path.join(path.dirname(taskDir), newName)
+            await rename(taskDir, inFlightDir)
+        } else {
+            // Already in-flight (timestamp prefix present) — use as-is
+            inFlightDir = taskDir
+        }
 
         // ── Build step ───────────────────────────────────────────────────────
 
         let buildSessionId: string
 
-        const existingBuildSuccess = await findSessionFile(taskDir, "task.success")
+        const existingBuildSuccess = await findSessionFile(inFlightDir, "task.success")
         if (existingBuildSuccess) {
             // Already succeeded on a prior run — reuse its session ID
             buildSessionId = extractSessionId(existingBuildSuccess)
         } else {
             let buildPrompt: string
             try {
-                buildPrompt = await readFile(path.join(taskDir, "build.prompt.md"), "utf-8")
+                buildPrompt = await readFile(path.join(inFlightDir, "build.prompt.md"), "utf-8")
             } catch (err: any) {
-                const failFile = path.join(taskDir, "task.failed.read_error.md")
+                const failFile = path.join(inFlightDir, "task.failed.read_error.md")
                 await writeFile(
                     failFile,
                     `# Session Record\n\n## Error\n\nFailed to read build.prompt.md: ${err.message}\n`,
                     "utf-8",
                 ).catch(() => {})
+                // Mark as failed
+                const failedDir = `${inFlightDir}.failed`
+                await rename(inFlightDir, failedDir).catch(() => {})
                 return {
-                    failure: `Failed to read build.prompt.md for '${taskDisplayName}': ${err.message}`,
-                    sessionFile: failFile,
-                    sessionId: "read_error",
-                    buildSessionId: "read_error",
-                    failureType: "tool_error" as FailureType,
-                    failureDetails: err.message,
+                    finalDir: failedDir,
+                    failure: {
+                        failure: `Failed to read build.prompt.md for '${taskDisplayName}': ${err.message}`,
+                        sessionFile: failFile,
+                        sessionId: "read_error",
+                        buildSessionId: "read_error",
+                        failureType: "tool_error" as FailureType,
+                        failureDetails: err.message,
+                    },
                 }
             }
 
@@ -362,31 +444,36 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
 
                 if (executeResult.kind === "failure") {
                     const failure = `Execute agent reported failure for '${taskDisplayName}': ${executeResult.content}`
-                    const failFile = path.join(taskDir, `task.failed.${sid}.md`)
+                    const failFile = path.join(inFlightDir, `task.failed.${sid}.md`)
                     await writeFile(
                         failFile,
                         formatSessionMarkdown(buildPrompt, buildMessages),
                         "utf-8",
                     ).catch(() => {})
+                    const failedDir = `${inFlightDir}.failed`
+                    await rename(inFlightDir, failedDir).catch(() => {})
                     return {
-                        failure,
-                        sessionFile: failFile,
-                        sessionId: sid,
-                        buildSessionId: sid,
-                        failureType: "execute_failure" as FailureType,
-                        failureDetails: executeResult.content,
+                        finalDir: failedDir,
+                        failure: {
+                            failure,
+                            sessionFile: failFile,
+                            sessionId: sid,
+                            buildSessionId: sid,
+                            failureType: "execute_failure" as FailureType,
+                            failureDetails: executeResult.content,
+                        },
                     }
                 }
 
                 await writeFile(
-                    path.join(taskDir, `task.success.${sid}.md`),
+                    path.join(inFlightDir, `task.success.${sid}.md`),
                     formatSessionMarkdown(buildPrompt, buildMessages),
                     "utf-8",
                 )
 
                 // Write work.md summarising what was implemented
                 await writeFile(
-                    path.join(taskDir, "work.md"),
+                    path.join(inFlightDir, "work.md"),
                     `# Work Summary\n\n${executeResult.content}\n`,
                     "utf-8",
                 ).catch(() => {})
@@ -394,19 +481,24 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 buildSessionId = sid
             } catch (err: any) {
                 const failure = `Build session failed for '${taskDisplayName}': ${err.message}`
-                const failFile = path.join(taskDir, `task.failed.${sid}.md`)
+                const failFile = path.join(inFlightDir, `task.failed.${sid}.md`)
                 await writeFile(
                     failFile,
                     `# Session Record\n\n## Error\n\n${failure}\n`,
                     "utf-8",
                 ).catch(() => {})
+                const failedDir = `${inFlightDir}.failed`
+                await rename(inFlightDir, failedDir).catch(() => {})
                 return {
-                    failure,
-                    sessionFile: failFile,
-                    sessionId: sid,
-                    buildSessionId: sid,
-                    failureType: "task_session" as FailureType,
-                    failureDetails: err.message,
+                    finalDir: failedDir,
+                    failure: {
+                        failure,
+                        sessionFile: failFile,
+                        sessionId: sid,
+                        buildSessionId: sid,
+                        failureType: "task_session" as FailureType,
+                        failureDetails: err.message,
+                    },
                 }
             }
         }
@@ -415,14 +507,20 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
 
         let testPrompt: string
         try {
-            testPrompt = await readFile(path.join(taskDir, "test.prompt.md"), "utf-8")
+            testPrompt = await readFile(path.join(inFlightDir, "test.prompt.md"), "utf-8")
         } catch {
-            return null // No test prompt → task is complete
+            // No test prompt → mark succeeded and return
+            const doneDir = path.join(path.dirname(inFlightDir), `.${path.basename(inFlightDir)}`)
+            await rename(inFlightDir, doneDir).catch(() => {})
+            return { finalDir: doneDir, failure: null }
         }
 
-        const existingTestSuccess = await findSessionFile(taskDir, "test.success")
+        const existingTestSuccess = await findSessionFile(inFlightDir, "test.success")
         if (existingTestSuccess) {
-            return null // Already tested and passed
+            // Already tested and passed — mark succeeded
+            const doneDir = path.join(path.dirname(inFlightDir), `.${path.basename(inFlightDir)}`)
+            await rename(inFlightDir, doneDir).catch(() => {})
+            return { finalDir: doneDir, failure: null }
         }
 
         let testSid = "error"
@@ -450,25 +548,30 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             testMessages = (resp.data ?? []) as MessageEntry[]
         } catch (err: any) {
             const failure = `Test session failed for '${taskDisplayName}': ${err.message}`
-            const failFile = path.join(taskDir, `test.failed.${testSid}.md`)
+            const failFile = path.join(inFlightDir, `test.failed.${testSid}.md`)
             await writeFile(
                 failFile,
                 `# Session Record\n\n## Error\n\n${failure}\n`,
                 "utf-8",
             ).catch(() => {})
+            const failedDir = `${inFlightDir}.failed`
+            await rename(inFlightDir, failedDir).catch(() => {})
             return {
-                failure,
-                sessionFile: failFile,
-                sessionId: testSid,
-                buildSessionId,
-                failureType: "test_session" as FailureType,
-                failureDetails: err.message,
+                finalDir: failedDir,
+                failure: {
+                    failure,
+                    sessionFile: failFile,
+                    sessionId: testSid,
+                    buildSessionId,
+                    failureType: "test_session" as FailureType,
+                    failureDetails: err.message,
+                },
             }
         }
 
         const result = extractTestResult(testMessages)
         if (!result.passed) {
-            const failFile = path.join(taskDir, `test.failed.${testSid}.md`)
+            const failFile = path.join(inFlightDir, `test.failed.${testSid}.md`)
             await writeFile(failFile, formatSessionMarkdown(testPrompt, testMessages), "utf-8")
 
             // Collect the last 20 meaningful lines from the agent's final FAIL report
@@ -479,23 +582,31 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 .map(p => p.text ?? "")
                 .join("\n") ?? ""
 
+            const failedDir = `${inFlightDir}.failed`
+            await rename(inFlightDir, failedDir).catch(() => {})
             return {
-                failure: `Test FAILED for '${taskDisplayName}'.`,
-                sessionFile: failFile,
-                sessionId: testSid,
-                buildSessionId,
-                failureType: "test_verification" as FailureType,
-                failureDetails: lastNLines(lastAssistantText, 20),
+                finalDir: failedDir,
+                failure: {
+                    failure: `Test FAILED for '${taskDisplayName}'.`,
+                    sessionFile: failFile,
+                    sessionId: testSid,
+                    buildSessionId,
+                    failureType: "test_verification" as FailureType,
+                    failureDetails: lastNLines(lastAssistantText, 20),
+                },
             }
         }
 
         await writeFile(
-            path.join(taskDir, `test.success.${testSid}.md`),
+            path.join(inFlightDir, `test.success.${testSid}.md`),
             formatSessionMarkdown(testPrompt, testMessages),
             "utf-8",
         )
 
-        return null // success
+        // Mark succeeded — hide with leading dot
+        const doneDir = path.join(path.dirname(inFlightDir), `.${path.basename(inFlightDir)}`)
+        await rename(inFlightDir, doneDir).catch(() => {})
+        return { finalDir: doneDir, failure: null }
     }
 
     // ─── tool: autocode_orchestrate_resume ──────────────────────────────────
@@ -503,8 +614,18 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
     /**
      * Run every task in the plan to completion, then promote the plan to review.
      *
-     * Loops internally over all task groups in `accepted/` (lowest numeric prefix first).
-     * On full completion moves `.autocode/build/{plan}/` → `.autocode/review/{plan}/`.
+     * On the first call moves `.autocode/build/{plan}/` → `.autocode/execute/{plan}/`.
+     *
+     * Loops internally over all task groups (lowest numeric prefix first).
+     * Sequential tasks run one at a time; concurrent groups run in parallel.
+     *
+     * Task directory lifecycle:
+     *   Pending   `XX-task`                — not yet started
+     *   In-flight `YYYY-MM-DD_HH-mm-ss-XX-task` — currently executing
+     *   Succeeded `.YYYY-MM-DD_HH-mm-ss-XX-task` — completed (dot-hidden)
+     *   Failed    `YYYY-MM-DD_HH-mm-ss-XX-task.failed` — failed, needs fixing
+     *
+     * On full completion moves `.autocode/execute/{plan}/` → `.autocode/review/{plan}/`.
      *
      * Return shapes:
      *   { done: true,  reviewPath }
@@ -534,32 +655,48 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const toolName = "autocode_orchestrate_resume"
 
             const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
-            if (planNameErr) return planNameErr
+            if (planNameErr) return retryResponse(sid, toolName, "plan_name", "value is empty")
 
-            const planDir     = path.join(context.worktree, ".autocode", "build", args.plan_name)
-            const acceptedDir = path.join(planDir, "accepted")
-            const doneDir     = path.join(planDir, "done")
-            const reviewDir   = path.join(context.worktree, ".autocode", "review", args.plan_name)
+            const buildDir    = path.join(context.worktree, ".autocode", "build",   args.plan_name)
+            const executeDir  = path.join(context.worktree, ".autocode", "execute", args.plan_name)
+            const reviewDir   = path.join(context.worktree, ".autocode", "review",  args.plan_name)
+
+            // Move build/ → execute/ on first resume (idempotent: skip if already moved)
+            try {
+                await readdir(buildDir)
+                await mkdir(path.join(context.worktree, ".autocode", "execute"), { recursive: true })
+                await rename(buildDir, executeDir)
+            } catch (err: any) {
+                // buildDir does not exist — either already moved to execute/ or invalid plan
+                try {
+                    await readdir(executeDir)
+                } catch {
+                    return abortResponse(toolName, `Failed to move '${args.plan_name}' to .autocode/execute: ${err}`)
+                }
+            }
+
+            const planDir = executeDir
 
             while (true) {
-                const groupName = await findNextGroup(acceptedDir)
+                const groupName = await findNextGroup(planDir)
 
                 if (groupName === null) {
+                    // No more pending tasks — promote to review
                     await mkdir(path.join(context.worktree, ".autocode", "review"), { recursive: true })
                     await rename(planDir, reviewDir)
 
-                    // Collect completed task names from done/
+                    // Collect completed task names (dot-hidden entries)
                     const completedTasks: string[] = []
-                    const reviewDoneDir = path.join(reviewDir, "done")
-                    const doneEntries = await readdir(reviewDoneDir).catch(() => [] as string[])
-                    for (const entry of doneEntries.filter(e => /^\d{2}-/.test(e)).sort()) {
-                        if (/^\d{2}-concurrent_group$/.test(entry)) {
-                            const subEntries = await readdir(path.join(reviewDoneDir, entry)).catch(() => [] as string[])
-                            for (const sub of subEntries.filter(s => !s.startsWith(".")).sort()) {
-                                completedTasks.push(`${entry}/${sub}`)
+                    const reviewEntries = await readdir(reviewDir).catch(() => [] as string[])
+                    for (const entry of reviewEntries.filter(e => e.startsWith(".") && e !== ".review.md").sort()) {
+                        const logical = stripTaskNameDecorations(entry)
+                        if (/concurrent_group/.test(logical)) {
+                            const subEntries = await readdir(path.join(reviewDir, entry)).catch(() => [] as string[])
+                            for (const sub of subEntries.sort()) {
+                                completedTasks.push(`${logical}/${sub}`)
                             }
                         } else {
-                            completedTasks.push(entry)
+                            completedTasks.push(logical)
                         }
                     }
 
@@ -570,24 +707,33 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     })
                 }
 
-                const groupDir     = path.join(acceptedDir, groupName)
+                const groupDir     = path.join(planDir, groupName)
                 const isConcurrent = /^\d{2}-concurrent_group$/.test(groupName)
 
                 if (isConcurrent) {
                     const subEntries = await readdir(groupDir).catch(() => [] as string[])
                     const taskNames  = subEntries.filter(e => !e.startsWith("."))
 
+                    // Rename concurrent group dir to in-flight before executing sub-tasks
+                    const ts = makeTimestamp()
+                    const inFlightGroupName = `${ts}-${groupName}`
+                    const inFlightGroupDir  = path.join(planDir, inFlightGroupName)
+                    await rename(groupDir, inFlightGroupDir)
+
                     const results = await Promise.all(
                         taskNames.map(taskName =>
                             executeTask(
-                                path.join(groupDir, taskName),
+                                path.join(inFlightGroupDir, taskName),
                                 `${groupName}/${taskName}`,
-                            ).then(failure => ({ taskName, failure }))
+                            ).then(({ failure }) => ({ taskName, failure }))
                         )
                     )
 
                     const failures = results.filter(r => r.failure !== null)
                     if (failures.length > 0) {
+                        // Mark the group dir as failed
+                        const failedGroupDir = `${inFlightGroupDir}.failed`
+                        await rename(inFlightGroupDir, failedGroupDir).catch(() => {})
                         return successResponse(sid, toolName, {
                             done: false,
                             success: false,
@@ -604,11 +750,12 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                         })
                     }
 
-                    await mkdir(doneDir, { recursive: true })
-                    await rename(groupDir, path.join(doneDir, groupName))
+                    // All concurrent tasks succeeded — hide the group dir with a dot
+                    const doneGroupDir = path.join(planDir, `.${inFlightGroupName}`)
+                    await rename(inFlightGroupDir, doneGroupDir).catch(() => {})
 
                 } else {
-                    const failure = await executeTask(groupDir, groupName)
+                    const { failure } = await executeTask(groupDir, groupName)
                     if (failure) {
                         return successResponse(sid, toolName, {
                             done: false,
@@ -622,9 +769,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                             sessionFile: failure.sessionFile,
                         })
                     }
-
-                    await mkdir(doneDir, { recursive: true })
-                    await rename(groupDir, path.join(doneDir, groupName))
+                    // executeTask already renamed to the dot-hidden path on success
                 }
             }
         },
@@ -679,7 +824,10 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const fixMessageErr = validateNonEmpty(args.fix_message, sid, toolName, "fix_message")
             if (fixMessageErr) return fixMessageErr
 
-            const dir = taskDirPath(context.worktree, args.plan_name, args.task_name)
+            const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
+            if (!dir) {
+                return retryResponse(sid, toolName, "task_name", `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+            }
 
             try {
                 await client.session.prompt({
@@ -739,10 +887,11 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
             if (planNameErr) return planNameErr
 
-            // Plan may still be in build/ (during execution) or review/ (after completion)
+            // Plan may still be in build/ (before first resume), execute/ (during execution), or review/ (after completion)
             const candidates = [
-                path.join(context.worktree, ".autocode", "build", args.plan_name, "plan.md"),
-                path.join(context.worktree, ".autocode", "review", args.plan_name, "plan.md"),
+                path.join(context.worktree, ".autocode", "build",   args.plan_name, "plan.md"),
+                path.join(context.worktree, ".autocode", "execute",  args.plan_name, "plan.md"),
+                path.join(context.worktree, ".autocode", "review",   args.plan_name, "plan.md"),
             ]
             for (const p of candidates) {
                 try {
@@ -750,7 +899,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     return successResponse(sid, toolName, content)
                 } catch { /* try next */ }
             }
-            return abortResponse(toolName, `plan.md not found for plan '${args.plan_name}' in build/ or review/`)
+            return abortResponse(toolName, `plan.md not found for plan '${args.plan_name}' in build/, execute/, or review/`)
         },
     })
 
@@ -766,7 +915,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             task_name: tool.schema
                 .string()
                 .optional()
-                .describe("Task name (e.g. '01-create_model'). Omit to use the current task in accepted/."),
+                .describe("Task name (e.g. '01-create_model'). Omit to use the next pending task."),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -778,8 +927,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no pending task found for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             try {
                 const content = await readFile(path.join(dir, "build.prompt.md"), "utf-8")
@@ -807,7 +956,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             task_name: tool.schema
                 .string()
                 .optional()
-                .describe("Task name (e.g. '01-create_model'). Omit to use the current task in accepted/."),
+                .describe("Task name (e.g. '01-create_model'). Omit to use the next pending task."),
             session_id: tool.schema.string().describe("The build_session_id from the failure response"),
             section: tool.schema
                 .enum(["all", "prompt", "session", "last_assistant"])
@@ -841,8 +990,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no pending task found for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             const filePath = await findSessionFileById(dir, "task", args.session_id)
             if (!filePath) {
@@ -869,7 +1018,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             task_name: tool.schema
                 .string()
                 .optional()
-                .describe("Task name (e.g. '01-create_model'). Omit to use the current task in accepted/."),
+                .describe("Task name (e.g. '01-create_model'). Omit to use the next pending task."),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -881,8 +1030,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no pending task found for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             try {
                 const content = await readFile(path.join(dir, "test.prompt.md"), "utf-8")
@@ -910,7 +1059,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             task_name: tool.schema
                 .string()
                 .optional()
-                .describe("Task name (e.g. '01-create_model'). Omit to use the current task in accepted/."),
+                .describe("Task name (e.g. '01-create_model'). Omit to use the next pending task."),
             session_id: tool.schema.string().describe("The session_id from the failure response (test session ID)"),
             section: tool.schema
                 .enum(["all", "prompt", "session", "last_assistant"])
@@ -944,8 +1093,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no pending task found for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             const filePath = await findSessionFileById(dir, "test", args.session_id)
             if (!filePath) {
@@ -975,7 +1124,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             task_name: tool.schema
                 .string()
                 .optional()
-                .describe("Task name (e.g. '01-create_model'). Omit to use the current task in accepted/."),
+                .describe("Task name (e.g. '01-create_model'). Omit to use the next pending task."),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -987,8 +1136,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
             if (!dir) {
                 return args.task_name
-                    ? retryResponse(sid, toolName, "task_name", `match an existing task in accepted/ or done/ for plan '${args.plan_name}' — '${args.task_name}' was not found`)
-                    : abortResponse(toolName, `no current task found in accepted/ for plan '${args.plan_name}' — the plan state may be corrupted`)
+                    ? retryResponse(sid, toolName, "task_name", `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+                    : abortResponse(toolName, `no pending task found for plan '${args.plan_name}' — the plan state may be corrupted`)
             }
             try {
                 const content = await readFile(path.join(dir, "work.md"), "utf-8")
@@ -1004,7 +1153,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
     /**
      * Writes `.review.md` with a human review report for a completed plan.
      * The plan should already be in `.autocode/review/` (promoted by resume).
-     * Falls back to `.autocode/build/` if the plan hasn't been promoted yet.
+     * Falls back to `.autocode/execute/` or `.autocode/build/` if not yet promoted.
      */
     const autocode_orchestrate_review: ToolDefinition = tool({
         description:
@@ -1032,10 +1181,11 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const contentErr = validateNonEmpty(args.review_md_content, sid, toolName, "review_md_content")
             if (contentErr) return contentErr
 
-            // ── find the plan directory (review/ first, then build/) ──────────
+            // ── find the plan directory (review/ first, then execute/, then build/) ──────────
             const candidates = [
-                path.join(context.worktree, ".autocode", "review", args.plan_name),
-                path.join(context.worktree, ".autocode", "build", args.plan_name),
+                path.join(context.worktree, ".autocode", "review",  args.plan_name),
+                path.join(context.worktree, ".autocode", "execute", args.plan_name),
+                path.join(context.worktree, ".autocode", "build",   args.plan_name),
             ]
             let planDir: string | null = null
             for (const candidate of candidates) {
@@ -1051,7 +1201,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     sid,
                     toolName,
                     "plan_name",
-                    `match an existing plan directory — '${args.plan_name}' was not found in review/ or build/`,
+                    `match an existing plan directory — '${args.plan_name}' was not found in review/, execute/, or build/`,
                 )
             }
 
@@ -1062,7 +1212,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     args.review_md_content,
                     "utf-8",
                 )
-                return successResponse(sid, toolName, `✅ Review report written for plan '${args.plan_name}'`)
+                return successResponse(sid, toolName, `Review report written for plan '${args.plan_name}'`)
             } catch (err: any) {
                 return abortResponse(toolName, `failed to write review for plan '${args.plan_name}': ${err.message}`)
             }
@@ -1072,10 +1222,10 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
     // ─── tool: autocode_orchestrate_list ────────────────────────────────────
 
     /**
-     * List all plans available to orchestrate in `.autocode/build/`.
+     * List all plans available for orchestration in `.autocode/build/`.
      *
      * Returns an array of plan directory names (subdirectories of `.autocode/build/`).
-     * Each entry represents a plan that has been built but not yet completed or promoted.
+     * Each entry represents a plan that has been built but not yet started or promoted.
      */
     const autocode_orchestrate_list: ToolDefinition = tool({
         description:

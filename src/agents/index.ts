@@ -40,7 +40,7 @@ export const agents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_analyze*": "allow",
-            doom_loop: "allow",
+            doom_loop: "ask",
             grep: "allow",
             plan_exit: "allow",
             question: "allow",
@@ -71,6 +71,8 @@ export const agents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_build*": "allow",
+            doom_loop: "ask",
+            plan_enter: "allow",
             question: "allow"
         },
         prompt: buildPrompt,
@@ -89,6 +91,7 @@ export const agents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_orchestrate*": "allow",
+            doom_loop: "ask",
         },
         prompt: orchestratePrompt,
     },
@@ -101,11 +104,12 @@ export const agents: AgentMap = {
         permission: {
             "*": "allow",
             "autocode*": "deny",
-            "general": "deny",
-            "plan": "deny",
-            "todo*": "deny",
             "autocode_execute*": "allow",
-            "document/*": "deny"
+            "document/*": "deny",
+            "todo*": "deny",
+            doom_loop: "ask",
+            general: "deny",
+            plan: "deny"
         },
         prompt: executePrompt,
     },

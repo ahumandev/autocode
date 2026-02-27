@@ -59,7 +59,7 @@ opencode
 ├── plan.md              # Approved plan content
 ├── .review.md           # Review instructions (hidden until review)
 ├── .session.json        # Session IDs for resumability
-├── accepted/            # Tasks not yet started
+├── awaiting/            # Tasks not yet started
 │   ├── 0-first_task/    # Numbered = sequential (runs after all lower numbers)
 │   │   ├── build.prompt.md
 │   │   └── test.prompt.md

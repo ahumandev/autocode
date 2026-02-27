@@ -39,19 +39,6 @@ export function createAnalyzeTools(client: Client): Record<string, ToolDefinitio
 - Parallel task slot: `<order>-(parallel)` with subtasks as subdirectories
 - Max 7 words; words 8+ abbreviated to first letter and concatenated as 8th token
 
-**Example:**
-```
-.autocode/build/add_auth/
-├── plan.md
-├── accepted/
-│   ├── 0-install_auth_deps/
-│   ├── 1-create_user_model/
-│   └── 2-(parallel)/
-│       ├── login_endpoint/
-│       ├── register_endpoint/
-│       └── logout_endpoint/
-```
-
 ## Configuration Property Naming
 
 **Why:** TypeScript interfaces use camelCase; JSON config files use snake_case per JSON conventions.
