@@ -147,6 +147,7 @@ Every task's instructions MUST contain these sections:
     - Remove duplicated code, comments or debug statements introduced by this task
     - Document non-obvious decisions: explain in brief comments *why* the change was necessary, not how it works; Include links to online resources consulted during decision-making process (if applicable)
     (Skip bullet points that do not apply to this task's scope)
+    - Only include this step section if you have at least 1 tidy instruction to list in this section, otherwise omit the section entirely 
 - STEP 4 — RESPONSE:
     Instructions on how the agent must respond to the task orchestrator:
         - Reporting tasks: respond only with the final report with no additional comments or instructions.
