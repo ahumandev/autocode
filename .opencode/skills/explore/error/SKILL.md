@@ -27,7 +27,6 @@ Errors surface as user-visible `❌ …` strings from tools; no custom exception
 
 - There are **no custom exception classes** — errors are represented as plain strings in tool return values or as native `Error` objects from the runtime/SDK.
 - Tool return values use a consistent emoji convention: `✅` for success, `❌` for failure. Agents parse these strings to determine next steps.
-- The `## Error Recovery` block injected into every `build.prompt.md` (`src/agents/prompts/build.ts` lines 130–137) instructs the solve agent to self-heal common errors (missing deps, bad imports, missing config) without asking for help.
 - `throwOnError: true` on SDK calls means a network or API error in `spawn_session` or `autocode_analyze_read` will propagate uncaught unless the caller wraps it — `autocode_analyze_read` does wrap it; `spawn_session` does not.
 - Config parse errors are silently swallowed (`src/core/config.ts`); a malformed `opencode.json` will produce no warning and fall back to defaults.
 

@@ -19,7 +19,7 @@ Autocode introduces a structured workflow with 4 stages:
 
 1. **Analyze** — Add idea `.md` files to `.autocode/analyze/`
 2. **Plan** — Run `/autocode-analyze` → interactive planning with OpenCode's plan agent
-3. **Build** — Plan approval generates task directory structure with `build.prompt.md` and `test.prompt.md` files
+3. **Build** — Plan approval generates task directory structure with `prompt.md` file
 4. **Orchestrate** — Autocode agent executes tasks sequentially/concurrently, retries failures, exports session logs
 5. **Review** — Run `/autocode-review` → approve or reject completed work
 6. **Specs** — Approved plans become OpenCode skills under `/plan-*` for future reference
@@ -61,11 +61,9 @@ opencode
 ├── .session.json        # Session IDs for resumability
 ├── awaiting/            # Tasks not yet started
 │   ├── 0-first_task/    # Numbered = sequential (runs after all lower numbers)
-│   │   ├── build.prompt.md
-│   │   └── test.prompt.md
+│   │   └── prompt.md
 │   ├── 1-second_task/
-│   │   ├── build.prompt.md
-│   │   ├── test.prompt.md
+│   │   ├── prompt.md
 │   │   ├── parallel_a/  # Unnumbered = parallel (runs concurrently)
 │   │   └── parallel_b/  # Unnumbered = parallel (runs concurrently)
 │   └── 2-third_task/

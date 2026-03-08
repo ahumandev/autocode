@@ -68,7 +68,7 @@ export interface Task {
   order: number | null
   /** Current status directory */
   status: TaskStatus
-  /** Content of build.prompt.md (if exists) */
+  /** Content of prompt.md (if exists) */
   buildPrompt?: string
   /** Content of test.prompt.md (if exists) */
   testPrompt?: string

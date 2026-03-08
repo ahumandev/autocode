@@ -12,10 +12,11 @@
  * Prompts are stored in separate files under `./prompts/` for maintainability.
  */
 
-import { planPrompt } from "./prompts/plan"
+import { browserPrompt } from "./prompts/browser"
 import { buildPrompt } from "./prompts/build"
+import { executePrompt } from "./prompts/execute";
 import { orchestratePrompt } from "./prompts/orchestrate"
-import { executePrompt } from "@/agents/prompts/execute";
+import { planPrompt } from "./prompts/plan"
 
 type AgentMap = Record<string, {
     color?: string
@@ -33,8 +34,36 @@ type AgentMap = Record<string, {
  */
 export const agents: AgentMap = {
 
+    report: {
+        color: "#FFFFFF",
+        description: "Read-only query agent generate reports for the user",
+        mode: "primary",
+        permission: {
+            "*": "deny",
+            doom_loop: "ask",
+            grep: "allow",
+            plan_enter: "allow",
+            question: "allow",
+            read: "allow",
+            submit_plan: "allow",
+            task: {
+                "*": "allow",
+                analyze: "deny",
+                build: "deny",
+                code: "deny",
+                "document*": "deny",
+                human: "deny",
+                md: "deny",
+                test: "deny",
+                troubleshoot: "deny",
+            },
+            "todo*": "allow",
+            webfetch: "allow",
+        }
+    },
+
     plan: {
-        color: "#4040FF",
+        color: "#40FFFF",
         description: "Interactive Planning - Interview user, research problem, and create implementation plans",
         mode: "primary",
         permission: {
@@ -54,6 +83,7 @@ export const agents: AgentMap = {
                 "document*": "deny",
                 human: "deny",
                 md: "deny",
+                report: "deny",
                 test: "deny",
                 troubleshoot: "deny",
             },
@@ -63,10 +93,22 @@ export const agents: AgentMap = {
         prompt: planPrompt,
     },
 
+    explore: {
+        color: "#40A0FF",
+        hidde: true,
+        mode: "subagent",
+    },
+
+    websearch: {
+        color: "#4060FF",
+        hidde: true,
+        mode: "subagent",
+    },
+
     build: {
-        color: "#FF4040",
+        color: "#4040FF",
         description: "Build autocode tasks from approved plans with ordered directories and prompt files",
-        hidden: false,
+        hidden: false, // "false" required by Plannotator
         mode: "primary",
         permission: {
             "*": "deny",
@@ -84,10 +126,10 @@ export const agents: AgentMap = {
      * Only allowed to call autocode_orchestrate_* tools — no direct filesystem access.
      */
     "orchestrate": {
-        color: "#FF8040",
+        color: "#FF40A0",
         description: "Orchestrate plan task execution — runs tasks in order, concurrently where possible",
         hidden: true,
-        mode: "subagent",
+        mode: "primary",
         permission: {
             "*": "deny",
             "autocode_orchestrate*": "allow",
@@ -97,27 +139,88 @@ export const agents: AgentMap = {
     },
 
     "execute": {
-        color: "#FFFF40",
+        color: "#FF4040",
         description: "Execute a task",
-        hidden: true,
-        mode: "subagent",
+        hidden: false,
+        mode: "primary",
         permission: {
             "*": "allow",
             "autocode*": "deny",
-            "autocode_execute*": "allow",
-            "document/*": "deny",
-            "todo*": "deny",
             doom_loop: "ask",
             general: "deny",
-            plan: "deny"
+            plan: "deny",
+            task: {
+                "*": "allow",
+                "build": "deny",
+                "document/*": "deny",
+                "general": "deny",
+                "plan": "deny",
+                "report": "deny",
+            }
         },
         prompt: executePrompt,
     },
 
-    verify: {
-        color: "#40FF40",
-        description: "Verify the build solution",
-        hidden: true
+    os: {
+        color: "#FF6040",
+        hidden: true,
+        mode: "subagent",
+    },
+
+    code: {
+        color: "#FF6040",
+        hidden: true,
+        mode: "subagent",
+    },
+
+    excel: {
+        color: "#FF6040",
+        hidden: true,
+        mode: "subagent",
+    },
+
+    git: {
+        color: "#FF6040",
+        hidden: true,
+        mode: "subagent",
+    },
+
+    troubleshoot: {
+        color: "#FFA040",
+        hidden: true,
+        mode: "subagent",
+    },
+
+    document: {
+        color: "#FFFF40",
+        hidden: true,
+        mode: "subagent",
+    },
+
+    md: {
+        color: "#A0FF40",
+        hidden: true,
+        mode: "subagent",
+    },
+
+    test: {
+        color: "#00FF00",
+        description: "Test the system.",
+        mode: "all"
+    },
+
+    browser: {
+        color: "#40FFA0",
+        description: "Use this agent for frontend development & testing - Debug, test and verify YOUR RUNNING APPLICATION: inspect DOM elements, read console logs, analyze network requests, click UI elements, test performance and automate frontend testing. NOT for online research nor internet searches.",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            '*': "deny",
+            "chrome*": "allow",
+            "doom_loop": "ask",
+            "todo*": "allow"
+        },
+        prompt: browserPrompt
     },
 
     /**

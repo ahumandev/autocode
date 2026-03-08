@@ -332,7 +332,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         expect(entries).toContain("01-next_sequential")
     })
 
-    test("writes build.prompt.md", async () => {
+    test("writes prompt.md", async () => {
         const { autocode_build_concurrent_task } = tools()
 
         await autocode_build_concurrent_task.execute(
@@ -346,7 +346,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
 
         const { readFile } = await import("fs/promises")
         const buildContent = await readFile(
-            path.join(awaitDir, "00-concurrent_group", "task_a", "build.prompt.md"),
+            path.join(awaitDir, "00-concurrent_group", "task_a", "prompt.md"),
             "utf-8",
         )
 

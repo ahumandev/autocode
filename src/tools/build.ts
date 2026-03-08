@@ -138,10 +138,10 @@ async function createConcurrentGroupDir(awaitDir: string): Promise<string> {
  *   .autocode/build/<plan_name>/
  *     plan.md                          ← full approved plan text
  *     <order>-<task_name>/             ← sequential task (pending, not yet started)
- *       build.prompt.md
+ *       prompt.md
  *     <order>-concurrent_group/        ← concurrent task group directory (pending)
  *       <task_name>/                   ← one sub-dir per concurrent task
- *         build.prompt.md
+ *         prompt.md
  */
 export function createBuildTools(client: Client): Record<string, ToolDefinition> {
 
@@ -322,7 +322,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 const taskDir = path.join(planDir, dirName)
 
                 await mkdir(taskDir, { recursive: true })
-                await writeFile(path.join(taskDir, "build.prompt.md"), args.instructions, "utf-8")
+                await writeFile(path.join(taskDir, "prompt.md"), args.instructions, "utf-8")
 
                 return successResponse(sid, toolName)
             } catch (err: any) {
@@ -401,7 +401,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
 
                 const taskDir = path.join(slotDir, args.task_name)
                 await mkdir(taskDir, { recursive: true })
-                await writeFile(path.join(taskDir, "build.prompt.md"), args.instructions, "utf-8")
+                await writeFile(path.join(taskDir, "prompt.md"), args.instructions, "utf-8")
 
                 const slotName = path.basename(slotDir)
                 return successResponse(sid, toolName, `✅ Concurrent task '${slotName}/${args.task_name}' created`)

@@ -122,7 +122,14 @@ Before calling any tool, think carefully about the current task:
 4. **What are the boundaries?** — Which files may be touched, what should NOT be changed.
 5. **What would a successful outcome look like?**
 
-### 3b. Write and Submit the Task
+### 3b. Categorize the Task
+
+- If primary focus is on codebase changes (source code, scripts, configs, templates, assets, resources, project structure) → task coding subagent
+- If primary focus is on running CLI commands, installing/removing dependencies, starting/stopping processes → task cli subagent
+- If primary focus is on research, gathering info or to create a report → task reporting agent
+- If primary focus is on codebase documentation or comments → task documentation agent
+
+### 3c. Write and Submit the Task
 
 Call the appropriate tool (\`autocode_build_next_task\` or \`autocode_build_concurrent_task\`) to create the task immediately.
 
@@ -135,24 +142,23 @@ Every task's instructions MUST contain these sections:
 **Instructions**: Detailed step-by-step instructions organized as:
 
 - STEP 1 — IMPLEMENTATION:
-    - Detailed step-by-step instructions on exactly what the agent should do
+    - Include detailed step-by-step instructions on exactly what the agent should do
     - Include full code examples (only if original plan included relevant examples for this particular task)
 - STEP 2 — TEST:
-    - For coding tasks: complete instructions on how codebase should be updated including examples of the original plan (if available and relevant to the task)
-    - For CLI tasks: exact command(s) to run and what the output must look like to confirm correctness (e.g. unit test pass, specific log line, file exists at path, HTTP 200 on specific route)
-    - For reporting tasks: confirm the gathered information contains all requested data and is formatted as expected
-    - For documentation tasks: confirm the updated documentation is correct, relevant, and appropriately detailed
+    - For coding tasks: Include complete instructions on how codebase should be updated including examples of the original plan (if available and relevant to the task)
+    - For CLI tasks: Include exact command(s) to run and what the output must look like to confirm correctness (e.g. unit test pass, specific log line, file exists at path, HTTP 200 on specific route)
+    - For reporting tasks: Include instructions to confirm that gathered information contains all requested data and is formatted as expected
+    - For documentation tasks: Include instructions to confirm that updated documentation is correct, relevant, and appropriately detailed
 - STEP 3 — TIDY:
     Review only your recent changes (not other code). Apply whichever of the following are relevant to this task:
-    - Remove duplicated code, comments or debug statements introduced by this task
-    - Document non-obvious decisions: explain in brief comments *why* the change was necessary, not how it works; Include links to online resources consulted during decision-making process (if applicable)
-    (Skip bullet points that do not apply to this task's scope)
-    - Only include this step section if you have at least 1 tidy instruction to list in this section, otherwise omit the section entirely 
+    - For coding tasks: Include instructions to remove duplicated code, comments or debug statements introduced by this task
+    - For CLI tasks: Include instructions to clean up temporary files or stop temporary debugging processes (if applicable)
+    (Skip bullet points that do not apply to this task's scope - only include this step section if you have at least 1 tidy instruction to list in this section, otherwise omit the section entirely) 
 - STEP 4 — RESPONSE:
     Instructions on how the agent must respond to the task orchestrator:
-        - Reporting tasks: respond only with the final report with no additional comments or instructions.
-        - Execution tasks:
-            1. Respond with a summary explaining what changed in < 20 words
+        - For reporting tasks: Include an instruction that the agent should only respond with the final report with no additional comments or instructions.
+        - For non reporting tasks:
+            1. Include an instructions that the agent must respond with a summary explaining what changed in < 20 words
             2. Respond with instructions for a human reviewer on how they could potentially verify the task's implementation
 
 **Constraints** (optional): Permissions or scope of work, e.g. only modify certain files, fix only this endpoint, etc.

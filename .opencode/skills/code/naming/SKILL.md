@@ -60,28 +60,6 @@ export interface AutocodeConfig {
 { "autocode": { "retry_count": 3, "auto_install_dependencies": true } }
 ```
 
-## Prompt and Session Files
-
-**Why:** Distinguishes workflow files (build.prompt.md, test.session.md) from metadata files (.review.md, .session.json) using dot-prefix convention.
-
-**Pattern:**
-- Prompt files: `<agent>.prompt.md` (e.g., `build.prompt.md`, `test.prompt.md`)
-- Session files: `<agent>.session.md` (e.g., `build.session.md`, `test.session.md`)
-- Metadata files: dot-prefixed (e.g., `.review.md`, `.session.json`)
-
-**Example:**
-```
-task_directory/
-├── build.prompt.md      ← build agent instructions
-├── test.prompt.md       ← test agent instructions
-├── build.session.md     ← build execution output
-└── test.session.md      ← test execution output
-
-plan_directory/
-├── .review.md           ← human review instructions
-└── .session.json        ← session metadata
-```
-
 ## Commands and Agents
 
 **Why:** Commands use kebab-case for CLI visibility; agents use lowercase for internal registry keys.
