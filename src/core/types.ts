@@ -45,9 +45,9 @@ export interface SessionMeta {
 }
 
 export interface TaskSessionInfo {
-  /** OpenCode session ID for the solve agent */
-  buildSessionId?: string
-  /** OpenCode session ID for the test agent */
+  /** OpenCode session ID for the agent execution */
+  agentSessionId?: string
+  /** OpenCode session ID for the test execution */
   testSessionId?: string
   /** Number of retry attempts so far */
   retryCount: number
@@ -68,14 +68,14 @@ export interface Task {
   order: number | null
   /** Current status directory */
   status: TaskStatus
-  /** Content of prompt.md (if exists) */
-  buildPrompt?: string
+  /** Agent name extracted from {agent_name}.prompt.md filename */
+  agentName?: string
+  /** Content of {agent_name}.prompt.md */
+  agentPrompt?: string
+  /** Content of background.md */
+  backgroundMd?: string
   /** Content of test.prompt.md (if exists) */
   testPrompt?: string
-  /** Content of build.session.md (after execution) */
-  buildSession?: string
-  /** Content of test.session.md (after execution) */
-  testSession?: string
   /** Whether this task was skipped during orchestration */
   skipped?: boolean
   /** Nested subtask tree */

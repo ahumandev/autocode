@@ -20,7 +20,7 @@
 
 3. Install into OpenCode's global config directory:
    ```bash
-   bun run src/install.ts --global
+   bun run install:global
    ```
    This creates symlinks in `~/.config/opencode/` for agents, commands, tools, and the plugin file.
 
@@ -44,49 +44,60 @@ Rebuilds TypeScript and watches for changes:
 bun run watch
 ```
 
-### Manual Setup (Alternative to `install:global`)
-If you prefer manual symlinks instead of the install script:
-
-```bash
-# Symlink plugin file
-mkdir -p ~/.config/opencode/plugin
-ln -s $(pwd)/.opencode/plugin/autocode-plugin.ts ~/.config/opencode/plugin/autocode-plugin.ts
-
-# Symlink agents
-mkdir -p ~/.config/opencode/agent
-for f in .opencode/agent/*.md; do
-  ln -s "$(pwd)/$f" ~/.config/opencode/agent/$(basename "$f")
-done
-
-# Symlink commands
-mkdir -p ~/.config/opencode/command
-for f in .opencode/command/*.md; do
-  ln -s "$(pwd)/$f" ~/.config/opencode/command/$(basename "$f")
-done
-
-# Symlink tools
-mkdir -p ~/.config/opencode/tool
-for f in .opencode/tool/*.ts; do
-  ln -s "$(pwd)/$f" ~/.config/opencode/tool/$(basename "$f")
-done
-```
-
 ### Uninstall
 Remove symlinks from OpenCode's config:
 ```bash
-bun run src/install.ts --uninstall
+bun run uninstall:global
 ```
 
-## Project Structure
+## Autocode Workflow
 
-- **src/plugin.ts** — Main plugin entry point; registers agents, commands, and tools
-- **src/install.ts** — Installation script for symlinking into OpenCode config
-- **src/setup.ts** — Initializes `.autocode/` directory structure in projects
-- **src/agents/** — Agent definitions (plan, build, autocode, solve)
-- **src/commands/** — Command definitions (analyze, review, status, etc.)
-- **src/tools/** — Tool implementations (session, analyze, build)
-- **.opencode/** — OpenCode plugin assets (agents, commands, tools, plugin file)
-- **dist/** — Compiled JavaScript output
+Autocode is a fire-and-forget AI task orchestration system. Once installed, it provides two main commands:
+
+### `/autocode-analyze` — Plan Creation
+1. User creates an idea file in `.autocode/analyze/` (e.g., `hello_world.md`)
+2. User runs `/autocode-analyze` → launches the **plan agent**
+3. Plan agent discovers idea files, reads content, interviews user, researches constraints
+4. Plan agent proposes a solution and writes a full plan with `<plan_name>` tag
+5. User approves plan → plan agent calls `plan_exit` → hands off to **build agent**
+6. Build agent creates `.autocode/build/{plan_name}/plan.md` and numbered task directories with prompt files
+7. Build agent spawns **orchestrate agent** (fire-and-forget)
+
+### Orchestrate Agent — Task Execution
+The orchestrate agent automatically:
+1. Loops through each task directory in order
+2. Spawns the appropriate agent (code, browser, git, etc.) with execution instructions
+3. Spawns a **test agent** to verify the work
+4. On task completion, moves to the next task
+5. On all tasks complete, generates `review.md` and moves plan to `.autocode/review/`
+
+### Plan Review & Approval
+1. User runs `/autocode-review` to review completed plans
+2. User approves or rejects results
+3. Approved plans move to `.autocode/specs/`
+4. Failed plans move to `.autocode/failed/`
+
+## Directory Structure
+
+The plugin automatically initializes this structure in any project:
+
+```
+.autocode/
+├── analyze/      — User-created idea .md files
+├── build/        — Active plans with task directories
+│   └── {plan_name}/
+│       ├── plan.md
+│       ├── 01-task_name/
+│       │   ├── {agent}.prompt.md
+│       │   ├── test.prompt.md
+│       │   └── {agent}.result.*.md
+│       └── 02-task_name/
+├── review/       — Completed plans awaiting manual review
+├── specs/        — Approved specs (also registered as OpenCode skills)
+├── failed/       — Failed plans
+├── .archive/     — Historical plan directories
+└── README.md     — Quick start guide
+```
 
 ## Non-Standard Dependencies
 
@@ -94,10 +105,3 @@ bun run src/install.ts --uninstall
 - **@opencode-ai/plugin** — Plugin interface and types
 - **gray-matter** — YAML frontmatter parsing for `.md` files
 - **zod** — Schema validation for configuration and data structures
-
-## Build Output
-
-The build process generates:
-- **dist/plugin.js** — Bundled plugin for OpenCode
-- **dist/*.d.ts** — TypeScript declaration files
-- **dist/*.js.map** — Source maps for debugging

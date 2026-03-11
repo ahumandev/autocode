@@ -9,11 +9,11 @@ import { trackFailure, resetTool, MAX_RETRIES } from "./retry-tracker"
  *
  * @param sessionID Agent session ID (from `context.sessionID`)
  * @param toolName  Name of the tool that succeeded
- * @param result    Success payload — objects are JSON-serialized; strings pass through as-is
+ * @param result    Success payload — always JSON-serialized and wrapped in { result }
  */
 export function successResponse(sessionID: string, toolName: string, result: unknown = { success: true }): string {
     resetTool(sessionID, toolName)
-    return typeof result === "string" ? result : JSON.stringify(result)
+    return JSON.stringify({ result })
 }
 
 /**

@@ -5,76 +5,69 @@ description: Use this skill to discover common utilities and helpers, or to unde
 
 # Common Utilities & Cross-Cutting Concerns
 
-Validation, error formatting, and string-normalization helpers shared across all tool implementations.
+Shared utilities for tool response contracts, agent retry governance, task filesystem operations, and project configuration.
 
 ## Utilities
 
 ### Response Helpers (`src/utils/validation.ts`)
-
-Three functions cover every possible tool return path. All return a `string` (JSON or plain text) ready to `return` directly from `execute`.
-
-- **`successResponse(sessionID, toolName, result?)`** — Resets the retry counter for the tool, then returns `result` serialised. Objects are `JSON.stringify`-ed; strings pass through unchanged. Default `result` is `{ success: true }`. **Always call this on success** so a later failure starts from zero retries.
-
-- **`retryResponse(sessionID, toolName, paramName, constraint, onMaxRetries?)`** — Increments the retry counter via `trackFailure`. Returns `{ error: "Retry <toolName> again with a valid <paramName> parameter which must <constraint>" }`. Once `MAX_RETRIES` (5) is reached, calls `onMaxRetries()` instead — default escalates to `abortResponse`. Use for **agent-correctable** parameter errors.
-
-- **`abortResponse(toolName, reason)`** — Stateless. Returns `{ error: "You **MUST ABORT** your workflow immediately and prompt the user to investigate the failure of the tool call '<toolName>' with reason: <reason>" }`. Use for **system/IO failures** that the agent cannot fix by retrying.
-
-### Retry Tracker (`src/utils/retry-tracker.ts`)
-
-Module-level `Map` keyed by `sessionID`. Each session stores **one** `{ tool, count }` entry — switching to a different `toolName` implicitly resets the count to 0 for that new tool.
-
-- **`MAX_RETRIES`** — `5`. Exported constant; `shouldAbort` becomes `true` when `retriesLeft <= 0`.
-- **`trackFailure(sessionID, toolName)`** — Increments count, returns `{ retriesLeft, shouldAbort }`. Called internally by `retryResponse`; do not call directly from tools.
-- **`resetTool(sessionID, toolName)`** — Zeroes the count for a specific tool. Called internally by `successResponse`.
-- **`resetSession(sessionID)`** — Deletes the session entry entirely. Useful in tests.
-- **`getStatus(sessionID, toolName)`** — Read-only status check; does not mutate state.
-
-> **Gotcha:** only one tool is tracked per session at a time. If a tool calls `retryResponse` for `tool-a` twice, then `retryResponse` for `tool-b` once, the `tool-a` count is lost. Counts are per-(session, most-recent-tool) pair, not per-(session, tool) pair.
+- **`successResponse(sid, toolName, result?)`**: Resets retry counter for the tool then returns result. Objects are JSON-serialised; strings pass through raw.
+- **`retryResponse(sid, toolName, paramName, constraint, onMaxRetries?)`**: Increments retry counter; after 5 failures escalates to `onMaxRetries` (default: `abortResponse`).
+- **`abortResponse(toolName, reason)`**: Stateless. Emits a `**MUST ABORT**` instruction — for system/IO failures not caused by the agent.
 
 ### Parameter Validators (`src/utils/validation.ts`)
+All validators return `null` on pass or a **ready-to-return JSON error string** on failure (null-or-error-string pattern).
+- **`validateNonEmpty`**: Rejects undefined, null, or blank strings.
+- **`validateMaxWords`**: Splits on whitespace **and underscores** — `"foo_bar"` counts as 2 words.
+- **`validateMinLength` / `validateMaxLength`**: Character-length checks after trim.
+- **`validateFormat`**: Regex match; caller supplies human-readable `formatDesc` shown in error.
+- **`validateHasAlphanumeric`**: Strips all non-alphanumeric chars; rejects if nothing remains. Use before sanitisation, not after.
 
-Each validator returns **`null` on pass** or a **complete JSON error string on failure** (ready to `return` from `execute`). All failures route through `retryResponse`, so they automatically participate in retry escalation.
+### Identifier Formatters (`src/utils/validation.ts`)
+- **`toIdentifier(value)`**: Full pipeline — trim → lowercase → replace non-alphanumeric with `_` → collapse `__+` → strip edge underscores.
+- **`replaceSpecialChars`, `collapseUnderscores`, `stripEdgeUnderscores`**: Individual steps, exported for targeted use.
 
-| Function | Key behaviour |
-|---|---|
-| `validateNonEmpty(value, sid, toolName, paramName)` | Fails if `undefined`, `null`, or blank after trim |
-| `validateHasAlphanumeric(value, sid, toolName, paramName)` | Strips all non-alphanumeric chars; fails if nothing remains — run **before** `toIdentifier` to catch all-symbol inputs |
-| `validateMaxWords(value, maxWords, sid, toolName, paramName)` | Splits on whitespace **and underscores** — `"foo_bar_baz"` counts as 3 words |
-| `validateMinLength(value, minLength, sid, toolName, paramName)` | Checks trimmed length |
-| `validateMaxLength(value, maxLength, sid, toolName, paramName)` | Checks trimmed length |
-| `validateFormat(value, pattern, formatDesc, sid, toolName, paramName)` | Tests `pattern.test(value)`; `formatDesc` appears verbatim in the error message |
+### Retry Tracker (`src/utils/retry-tracker.ts`)
+- **`trackFailure(sid, toolName)`**: Per-session, per-tool counter stored in a module-level `Map`. Switching tools **resets** the count for that session (only one tool tracked per session at a time).
+- **`resetTool(sid, toolName)`**: Called by `successResponse` — zeroes count without clearing other tools.
+- **`resetSession(sid)`**: Deletes the session entry entirely; use on session teardown.
+- **`MAX_RETRIES = 5`**: `shouldAbort` becomes `true` when `retriesLeft <= 0` (i.e., on the 5th failure).
 
-### Parameter Formatters (`src/utils/validation.ts`)
+### Task Filesystem Helpers (`src/utils/tasks.ts`)
+- **`findNextGroup(planDir)`**: Returns the lowest `^\d{2}-` entry with **no timestamp prefix and no leading dot** — i.e., strictly pending tasks only.
+- **`resolveTaskDir(worktree, planName, taskName?)`**: Searches `build/`, `failed/`, and `review/` plan locations; handles all task states (pending, in-flight, succeeded, failed, concurrent groups).
+- **`collectTasks(planDir)`**: Walks plan dir, recurses into `concurrent_group` subdirs, returns `TaskInfo[]` sorted numerically by task number.
+- **`extractTaskResult(messages)`**: Parses `<success>`/`<failure>` tags from the last assistant message. When **both** tags appear, the one with the **higher index wins**. No tags → graceful fallback to `{ kind: "success" }` for backward compatibility.
+- **`stripTaskNameDecorations(name)`**: Removes leading dot, `YYYY-MM-DD_HH-mm-ss_` prefix, and trailing `.failed`/`.deleted` — recovers the logical task name.
+- **`writeOutcomeFiles(dir, sid, content, outcome)`**: Always removes stale `success.md`/`failure.md` before writing the new outcome — prevents stale state from prior runs.
+- **`formatSessionMarkdown(prompt, messages)`**: Renders session transcript to markdown; includes both `text` and `reasoning` part types.
+- **`buildReviewMarkdown(planName, tasks)`**: Generates the plan completion review table + detail sections.
+- **`makeTimestamp()`**: Local-time `YYYY-MM-DD_HH-mm-ss` string used as task directory prefixes.
 
-Pure string transforms with no side effects. Intended to be composed in order.
+### Configuration (`src/core/config.ts`)
+- **`loadConfig(projectRoot)`**: Reads `opencode.json` → `autocode` section; strips `//` and `/* */` comments (JSONC support). Bare `catch {}` silently falls back to defaults — config errors are invisible.
+- **`createConfig(worktree, overrides?)`**: Sync; used by tools that receive `worktree` from context rather than discovering `projectRoot`.
+- **snake_case ↔ camelCase mapping**: JSON keys (`retry_count`, `auto_install_dependencies`, `parallel_sessions_limit`) map to TypeScript camelCase fields.
+- **Defaults**: `retryCount=3`, `autoInstallDependencies=true`, `parallelSessionsLimit=4`.
 
-- **`toIdentifier(value)`** — Full pipeline: trim → lowercase → replace non-alphanumeric with `_` → collapse consecutive `_` → strip leading/trailing `_`. Produces a safe filesystem/identifier token.
-- **`toLowercase(value)`** — `value.toLowerCase()`.
-- **`replaceSpecialChars(value, replacement?)`** — Replaces every non-`[a-z0-9]` char with `replacement` (default `_`). Assumes input is already lowercased.
-- **`collapseUnderscores(value)`** — Collapses `__+` to a single `_`.
-- **`stripEdgeUnderscores(value)`** — Removes leading and trailing `_`.
+### Core Types (`src/core/types.ts`)
+- **`Stage`** (Zod enum): `analyze | build | review | specs` — maps to `.autocode/` subdirectory names.
+- **`TaskStatus`** (Zod enum): `awaiting | busy | tested`.
+- **`TaskTree`**: Groups of parallel tasks executed sequentially. Numbered dirs sort **numerically** (not alphabetically) — critical for correct ordering past task 9.
+- **`TaskFailure`**: Typed failure descriptor with `failureType` discriminant (`agent_failure | task_session | test_session | test_verification | tool_error`).
 
----
+## Cross-Cutting Patterns
 
-## Standard Tool Execute Pattern
+### Tool Factory Pattern
+- `createAnalyzeTools(client)` / `createBuildTools(client)` capture the SDK `Client` at plugin init via closure.
+- Enables per-tool client isolation and direct testability (pass a mock client in tests).
 
-Every tool `execute` function follows this exact structure:
+### Unified Error Contract
+- All tool `execute` functions return `{ error: "..." }` JSON on failure — never throw.
+- Exception: `src/tools/session.ts` and `src/tools/orchestrate.ts` use `throwOnError: true` on SDK calls — errors propagate up uncaught.
+- `src/plugin.ts` wraps `initAutocode` in `.catch(() => console.warn(...))` — plugin init failures are silent.
 
-```
-1. const sid = context.sessionID
-2. Run validators in order, returning early on non-null:
-     const err = validateXxx(args.foo, sid, "tool_name", "foo")
-     if (err) return err
-3. Perform business logic / IO inside try/catch:
-     - On IO success:  return successResponse(sid, "tool_name", payload)
-     - On agent error: return retryResponse(sid, "tool_name", "param", "constraint")
-     - On system error: return abortResponse("tool_name", err.message)
-```
+### Filesystem Scoping
+- All file operations use `path.join(worktree, ".autocode", ...)` — never `process.cwd()`.
+- `input.worktree` (from tool context) is the canonical root, not the process working directory.
 
-`build.ts` tools that touch the filesystem also call `failPlan()` before `abortResponse` to move the plan directory to `.autocode/failed/` as a best-effort cleanup step.
-
-Note: `autocode_analyze_list` has no `sid` / validators because it takes no parameters; it uses `abortResponse` directly for IO errors.
-
----
-
-**IMPORTANT**: Update `.opencode/skills/code/common/SKILL.md` whenever a common util was added or modified.
+**IMPORTANT**: Update `.Claude/skills/code/common/SKILL.md` whenever a common util was added or modified.

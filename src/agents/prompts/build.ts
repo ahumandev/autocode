@@ -22,12 +22,13 @@ With *unclear plan purpose* (#3):
      1. use the \`plan_enter\` tool to enter into planning mode. 
      2. SKIP ALL REMAINING STEPS and respond only to the user's query in planning mode.
 
-Otherwise, with a *clear plan purpose* (#1 or #2) call \`autocode_build_plan\` with that proposed name and the full plan text:
+Otherwise, with a *clear plan purpose* (#1 or #2) call \`autocode_build_plan\` with that proposed name, a decided goal, and the full plan text. You must decide on a good overall "goal" for the tasks (which is < 30 words describing the purpose of the plan) and that the \`goal\` will be injected in every agentic prompt. Therefore, plan.md no longer needs to contain the goal.
 
 | Parameter | Description |
 |---|---|
 | \`name\` | Proposed name — at most 7 words (space- or underscore-separated) |
-| \`plan_content\` | The full approved plan text, copied exactly |
+| \`goal\` | A brief (< 30 words) description of the overall goal of the plan. This will be injected into every agentic prompt. |
+| \`plan_content\` | The full approved plan text, copied exactly (does not need to contain the goal) |
 
 The tool sanitizes your input automatically (lowercases, replaces invalid chars with \`_\`, collapses double underscores, strips leading/trailing underscores, abbreviates words beyond the 7th). The returned name may differ from what you passed. If the name already exists, a timestamp suffix is appended automatically.
 
@@ -43,8 +44,28 @@ Read the plan to understand its overall scope. Produce a **brief outline only** 
 - A one-line summary of what it covers
 - What it **produces** (files, exports, DB state, config) that later tasks may consume
 - What it **depends on** (task numbers whose output it needs, or "none")
+- Which **agent** should execute it (see classification below)
 
 **IMPORTANT**: This outline is just a roadmap. Do NOT write detailed instructions yet. The detailed thinking happens in Phase 3 when you create each task.
+
+### Agent Classification
+
+After determining task sizing and sequential vs concurrent, classify which agent should execute each task:
+
+- **code** — Writing, editing, or refactoring source code files, configurations, templates, styles, scripts or any other project files
+- **explore** - Reading or exploring source code files, configurations, templates, styles, scripts to answer user queries regarding project files
+- **troubleshoot** — Diagnosing and fixing bugs or broken environments
+- **browser** — Browser automation, UI testing, web scraping
+- **websearch** — Researching online documentation, finding answers
+- **os** — Running CLI commands, shell scripts, system administration
+- **excel** — Reading or writing Excel/CSV spreadsheet files
+- **test** — Verification-only tasks: checking output, reading files, running test commands to verify
+- **git** — Git operations: commit, branch, merge, push
+- **md** — Writing or editing markdown documentation files
+- **document** — Generating code documentation (JSDoc, docstrings, README)
+- **human** — Tasks requiring manual human action: entering passwords, accessing SSO, dangerous production operations
+
+Include the agent name in the lightweight outline alongside task name and sequential/concurrent classification.
 
 ### Extract Shared Context
 
@@ -122,46 +143,9 @@ Before calling any tool, think carefully about the current task:
 4. **What are the boundaries?** — Which files may be touched, what should NOT be changed.
 5. **What would a successful outcome look like?**
 
-### 3b. Categorize the Task
+### 3b. Write and Submit the Task
 
-- If primary focus is on codebase changes (source code, scripts, configs, templates, assets, resources, project structure) → task coding subagent
-- If primary focus is on running CLI commands, installing/removing dependencies, starting/stopping processes → task cli subagent
-- If primary focus is on research, gathering info or to create a report → task reporting agent
-- If primary focus is on codebase documentation or comments → task documentation agent
-
-### 3c. Write and Submit the Task
-
-Call the appropriate tool (\`autocode_build_next_task\` or \`autocode_build_concurrent_task\`) to create the task immediately.
-
-#### Task instructions format
-
-Every task's instructions MUST contain these sections:
-
-**Purpose** (< 20 words): Why this task is necessary and what it should accomplish.
-
-**Instructions**: Detailed step-by-step instructions organized as:
-
-- STEP 1 — IMPLEMENTATION:
-    - Include detailed step-by-step instructions on exactly what the agent should do
-    - Include full code examples (only if original plan included relevant examples for this particular task)
-- STEP 2 — TEST:
-    - For coding tasks: Include complete instructions on how codebase should be updated including examples of the original plan (if available and relevant to the task)
-    - For CLI tasks: Include exact command(s) to run and what the output must look like to confirm correctness (e.g. unit test pass, specific log line, file exists at path, HTTP 200 on specific route)
-    - For reporting tasks: Include instructions to confirm that gathered information contains all requested data and is formatted as expected
-    - For documentation tasks: Include instructions to confirm that updated documentation is correct, relevant, and appropriately detailed
-- STEP 3 — TIDY:
-    Review only your recent changes (not other code). Apply whichever of the following are relevant to this task:
-    - For coding tasks: Include instructions to remove duplicated code, comments or debug statements introduced by this task
-    - For CLI tasks: Include instructions to clean up temporary files or stop temporary debugging processes (if applicable)
-    (Skip bullet points that do not apply to this task's scope - only include this step section if you have at least 1 tidy instruction to list in this section, otherwise omit the section entirely) 
-- STEP 4 — RESPONSE:
-    Instructions on how the agent must respond to the task orchestrator:
-        - For reporting tasks: Include an instruction that the agent should only respond with the final report with no additional comments or instructions.
-        - For non reporting tasks:
-            1. Include an instructions that the agent must respond with a summary explaining what changed in < 20 words
-            2. Respond with instructions for a human reviewer on how they could potentially verify the task's implementation
-
-**Constraints** (optional): Permissions or scope of work, e.g. only modify certain files, fix only this endpoint, etc.
+Call the appropriate tool (\`autocode_build_next_task\` or \`autocode_build_concurrent_task\`) to create the task immediately, using the agent classified in Phase 2.
 
 #### Sequential task → \`autocode_build_next_task\`
 
@@ -171,7 +155,10 @@ Use this for tasks that depend on earlier tasks.
 |---|---|
 | \`plan_name\` | Plan name from Phase 1 |
 | \`task_name\` | Summarize what the task accomplishes in < 10 words |
-| \`instructions\` | The full self-contained task instructions (see format above) |
+| \`agent\` | The classified agent name from Phase 2 |
+| \`background\` | (optional, max 40 words) Brief context explaining WHY this task is needed — NOT what to do |
+| \`execute\` | (compulsory) The full implementation instructions on WHAT the agent needs to do and it should include exact code examples from the plan - be detailed and complete. |
+| \`test\` | (optional) Instructions for the \`test\` agent to verify the work. Include exact commands to run and expected output. If omitted, a default test prompt will be auto-generated. **Do NOT include when \`agent\` is already \`"test"\`** |
 
 #### Concurrent tasks → \`autocode_build_concurrent_task\`
 
@@ -181,23 +168,38 @@ Use this for tasks that are independent of their siblings. Call \`autocode_build
 |---|---|
 | \`plan_name\` | Plan name from Phase 1 |
 | \`task_name\` | Summarize what the task accomplishes in < 10 words |
-| \`instructions\` | The full self-contained task instructions (see format above) |
+| \`agent\` | The classified agent name from Phase 2 |
+| \`background\` | (optional, max 40 words) Brief context explaining WHY this task is needed — NOT what to do |
+| \`execute\` | (compulsory) The full implementation instructions on WHAT the agent needs to do and it should include exact code examples from the plan - be detailed and complete. |
+| \`test\` | (optional) Instructions for the \`test\` agent to verify the work. Include exact commands to run and expected output. If omitted, a default test prompt will be auto-generated. **Do NOT include when \`agent\` is already \`"test"\`** |
 
 Example — a plan to "add user authentication":
 
 \`\`\`
 Outline:
-1. install_auth_deps     — sequential   — depends on: none   — produces: package.json with bcrypt, jsonwebtoken
-2. create_user_model     — sequential   — depends on: #1     — produces: src/models/user.ts, users migration
-3. login_endpoint        — concurrent   — depends on: #2     — produces: POST /auth/login route
-4. register_endpoint     — concurrent   — depends on: #2     — produces: POST /auth/register route
-5. logout_endpoint       — concurrent   — depends on: #2     — produces: POST /auth/logout route
-6. add_auth_middleware   — sequential   — depends on: #3,#4  — produces: src/middleware/auth.ts applied to protected routes
+1. install_auth_deps     — sequential   — agent: os    — depends on: none   — produces: package.json with bcrypt, jsonwebtoken
+2. create_user_model     — sequential   — agent: code  — depends on: #1     — produces: src/models/user.ts, users migration
+3. login_endpoint        — concurrent   — agent: code  — depends on: #2     — produces: POST /auth/login route
+4. register_endpoint     — concurrent   — agent: code  — depends on: #2     — produces: POST /auth/register route
+5. logout_endpoint       — concurrent   — agent: code  — depends on: #2     — produces: POST /auth/logout route
+6. add_auth_middleware   — sequential   — agent: code  — depends on: #3,#4  — produces: src/middleware/auth.ts applied to protected routes
 \`\`\`
 
 * Tasks 1–2: call \`autocode_build_next_task\` for each
 * Tasks 3–5: call \`autocode_build_concurrent_task\` for each (they form one concurrent group)
 * Task 6: call \`autocode_build_next_task\` (starts a new sequential step after the concurrent group)
+
+Example tool call for task 2:
+\`\`\`
+autocode_build_next_task({
+  plan_name: "add_user_auth",
+  task_name: "create_user_model_with_email_password_fields",
+  agent: "code",
+  background: "Auth deps are installed. We need a User model before implementing login/register endpoints.",
+  execute: "Create src/models/user.ts with a User interface containing id, email, passwordHash, createdAt fields. Create a migration file at db/migrations/001_create_users.ts...",
+  test: "Run: npx ts-node db/migrations/001_create_users.ts. Verify the users table exists with correct columns by running: SELECT column_name FROM information_schema.columns WHERE table_name='users';"
+})
+\`\`\`
 
 Repeat the cycle (3a → 3b) until all tasks are created.
 
@@ -215,8 +217,7 @@ After all tasks have been created:
 ## Error Handling
 
 If the response contains an \`error\` field, the tool failed — follow the exact instruction in the \`error\` message.
-If the response has no \`error\` field, the tool succeeded.
-If the response has an \`instruction\` field, follow the exact instruction in the \`instruction\` message.
+If the response has no \`error\` field, the tool succeeded — read the \`result\` field for the outcome.
 
 ---
 `.trim()

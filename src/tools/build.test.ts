@@ -232,7 +232,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
     beforeEach(async () => {
         tmpDir = await mkdtemp(path.join(tmpdir(), "autocode-test-"))
         planName = "test_plan"
-        awaitDir = path.join(tmpDir, ".autocode", "build", planName, "awaiting")
+        awaitDir = path.join(tmpDir, ".autocode", "build", planName)
         await mkdir(awaitDir, { recursive: true })
     })
 
@@ -252,7 +252,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const { autocode_build_concurrent_task } = tools()
 
         const result = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_a", instructions: "do task a" },
+            { plan_name: planName, task_name: "task_a", agent: "code", execute: "do task a" },
             makeContext(),
         )
 
@@ -267,7 +267,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const { autocode_build_concurrent_task } = tools()
 
         const result = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_b", instructions: "do task b" },
+            { plan_name: planName, task_name: "task_b", agent: "code", execute: "do task b" },
             makeContext(),
         )
 
@@ -284,7 +284,7 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const { autocode_build_concurrent_task } = tools()
 
         const result = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_b", instructions: "do task b" },
+            { plan_name: planName, task_name: "task_b", agent: "code", execute: "do task b" },
             makeContext(),
         )
 
@@ -299,11 +299,11 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const ctx = makeContext()
 
         const r1 = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_a", instructions: "do a" },
+            { plan_name: planName, task_name: "task_a", agent: "code", execute: "do a" },
             ctx,
         )
         const r2 = await autocode_build_concurrent_task.execute(
-            { plan_name: planName, task_name: "task_b", instructions: "do b" },
+            { plan_name: planName, task_name: "task_b", agent: "code", execute: "do b" },
             ctx,
         )
 
@@ -319,12 +319,12 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         const { autocode_build_next_task } = tools()
 
         const result = await autocode_build_next_task.execute(
-            { plan_name: planName, task_name: "next_sequential", instructions: "do it" },
+            { plan_name: planName, task_name: "next_sequential", agent: "code", execute: "do it" },
             makeContext(),
         )
 
         const parsed = JSON.parse(result)
-        expect(parsed.success).toBe(true)
+        expect(parsed.result.success).toBe(true)
 
         // Verify the directory was created at order 01
         const { readdir } = await import("fs/promises")
@@ -332,24 +332,134 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         expect(entries).toContain("01-next_sequential")
     })
 
-    test("writes prompt.md", async () => {
+    test("writes {agent}.prompt.md with execute content", async () => {
         const { autocode_build_concurrent_task } = tools()
 
         await autocode_build_concurrent_task.execute(
             {
                 plan_name: planName,
                 task_name: "task_a",
-                instructions: "build instructions",
+                agent: "code",
+                execute: "build instructions",
             },
             makeContext(),
         )
 
         const { readFile } = await import("fs/promises")
         const buildContent = await readFile(
-            path.join(awaitDir, "00-concurrent_group", "task_a", "prompt.md"),
+            path.join(awaitDir, "00-concurrent_group", "task_a", "code.prompt.md"),
             "utf-8",
         )
 
         expect(buildContent).toBe("build instructions")
+    })
+
+    test("auto-generates test.prompt.md when test param is omitted and agent is not 'test'", async () => {
+        const { autocode_build_concurrent_task } = tools()
+
+        await autocode_build_concurrent_task.execute(
+            {
+                plan_name: planName,
+                task_name: "task_a",
+                agent: "code",
+                execute: "build instructions",
+            },
+            makeContext(),
+        )
+
+        const { readFile } = await import("fs/promises")
+        const testContent = await readFile(
+            path.join(awaitDir, "00-concurrent_group", "task_a", "test.prompt.md"),
+            "utf-8",
+        )
+
+        expect(testContent).toContain("build instructions")
+        expect(testContent).toContain("Verify that these instructions were correctly followed.")
+    })
+
+    test("test.prompt.md contains provided test content when test param is given", async () => {
+        const { autocode_build_concurrent_task } = tools()
+
+        await autocode_build_concurrent_task.execute(
+            {
+                plan_name: planName,
+                task_name: "task_a",
+                agent: "code",
+                execute: "build instructions",
+                test: "check that the build output exists",
+            },
+            makeContext(),
+        )
+
+        const { readFile } = await import("fs/promises")
+        const testContent = await readFile(
+            path.join(awaitDir, "00-concurrent_group", "task_a", "test.prompt.md"),
+            "utf-8",
+        )
+
+        expect(testContent).toBe("check that the build output exists")
+    })
+
+    test("does not create test.prompt.md when agent is 'test'", async () => {
+        const { autocode_build_concurrent_task } = tools()
+
+        await autocode_build_concurrent_task.execute(
+            {
+                plan_name: planName,
+                task_name: "task_a",
+                agent: "test",
+                execute: "verify the output",
+            },
+            makeContext(),
+        )
+
+        const { readFile } = await import("fs/promises")
+        const testPromptPath = path.join(awaitDir, "00-concurrent_group", "task_a", "test.prompt.md")
+        const content = await readFile(testPromptPath, "utf-8")
+        // test.prompt.md exists as the agent's execution prompt (not a verification file)
+        expect(content).toBe("verify the output")
+        // It must NOT contain the auto-generated verification template
+        expect(content).not.toContain("Verify that these instructions were correctly followed.")
+    })
+
+    test("creates background.md when background param is provided", async () => {
+        const { autocode_build_concurrent_task } = tools()
+
+        await autocode_build_concurrent_task.execute(
+            {
+                plan_name: planName,
+                task_name: "task_a",
+                agent: "code",
+                execute: "build instructions",
+                background: "this task is needed because of the new feature",
+            },
+            makeContext(),
+        )
+
+        const { readFile } = await import("fs/promises")
+        const bgContent = await readFile(
+            path.join(awaitDir, "00-concurrent_group", "task_a", "background.md"),
+            "utf-8",
+        )
+
+        expect(bgContent).toBe("this task is needed because of the new feature")
+    })
+
+    test("does not create background.md when background param is omitted", async () => {
+        const { autocode_build_concurrent_task } = tools()
+
+        await autocode_build_concurrent_task.execute(
+            {
+                plan_name: planName,
+                task_name: "task_a",
+                agent: "code",
+                execute: "build instructions",
+            },
+            makeContext(),
+        )
+
+        const { access } = await import("fs/promises")
+        const bgPath = path.join(awaitDir, "00-concurrent_group", "task_a", "background.md")
+        await expect(access(bgPath)).rejects.toThrow()
     })
 })

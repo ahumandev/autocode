@@ -1,5 +1,5 @@
 ---
-name: explore_error
+name: code_error
 description: Use this skill to understand how errors are handled in this project or to find error codes or custom exceptions.
 ---
 
@@ -30,4 +30,4 @@ Errors surface as user-visible `❌ …` strings from tools; no custom exception
 - `throwOnError: true` on SDK calls means a network or API error in `spawn_session` or `autocode_analyze_read` will propagate uncaught unless the caller wraps it — `autocode_analyze_read` does wrap it; `spawn_session` does not.
 - Config parse errors are silently swallowed (`src/core/config.ts`); a malformed `opencode.json` will produce no warning and fall back to defaults.
 
-**IMPORTANT**: Update `.Claude/skills/explore/error/SKILL.md` whenever an error code was added or modified or the error handling logic changed.
+**IMPORTANT**: Update `.Claude/skills/code/error/SKILL.md` whenever an error code was added or modified or the error handling logic changed.

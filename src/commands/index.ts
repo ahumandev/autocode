@@ -38,7 +38,7 @@ Use the \`autocode_orchestrate_list\` tool to list all plans available in \`.aut
 
 - If only 1 plan is found:
     1. Inform the user of the plan name.
-    2. Call \`autocode_orchestrate_resume\` with that plan name immediately.
+    2. Call \`autocode_orchestrate_next_task\` with that plan name immediately.
        The \`plan_name\` parameter must be set to the exact directory name string — e.g. \`my_plan\`.
 
 - If multiple plans are found:
@@ -46,7 +46,7 @@ Use the \`autocode_orchestrate_list\` tool to list all plans available in \`.aut
         - Header: "Select a Plan"
         - Question: "Which plan would you like to orchestrate?"
         - Options: One option per plan directory name found in \`.autocode/build/\`
-    2. Only after the user selects a plan, call \`autocode_orchestrate_resume\` with that plan name.
+    2. Only after the user selects a plan, call \`autocode_orchestrate_next_task\` with that plan name.
        The \`plan_name\` parameter must be set to the exact selected directory name string.
     3. Use only the selected plan name for all subsequent tool calls — do not reference any other plan.
 `.trim(),

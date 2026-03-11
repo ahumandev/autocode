@@ -1,4 +1,4 @@
-export const browserPrompt = `
+export const queryBrowserPrompt = `
 # Browser Automation
 
 ## Core Capabilities

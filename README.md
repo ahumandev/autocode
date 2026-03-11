@@ -1,6 +1,6 @@
 # Autocode
 
-A file-based workflow orchestrator for [OpenCode](https://opencode.ai). Enables fire-and-forget AI task execution: approve a plan, walk away, and come back to review results.
+A Claude Code plugin that orchestrates fire-and-forget AI task execution via file-based workflows. Approve a plan, walk away, and come back to review results.
 
 ## How It Works
 
@@ -8,21 +8,13 @@ Autocode introduces a structured workflow with 4 stages:
 
 ```
 .autocode/
-├── analyze/    # Add your idea .md files here
-├── build/      # Plans being converted to tasks and executed
-├── review/     # Completed plans awaiting your review
+├── analyze/    # Requirements that needs to be analyzed
+├── build/      # Tasks being build from plans
+├── failed/     # Plans that failed (required human intervention)
+├── review/     # Tasks that succeeded (require human review)
 ├── specs/      # Approved specs (registered as OpenCode skills)
 └── .archive/   # Historical plan directories
 ```
-
-### Workflow
-
-1. **Analyze** — Add idea `.md` files to `.autocode/analyze/`
-2. **Plan** — Run `/autocode-analyze` → interactive planning with OpenCode's plan agent
-3. **Build** — Plan approval generates task directory structure with `prompt.md` file
-4. **Orchestrate** — Autocode agent executes tasks sequentially/concurrently, retries failures, exports session logs
-5. **Review** — Run `/autocode-review` → approve or reject completed work
-6. **Specs** — Approved plans become OpenCode skills under `/plan-*` for future reference
 
 ## Installation & Usage
 
@@ -43,39 +35,52 @@ opencode
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/autocode-init` | Initialize `.autocode/` directory in current project |
-| `/autocode-analyze` | Pick an idea from `.autocode/analyze/` and start planning |
-| `/autocode-resume` | Resume an interrupted build orchestration |
-| `/autocode-review` | Review completed plans (approve/reject) |
-| `/autocode-status` | Show status of all stages |
-| `/autocode-abort` | Emergency abort all running tasks |
+| Command                        | Description                                                      |
+|--------------------------------|------------------------------------------------------------------|
+| `/autocode-analyze`            | Pick an idea from `.autocode/analyze/` and start planning        |
+| `/autocode-orchestrate-next`   | Execute next pending task or concurrent task group               |
+| `/autocode-orchestrate-review` | Generate review report and move plan to `.autocode/review/`      |
+| `/autocode-orchestrate-list`   | List plans in build, failed, and review stages                   |
+| `/autocode-orchestrate-read`   | Read plan content, progress, task prompts, and results           |
+| `/autocode-orchestrate-fix`    | Reconnect and send fix instructions to a failed task             |
+| `/autocode-orchestrate-retry`  | Reconnect and retry a failed task                                |
+| `/autocode-orchestrate-insert` | Insert a new task and shift subsequent tasks                     |
+| `/autocode-orchestrate-move`   | Move a task to a new index                                       |
+| `/autocode-orchestrate-delete` | Soft-delete a task directory                                     |
 
 ### Task Directory Structure
 
 ```
-.autocode/build/<plan_name>/
-├── plan.md              # Approved plan content
-├── .review.md           # Review instructions (hidden until review)
-├── .session.json        # Session IDs for resumability
-├── awaiting/            # Tasks not yet started
-│   ├── 0-first_task/    # Numbered = sequential (runs after all lower numbers)
-│   │   └── prompt.md
-│   ├── 1-second_task/
-│   │   ├── prompt.md
-│   │   ├── parallel_a/  # Unnumbered = parallel (runs concurrently)
-│   │   └── parallel_b/  # Unnumbered = parallel (runs concurrently)
-│   └── 2-third_task/
-├── busy/                # Currently executing
-└── tested/              # Completed & verified
+.autocode/{build|failed|review}/<plan_name>/
+├── goal.md                    # Plan's goal
+├── plan.md                    # Plan content
+├── 00-first_task/             # Zero-padded, numbered = sequential
+│   ├── background.md          # Task context (if provided)
+│   ├── {agent}.prompt.md      # Agent execution instructions
+│   ├── {agent}.session.{id}.md
+│   ├── {agent}.result.{ts}.md
+│   ├── verify.prompt.md         # Test verification instructions
+│   ├── verify.session.{id}.md
+│   └── verify.result.{ts}.md
+├── 01-concurrent_group/       # Numbered group containing parallel tasks
+│   ├── background.md
+│   ├── parallel_a/            # Unnumbered = runs in parallel
+│   │   ├── {agent}.prompt.md
+│   │   └── ...
+│   └── parallel_b/            # Unnumbered = runs in parallel
+│       ├── {agent}.prompt.md
+│       └── ...
+└── 02-third_task/
 ```
 
 ### Task Ordering Rules
 
-- **Numbered directories** (`0-xxx`, `1-xxx`, `2-xxx`, ..., `10-xxx`) execute **sequentially** in numeric order
-- **Unnumbered directories** (no numeric prefix) execute **in parallel** with their siblings
+- **Numbered directories** (`00-xxx`, `01-xxx`, `02-xxx`, ...) execute **sequentially** in numeric order
+- **Unnumbered subdirectories** within a numbered group execute **in parallel** with siblings
 - Sorting is **numeric** (0, 1, 2, ..., 9, 10, 11) — not alphabetic
+- **In-flight state**: `timestamp_NN-task_name` (directory being executed)
+- **Succeeded state**: `.timestamp_NN-task_name` (hidden directory, dot-prefixed)
+- **Failed state**: `timestamp_NN-task_name.failed` (directory with `.failed` suffix)
 
 ## Architecture
 
@@ -85,20 +90,26 @@ opencode
 flowchart TB
   analyst["analyst (human)"] <.->|interview| plan
     
-  plan -->|plan| plannatator
   plan .->|queries| plan_agents["multiple subagents"]
   plan_agents .->|results| plan
+  plan -->|plan| plannatator{"present plan"}
   plannatator -->|feedback| plan
-  plannatator -->|approved plan| build
+  plannatator -->|approval| build
 
   build -->|new tasks| orchestrate
 
-  orchestrate .->|task| execute
-  execute["multiple executors"] .->|instructions| execute_agents["multiple subagents"]
-  execute_agents .->|results| execute
-  execute .->|results| orchestrate
-  orchestrate -->|report| reviewer["reviewer (human)"]
+  orchestrate -->|resume tasks| orchestrate_tool["orchestrate tool"]
+  orchestrate_tool .->|task prompts| orchestrate_agents["multiple subagents"]
+  orchestrate_agents .->|task results| orchestrate_tool
+  orchestrate_tool -->|test prompts| test{test}
 
+  test -->|failure| recover
+  recover .->|recover instructions| recover_agents["multiple subagents"]
+  recover_agents .->|responses| recover
+  recover --> |test prompt|test
+
+  test -->|success| review
+  review -->|report| reviewer["reviewer (human)"]
   reviewer -->|reject| revise
   revise -->|instruction| orchestrate
   reviewer -->|approve| specs_dir[(".autocode/specs")]
@@ -107,13 +118,15 @@ flowchart TB
 
 ### Core Components
 
-- **Plugin** (`src/plugin.ts`) — OpenCode plugin entry point; initializes config and tool factories
-- **Agents** (`src/agents/`) — `plan` (interview/research) and `build` (plan→tasks conversion)
-- **Commands** (`src/commands/`) — CLI commands (`autocode-analyze`, `autocode-review`, etc.)
-- **Tools** (`src/tools/`) — OpenCode tool implementations:
+- **Plugin** (`src/plugin.ts`) — Claude Code plugin entry point; initializes config and tool factories
+- **Agents** (`src/agents/`) — `plan`, `build`, `orchestrate`, and `recover` agents
+- **Agent Prompts** (`src/agents/prompts/`) — Prompt files for each agent
+- **Commands** (`src/commands/`) — CLI command definitions
+- **Tools** (`src/tools/`) — Claude Code tool implementations:
+  - `analyze.ts` — analyze tools (`autocode_analyze_list`, `autocode_analyze_read`)
+  - `build.ts` — build tools (`autocode_build_plan`, `autocode_build_next_task`, `autocode_build_concurrent_task`, `autocode_build_orchestrate`, `autocode_build_fail`)
+  - `orchestrate.ts` — orchestrate tools (task execution, progress tracking, review generation)
   - `session.ts` — session lifecycle (`spawn_session`)
-  - `plan.ts` — plan analysis tools
-  - `build.ts` — plan→task conversion tools
 - **Core** (`src/core/`) — Configuration, types, and constants:
   - `config.ts` — async `loadConfig()` and sync `createConfig()`
   - `types.ts` — Zod enums for `Stage` and `TaskStatus`
@@ -122,11 +135,12 @@ flowchart TB
 ### Tool Factories
 
 Tools are created via closure-based dependency injection:
+- `createAnalyzeTools()` — analyze tools
+- `createBuildTools()` — build tools
+- `createOrchestrateTools()` — orchestrate tools
 - `createSessionTools()` — session management
-- `createAnalyzeTools()` — plan analysis
-- `createBuildTools()` — plan→task conversion
 
-Each factory captures the OpenCode client at plugin initialization.
+Each factory captures the Claude Code client at plugin initialization.
 
 ### Common Utilities
 
@@ -143,10 +157,16 @@ All tools use shared validation, response helpers, and error formatting:
 - Implicit reset when switching tools within a session
 
 **Parameter Validators & Formatters** (`src/utils/validation.ts`):
-- 6 validators for null-or-error-string pattern (non-empty, max words, length, format, alphanumeric)
+- Validators for null-or-error-string pattern (non-empty, max words, length, format, alphanumeric)
 - String formatters: `toIdentifier()` pipeline for normalizing plan names and identifiers
 
-See [Common Utilities & Cross-Cutting Concerns](.Claude/skills/code/common/SKILL.md) for details.
+**Task Utilities** (`src/utils/tasks.ts`):
+- `findNextGroup()` — locate next pending task or concurrent group
+- `collectTasks()` — gather all tasks from a plan directory
+- `formatSessionMarkdown()` — format agent session transcripts
+- `extractLastMessage()` — extract final message from session
+- `extractTaskResult()` — parse task result (last `<success>` or `<failure>` tag wins)
+- `buildReviewMarkdown()` — generate review report from completed tasks
 
 ### Error Handling
 
@@ -154,12 +174,14 @@ Autocode uses a unified error contract: all tools return `{ error: "..." }` JSON
 - **Retry prefix** (`"Retry <tool> again..."`): agent provided bad input — fix and retry up to 5 times
 - **Abort prefix** (`"You MUST abort..."`): internal system failure — stop immediately
 - Distributed error handling (no custom exception hierarchy)
-- `src/plugin.ts`: `.catch()` on `initAutocode` → `console.warn` (silent failure)
-- `src/tools/session.ts`: NO try/catch — uses `throwOnError: true` (propagates errors)
-- `src/core/config.ts`: bare `catch {}` silently falls back to defaults
-- `failPlan()` helper moves failed plans to `.autocode/failed/` with idempotency guard
+- Per-session retry tracker with `MAX_RETRIES = 5`; escalates from retry → abort when exceeded
+- Task failures tracked via filesystem directory renames and `failure.md` markers
+- **Silent failures** (intentional):
+  - `src/plugin.ts`: `.catch()` on `initAutocode` → `console.warn`
+  - `src/core/config.ts`: bare `catch {}` silently falls back to defaults
+- **Exception to the rule**: `src/tools/session.ts` uses `throwOnError: true` (propagates errors)
 
-See [Error Handling](.Claude/skills/explore/error/SKILL.md) for the full error contract and [SECURITY.md](SECURITY.md) for authorization and input validation details.
+See [SECURITY.md](SECURITY.md) for authorization and input validation details.
 
 ## Development
 

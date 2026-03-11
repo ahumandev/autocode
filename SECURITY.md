@@ -6,10 +6,11 @@ Autocode is a file-based workflow orchestrator plugin for OpenCode with minimal 
 
 ## Key Components
 
-- [Permission Model](./src/agents/index.ts) - Agent-level tool access control via OpenCode's permission system
-- [Input Sanitization](./src/tools/build.ts) - Plan name validation and filesystem path safety
-- [File Operations](./src/tools/analyze.ts) - Scoped read/write within `.autocode/` directory
-- [Configuration](./src/core/config.ts) - JSONC parsing with comment stripping
+- [Agent Permissions](./src/agents/index.ts) - Tool access control via OpenCode's permission system
+- [Input Sanitization](./src/tools/build.ts) - Plan name validation (7-word limit, alphanumeric + underscore, timestamp deduplication)
+- [Parameter Validators](./src/utils/validation.ts) - Non-empty, max-words, length, format, alphanumeric checks
+- [Retry & Error Handling](./src/utils/retry-tracker.ts) - Distributed error handling with max-retry escalation (5 retries)
+- [Configuration](./src/core/config.ts) - JSONC parsing with regex comment stripping; safe defaults on missing/invalid files
 
 ## Authentication
 
@@ -19,79 +20,45 @@ Autocode is a file-based workflow orchestrator plugin for OpenCode with minimal 
 
 Autocode uses **OpenCode's permission system** to restrict agent access to specific tools. Each agent declares a `permission` object that controls which tools it can invoke.
 
-### Permission Model
+### Agent Permissions
 
-Permissions are defined per agent in [`src/agents/index.ts`](./src/agents/index.ts):
+Defined in [`src/agents/index.ts`](./src/agents/index.ts):
 
-```typescript
-permission: {
-  "*": "deny",                    // Deny all by default
-  "autocode_analyze*": "allow",   // Allow tools matching pattern
-  "task": {
-    "*": "allow",                 // Allow all task subagents
-    "analyze": "deny",            // Except these specific ones
-    "build": "deny"
-  }
-}
-```
-
-### Agents & Roles
-
-- **plan**: Interactive planning agent
-  - Allowed: `autocode_analyze*`, `grep`, `read`, `question`, `webfetch`, `task` (with restrictions)
-  - Denied: `edit`, `bash`, `code`, `test`, `troubleshoot`
-  - Purpose: Interview users, research problems, create plans (no code execution)
-
-- **build**: Task generation agent
-  - Allowed: `autocode_build*`, `question`, `skill` (plan-* only)
-  - Denied: All other tools
-  - Purpose: Convert approved plans into task directory structure (filesystem only)
+- **plan** (read-only): `autocode_analyze*`, `grep`, `read`, `question`, `webfetch`, `plan_exit`, `submit_plan`, `task` (with restrictions)
+- **build** (filesystem only): `autocode_build*`, `question`, `plan_enter`
+- **orchestrate** (hidden): `autocode_orchestrate*` only — no direct filesystem access
+- **human** (delegation): `question` only — for manual SSO/password/production operations
+- **report** (read-only): Query and reporting tools; denies code execution
 
 ## Security Features
 
-- **Filesystem Scoping**: All file operations are scoped to `.autocode/` directory via `path.join()` with explicit directory names
-- **Plan Name Sanitization**: Raw plan names are validated and sanitized before use in filesystem paths:
-  - Lowercase conversion
-  - Non-alphanumeric → underscore
-  - Consecutive underscores collapsed
-  - Leading/trailing underscores stripped
-  - Word limit (7 words max, extras abbreviated)
-  - Timestamp suffix added if directory exists (deduplication)
-- **Permission-Based Tool Access**: Agents cannot invoke tools outside their declared permissions
+- **Filesystem Scoping**: All file operations scoped to `.autocode/` via `path.join(input.worktree, ".autocode", ...)` — never writes outside
+- **Plan Name Sanitization** ([`generatePlanName()`](./src/tools/build.ts#L35)): 
+  - Lowercase, non-alphanumeric → underscore, collapse consecutive underscores, strip edges
+  - 7-word limit; words 8+ abbreviated to first letter and concatenated
+  - Timestamp suffix (`_${Date.now()}`) if directory exists (deduplication)
+  - Validation: non-empty + alphanumeric check before sanitization
+- **Parameter Validators** ([`src/utils/validation.ts`](./src/utils/validation.ts)): Non-empty, max-words, min/max-length, format (regex), alphanumeric
+- **Retry Tracking** ([`src/utils/retry-tracker.ts`](./src/utils/retry-tracker.ts)): Max 5 retries per tool per session; escalates to abort on max exceeded
+- **Unified Error Responses**: All tools return `{ error: "..." }` JSON on failure; no custom exceptions
+- **No Network Calls**: All external calls go through OpenCode client API (no direct HTTP)
 - **No Credential Handling**: Plugin never stores, logs, or transmits secrets
-- **No Network Exposure**: Plugin operates entirely within local filesystem and OpenCode's internal APIs
-- **Configuration Validation**: JSONC parsing with comment stripping; missing config files fall back to safe defaults
-- **Error Handling**: File operation errors are caught and reported without exposing system paths
 
 ## Non-Standard Practices
 
-- **JSONC Comment Stripping**: Configuration loader uses regex-based comment removal instead of a dedicated JSONC parser. This is intentional for simplicity but may fail on edge cases (e.g., comments inside strings). Acceptable because config files are user-controlled and not untrusted input.
+- **Silent Failures on Init**: `src/plugin.ts` `.catch()` on `initAutocode` → `console.warn` (non-blocking). `src/core/config.ts` bare `catch {}` falls back to safe defaults. Acceptable because `.autocode/` directory creation is idempotent and config files are user-controlled.
 
-- **Path Traversal Prevention via Naming Convention**: Filesystem safety relies on sanitized plan names and explicit `path.join()` calls rather than canonicalization checks. This is safe because:
-  - Plan names are generated/validated by the build agent (trusted)
-  - Task names are provided by the build agent (trusted)
-  - No user-supplied paths are used directly in filesystem operations
-  - All paths are constructed relative to `.autocode/` directory
+- **Session Tool Error Propagation**: `src/tools/session.ts` uses `throwOnError: true` (no try/catch) — errors bubble up to OpenCode. Acceptable because session creation/prompting is a system-level operation; failures should be visible.
 
-- **No Input Validation on Prompt Content**: Task prompts and review instructions are written as-is without sanitization. This is acceptable because:
-  - Prompts are generated by the build agent (trusted)
-  - They are read back by agents (not executed as code)
-  - They are stored in markdown files (not interpreted)
+- **Orchestrate Tool Fire-and-Forget**: `autocode_build_orchestrate` spawns orchestrate agent without awaiting the prompt call; `.catch()` silently ignores errors. Acceptable because the orchestrate agent runs independently and handles its own failures.
 
-## Threat Model
+- **JSONC Comment Stripping**: Regex-based comment removal instead of dedicated parser. May fail on edge cases (comments inside strings). Acceptable because config files are user-controlled and not untrusted input.
 
-**Out of scope:**
-- OpenCode authentication/authorization (delegated to OpenCode)
-- Agent prompt injection (agents are trusted OpenCode components)
-- Malicious user input (users control their own projects)
-- Network attacks (no network exposure)
-- Credential theft (no credentials stored)
-
-**In scope:**
-- Filesystem path traversal via plan/task names → **Mitigated by sanitization**
-- Unintended file overwrites → **Mitigated by deduplication (timestamp suffix)**
-- Accidental data loss → **Mitigated by `.archive/` directory for historical plans**
-- Agent privilege escalation → **Mitigated by OpenCode's permission system**
+- **Path Traversal Prevention via Naming Convention**: Filesystem safety relies on sanitized plan/task names and explicit `path.join()` calls rather than canonicalization. Safe because:
+  - Plan names generated/validated by build agent (trusted)
+  - Task names provided by build agent (trusted)
+  - No user-supplied paths used directly in filesystem operations
+  - All paths constructed relative to `.autocode/` directory
 
 ## Configuration
 
@@ -108,12 +75,3 @@ Autocode reads optional configuration from `opencode.json` under the `autocode` 
 ```
 
 If `opencode.json` is missing or invalid, safe defaults are used. No secrets should be stored in this file.
-
-## Dependency Security
-
-- **zod**: Schema validation library (used for type definitions, not runtime validation)
-- **gray-matter**: YAML/frontmatter parsing (used for plan metadata)
-- **@opencode-ai/plugin**: OpenCode plugin SDK (trusted first-party)
-- **@opencode-ai/sdk**: OpenCode SDK (trusted first-party)
-
-No external authentication libraries, no credential storage, no network clients.

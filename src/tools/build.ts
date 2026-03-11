@@ -220,6 +220,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             name: tool.schema
                 .string()
                 .describe("Raw plan name proposal — provide at most 7 words (underscore-separated) that summarize the purpose of the plan"),
+            goal: tool.schema
+                .string()
+                .describe("A brief (< 30 words) description of the overall goal of the plan. This will be injected into every agentic prompt."),
             plan_content: tool.schema
                 .string()
                 .describe("The full approved plan text to write into plan.md"),
@@ -248,6 +251,9 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             const contentErr = validateNonEmpty(args.plan_content, sid, toolName, "plan_content")
             if (contentErr) return contentErr
 
+            const goalErr = validateNonEmpty(args.goal, sid, toolName, "goal")
+            if (goalErr) return goalErr
+
             // ── filesystem work ───────────────────────────────────────────────
             // De-duplicate: append timestamp if a directory already exists
             const buildDir = path.join(context.worktree, ".autocode", "build")
@@ -260,6 +266,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             try {
                 await mkdir(planDir, { recursive: true })
                 await writeFile(path.join(planDir, "plan.md"), args.plan_content, "utf-8")
+                await writeFile(path.join(planDir, "goal.md"), args.goal, "utf-8")
                 return successResponse(sid, toolName, { plan_name: finalName })
             } catch (err: any) {
                 await failPlan(context.worktree, finalName, `${toolName} failed to initialize plan directory: ${err.message}`)
@@ -284,9 +291,20 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             task_name: tool.schema
                 .string()
                 .describe("Describe the task's purpose in < 10 words"),
-            instructions: tool.schema
+            agent: tool.schema
                 .string()
-                .describe("Task background, instructions, rules and testing steps to ensure the task's instructions was correctly executed."),
+                .describe("The agent that should execute this task. One of: code, troubleshoot, browser, websearch, os, excel, test, human, git, md, document"),
+            background: tool.schema
+                .string()
+                .optional()
+                .describe("(Optional) Relevant background info why this task is necessary. Max 40 words."),
+            execute: tool.schema
+                .string()
+                .describe("Detailed execution instructions for the agent. Copy exact examples from the plan if available."),
+            test: tool.schema
+                .string()
+                .optional()
+                .describe("(Optional) Instructions for the test agent to verify the execute instructions were correctly followed. Ignored if agent is 'test'."),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -299,8 +317,11 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             const taskNameErr = validateNonEmpty(args.task_name, sid, toolName, "task_name")
             if (taskNameErr) return taskNameErr
 
-            const instructionsErr = validateNonEmpty(args.instructions, sid, toolName, "instructions")
-            if (instructionsErr) return instructionsErr
+            const agentErr = validateNonEmpty(args.agent, sid, toolName, "agent")
+            if (agentErr) return agentErr
+
+            const executeErr = validateNonEmpty(args.execute, sid, toolName, "execute")
+            if (executeErr) return executeErr
 
             // ── check the plan directory exists (input problem if it does not) ──
             const planDir = path.join(context.worktree, ".autocode", "build", args.plan_name)
@@ -322,7 +343,40 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 const taskDir = path.join(planDir, dirName)
 
                 await mkdir(taskDir, { recursive: true })
-                await writeFile(path.join(taskDir, "prompt.md"), args.instructions, "utf-8")
+
+                if (args.background) {
+                    await writeFile(path.join(taskDir, "background.md"), args.background, "utf-8")
+                }
+
+                await writeFile(path.join(taskDir, `${args.agent}.prompt.md`), args.execute, "utf-8")
+
+                if (args.agent !== "test") {
+                    const testContent = args.test?.trim()
+                        ? args.test
+                        : `
+# Background
+
+${args.background || "No background provided."}
+
+# Original Prompt
+
+The ${args.agent} agent received this prompt:
+
+<prompt>
+${args.execute}
+</prompt>
+
+*(The above prompt is not intended for you)* 
+
+# **YOUR** Task
+
+1. Verify that these instructions were correctly followed.
+2. Think what is necessary to validate that the correct action was previously taken by the ${args.agent} agent. For example, you may need to write a unit test, scan for a specific log message, validate that file contents were correctly updated, etc.
+3. If the ${args.agent} agent made a mistake, did not complete its task, or you discover a problem with the implementation, clearly explain the failure and provide instructions on how to rectify the problem.
+4. If you can confirm the instructions were correctly followed, clearly state that the task was successful and provide your observation.
+`.trim() + "\n"
+                    await writeFile(path.join(taskDir, "test.prompt.md"), testContent, "utf-8")
+                }
 
                 return successResponse(sid, toolName)
             } catch (err: any) {
@@ -355,9 +409,20 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             task_name: tool.schema
                 .string()
                 .describe("Lowercase underscore task name (e.g. login_endpoint)"),
-            instructions: tool.schema
+            agent: tool.schema
                 .string()
-                .describe("Task background, instructions, rules and testing steps to ensure the task's instructions was correctly executed."),
+                .describe("The agent that should execute this task. One of: code, troubleshoot, browser, websearch, os, excel, test, human, git, md, document"),
+            background: tool.schema
+                .string()
+                .optional()
+                .describe("(Optional) Relevant background info why this task is necessary. Max 40 words."),
+            execute: tool.schema
+                .string()
+                .describe("Detailed execution instructions for the agent. Copy exact examples from the plan if available."),
+            test: tool.schema
+                .string()
+                .optional()
+                .describe("(Optional) Instructions for the test agent to verify the execute instructions were correctly followed. Ignored if agent is 'test'."),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -370,8 +435,11 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
             const taskNameErr = validateNonEmpty(args.task_name, sid, toolName, "task_name")
             if (taskNameErr) return taskNameErr
 
-            const taskPromptErr = validateNonEmpty(args.instructions, sid, toolName, "instructions")
-            if (taskPromptErr) return taskPromptErr
+            const agentErr = validateNonEmpty(args.agent, sid, toolName, "agent")
+            if (agentErr) return agentErr
+
+            const executeErr = validateNonEmpty(args.execute, sid, toolName, "execute")
+            if (executeErr) return executeErr
 
             // ── check the plan directory exists (input problem if it does not) ──
             const planDir = path.join(context.worktree, ".autocode", "build", args.plan_name)
@@ -401,7 +469,40 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
 
                 const taskDir = path.join(slotDir, args.task_name)
                 await mkdir(taskDir, { recursive: true })
-                await writeFile(path.join(taskDir, "prompt.md"), args.instructions, "utf-8")
+
+                if (args.background) {
+                    await writeFile(path.join(taskDir, "background.md"), args.background, "utf-8")
+                }
+
+                await writeFile(path.join(taskDir, `${args.agent}.prompt.md`), args.execute, "utf-8")
+
+                if (args.agent !== "test") {
+                    const testContent = args.test?.trim()
+                        ? args.test
+                        : `
+# Background
+
+${args.background || "No background provided."}
+
+# Original Prompt
+
+The ${args.agent} agent received this prompt:
+
+<prompt>
+${args.execute}
+</prompt>
+
+*(The above prompt is not intended for you)* 
+
+# **YOUR** Task
+
+1. Verify that these instructions were correctly followed.
+2. Think what is necessary to validate that the correct action was previously taken by the ${args.agent} agent. For example, you may need to write a unit test, scan for a specific log message, validate that file contents were correctly updated, etc.
+3. If the ${args.agent} agent made a mistake, did not complete its task, or you discover a problem with the implementation, clearly explain the failure and provide instructions on how to rectify the problem.
+4. If you can confirm the instructions were correctly followed, clearly state that the task was successful and provide your observation.
+`.trim() + "\n"
+                    await writeFile(path.join(taskDir, "test.prompt.md"), testContent, "utf-8")
+                }
 
                 const slotName = path.basename(slotDir)
                 return successResponse(sid, toolName, `✅ Concurrent task '${slotName}/${args.task_name}' created`)
