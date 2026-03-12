@@ -1,4 +1,5 @@
 import { Plugin, PluginInput } from "@opencode-ai/plugin"
+import type { Config } from "@opencode-ai/sdk/v2"
 import { createSessionTools } from "./tools/session"
 import { createAnalyzeTools } from "./tools/analyze"
 import { createBuildTools } from "./tools/build"
@@ -28,7 +29,7 @@ const autocode: Plugin = async (input: PluginInput) => {
         // Inject commands into the live config object before Command.state initializes.
         // This is equivalent to shipping markdown files in {command,commands}/ —
         // but self-contained in the npm package with no filesystem dependency.
-        async config(cfg) {
+        async config(cfg: Config) {
             cfg.command = { ...commands, ...cfg.command }
 
             // Merge plugin agents into the config so that:

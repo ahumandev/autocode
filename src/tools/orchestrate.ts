@@ -21,15 +21,6 @@ import {
 
 type Client = PluginInput["client"]
 
-/**
- * Appended to the system prompt of every agent session spawned by the orchestrator.
- * Instructs the agent to wrap its final response in <success> or <failure> XML tags.
- * This is ONLY injected when sessions are spawned via the orchestrate tools — agents
- * called directly (outside orchestration) are not affected.
- */
-const PROMPT_RESPONSE = `
-`.trimEnd()
-
 // ─── tool factory ────────────────────────────────────────────────────────────
 
 export function createOrchestrateTools(client: Client): Record<string, ToolDefinition> {
@@ -207,8 +198,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     path: { id: sid },
                     body: {
                         agent: agentName,
-                        system: PROMPT_RESPONSE,
-                        parts: [{ type: "text", text: agentPromptContent }],
+                        system: agentPromptContent,
+                        parts: [{ type: "text", text: "Begin." }],
                     },
                     throwOnError: true,
                 })

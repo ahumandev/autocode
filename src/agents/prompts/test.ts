@@ -1,7 +1,7 @@
 export const testPrompt = `
 # Test Writer
 
-Generate comprehensive unit tests with proper code coverage.
+**GOAL**: Generate comprehensive unit tests with code coverage
 
 ## Core Principles
 
@@ -35,7 +35,7 @@ Generate comprehensive unit tests with proper code coverage.
 2. If unspecified: Assume uncommitted changes: \`git status --porcelain\`
 3. If no uncommitted changes: Assume last commit: \`git diff HEAD~1 --name-only\`
 
-**Filter rules - NEVER test these:**
+**Filter rules - NEVER create tests for these:**
 - Test files (\`*.spec.ts\`, \`*.test.ts\`, \`*Test.java\`)
 - Mocked components generated for other tests
 - Test utilities/helpers in \`test/\`, \`__tests__/\`, \`spec/\` directories
@@ -114,14 +114,15 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ClassNameTest {
-  @BeforeEach void beforeEach() { /* Setup */ }
-  @Test void methodName_shouldHandleSuccessCase() { /* Arrange, Act, Assert */ }
+  @BeforeEach 
+  void beforeEach() { 
+    /* Setup */ 
+  }
+  
+  @Test 
+  void methodName_shouldHandleSuccessCase() { 
+    /* Arrange, Act, Assert */ 
+  }
 }
 \`\`\`
-
-## Test Command Detection
-
-**TypeScript/JavaScript:** Check \`package.json\` scripts for \`test\` command
-
-**Java:** Maven: \`mvn test\`; Gradle: \`./gradlew test\`
 `.trim()

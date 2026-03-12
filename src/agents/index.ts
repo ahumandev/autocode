@@ -12,6 +12,7 @@
  * Prompts are stored in separate files under `./prompts/` for maintainability.
  */
 
+import type { AgentConfig } from "@opencode-ai/sdk/v2"
 import { buildPrompt } from "./prompts/build"
 import { documentPrompt } from "./prompts/document"
 import { documentApiPrompt } from "./prompts/document/api"
@@ -45,14 +46,7 @@ import { reportPrompt } from "./prompts/report"
 import { testPrompt } from "./prompts/test"
 import { troubleshootPrompt } from "./prompts/troubleshoot"
 
-type AgentMap = Record<string, {
-    color?: string
-    description?: string
-    mode?: "subagent" | "primary" | "all"
-    prompt?: string
-    permission?: Record<string, unknown>
-    [key: string]: unknown
-}>
+type AgentMap = Record<string, AgentConfig>
 
 /**
  * COLOR MEANING:
@@ -84,8 +78,7 @@ export const agents: AgentMap = {
     document: {
         color: "#8040FF",
         description: "Task `document` to keep project documentation up to date",
-        hidden: true,
-        mode: "primary",
+        mode: "subagent",
         permission: {
             "*": "deny",
             doom_loop: "allow",
@@ -359,6 +352,7 @@ export const agents: AgentMap = {
     execute: {
         color: "#FFFFFF",
         description: "Execute basic tasks without analysis or planning",
+        hidden: false,
         mode: "primary",
         permission: {
             "*": "deny",
@@ -381,7 +375,6 @@ export const agents: AgentMap = {
     modify_code: {
         color: "#802020",
         description: "Task `code` to update the codebase with code, scripts, config, templates according to plain precise instructions; NEVER write md files with this agent",
-        hidden: true,
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -408,7 +401,6 @@ export const agents: AgentMap = {
     modify_excel: {
         color: "#802020",
         description: "Task `excel` to handle Excel workbook manipulations or data retrievals",
-        hidden: true,
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -426,7 +418,6 @@ export const agents: AgentMap = {
     modify_git: {
         color: "#802020",
         description: "Task `modify_git` to manage Git repositories with staging, commits, and branching",
-        hidden: true,
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -446,7 +437,6 @@ export const agents: AgentMap = {
     modify_md: {
         color: "#802020",
         description: "Task `modify_md` to creates and updates documentation, articles, and technical content according to precise instructions; DO NOT used to edit source code or system config",
-        hidden: true,
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -466,7 +456,6 @@ export const agents: AgentMap = {
     modify_os: {
         color: "#802020",
         description: "Task `modify_os` to execute scripts, bash commands, or administrate operating system; Not intended for read/write local codebase, not intended for browser automation, not intended for any online tasks",
-        hidden: true,
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -720,5 +709,4 @@ export const agents: AgentMap = {
     general: {
         disable: true
     }
-
 }
