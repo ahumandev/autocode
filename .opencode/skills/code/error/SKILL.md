@@ -53,4 +53,4 @@ Managed inside `src/tools/orchestrate.ts` (`executeTask`):
 - **`failPlan` is best-effort**: its own `try/catch` swallows filesystem errors — callers still receive `abortResponse` even if the directory move fails.
 - **No custom exception classes** anywhere in the codebase.
 
-**IMPORTANT**: Update `.Claude/skills/code/error/SKILL.md` whenever an error code was added or modified or the error handling logic changed.
+**IMPORTANT**: Update `.opencode/skills/code/error/SKILL.md` whenever an error code was added or modified or the error handling logic changed.

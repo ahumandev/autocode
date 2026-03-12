@@ -70,4 +70,4 @@ All validators return `null` on pass or a **ready-to-return JSON error string** 
 - All file operations use `path.join(worktree, ".autocode", ...)` — never `process.cwd()`.
 - `input.worktree` (from tool context) is the canonical root, not the process working directory.
 
-**IMPORTANT**: Update `.Claude/skills/code/common/SKILL.md` whenever a common util was added or modified.
+**IMPORTANT**: Update `.opencode/skills/code/common/SKILL.md` whenever a common util was added or modified.
