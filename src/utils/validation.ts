@@ -19,12 +19,13 @@ export function successResponse(sessionID: string, toolName: string, result: unk
 /**
  * Returns a JSON error response instructing the agent to abort the workflow.
  * Use for internal system failures that are not the agent's fault.
+ * The returned JSON includes `signal: "abort"` so agents can branch without parsing the error text.
  *
  * @param toolName Tool that failed
  * @param reason Human-readable description of what went wrong
  */
 export function abortResponse(toolName: string, reason: string): string {
-    return JSON.stringify({ error: `You **MUST ABORT** your workflow immediately and prompt the user to investigate the failure of the tool call '${toolName}' with reason: ${reason}` })
+    return JSON.stringify({ error: `You **MUST ABORT** your workflow immediately and prompt the user to investigate the failure of the tool call '${toolName}' with reason: ${reason}`, signal: "abort" })
 }
 
 /**
@@ -32,6 +33,7 @@ export function abortResponse(toolName: string, reason: string): string {
  * with corrected parameters. Internally tracks retry attempts via retry-tracker:
  * after `MAX_RETRIES` failed attempts for the same tool in the same session,
  * `onMaxRetries` is called instead of issuing another retry instruction.
+ * The returned JSON includes `signal: "retry"` so agents can branch without parsing the error text.
  *
  * @param sessionID    Agent session ID (from `context.sessionID`)
  * @param toolName     Tool that should be retried
@@ -51,7 +53,7 @@ export function retryResponse(
     if (shouldAbort) {
         return onMaxRetries()
     }
-    return JSON.stringify({ error: `Retry ${toolName} again with a valid ${paramName} parameter which must ${constraint}` })
+    return JSON.stringify({ error: `Retry ${toolName} again with a valid ${paramName} parameter which must ${constraint}`, signal: "retry" })
 }
 
 

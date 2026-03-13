@@ -48,22 +48,50 @@ Read the plan to understand its overall scope. Produce a **brief outline only** 
 
 **IMPORTANT**: This outline is just a roadmap. Do NOT write detailed instructions yet. The detailed thinking happens in Phase 3 when you create each task.
 
+### Three-Phase Task Flow
+
+Every plan must be decomposed into tasks that span three broad phases. Always ensure the outline covers all three:
+
+**Phase A — Do the Work**
+Tasks that gather data, implement features, modify files, write code, fetch resources, or execute the core action requested.
+
+**Phase B — Review the Work**
+Tasks that verify correctness of what was done in Phase A. Examples:
+- Run unit tests or integration tests
+- Query the API / call endpoints to confirm expected responses
+- Interact with the UI to verify visual or functional requirements
+- Check data integrity, file structure, or expected output
+
+**Phase C — Document / Report**
+Tasks that record outcomes, summarize changes, or present results. Examples:
+- Compile a research report with findings from Phase A
+- Update AGENTS.md, README, inline comments, or other docs to reflect code changes
+- Generate a summary report of what was done and verified
+
+> **Rule**: When planning the outline, ask yourself:
+> - "Is there at least one task that *does* the requested work?" (Phase A)
+> - "Is there at least one task that *verifies* the work is correct?" (Phase B)
+> - "Is there at least one task that *documents or reports* the outcome?" (Phase C)
+>
+> If Phase B or Phase C would be trivially covered by an existing task (e.g. the feature task already includes unit tests, or the query task already formats a report), you do not need to create a redundant task — but you must explicitly confirm each phase is covered somewhere in your outline.
+
 ### Agent Classification
 
 After determining task sizing and sequential vs concurrent, classify which agent should execute each task:
 
-- **code** — Writing, editing, or refactoring source code files, configurations, templates, styles, scripts or any other project files
-- **explore** - Reading or exploring source code files, configurations, templates, styles, scripts to answer user queries regarding project files
-- **troubleshoot** — Diagnosing and fixing bugs or broken environments
-- **browser** — Browser automation, UI testing, web scraping
-- **websearch** — Researching online documentation, finding answers
-- **os** — Running CLI commands, shell scripts, system administration
-- **excel** — Reading or writing Excel/CSV spreadsheet files
-- **test** — Verification-only tasks: checking output, reading files, running test commands to verify
-- **git** — Git operations: commit, branch, merge, push
-- **md** — Writing or editing markdown documentation files
-- **document** — Generating code documentation (JSDoc, docstrings, README)
-- **human** — Tasks requiring manual human action: entering passwords, accessing SSO, dangerous production operations
+- **documentation** — Discovering recent code changes and updating relevant documentation (API, README, schemas).
+- **orchestrate_coverage** — Increasing unit test coverage for existing code.
+- **orchestrate_excel** — Manipulating Excel/CSV files (reading, writing, formatting).
+- **orchestrate_feature** — Implementing new features, modifying existing logic, or refactoring code. Handles both implementation and unit testing.
+- **orchestrate_format** — Applying code formatting or style rules across many files using safe worktrees.
+- **orchestrate_git_commit** — Reviewing changes and creating professional git commits.
+- **orchestrate_md** — Creating or updating Markdown files with link and diagram validation.
+- **orchestrate_query** — Query various sources (code, git, web, excel) and compile results it into a research report.
+- **orchestrate_review_ui** — Reviewing UI/frontend changes, inspecting DOM, running tests, and verifying requirements.
+- **orchestrate_review_api** — Reviewing API/backend changes, checking endpoints, running tests, and verifying requirements.
+- **orchestrate_troubleshoot** — Diagnosing and fixing bugs, errors, or broken environments. Handles reproduction and verification.
+- **human** — Tasks requiring manual human action or responsibility: entering passwords, dangerous operations, production deployments/modifications.
+- **orchestrate_general - Any other task that does not fit in any of the above classifications.
 
 Include the agent name in the lightweight outline alongside task name and sequential/concurrent classification.
 
@@ -156,9 +184,7 @@ Use this for tasks that depend on earlier tasks.
 | \`plan_name\` | Plan name from Phase 1 |
 | \`task_name\` | Summarize what the task accomplishes in < 10 words |
 | \`agent\` | The classified agent name from Phase 2 |
-| \`background\` | (optional, max 40 words) Brief context explaining WHY this task is needed — NOT what to do |
 | \`execute\` | (compulsory) The full implementation instructions on WHAT the agent needs to do and it should include exact code examples from the plan - be detailed and complete. |
-| \`test\` | (optional) Instructions for the \`test\` agent to verify the work. Include exact commands to run and expected output. If omitted, a default test prompt will be auto-generated. **Do NOT include when \`agent\` is already \`"test"\`** |
 
 #### Concurrent tasks → \`autocode_build_concurrent_task\`
 
@@ -169,20 +195,22 @@ Use this for tasks that are independent of their siblings. Call \`autocode_build
 | \`plan_name\` | Plan name from Phase 1 |
 | \`task_name\` | Summarize what the task accomplishes in < 10 words |
 | \`agent\` | The classified agent name from Phase 2 |
-| \`background\` | (optional, max 40 words) Brief context explaining WHY this task is needed — NOT what to do |
 | \`execute\` | (compulsory) The full implementation instructions on WHAT the agent needs to do and it should include exact code examples from the plan - be detailed and complete. |
-| \`test\` | (optional) Instructions for the \`test\` agent to verify the work. Include exact commands to run and expected output. If omitted, a default test prompt will be auto-generated. **Do NOT include when \`agent\` is already \`"test"\`** |
 
 Example — a plan to "add user authentication":
 
 \`\`\`
 Outline:
-1. install_auth_deps     — sequential   — agent: os    — depends on: none   — produces: package.json with bcrypt, jsonwebtoken
-2. create_user_model     — sequential   — agent: code  — depends on: #1     — produces: src/models/user.ts, users migration
-3. login_endpoint        — concurrent   — agent: code  — depends on: #2     — produces: POST /auth/login route
-4. register_endpoint     — concurrent   — agent: code  — depends on: #2     — produces: POST /auth/register route
-5. logout_endpoint       — concurrent   — agent: code  — depends on: #2     — produces: POST /auth/logout route
-6. add_auth_middleware   — sequential   — agent: code  — depends on: #3,#4  — produces: src/middleware/auth.ts applied to protected routes
+1.  install_auth_deps     — sequential   — agent: orchestrate_feature       — depends on: none   — produces: package.json with bcrypt, jsonwebtoken
+2.  create_user_model     — sequential   — agent: orchestrate_feature       — depends on: #1     — produces: src/models/user.ts, users migration
+3.  login_endpoint        — concurrent   — agent: orchestrate_feature       — depends on: #2     — produces: POST /auth/login route
+4.  register_endpoint     — concurrent   — agent: orchestrate_feature       — depends on: #2     — produces: POST /auth/register route
+5.  logout_endpoint       — concurrent   — agent: orchestrate_feature       — depends on: #2     — produces: POST /auth/logout route
+6.  add_auth_middleware   — sequential   — agent: orchestrate_feature       — depends on: #3,#4  — produces: src/middleware/auth.ts applied to protected routes
+7.  add_login_tests       — sequential   — agent: orchestrate_coverage      — depends on: #6     — produces: src/middleware/auth.test.ts unit tests
+8.  review_login_api      — sequential   — agent: orchestrate_review_api    — depends on: #7     — simulate frontend api calls
+9.  review_login_ui       — sequential   — agent: orchestrate_review_ui     — depends on: #8     — simulate frontend ui actions
+10. document_login        — sequential   — agent: orchestrate_document      — depends on: #9     — document login code changes 
 \`\`\`
 
 * Tasks 1–2: call \`autocode_build_next_task\` for each
@@ -194,10 +222,8 @@ Example tool call for task 2:
 autocode_build_next_task({
   plan_name: "add_user_auth",
   task_name: "create_user_model_with_email_password_fields",
-  agent: "code",
-  background: "Auth deps are installed. We need a User model before implementing login/register endpoints.",
-  execute: "Create src/models/user.ts with a User interface containing id, email, passwordHash, createdAt fields. Create a migration file at db/migrations/001_create_users.ts...",
-  test: "Run: npx ts-node db/migrations/001_create_users.ts. Verify the users table exists with correct columns by running: SELECT column_name FROM information_schema.columns WHERE table_name='users';"
+  agent: "orchestrate_feature",
+  execute: "Create src/models/user.ts with a User interface containing id, email, passwordHash, createdAt fields. Create a migration file at db/migrations/001_create_users.ts..."
 })
 \`\`\`
 

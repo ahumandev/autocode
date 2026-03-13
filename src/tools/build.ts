@@ -293,18 +293,10 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
                 .describe("Describe the task's purpose in < 10 words"),
             agent: tool.schema
                 .string()
-                .describe("The agent that should execute this task. One of: code, troubleshoot, browser, websearch, os, excel, test, human, git, md, document"),
-            background: tool.schema
-                .string()
-                .optional()
-                .describe("(Optional) Relevant background info why this task is necessary. Max 40 words."),
+                .describe("The agent that should execute this task. One of: orchestrate_feature, orchestrate_troubleshoot, orchestrate_coverage, orchestrate_report, orchestrate_documentation, orchestrate_md, orchestrate_excel, orchestrate_git_commit, orchestrate_format, orchestrate_review_ui, orchestrate_review_api, human"),
             execute: tool.schema
                 .string()
                 .describe("Detailed execution instructions for the agent. Copy exact examples from the plan if available."),
-            test: tool.schema
-                .string()
-                .optional()
-                .describe("(Optional) Instructions for the test agent to verify the execute instructions were correctly followed. Ignored if agent is 'test'."),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -344,39 +336,7 @@ export function createBuildTools(client: Client): Record<string, ToolDefinition>
 
                 await mkdir(taskDir, { recursive: true })
 
-                if (args.background) {
-                    await writeFile(path.join(taskDir, "background.md"), args.background, "utf-8")
-                }
-
                 await writeFile(path.join(taskDir, `${args.agent}.prompt.md`), args.execute, "utf-8")
-
-                if (args.agent !== "test") {
-                    const testContent = args.test?.trim()
-                        ? args.test
-                        : `
-# Background
-
-${args.background || "No background provided."}
-
-# Original Prompt
-
-The ${args.agent} agent received this prompt:
-
-<prompt>
-${args.execute}
-</prompt>
-
-*(The above prompt is not intended for you)* 
-
-# **YOUR** Task
-
-1. Verify that these instructions were correctly followed.
-2. Think what is necessary to validate that the correct action was previously taken by the ${args.agent} agent. For example, you may need to write a unit test, scan for a specific log message, validate that file contents were correctly updated, etc.
-3. If the ${args.agent} agent made a mistake, did not complete its task, or you discover a problem with the implementation, clearly explain the failure and provide instructions on how to rectify the problem.
-4. If you can confirm the instructions were correctly followed, clearly state that the task was successful and provide your observation.
-`.trim() + "\n"
-                    await writeFile(path.join(taskDir, "test.prompt.md"), testContent, "utf-8")
-                }
 
                 return successResponse(sid, toolName)
             } catch (err: any) {
@@ -411,18 +371,10 @@ ${args.execute}
                 .describe("Lowercase underscore task name (e.g. login_endpoint)"),
             agent: tool.schema
                 .string()
-                .describe("The agent that should execute this task. One of: code, troubleshoot, browser, websearch, os, excel, test, human, git, md, document"),
-            background: tool.schema
-                .string()
-                .optional()
-                .describe("(Optional) Relevant background info why this task is necessary. Max 40 words."),
+                .describe("The agent that should execute this task. One of: orchestrate_feature, orchestrate_troubleshoot, orchestrate_coverage, orchestrate_report, orchestrate_documentation, orchestrate_md, orchestrate_excel, orchestrate_git_commit, orchestrate_format, orchestrate_review_ui, orchestrate_review_api, human"),
             execute: tool.schema
                 .string()
                 .describe("Detailed execution instructions for the agent. Copy exact examples from the plan if available."),
-            test: tool.schema
-                .string()
-                .optional()
-                .describe("(Optional) Instructions for the test agent to verify the execute instructions were correctly followed. Ignored if agent is 'test'."),
         },
         async execute(args, context) {
             const sid = context.sessionID
@@ -470,39 +422,7 @@ ${args.execute}
                 const taskDir = path.join(slotDir, args.task_name)
                 await mkdir(taskDir, { recursive: true })
 
-                if (args.background) {
-                    await writeFile(path.join(taskDir, "background.md"), args.background, "utf-8")
-                }
-
                 await writeFile(path.join(taskDir, `${args.agent}.prompt.md`), args.execute, "utf-8")
-
-                if (args.agent !== "test") {
-                    const testContent = args.test?.trim()
-                        ? args.test
-                        : `
-# Background
-
-${args.background || "No background provided."}
-
-# Original Prompt
-
-The ${args.agent} agent received this prompt:
-
-<prompt>
-${args.execute}
-</prompt>
-
-*(The above prompt is not intended for you)* 
-
-# **YOUR** Task
-
-1. Verify that these instructions were correctly followed.
-2. Think what is necessary to validate that the correct action was previously taken by the ${args.agent} agent. For example, you may need to write a unit test, scan for a specific log message, validate that file contents were correctly updated, etc.
-3. If the ${args.agent} agent made a mistake, did not complete its task, or you discover a problem with the implementation, clearly explain the failure and provide instructions on how to rectify the problem.
-4. If you can confirm the instructions were correctly followed, clearly state that the task was successful and provide your observation.
-`.trim() + "\n"
-                    await writeFile(path.join(taskDir, "test.prompt.md"), testContent, "utf-8")
-                }
 
                 const slotName = path.basename(slotDir)
                 return successResponse(sid, toolName, `✅ Concurrent task '${slotName}/${args.task_name}' created`)

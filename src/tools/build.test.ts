@@ -422,44 +422,5 @@ describe("autocode_build_concurrent_task — auto-detection", () => {
         expect(content).not.toContain("Verify that these instructions were correctly followed.")
     })
 
-    test("creates background.md when background param is provided", async () => {
-        const { autocode_build_concurrent_task } = tools()
 
-        await autocode_build_concurrent_task.execute(
-            {
-                plan_name: planName,
-                task_name: "task_a",
-                agent: "code",
-                execute: "build instructions",
-                background: "this task is needed because of the new feature",
-            },
-            makeContext(),
-        )
-
-        const { readFile } = await import("fs/promises")
-        const bgContent = await readFile(
-            path.join(awaitDir, "00-concurrent_group", "task_a", "background.md"),
-            "utf-8",
-        )
-
-        expect(bgContent).toBe("this task is needed because of the new feature")
-    })
-
-    test("does not create background.md when background param is omitted", async () => {
-        const { autocode_build_concurrent_task } = tools()
-
-        await autocode_build_concurrent_task.execute(
-            {
-                plan_name: planName,
-                task_name: "task_a",
-                agent: "code",
-                execute: "build instructions",
-            },
-            makeContext(),
-        )
-
-        const { access } = await import("fs/promises")
-        const bgPath = path.join(awaitDir, "00-concurrent_group", "task_a", "background.md")
-        await expect(access(bgPath)).rejects.toThrow()
-    })
 })

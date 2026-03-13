@@ -147,16 +147,16 @@ describe("makeTimestamp", () => {
 })
 
 describe("parseEntryTimestamp", () => {
-    test("returns — for entries without a timestamp prefix", () => {
+    test("always returns — (stub)", () => {
         expect(parseEntryTimestamp("01-my-task")).toBe("—")
     })
 
-    test("parses timestamp from prefixed entry", () => {
-        expect(parseEntryTimestamp("2024-03-15_10-30-45_01-my-task")).toBe("2024-03-15 10:30:45")
+    test("returns — for timestamp-prefixed entries", () => {
+        expect(parseEntryTimestamp("2024-03-15_10-30-45_01-my-task")).toBe("—")
     })
 
-    test("handles dot-prefixed entries", () => {
-        expect(parseEntryTimestamp(".2024-03-15_10-30-45_01-my-task")).toBe("2024-03-15 10:30:45")
+    test("returns — for dot-prefixed entries", () => {
+        expect(parseEntryTimestamp(".2024-03-15_10-30-45_01-my-task")).toBe("—")
     })
 })
 
@@ -226,20 +226,28 @@ describe("stripTaskNameDecorations", () => {
         expect(stripTaskNameDecorations(".01-my-task")).toBe("01-my-task")
     })
 
-    test("strips timestamp prefix", () => {
-        expect(stripTaskNameDecorations("2024-03-15_10-30-45_01-my-task")).toBe("01-my-task")
+    test("does not strip timestamp prefix (timestamps are no longer stripped)", () => {
+        expect(stripTaskNameDecorations("2024-03-15_10-30-45_01-my-task")).toBe("2024-03-15_10-30-45_01-my-task")
     })
 
-    test("strips .failed suffix", () => {
-        expect(stripTaskNameDecorations("01-my-task.failed")).toBe("01-my-task")
+    test("strips -failed suffix", () => {
+        expect(stripTaskNameDecorations("01-my-task-failed")).toBe("01-my-task")
+    })
+
+    test("does not strip .failed suffix (only -failed is stripped)", () => {
+        expect(stripTaskNameDecorations("01-my-task.failed")).toBe("01-my-task.failed")
     })
 
     test("strips .deleted suffix", () => {
         expect(stripTaskNameDecorations("01-my-task.deleted")).toBe("01-my-task")
     })
 
-    test("strips all decorations combined", () => {
-        expect(stripTaskNameDecorations(".2024-03-15_10-30-45_01-my-task.failed")).toBe("01-my-task")
+    test("strips leading dot and -failed suffix combined", () => {
+        expect(stripTaskNameDecorations(".01-my-task-failed")).toBe("01-my-task")
+    })
+
+    test("strips leading dot and .deleted suffix combined", () => {
+        expect(stripTaskNameDecorations(".01-my-task.deleted")).toBe("01-my-task")
     })
 
     test("leaves plain names unchanged", () => {
@@ -384,7 +392,7 @@ describe("findNextGroup", () => {
     })
 
     test("returns null when only dot-prefixed (completed) entries exist", async () => {
-        await mkdir(path.join(tmpDir, ".2024-03-15_10-30-45_01-my-task"))
+        await mkdir(path.join(tmpDir, ".01-my-task"))
         const result = await findNextGroup(tmpDir)
         expect(result).toBeNull()
     })
@@ -401,6 +409,26 @@ describe("findNextGroup", () => {
         await mkdir(path.join(tmpDir, "01-first-task"))
         const result = await findNextGroup(tmpDir)
         expect(result).toBe("01-first-task")
+    })
+
+    test("excludes entries ending in -failed", async () => {
+        await mkdir(path.join(tmpDir, "01-my-task-failed"))
+        const result = await findNextGroup(tmpDir)
+        expect(result).toBeNull()
+    })
+
+    test("excludes entries ending in .deleted", async () => {
+        await mkdir(path.join(tmpDir, "01-my-task.deleted"))
+        const result = await findNextGroup(tmpDir)
+        expect(result).toBeNull()
+    })
+
+    test("returns pending entry when -failed and .deleted entries also exist", async () => {
+        await mkdir(path.join(tmpDir, "01-first-task-failed"))
+        await mkdir(path.join(tmpDir, "02-second-task.deleted"))
+        await mkdir(path.join(tmpDir, "03-third-task"))
+        const result = await findNextGroup(tmpDir)
+        expect(result).toBe("03-third-task")
     })
 })
 
@@ -501,10 +529,19 @@ describe("resolveTaskDir", () => {
         expect(result).toBeNull()
     })
 
-    test("with taskName: finds task by logical name (stripping decorations)", async () => {
+    test("with taskName: finds task by logical name (stripping leading dot)", async () => {
         const planDir = path.join(tmpDir, ".autocode", "build", "my-plan")
         await mkdir(planDir, { recursive: true })
-        const taskDir = path.join(planDir, ".2024-03-15_10-30-45_01-my-task")
+        const taskDir = path.join(planDir, ".01-my-task")
+        await mkdir(taskDir)
+        const result = await resolveTaskDir(tmpDir, "my-plan", "01-my-task")
+        expect(result).toBe(taskDir)
+    })
+
+    test("with taskName: finds task by logical name (stripping -failed suffix)", async () => {
+        const planDir = path.join(tmpDir, ".autocode", "build", "my-plan")
+        await mkdir(planDir, { recursive: true })
+        const taskDir = path.join(planDir, "01-my-task-failed")
         await mkdir(taskDir)
         const result = await resolveTaskDir(tmpDir, "my-plan", "01-my-task")
         expect(result).toBe(taskDir)

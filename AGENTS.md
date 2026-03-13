@@ -72,7 +72,7 @@ Tools are created via factory functions that capture the Claude Code client at p
 ## Naming Conventions
 
 - **Plan names**: sanitized (lowercase, underscores, 7-word max with abbreviation)
-- **Task directories**: `NN-task_name` (zero-padded), in-flight: `timestamp_NN-task`, succeeded: `.timestamp_NN-task` (hidden), failed: `timestamp_NN-task.failed`
+- **Task directories**: `NN-task_name` (zero-padded), succeeded: `.NN-task_name` (dot-hidden), failed: `NN-task_name-failed`, deleted: `.NN-task_name.deleted`
 - **Tool names**: `autocode_{module}_{action}` pattern
 - **Agent names**: lowercase single words
 - **Prompt files**: `{agent}.prompt.md`, `{agent}.session.{id}.md`, `{agent}.result.{ts}.md`

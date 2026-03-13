@@ -1,5 +1,5 @@
 import { tool, ToolDefinition, PluginInput } from "@opencode-ai/plugin"
-import { mkdir, readdir, readFile, rename, writeFile } from "fs/promises"
+import { mkdir, readdir, readFile, rename, unlink, writeFile } from "fs/promises"
 import path from "path"
 import { validateNonEmpty, retryResponse, abortResponse, successResponse } from "@/utils/validation"
 import {
@@ -31,9 +31,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
      * Execute a single task directory end-to-end, managing directory renames
      * to reflect the current state:
      *
-     *   Pending   → In-flight:  `XX-task`        → `YYYY-MM-DD_HH-mm-ss_XX-task`
-     *   In-flight → Succeeded:  `YYYY-…_XX-task` → `.YYYY-…_XX-task`
-     *   In-flight → Failed:     `YYYY-…_XX-task` → `YYYY-…_XX-task.failed`
+     *   Pending   → Succeeded:  `XX-task`  → `.XX-task`
+     *   Pending   → Failed:     `XX-task`  → `XX-task-failed`
      *
      * Build step:
      *   - If `success.md` already exists → skip (prior run succeeded).
@@ -55,23 +54,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         planDir: string,
     ): Promise<{ finalDir: string; failure: TaskFailure | null }> {
 
-        // ── Rename pending → in-flight ────────────────────────────────────────
-        // The directory name may already have a timestamp prefix if this is a
-        // resume after a crash (in-flight state survived).  Only rename when the
-        // entry still looks pending (starts with two digits).
-        const entryName = path.basename(taskDir)
-        let inFlightDir: string
-
-        if (/^\d{2}-/.test(entryName)) {
-            // Still pending — prepend timestamp
-            const ts = makeTimestamp()
-            const newName = `${ts}_${entryName}`
-            inFlightDir = path.join(path.dirname(taskDir), newName)
-            await rename(taskDir, inFlightDir)
-        } else {
-            // Already in-flight (timestamp prefix present) — use as-is
-            inFlightDir = taskDir
-        }
+        const inFlightDir = taskDir
 
         // ── Skip if already done / failed ────────────────────────────────────
 
@@ -90,7 +73,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         try {
             const failureContent = await readFile(failureMdPath, "utf-8")
             const sessionId = await findSessionId(inFlightDir) ?? "prior_run"
-            const failedDir = `${inFlightDir}.failed`
+            const failedDir = path.join(path.dirname(inFlightDir), `${path.basename(inFlightDir)}-failed`)
             await rename(inFlightDir, failedDir).catch(() => {})
             return {
                 finalDir: failedDir,
@@ -109,7 +92,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
 
         const dirFiles = await readdir(inFlightDir).catch(() => [] as string[])
         const agentPromptFile = dirFiles.find(
-            f => f.endsWith(".prompt.md") && f !== "test.prompt.md"
+            f => f.endsWith(".prompt.md")
         )
         let agentName: string
         let agentPromptContent: string
@@ -138,17 +121,6 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 },
             }
         }
-
-        // ── Read test prompt (optional) ───────────────────────────────────────
-
-        const testPromptPath = path.join(inFlightDir, "test.prompt.md")
-        let testPromptContent: string | null = null
-        try { 
-            testPromptContent = await readFile(testPromptPath, "utf-8") 
-            if (goalContent.trim()) {
-                testPromptContent = `# Background\n\n${goalContent.trim()}\n\n${testPromptContent}`
-            }
-        } catch { /* optional */ }
 
         // ── Run agent session ─────────────────────────────────────────────────
 
@@ -198,8 +170,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     path: { id: sid },
                     body: {
                         agent: agentName,
-                        system: agentPromptContent,
-                        parts: [{ type: "text", text: "Begin." }],
+                        parts: [{ type: "text", text: agentPromptContent }],
                     },
                     throwOnError: true,
                 })
@@ -221,7 +192,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     err.message,
                     "utf-8",
                 ).catch(() => {})
-                const failedDir = `${inFlightDir}.failed`
+                const failedDir = path.join(path.dirname(inFlightDir), `${path.basename(inFlightDir)}-failed`)
                 await rename(inFlightDir, failedDir).catch(() => {})
                 return {
                     finalDir: failedDir,
@@ -262,7 +233,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         // to give the orchestrate AGENT the failure details and let it modify the task schedule.
         if (agentResult.kind === "failure") {
             await writeFile(path.join(inFlightDir, "failure.md"), agentResult.content, "utf-8").catch(() => {})
-            const failedDir = `${inFlightDir}.failed`
+            const failedDir = path.join(path.dirname(inFlightDir), `${path.basename(inFlightDir)}-failed`)
             await rename(inFlightDir, failedDir).catch(() => {})
             return {
                 finalDir: failedDir,
@@ -278,76 +249,9 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             }
         }
 
-        // ── Run test session (if test.prompt.md exists) ───────────────────────
-
-        let testSucceeded = true // default: no test = pass
-        let testOutput = ""
-        let testSid = "error"
-
-        if (testPromptContent && agentName !== "test") {
-            try {
-                const testCreated = await client.session.create({
-                    body: { title: `Test: ${taskDisplayName}` },
-                    throwOnError: true,
-                })
-                testSid = testCreated.data.id
-
-                await client.session.prompt({
-                    path: { id: testSid },
-                    body: {
-                        agent: "test",
-                        parts: [{ type: "text", text: testPromptContent }],
-                    },
-                    throwOnError: true,
-                })
-
-                const testResp = await client.session.messages({
-                    path: { id: testSid },
-                    throwOnError: true,
-                })
-                const testMessages = (testResp.data ?? []) as MessageEntry[]
-
-                // Write test session transcript
-                await writeFile(
-                    path.join(inFlightDir, `test.session.${testSid}.md`),
-                    formatSessionMarkdown(testPromptContent, testMessages),
-                    "utf-8",
-                ).catch(() => {})
-
-                const testResult = extractTaskResult(testMessages)
-                testOutput = testResult.content
-                testSucceeded = testResult.kind === "success"
-
-                const testTimestamp = makeTimestamp()
-                const testResultContent = testResult.kind === "success"
-                    ? `<success>${testResult.content}</success>`
-                    : `<failure>${testResult.content}</failure>`
-                await writeFile(
-                    path.join(inFlightDir, `test.result.${testTimestamp}.md`),
-                    testResultContent,
-                    "utf-8",
-                ).catch(() => {})
-            } catch (err: any) {
-                // Test session threw — treat as test failure
-                testSucceeded = false
-                testOutput = err.message
-                await writeFile(
-                    path.join(inFlightDir, `test.session.${testSid}.md`),
-                    `# Error\n\n${err.message}\n`,
-                    "utf-8",
-                ).catch(() => {})
-                const testTimestamp = makeTimestamp()
-                await writeFile(
-                    path.join(inFlightDir, `test.result.${testTimestamp}.md`),
-                    `<failure>${err.message}</failure>`,
-                    "utf-8",
-                ).catch(() => {})
-            }
-        }
-
         // ── Both succeeded → done ─────────────────────────────────────────────
 
-        if (agentResult.kind === "success" && testSucceeded) {
+        if (agentResult.kind === "success") {
             await writeFile(path.join(inFlightDir, "success.md"), "", "utf-8").catch(() => {})
             const doneDir = path.join(path.dirname(inFlightDir), `.${path.basename(inFlightDir)}`)
             await rename(inFlightDir, doneDir).catch(() => {})
@@ -355,11 +259,6 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         }
 
         // ── Either failed → invoke recover agent ───────────────────────────
-
-        // Read background.md if present
-        const backgroundPath = path.join(inFlightDir, "background.md")
-        let backgroundContent = ""
-        try { backgroundContent = await readFile(backgroundPath, "utf-8") } catch {}
 
         // Collect ALL result files in timestamp order
         const currentDirFiles = await readdir(inFlightDir).catch(() => [] as string[])
@@ -374,13 +273,12 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             })
         )
 
-        // Determine failure details from the failing test (agent_failure is handled above)
-        let failureDetails = testOutput
+        // Determine failure details (agent_failure is handled above)
+        let failureDetails = ""
 
         // Build recover message
         const recoverMessage = [
             goalContent.trim() ? `# BACKGROUND (Goal)\n${goalContent.trim()}` : null,
-            backgroundContent ? `# BACKGROUND (Task)\n${backgroundContent}` : null,
             `# ORIGINAL PROMPT\n<prompt>\n${agentPromptContent}\n</prompt>`,
             `# RESULTS\n${allResultsText.join("\n\n")}`,
             `# FAILURE INSTRUCTION\nThe above results contain a failure. Please correct the implementation and respond with <success> or <failure>.`,
@@ -442,66 +340,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             ).catch(() => {})
         }
 
-        // If recover succeeded and there's a test, re-run test to verify
-        if (recoverKind === "success" && testPromptContent && agentName !== "test") {
-            let verifySid = "error"
-            try {
-                const verifyCreated = await client.session.create({
-                    body: { title: `Verify: ${taskDisplayName}` },
-                    throwOnError: true,
-                })
-                verifySid = verifyCreated.data.id
-
-                await client.session.prompt({
-                    path: { id: verifySid },
-                    body: {
-                        agent: "test",
-                        parts: [{ type: "text", text: testPromptContent }],
-                    },
-                    throwOnError: true,
-                })
-
-                const verifyResp = await client.session.messages({
-                    path: { id: verifySid },
-                    throwOnError: true,
-                })
-                const verifyMessages = (verifyResp.data ?? []) as MessageEntry[]
-
-                // Write verify session transcript
-                await writeFile(
-                    path.join(inFlightDir, `test.session.${verifySid}.md`),
-                    formatSessionMarkdown(testPromptContent, verifyMessages),
-                    "utf-8",
-                ).catch(() => {})
-
-                const verifyResult = extractTaskResult(verifyMessages)
-                const verifyTimestamp = makeTimestamp()
-                const verifyResultContent = verifyResult.kind === "success"
-                    ? `<success>${verifyResult.content}</success>`
-                    : `<failure>${verifyResult.content}</failure>`
-                await writeFile(
-                    path.join(inFlightDir, `test.result.${verifyTimestamp}.md`),
-                    verifyResultContent,
-                    "utf-8",
-                ).catch(() => {})
-
-                if (verifyResult.kind === "success") {
-                    await writeFile(path.join(inFlightDir, "success.md"), "", "utf-8").catch(() => {})
-                    const doneDir = path.join(path.dirname(inFlightDir), `.${path.basename(inFlightDir)}`)
-                    await rename(inFlightDir, doneDir).catch(() => {})
-                    return { finalDir: doneDir, failure: null }
-                }
-                failureDetails = verifyResult.content
-            } catch (err: any) {
-                failureDetails = err.message
-                await writeFile(
-                    path.join(inFlightDir, `test.session.${verifySid}.md`),
-                    `# Error\n\n${err.message}\n`,
-                    "utf-8",
-                ).catch(() => {})
-            }
-        } else if (recoverKind === "success" && !testPromptContent) {
-            // Recover succeeded, no test to run — mark done
+        // If recover succeeded — mark done
+        if (recoverKind === "success") {
             await writeFile(path.join(inFlightDir, "success.md"), "", "utf-8").catch(() => {})
             const doneDir = path.join(path.dirname(inFlightDir), `.${path.basename(inFlightDir)}`)
             await rename(inFlightDir, doneDir).catch(() => {})
@@ -510,7 +350,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
 
         // Still failing — write failure.md and mark as failed
         await writeFile(path.join(inFlightDir, "failure.md"), failureDetails, "utf-8").catch(() => {})
-        const failedDir = `${inFlightDir}.failed`
+        const failedDir = path.join(path.dirname(inFlightDir), `${path.basename(inFlightDir)}-failed`)
         await rename(inFlightDir, failedDir).catch(() => {})
         return {
             finalDir: failedDir,
@@ -537,9 +377,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
      *
      * Task directory lifecycle:
      *   Pending   `XX-task`                — not yet started
-     *   In-flight `YYYY-MM-DD_HH-mm-ss_XX-task` — currently executing
-     *   Succeeded `.YYYY-MM-DD_HH-mm-ss_XX-task` — completed (dot-hidden)
-     *   Failed    `YYYY-MM-DD_HH-mm-ss_XX-task.failed` — failed, needs fixing
+     *   Succeeded `.XX-task`              — completed (dot-hidden)
+     *   Failed    `XX-task-failed`        — failed, needs fixing
      *
      * On full completion moves `.autocode/build/{plan}/` → `.autocode/review/{plan}/`.
      * On permanent failure moves `.autocode/build/{plan}/` → `.autocode/failed/{plan}/`.
@@ -551,6 +390,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
      */
     const autocode_orchestrate_resume: ToolDefinition = tool({
         description:
+            "[Legacy - prefer autocode_orchestrate_next_task for step-by-step control] " +
             "Run every task in the plan autonomously and promote the plan to review when finished. " +
             "Plans remain in `.autocode/build/` during execution. " +
             "Loops internally through all task groups (lowest numeric prefix first). " +
@@ -574,7 +414,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const toolName = "autocode_orchestrate_resume"
 
             const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
-            if (planNameErr) return retryResponse(sid, toolName, "plan_name", "value is empty")
+            if (planNameErr) return planNameErr
 
             const buildDir  = path.join(context.worktree, ".autocode", "build",  args.plan_name)
             const failedDir = path.join(context.worktree, ".autocode", "failed", args.plan_name)
@@ -611,11 +451,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     const subEntries = await readdir(groupDir).catch(() => [] as string[])
                     const taskNames  = subEntries.filter(e => !e.startsWith("."))
 
-                    // Rename concurrent group dir to in-flight before executing sub-tasks
-                    const ts = makeTimestamp()
-                    const inFlightGroupName = `${ts}_${groupName}`
-                    const inFlightGroupDir  = path.join(planDir, inFlightGroupName)
-                    await rename(groupDir, inFlightGroupDir)
+                    const inFlightGroupDir = groupDir
 
                     const results = await Promise.all(
                         taskNames.map(taskName =>
@@ -632,9 +468,9 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                         const agentFailures = failures.filter(f => f.failure!.failureType === "agent_failure")
                         const hardFailures  = failures.filter(f => f.failure!.failureType !== "agent_failure")
 
-                        // Always rename the group dir to .failed so delete_step can find it
-                        const failedGroupDir = `${inFlightGroupDir}.failed`
-                        await rename(inFlightGroupDir, failedGroupDir).catch(() => {})
+                        // Always rename the group dir to -failed so delete_step can find it
+                        const failedGroupDir = path.join(planDir, `${groupName}-failed`)
+                        await rename(groupDir, failedGroupDir).catch(() => {})
 
                         if (hardFailures.length > 0) {
                             // At least one hard failure (session crash, tool error) — move plan to failed/
@@ -672,8 +508,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     }
 
                     // All concurrent tasks succeeded — hide the group dir with a dot
-                    const doneGroupDir = path.join(planDir, `.${inFlightGroupName}`)
-                    await rename(inFlightGroupDir, doneGroupDir).catch(() => {})
+                    const doneGroupDir = path.join(planDir, `.${groupName}`)
+                    await rename(groupDir, doneGroupDir).catch(() => {})
 
                 } else {
                     const { failure } = await executeTask(groupDir, groupName, planDir)
@@ -708,6 +544,148 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     }
                     // executeTask already renamed to the dot-hidden path on success
                 }
+            }
+        },
+    })
+
+    // ─── tool: autocode_orchestrate_reply_task ──────────────────────────────────
+
+    const autocode_orchestrate_reply_task: ToolDefinition = tool({
+        description:
+            "Reconnect to a running subagent session and send a reply message. " +
+            "Use this when a subagent has asked a question mid-task instead of completing. " +
+            "Reconnects to the existing session identified by the session file in the task directory, " +
+            "sends `reply_message` to the agent, waits for its response, " +
+            "and writes the updated session transcript. " +
+            "If the agent's response contains <success> or <failure>, writes success.md / failure.md accordingly. " +
+            "Returns { replied, session_id, response, terminal } where terminal is true when the agent " +
+            "responded with a final outcome (success or failure).",
+        args: {
+            plan_name: tool.schema
+                .string()
+                .describe("Plan name (as returned by autocode_build_plan)"),
+            task_name: tool.schema
+                .string()
+                .describe("Task name exactly as shown in progress (e.g. '01-create_model' or '02-concurrent_group/login_endpoint')"),
+            reply_message: tool.schema
+                .string()
+                .describe("The reply to send to the waiting subagent. Address its question directly and provide any clarification needed."),
+        },
+        async execute(args, context) {
+            const sid = context.sessionID
+            const toolName = "autocode_orchestrate_reply_task"
+
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
+            if (planNameErr) return planNameErr
+
+            const taskNameErr = validateNonEmpty(args.task_name, sid, toolName, "task_name")
+            if (taskNameErr) return taskNameErr
+
+            const replyMessageErr = validateNonEmpty(args.reply_message, sid, toolName, "reply_message")
+            if (replyMessageErr) return replyMessageErr
+
+            const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
+            if (!dir) {
+                return retryResponse(sid, toolName, "task_name",
+                    `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+            }
+
+            // Detect agent name from {agentName}.session.{id}.md in the task dir
+            const dirFiles = await readdir(dir).catch(() => [] as string[])
+            const sessionFile = dirFiles.find(
+                f => f.includes(".session.") && f.endsWith(".md") && !f.startsWith("recover.")
+            )
+            if (!sessionFile) {
+                return abortResponse(toolName,
+                    `No session file found in task '${args.task_name}'. ` +
+                    `The task may not have started yet — use autocode_orchestrate_resume to start it.`)
+            }
+
+            // Extract agentName and sessionId from filename: {agentName}.session.{id}.md
+            const sessionFileMatch = sessionFile.match(/^(.+)\.session\.(.+)\.md$/)
+            if (!sessionFileMatch) {
+                return abortResponse(toolName, `Could not parse session file name: ${sessionFile}`)
+            }
+            const agentName = sessionFileMatch[1]
+            const sessionId = sessionFileMatch[2]
+
+            try {
+                await client.session.prompt({
+                    path: { id: sessionId },
+                    body: {
+                        agent: agentName,
+                        parts: [{ type: "text", text: args.reply_message }],
+                    },
+                    throwOnError: true,
+                })
+
+                const resp = await client.session.messages({
+                    path: { id: sessionId },
+                    throwOnError: true,
+                })
+                const messages = (resp.data ?? []) as MessageEntry[]
+
+                // Extract last assistant message
+                const assistant = messages.filter(m => m.info.role === "assistant")
+                const lastResponse = assistant.length > 0
+                    ? assistant[assistant.length - 1].parts
+                        .filter(p => p.type === "text")
+                        .map(p => p.text ?? "")
+                        .join("\n")
+                        .trim()
+                    : "(no response)"
+
+                // Update session transcript (overwrite existing)
+                const agentPromptFile = dirFiles.find(f => f.endsWith(".prompt.md"))
+                const originalPrompt = agentPromptFile
+                    ? await readFile(path.join(dir, agentPromptFile), "utf-8").catch(() => "")
+                    : ""
+                await writeFile(
+                    path.join(dir, `${agentName}.session.${sessionId}.md`),
+                    formatSessionMarkdown(originalPrompt, messages),
+                    "utf-8",
+                ).catch(() => {})
+
+                // Check for terminal outcome
+                const hasSuccess = lastResponse.includes("<success>")
+                const hasFailure = lastResponse.includes("<failure>")
+                let terminal = false
+
+                if (hasSuccess || hasFailure) {
+                    terminal = true
+                    const kind = hasSuccess ? "success" : "failure"
+                    // Extract content between tags
+                    const tagMatch = lastResponse.match(hasSuccess ? /<success>([\s\S]*?)<\/success>/ : /<failure>([\s\S]*?)<\/failure>/)
+                    const content = tagMatch ? tagMatch[1].trim() : lastResponse
+
+                    // Remove stale outcome files then write new one
+                    await unlink(path.join(dir, "success.md")).catch(() => {})
+                    await unlink(path.join(dir, "failure.md")).catch(() => {})
+                    const outFile = kind === "success" ? "success.md" : "failure.md"
+                    await writeFile(path.join(dir, outFile), content, "utf-8").catch(() => {})
+
+                    // Write result file
+                    const ts = makeTimestamp()
+                    await writeFile(
+                        path.join(dir, `${agentName}.result.${ts}.md`),
+                        kind === "success" ? `<success>${content}</success>` : `<failure>${content}</failure>`,
+                        "utf-8",
+                    ).catch(() => {})
+                }
+
+                return successResponse(sid, toolName, {
+                    replied: true,
+                    session_id: sessionId,
+                    agent_name: agentName,
+                    response: lastResponse.slice(0, 2000),
+                    terminal,
+                    instruction: terminal
+                        ? "The agent has completed. Call autocode_orchestrate_resume to continue orchestration."
+                        : "The agent is still waiting. Read its response and reply again if needed, or use autocode_orchestrate_resume to continue.",
+                })
+            } catch (err: any) {
+                return abortResponse(toolName,
+                    `reply to task '${args.task_name}' session '${sessionId}' failed: ${err.message}`)
             }
         },
     })
@@ -1012,7 +990,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             try {
                 const dirFiles = await readdir(dir)
                 const agentPromptFile = dirFiles.find(
-                    f => f.endsWith(".prompt.md") && f !== "test.prompt.md"
+                    f => f.endsWith(".prompt.md")
                 )
                 if (agentPromptFile) {
                     const agentName = agentPromptFile.replace(".prompt.md", "")
@@ -1462,17 +1440,15 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
     const autocode_orchestrate_insert_step: ToolDefinition = tool({
         description:
             "Insert a new step into the plan at a given index, shifting all subsequent steps up by 1. " +
-            "Writes {agent}.prompt.md with the execute instructions, and optionally background.md and test.prompt.md. " +
-            "For each shifted step, outcome files (success.md, failure.md, session.*.md) are hidden " +
-            "by prefixing with .{timestamp}. so the step will re-run on next resume. " +
+            "Writes {agent}.prompt.md with the execute instructions. " +
+            "For each shifted step, outcome files (success.md, failure.md, session.*.md) are deleted " +
+            "so the step will re-run on next resume. " +
             "If step_index is omitted, inserts before the current pending step.",
         args: {
             plan_name: tool.schema.string().describe("The plan name"),
             step_name: tool.schema.string().describe("Logical name for the new step (e.g. 'add_validation'). Will become '{index:02}-{step_name}'."),
             agent: tool.schema.string().describe("Agent to execute this step (e.g. 'code', 'md', 'os', 'troubleshoot', 'git', 'browser', 'excel'). Determines which {agent}.prompt.md file is written."),
             execute: tool.schema.string().describe("Full execution instructions for the agent. Written to {agent}.prompt.md."),
-            background: tool.schema.string().optional().describe("Optional context/reason for this task (max 40 words). Written to background.md if provided."),
-            test: tool.schema.string().optional().describe("Optional verification instructions for the test agent. Written to test.prompt.md if provided."),
             step_index: tool.schema.number().int().min(1).optional()
                 .describe("1-based index to insert at. Omit to insert before the current pending step."),
         },
@@ -1532,8 +1508,6 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 return abortResponse(toolName, `Cannot insert step: plan already has ${stepEntries.length} steps (max 99)`)
             }
 
-            const ts = makeTimestamp()
-
             // Shift all steps with index >= insertIndex
             // Process in reverse order to avoid name collisions
             const toShift = stepEntries.filter(s => s.index >= insertIndex).reverse()
@@ -1547,38 +1521,20 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 const oldIndexStr = String(index).padStart(2, "0")
 
                 // Rebuild the entry name with the new index
-                // The index appears in the logical name portion: replace oldIndexStr- with newIndexStr-
-                // We need to find where the logical name starts in the entry
-                let newEntry = entry
-                // Strip leading dot if present
                 const hasDot = entry.startsWith(".")
                 const stripped = hasDot ? entry.slice(1) : entry
-                // Strip timestamp prefix if present
-                const tsMatch = stripped.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_)(.+)$/)
-                if (tsMatch) {
-                    const tsPrefix = tsMatch[1]
-                    const rest = tsMatch[2]
-                    // rest starts with oldIndexStr-
-                    const newRest = newIndexStr + rest.slice(oldIndexStr.length)
-                    newEntry = (hasDot ? "." : "") + tsPrefix + newRest
-                } else {
-                    // No timestamp prefix — entry is just the logical name (possibly with .failed)
-                    const newRest = newIndexStr + stripped.slice(oldIndexStr.length)
-                    newEntry = (hasDot ? "." : "") + newRest
-                }
+                const newRest = newIndexStr + stripped.slice(oldIndexStr.length)
+                const newEntry = (hasDot ? "." : "") + newRest
 
                 const oldPath = path.join(planDir, entry)
                 const newPath = path.join(planDir, newEntry)
                 await rename(oldPath, newPath)
 
-                // Hide outcome files inside the shifted directory
+                // Remove outcome files from shifted directory so it re-runs on next resume
                 const dirFiles = await readdir(newPath).catch(() => [] as string[])
                 for (const f of dirFiles) {
                     if (f === "success.md" || f === "failure.md" || /^session\..+\.md$/.test(f)) {
-                        await rename(
-                            path.join(newPath, f),
-                            path.join(newPath, `.${ts}.${f}`),
-                        ).catch(() => {})
+                        await unlink(path.join(newPath, f)).catch(() => {})
                     }
                 }
                 stepsShifted++
@@ -1589,12 +1545,6 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const newStepDir = path.join(planDir, newStepName)
             await mkdir(newStepDir, { recursive: true })
             await writeFile(path.join(newStepDir, `${args.agent}.prompt.md`), args.execute, "utf-8")
-            if (args.background) {
-                await writeFile(path.join(newStepDir, "background.md"), args.background, "utf-8")
-            }
-            if (args.test) {
-                await writeFile(path.join(newStepDir, "test.prompt.md"), args.test, "utf-8")
-            }
 
             return successResponse(sid, toolName, {
                 inserted_step: newStepName,
@@ -1609,7 +1559,7 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         description:
             "Move a step to a new position in the plan, shifting other steps to accommodate. " +
             "Outcome files (success.md, failure.md, session.*.md) in the moved step and all " +
-            "shifted steps are hidden so they will re-run on next resume.",
+            "shifted steps are deleted so they will re-run on next resume.",
         args: {
             plan_name: tool.schema.string().describe("The plan name"),
             task_name: tool.schema.string().describe("Task name to move (e.g. '01-create_model')"),
@@ -1659,41 +1609,30 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                 return successResponse(sid, toolName, { message: "Step is already at the requested index", steps_shifted: 0 })
             }
 
-            const ts = makeTimestamp()
             const localPlanDir = planDir
 
-            // Helper: rename a step entry to a new index, hide its outcome files
+            // Helper: rename a step entry to a new index, remove its outcome files
             async function renameStep(entry: string, fromIndex: number, toIndex: number): Promise<void> {
                 const fromIndexStr = String(fromIndex).padStart(2, "0")
                 const toIndexStr = String(toIndex).padStart(2, "0")
                 const hasDot = entry.startsWith(".")
                 const stripped = hasDot ? entry.slice(1) : entry
-                const tsMatch = stripped.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_)(.+)$/)
-                let newEntry: string
-                if (tsMatch) {
-                    const newRest = toIndexStr + tsMatch[2].slice(fromIndexStr.length)
-                    newEntry = (hasDot ? "." : "") + tsMatch[1] + newRest
-                } else {
-                    const newRest = toIndexStr + stripped.slice(fromIndexStr.length)
-                    newEntry = (hasDot ? "." : "") + newRest
-                }
+                const newRest = toIndexStr + stripped.slice(fromIndexStr.length)
+                const newEntry = (hasDot ? "." : "") + newRest
                 const oldPath = path.join(localPlanDir, entry)
                 const newPath = path.join(localPlanDir, newEntry)
                 await rename(oldPath, newPath)
-                // Hide outcome files
+                // Remove outcome files so it re-runs on next resume
                 const dirFiles = await readdir(newPath).catch(() => [] as string[])
                 for (const f of dirFiles) {
                     if (f === "success.md" || f === "failure.md" || /^session\..+\.md$/.test(f)) {
-                        await rename(
-                            path.join(newPath, f),
-                            path.join(newPath, `.${ts}.${f}`),
-                        ).catch(() => {})
+                        await unlink(path.join(newPath, f)).catch(() => {})
                     }
                 }
             }
 
             // Temporarily rename the target step to a placeholder to avoid conflicts
-            const placeholderName = `.moving_${ts}_${target.entry}`
+            const placeholderName = `.moving_${target.entry}`
             await rename(path.join(localPlanDir, target.entry), path.join(localPlanDir, placeholderName))
 
             let stepsShifted = 0
@@ -1718,25 +1657,15 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
             const oldIndexStr = String(oldIndex).padStart(2, "0")
             const hasDot = target.entry.startsWith(".")
             const stripped = hasDot ? target.entry.slice(1) : target.entry
-            const tsMatch = stripped.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_)(.+)$/)
-            let finalEntry: string
-            if (tsMatch) {
-                const newRest = newIndexStr + tsMatch[2].slice(oldIndexStr.length)
-                finalEntry = (hasDot ? "." : "") + tsMatch[1] + newRest
-            } else {
-                const newRest = newIndexStr + stripped.slice(oldIndexStr.length)
-                finalEntry = (hasDot ? "." : "") + newRest
-            }
+            const newRest = newIndexStr + stripped.slice(oldIndexStr.length)
+            const finalEntry = (hasDot ? "." : "") + newRest
             const finalPath = path.join(localPlanDir, finalEntry)
             await rename(path.join(localPlanDir, placeholderName), finalPath)
-            // Hide outcome files in the moved step
+            // Remove outcome files in the moved step so it re-runs on next resume
             const movedFiles = await readdir(finalPath).catch(() => [] as string[])
             for (const f of movedFiles) {
                 if (f === "success.md" || f === "failure.md" || /^session\..+\.md$/.test(f)) {
-                    await rename(
-                        path.join(finalPath, f),
-                        path.join(finalPath, `.${ts}.${f}`),
-                    ).catch(() => {})
+                    await unlink(path.join(finalPath, f)).catch(() => {})
                 }
             }
 
@@ -1793,8 +1722,8 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
                     `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
             }
 
-            const ts = makeTimestamp()
-            const deletedName = `.${ts}_${foundEntry}.deleted`
+            const baseName = stripTaskNameDecorations(foundEntry)
+            const deletedName = `.${baseName}.deleted`
             await rename(path.join(planDir, foundEntry), path.join(planDir, deletedName))
 
             return successResponse(sid, toolName, {
@@ -1858,13 +1787,291 @@ export function createOrchestrateTools(client: Client): Record<string, ToolDefin
         }
     })
 
+    // ─── tool: autocode_orchestrate_next_task ───────────────────────────────────
+
+    /**
+     * Execute the next pending task in the plan and return the outcome.
+     * The orchestrate agent calls this in a loop — one call per task group.
+     *
+     * Return shapes (all via successResponse):
+     *   { done: true, plan_name, instruction }
+     *   { done: false, success: true,  task_name, response }
+     *   { done: false, success: true,  group, tasks: [{task_name, response}] }
+     *   { done: false, success: false, task_name, failure_type, failure_details, session_id, agent_name }  // agent_failure — plan stays in build/
+     *   { done: false, success: false, task_name, failure_type, failure_details, session_id, build_session_id }  // hard failure — plan moved to failed/
+     *   { done: false, success: false, group, failures: [...] }
+     */
+    const autocode_orchestrate_next_task: ToolDefinition = tool({
+        description:
+            "Execute the next pending task group in the plan and return the outcome. " +
+            "Call this in a loop — one call advances the plan by one task group. " +
+            "Returns { done: true } when all tasks are complete (call autocode_orchestrate_review next). " +
+            "Returns { done: false, success: true, task_name, response } on sequential task success. " +
+            "Returns { done: false, success: true, group, tasks } on concurrent group success. " +
+            "On agent_failure (soft): returns { done: false, success: false, task_name, failure_type: 'agent_failure', failure_details, session_id, agent_name } — plan stays in build/, agent can reschedule and call next_task again. " +
+            "On hard failure (task_session/task_failure/tool_error): returns { done: false, success: false, ..., failure_type } — plan has been moved to failed/, call autocode_orchestrate_abort.",
+        args: {
+            plan_name: tool.schema
+                .string()
+                .describe("The plan name to advance (as returned by autocode_build_plan)"),
+        },
+        async execute(args, context) {
+            const sid = context.sessionID
+            const toolName = "autocode_orchestrate_next_task"
+
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
+            if (planNameErr) return planNameErr
+
+            const buildDir  = path.join(context.worktree, ".autocode", "build",  args.plan_name)
+            const failedDir = path.join(context.worktree, ".autocode", "failed", args.plan_name)
+
+            // Verify the plan exists in build/
+            try {
+                await readdir(buildDir)
+            } catch {
+                return abortResponse(toolName, `Plan '${args.plan_name}' not found in .autocode/build/`)
+            }
+
+            const planDir = buildDir
+            const groupName = await findNextGroup(planDir)
+
+            if (groupName === null) {
+                // No more pending tasks — promote to review
+                const reviewDir = path.join(context.worktree, ".autocode", "review", args.plan_name)
+                await mkdir(path.join(context.worktree, ".autocode", "review"), { recursive: true })
+                await rename(planDir, reviewDir)
+                return successResponse(sid, toolName, {
+                    done: true,
+                    plan_name: args.plan_name,
+                    instruction: "All tasks complete. Call autocode_orchestrate_review to generate the review report.",
+                })
+            }
+
+            const groupDir     = path.join(planDir, groupName)
+            const isConcurrent = /^\d{2}-concurrent_group$/.test(groupName)
+
+            if (isConcurrent) {
+                const subEntries = await readdir(groupDir).catch(() => [] as string[])
+                const taskNames  = subEntries.filter(e => !e.startsWith("."))
+
+                const results = await Promise.all(
+                    taskNames.map(taskName =>
+                        executeTask(
+                            path.join(groupDir, taskName),
+                            `${groupName}/${taskName}`,
+                            planDir,
+                        ).then(({ failure, finalDir }) => ({ taskName, failure, finalDir }))
+                    )
+                )
+
+                const failures = results.filter(r => r.failure !== null)
+
+                if (failures.length > 0) {
+                    const agentFailures = failures.filter(f => f.failure!.failureType === "agent_failure")
+                    const hardFailures  = failures.filter(f => f.failure!.failureType !== "agent_failure")
+
+                    const failedGroupDir = path.join(planDir, `${groupName}-failed`)
+                    await rename(groupDir, failedGroupDir).catch(() => {})
+
+                    if (hardFailures.length > 0) {
+                        await mkdir(path.join(context.worktree, ".autocode", "failed"), { recursive: true })
+                        await rename(planDir, failedDir).catch(() => {})
+                        return successResponse(sid, toolName, {
+                            done: false,
+                            success: false,
+                            plan_name: args.plan_name,
+                            group: groupName,
+                            failures: failures.map(f => ({
+                                task_name: `${groupName}/${f.taskName}`,
+                                session_id: f.failure!.sessionId,
+                                build_session_id: f.failure!.buildSessionId,
+                                failure_type: f.failure!.failureType,
+                                failure_details: f.failure!.failureDetails,
+                            })),
+                        })
+                    }
+
+                    // All agent_failure — plan stays in build/
+                    return successResponse(sid, toolName, {
+                        done: false,
+                        success: false,
+                        plan_name: args.plan_name,
+                        group: groupName,
+                        failures: agentFailures.map(f => ({
+                            task_name: `${groupName}/${f.taskName}`,
+                            failure_type: "agent_failure",
+                            failure_details: f.failure!.failureDetails,
+                            session_id: f.failure!.sessionId,
+                            agent_name: f.failure!.agentName ?? "unknown",
+                        })),
+                    })
+                }
+
+                // All succeeded — hide the group dir
+                const doneGroupDir = path.join(planDir, `.${groupName}`)
+                await rename(groupDir, doneGroupDir).catch(() => {})
+
+                return successResponse(sid, toolName, {
+                    done: false,
+                    success: true,
+                    group: groupName,
+                    tasks: results.map(r => ({
+                        task_name: `${groupName}/${r.taskName}`,
+                        response: "(completed)",
+                    })),
+                })
+
+            } else {
+                // Sequential task
+                const { failure, finalDir } = await executeTask(groupDir, groupName, planDir)
+
+                if (failure) {
+                    if (failure.failureType === "agent_failure") {
+                        // Soft failure — plan stays in build/
+                        return successResponse(sid, toolName, {
+                            done: false,
+                            success: false,
+                            plan_name: args.plan_name,
+                            task_name: groupName,
+                            failure_type: "agent_failure",
+                            failure_details: failure.failureDetails,
+                            session_id: failure.sessionId,
+                            agent_name: failure.agentName ?? "unknown",
+                        })
+                    }
+                    // Hard failure — move plan to failed/
+                    await mkdir(path.join(context.worktree, ".autocode", "failed"), { recursive: true })
+                    await rename(planDir, failedDir).catch(() => {})
+                    return successResponse(sid, toolName, {
+                        done: false,
+                        success: false,
+                        plan_name: args.plan_name,
+                        task_name: groupName,
+                        failure_type: failure.failureType,
+                        failure_details: failure.failureDetails,
+                        session_id: failure.sessionId,
+                        build_session_id: failure.buildSessionId,
+                    })
+                }
+
+                // Success — read the agent's response from the result file
+                const dirFiles = await readdir(finalDir).catch(() => [] as string[])
+                const resultFile = dirFiles
+                    .filter(f => f.endsWith(".md") && f.includes(".result.") && !f.startsWith("recover.result."))
+                    .sort()
+                    .at(-1)
+                let response = "(completed)"
+                if (resultFile) {
+                    const raw = await readFile(path.join(finalDir, resultFile), "utf-8").catch(() => "")
+                    const m = raw.match(/<success>([\s\S]*?)<\/success>/)
+                    response = m ? m[1].trim() : raw.trim()
+                    response = response.slice(0, 2000)
+                }
+
+                return successResponse(sid, toolName, {
+                    done: false,
+                    success: true,
+                    task_name: groupName,
+                    response,
+                })
+            }
+        },
+    })
+
+    // ─── tool: autocode_orchestrate_update_task ─────────────────────────────────
+
+    /**
+     * Update the agent and/or execution instructions of an existing pending task.
+     * Rewrites {agent}.prompt.md in the task directory.
+     * If agent changes, renames the old prompt file to the new agent name.
+     */
+    const autocode_orchestrate_update_task: ToolDefinition = tool({
+        description:
+            "Update the agent and/or execution instructions of an existing task. " +
+            "Rewrites {agent}.prompt.md in the task directory. " +
+            "If agent is changed, the old prompt file is renamed. " +
+            "Use this before inserting a prerequisite task to correct the failed task's instructions. " +
+            "Returns { updated_task, agent, prompt_path }.",
+        args: {
+            plan_name: tool.schema.string().describe("The plan name"),
+            task_name: tool.schema.string().describe("Task name exactly as shown in progress (e.g. '01-create_model')"),
+            agent: tool.schema.string().optional().describe("New agent name (e.g. 'code', 'os', 'md'). Omit to keep current agent."),
+            execute: tool.schema.string().optional().describe("New execution instructions. Omit to keep current instructions."),
+        },
+        async execute(args, context) {
+            const sid = context.sessionID
+            const toolName = "autocode_orchestrate_update_task"
+
+            const planNameErr = validateNonEmpty(args.plan_name, sid, toolName, "plan_name")
+            if (planNameErr) return planNameErr
+            const taskNameErr = validateNonEmpty(args.task_name, sid, toolName, "task_name")
+            if (taskNameErr) return taskNameErr
+
+            if (!args.agent && !args.execute) {
+                return abortResponse(toolName, "At least one of 'agent' or 'execute' must be provided")
+            }
+
+            const dir = await resolveTaskDir(context.worktree, args.plan_name, args.task_name)
+            if (!dir) {
+                return retryResponse(sid, toolName, "task_name",
+                    `match an existing task for plan '${args.plan_name}' — '${args.task_name}' was not found`)
+            }
+
+            const dirFiles = await readdir(dir).catch(() => [] as string[])
+            const existingPromptFile = dirFiles.find(f => f.endsWith(".prompt.md"))
+
+            let currentAgent = existingPromptFile ? existingPromptFile.replace(".prompt.md", "") : "code"
+            const newAgent = args.agent?.trim() || currentAgent
+
+            // Read current content if not replacing
+            let newContent: string
+            if (args.execute) {
+                newContent = args.execute
+            } else if (existingPromptFile) {
+                newContent = await readFile(path.join(dir, existingPromptFile), "utf-8").catch(() => "")
+            } else {
+                newContent = ""
+            }
+
+            // Remove old prompt file if agent is changing
+            if (args.agent && args.agent.trim() !== currentAgent && existingPromptFile) {
+                await unlink(path.join(dir, existingPromptFile)).catch(() => {})
+            }
+
+            const promptPath = path.join(dir, `${newAgent}.prompt.md`)
+            await writeFile(promptPath, newContent, "utf-8")
+
+            // Also clear any stale outcome files so the task re-runs cleanly
+            for (const f of dirFiles) {
+                if (f === "success.md" || f === "failure.md") {
+                    await unlink(path.join(dir, f)).catch(() => {})
+                }
+            }
+
+            return successResponse(sid, toolName, {
+                updated_task: args.task_name,
+                agent: newAgent,
+                prompt_path: promptPath,
+            })
+        },
+    })
+
+    // Aliases for prompt-facing tool names (prompt uses _task suffix, implementation uses _step)
+    const autocode_orchestrate_insert_task = autocode_orchestrate_insert_step
+    const autocode_orchestrate_delete_task = autocode_orchestrate_delete_step
+
     // ─── exports ─────────────────────────────────────────────────────────────
 
     return {
         autocode_orchestrate_list,
+        autocode_orchestrate_next_task,
         autocode_orchestrate_resume,
+        autocode_orchestrate_reply_task,
         autocode_orchestrate_fix_task,
         autocode_orchestrate_retry_task,
+        autocode_orchestrate_update_task,
+        autocode_orchestrate_insert_task,
+        autocode_orchestrate_delete_task,
         autocode_orchestrate_review,
         autocode_orchestrate_read_plan,
         autocode_orchestrate_read_plan_purpose,

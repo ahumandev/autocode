@@ -13,6 +13,7 @@
  */
 
 import type { AgentConfig } from "@opencode-ai/sdk/v2"
+import { askPrompt } from "./prompts/ask"
 import { buildPrompt } from "./prompts/build"
 import { documentPrompt } from "./prompts/document"
 import { documentApiPrompt } from "./prompts/document/api"
@@ -34,15 +35,24 @@ import { modifyExcelPrompt } from "./prompts/modify/excel"
 import { modifyGitPrompt } from "./prompts/modify/git"
 import { modifyMdPrompt } from "./prompts/modify/md"
 import { modifyOsPrompt } from "./prompts/modify/os"
+import { orchestratePrompt } from "./prompts/orchestrate"
+import { orchestrateCoveragePrompt } from "./prompts/orchestrate/coverage"
+import { orchestrateDocumentationPrompt } from "./prompts/orchestrate/documentation"
+import { orchestrateExcelPrompt } from "./prompts/orchestrate/excel"
+import { orchestrateFeaturePrompt } from "./prompts/orchestrate/feature"
+import { orchestrateFormatPrompt } from "./prompts/orchestrate/format"
+import { orchestrateGitCommitPrompt } from "./prompts/orchestrate/git_commit"
+import { orchestrateQueryPrompt } from "./prompts/orchestrate/query"
+import { orchestrateTroubleshootPrompt } from "./prompts/orchestrate/troubleshoot"
+import { orchestrateReviewUiPrompt } from "./prompts/orchestrate/review_ui"
+import { orchestrateReviewApiPrompt } from "./prompts/orchestrate/review_api"
+import { planPrompt } from "./prompts/plan"
 import { queryBrowserPrompt } from "./prompts/query/browser"
 import { queryCodePrompt } from "./prompts/query/code"
 import { queryExcelPrompt } from "./prompts/query/excel"
 import { queryGitPrompt } from "./prompts/query/git"
 import { queryTextPrompt } from "./prompts/query/text";
 import { queryWebPrompt } from "./prompts/query/web"
-import { orchestratePrompt } from "./prompts/orchestrate"
-import { planPrompt } from "./prompts/plan"
-import { reportPrompt } from "./prompts/report"
 import { testPrompt } from "./prompts/test"
 import { troubleshootPrompt } from "./prompts/troubleshoot"
 
@@ -58,6 +68,22 @@ type AgentMap = Record<string, AgentConfig>
  * dark = subagent
  */
 export const agents: AgentMap = {
+
+    ask: {
+        color: "#40FFFF",
+        description: "Generate reports (read-only)",
+        mode: "primary",
+        permission: {
+            "*": "deny",
+            question: "allow",
+            task: {
+                "*": "deny",
+                "query*": "allow",
+            },
+            "todo*": "allow"
+        },
+        prompt: askPrompt
+    },
 
     build: {
         color: "#FF4040",
@@ -374,7 +400,7 @@ export const agents: AgentMap = {
 
     modify_code: {
         color: "#802020",
-        description: "Task `code` to update the codebase with code, scripts, config, templates according to plain precise instructions; NEVER write md files with this agent",
+        description: "Task `modify_code` to update the codebase with code, scripts, config, templates according to plain precise instructions; NEVER write md files with this agent",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -400,7 +426,7 @@ export const agents: AgentMap = {
 
     modify_excel: {
         color: "#802020",
-        description: "Task `excel` to handle Excel workbook manipulations or data retrievals",
+        description: "Task `modify_excel` to handle Excel workbook manipulations or data retrievals",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -491,6 +517,230 @@ export const agents: AgentMap = {
         },
         prompt: orchestratePrompt,
         temperature: 0.3,
+    },
+
+    orchestrate_coverage: {
+        color: "#208020",
+        description: "Task `orchestrate_coverage` to increase unit test coverage: discover untested code, write tests, fix failures (tests only, not code)",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                modify_os: "allow",
+                query_code: "allow",
+                test: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateCoveragePrompt,
+        temperature: 0.3,
+    },
+
+    orchestrate_documentation: {
+        color: "#402080",
+        description: "Task `orchestrate_documentation` to discover recent changes and update all affected documentation automatically",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                "document*": "allow",
+                query_code: "allow",
+                query_git: "allow",
+                query_text: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateDocumentationPrompt,
+        temperature: 0.3,
+    },
+
+    orchestrate_excel: {
+        color: "#802020",
+        description: "Task `orchestrate_excel` to orchestrate excel workbook manipulations and data validation",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                modify_excel: "allow",
+                query_excel: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateExcelPrompt,
+        temperature: 0.1,
+    },
+
+    orchestrate_feature: {
+        color: "#802020",
+        description: "Task `orchestrate_feature` to implement a feature end-to-end: write code, write tests, run tests, fix failures, confirm requirement is met",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                modify_code: "allow",
+                modify_os: "allow",
+                query_code: "allow",
+                query_git: "allow",
+                test: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateFeaturePrompt,
+        temperature: 0.3,
+    },
+
+    orchestrate_format: {
+        color: "#802020",
+        description: "Task `orchestrate_format` to orchestrate formatting of text files using safe git worktrees and custom scripts",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                modify_code: "allow",
+                modify_git: "allow",
+                modify_os: "allow",
+                query_code: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateFormatPrompt,
+        temperature: 0.3,
+    },
+
+    orchestrate_general: {
+        color: "#808080",
+        description: "Task `orchestrate_general` only if no other subagents's description matches the requested task",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            read: "allow",
+            task: {
+                "*": "allow",
+                build: "deny",
+                "orchestrate*": "deny",
+                plan: "deny",
+                report: "deny"
+            },
+            "todo*": "allow"
+        },
+    },
+
+    orchestrate_git_commit: {
+        color: "#802020",
+        description: "Task `orchestrate_git_commit` only if reviewing changes and creating professional git commits",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                modify_git: "allow",
+                query_git: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateGitCommitPrompt,
+        temperature: 0.1,
+    },
+
+    orchestrate_query: {
+        color: "#202F8F",
+        description: "Task `orchestrate_query` to query data, create research reports, find info user requested",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                "query*": "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateQueryPrompt,
+        temperature: 0.5,
+    },
+
+    orchestrate_review_api: {
+        color: "#808020",
+        description: "Task `orchestrate_review_api` to review API changes: check endpoints, run tests, fix failures, and confirm API requirements are met",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                modify_code: "allow",
+                modify_os: "allow",
+                query_code: "allow",
+                query_git: "allow",
+                test: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateReviewApiPrompt,
+        temperature: 0.3,
+    },
+
+    orchestrate_review_ui: {
+        color: "#808020",
+        description: "Task `orchestrate_review_ui` to review UI changes: run application, inspect UI, run tests, fix failures, and confirm UI requirements are met",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                modify_code: "allow",
+                modify_os: "allow",
+                query_browser: "allow",
+                query_code: "allow",
+                query_git: "allow",
+                test: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateReviewUiPrompt,
+        temperature: 0.3,
+    },
+
+    orchestrate_troubleshoot: {
+        color: "#802020",
+        description: "Task `orchestrate_troubleshoot` to diagnose and fix problems: reproduce if needed, find root cause, apply fix, verify, repeat until resolved",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                modify_code: "allow",
+                modify_os: "allow",
+                "query*": "allow",
+                troubleshoot: "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: orchestrateTroubleshootPrompt,
+        temperature: 0.5,
     },
 
     plan: {
@@ -637,22 +887,6 @@ export const agents: AgentMap = {
         },
         prompt: queryWebPrompt,
         temperature: 0.7,
-    },
-
-    report: {
-        color: "#40FFFF",
-        description: "Generate reports (read-only)",
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            question: "allow",
-            task: {
-                "*": "deny",
-                "query*": "allow",
-            },
-            "todo*": "allow"
-        },
-        prompt: reportPrompt
     },
 
     test: {

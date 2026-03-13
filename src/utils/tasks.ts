@@ -106,15 +106,8 @@ export function makeTimestamp(): string {
     ].join("_")
 }
 
-/**
- * Parse a human-readable timestamp from a task directory entry name.
- * Directory names use `YYYY-MM-DD_HH-mm-ss_` prefix; converts to `YYYY-MM-DD HH:mm:ss`.
- */
-export function parseEntryTimestamp(entry: string): string {
-    const s = entry.startsWith(".") ? entry.slice(1) : entry
-    const m = s.match(/^(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})_/)
-    if (!m) return "—"
-    return `${m[1]} ${m[2]}:${m[3]}:${m[4]}`
+export function parseEntryTimestamp(_entry: string): string {
+    return "—"
 }
 
 /**
@@ -149,18 +142,15 @@ export function buildReviewMarkdown(planName: string, tasks: TaskInfo[]): string
  *
  * Decorations removed (in order):
  *  1. Leading dot (hidden/completed marker)
- *  2. Leading `YYYY-MM-DD_HH-mm-ss_` timestamp
- *  3. Trailing `.failed`
- *  4. Trailing `.deleted`
+ *  2. Trailing `-failed`
+ *  3. Trailing `.deleted`
  */
 export function stripTaskNameDecorations(name: string): string {
     // 1. Strip leading dot
     let n = name.startsWith(".") ? name.slice(1) : name
-    // 2. Strip timestamp prefix: YYYY-MM-DD_HH-mm-ss_
-    n = n.replace(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_/, "")
-    // 3. Strip trailing .failed
-    if (n.endsWith(".failed")) n = n.slice(0, -".failed".length)
-    // 4. Strip trailing .deleted
+    // 2. Strip trailing -failed
+    if (n.endsWith("-failed")) n = n.slice(0, -"-failed".length)
+    // 3. Strip trailing .deleted
     if (n.endsWith(".deleted")) n = n.slice(0, -".deleted".length)
     return n
 }
@@ -196,7 +186,7 @@ export async function readTaskOutcome(dirPath: string): Promise<TaskInfo["outcom
 
 /**
  * Walk all task entries in a plan directory and collect TaskInfo records.
- * Handles pending, in-flight, succeeded, and failed task states.
+ * Handles pending, succeeded, and failed task states.
  * Recurses into concurrent groups.
  */
 export async function collectTasks(planDir: string): Promise<TaskInfo[]> {
@@ -291,17 +281,18 @@ export async function writeOutcomeFiles(
 
 /**
  * Returns the directory entry with the lowest numeric prefix in `planDir` that
- * has not yet started (i.e. still has the `XX-` prefix but no timestamp prefix
- * and is not hidden with a leading dot).
+ * has not yet started (i.e. still has the `XX-` prefix, is not hidden with a
+ * leading dot, and has no `-failed` suffix).
  *
  * Entries are sorted numerically by their leading two-digit order prefix.
  * Returns null when no pending tasks remain.
  */
 export async function findNextGroup(planDir: string): Promise<string | null> {
     const entries = await readdir(planDir).catch(() => [] as string[])
-    // Pending tasks start with exactly two digits followed by a dash
+    // Pending tasks start with exactly two digits followed by a dash,
+    // are not hidden (no leading dot), and not failed (no -failed suffix)
     const pending = entries
-        .filter(e => /^\d{2}-/.test(e))
+        .filter(e => /^\d{2}-/.test(e) && !e.endsWith("-failed") && !e.endsWith(".deleted"))
         .sort((a, b) => {
             const na = parseInt(a.match(/^(\d+)/)?.[1] ?? "0", 10)
             const nb = parseInt(b.match(/^(\d+)/)?.[1] ?? "0", 10)
@@ -317,18 +308,17 @@ export async function findNextGroup(planDir: string): Promise<string | null> {
  * `.autocode/review/`.  Within the plan directory tasks can be in any of
  * three states:
  *
- *   - Pending   — `XX-task_name`                (numeric prefix, no timestamp)
- *   - In-flight — `YYYY-MM-DD_HH-mm-ss_XX-task` (timestamp prefix)
- *   - Succeeded — `.YYYY-MM-DD_HH-mm-ss_XX-task` (dot-hidden, timestamp prefix)
- *   - Failed    — `YYYY-MM-DD_HH-mm-ss_XX-task.failed`
+ *   - Pending   — `XX-task_name`              (numeric prefix, not yet started)
+ *   - Succeeded — `.XX-task_name`             (dot-hidden)
+ *   - Failed    — `XX-task_name-failed`       (suffix)
  *
  * Concurrent tasks live inside a group directory named `XX-concurrent_group`
- * (pending) or the timestamped/hidden variants thereof.
+ * (pending) or the dot-hidden/failed variants thereof.
  *
  * With `taskName`:
  *   Searches all plan locations and all task states for a directory whose
- *   *base name* (after stripping the leading dot, timestamp prefix, and
- *   trailing `.failed`) matches `taskName`.  Returns the first match or null.
+ *   *base name* (after stripping the leading dot and trailing `-failed`) matches
+ *   `taskName`.  Returns the first match or null.
  *
  * Without `taskName`:
  *   Returns the directory of the lowest-numbered *pending* group in the plan
@@ -351,7 +341,7 @@ export async function resolveTaskDir(
             for (const entry of entries) {
                 if (entry.endsWith(".deleted")) continue
                 const candidate = path.join(base, entry)
-                // Strip leading dot, timestamp prefix, trailing .failed to get logical name
+                // Strip leading dot and trailing -failed to get logical name
                 const logical = stripTaskNameDecorations(entry)
                 if (logical === taskName) {
                     return candidate

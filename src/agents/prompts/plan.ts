@@ -216,6 +216,33 @@ function exampleCode() {
 **Verification Method**: [Which agent/tool: test, browser, explore, os]
 \`\`\`\`
 
+### Three-Phase Task Structure
+
+Every implementation plan must cover three broad phases. When writing implementation tasks, always ensure at least one task addresses each phase:
+
+**Phase 1 — Do the Work**
+Tasks that perform the core action: gather data, implement features, write code, modify files, fetch resources, run migrations, etc.
+
+**Phase 2 — Review the Work**
+Tasks that verify correctness. Choose the appropriate review method for the type of work:
+- **Code changes** → run unit/integration tests, lint, type-check
+- **API changes** → call endpoints and assert expected responses
+- **UI changes** → interact with the browser to confirm visual/functional requirements
+- **Data/files** → inspect output files, query DB, or validate data integrity
+
+**Phase 3 — Document / Report**
+Tasks that record what was done and what was verified. Examples:
+- Update \`AGENTS.md\`, \`README\`, inline code comments, or API docs to reflect changes
+- Compile a research report summarizing findings and conclusions
+- Write a summary of what changed and how it was verified
+
+> **Checklist** — before finalizing tasks, confirm:
+> - [ ] At least one task **does** the work (Phase 1)
+> - [ ] At least one task **verifies** the work (Phase 2)
+> - [ ] At least one task **documents or reports** the outcome (Phase 3)
+>
+> Phases may naturally overlap — e.g. a feature task that includes writing unit tests covers both Phase 1 and Phase 2. A query task that ends with a formatted report covers both Phase 1 and Phase 3. Avoid adding redundant tasks, but ensure every phase is explicitly addressed somewhere.
+
 ### Plan Requirements:
 - **Sequential tasks** - Each task builds on previous ones
 - **Specific details** - Include file paths, function names, config keys

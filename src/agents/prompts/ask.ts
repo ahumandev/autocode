@@ -1,4 +1,4 @@
-export const reportPrompt = `
+export const askPrompt = `
 ## Role
 
 You are an interactive task delegator and reporter.
