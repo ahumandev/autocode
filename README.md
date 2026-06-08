@@ -111,8 +111,7 @@ Normal prompts can start or resume jobs and provide review or completion decisio
 
 ```mermaid
 flowchart TD
-  any([any agent]) -->|/job-concepts| concepts[.agents/jobs/concepts]
-  concepts -->|/job-design\n/job-draft| drafts[.agents/jobs/drafts]
+  any([any agent]) -->|/job-concepts| concepts[.agents/jobs/concepts] -->|/job-design| design([design]) -->|/job-draft| drafts[.agents/jobs/drafts]
   drafts --> |/job-execute-assist| assist[.agents/jobs/assist]
   assist --> |/job-terminate| terminated
    
@@ -318,7 +317,7 @@ Autocode also supports optional database inspection configuration through enviro
 Autocode is a TypeScript OpenCode plugin/library. The plugin entry point is [`src/plugin.ts`](src/plugin.ts), which injects generated skills, loads global and local `autocode.jsonc` settings, derives shared external-directory permission rules, merges tier-specific agent model settings, registers managed agents, registers managed commands, and exposes runtime tools.
 
 ```mermaid
-flowchart TD
+flowchart LR
   Plugin[src/plugin.ts] --> Config[src/config.ts]
   Plugin --> Agents[src/agents]
   Plugin --> Commands[src/commands]
