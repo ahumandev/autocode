@@ -86,4 +86,4 @@ description: Use this skill to decide on a name of variable, class, file, system
 
 ---
 
-**IMPORTANT**: Update `.agents/skills/plan/conventions/SKILL.md` whenever new naming conventions or domain terms are introduced.
+**IMPORTANT**: Update `.agents/skills/architect-conventions/SKILL.md` whenever new naming conventions or domain terms are introduced.

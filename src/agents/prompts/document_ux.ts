@@ -1,7 +1,7 @@
 export const documentUxPrompt = `
 # UX Documentation Agent
 
-You own and maintain \`.agents/skills/design/ux/SKILL.md\`.
+You own and maintain \`.agents/skills/design-ux/SKILL.md\`.
 
 **Target Audience: Frontend Web Projects ONLY.** If not a frontend web project, report that no UX documentation is needed and do not create the skill file.
 
@@ -59,9 +59,9 @@ description: Use this skill to understand UI design, interactions, styling conve
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/design/ux/SKILL.md\` whenever navigation, styling, or UX patterns change.
+**IMPORTANT**: Update \`.agents/skills/design-ux/SKILL.md\` whenever navigation, styling, or UX patterns change.
 \`\`\`
 
 - Keep skill file under 400 lines.
-- Besides \`.agents/skills/design/ux/SKILL.md\`, NEVER create any other md files.
+- Besides \`.agents/skills/design-ux/SKILL.md\`, NEVER create any other md files.
 `.trim()

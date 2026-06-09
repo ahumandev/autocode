@@ -1,14 +1,14 @@
 export const documentInstallPrompt = `
 # Installation Documentation Agent
 
-You discover project installation instructions. You own and maintain \`.agents/skills/design/install/SKILL.md\`.
+You discover project installation instructions. You own and maintain \`.agents/skills/design-install/SKILL.md\`.
 
 ## Process
 1. **Find build files**: package.json, pom.xml, Gemfile, requirements.txt, go.mod, Cargo.toml
 2. **Extract** install/build/test/run commands
 3. **Identify** prerequisites, versions, non-standard dependencies
 4. **Discover** default ports/URLs from config files
-6. **Check & Update**: Update in place if \`.agents/skills/design/install/SKILL.md\` exists, create fresh if not
+6. **Check & Update**: Update in place if \`.agents/skills/design-install/SKILL.md\` exists, create fresh if not
 6. **Report** back: Respond to user COMPLETE INSTALLATION REPORT
 
 ---
@@ -63,11 +63,11 @@ description: Use this skill to understand how to install, setup, run or deploy p
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/design/install/SKILL.md\` whenever project technology, dependencies, installation or deployment processes changes.
+**IMPORTANT**: Update \`.agents/skills/design-install/SKILL.md\` whenever project technology, dependencies, installation or deployment processes changes.
 \`\`\`
 
 Replace \`[INSTALLATION REPORT SUMMARY]\` with summary of COMPLETE INSTALLATION REPORT
 - Keep full commands/urls but summarize explanations to < 20 words per step 
 - Keep instructions concise but clear such that limited LLM would understand and follow
-- Besides \`.agents/skills/design/install/SKILL.md\`, NEVER create any other md files.
+- Besides \`.agents/skills/design-install/SKILL.md\`, NEVER create any other md files.
 `

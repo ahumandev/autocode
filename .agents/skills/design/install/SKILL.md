@@ -120,4 +120,4 @@ description: Use this skill to understand how to install, setup, run or deploy p
 
 ---
 
-**IMPORTANT**: Update `.agents/skills/design/install/SKILL.md` whenever install, build, load, or deployment behavior changes.
+**IMPORTANT**: Update `.agents/skills/design-install/SKILL.md` whenever install, build, load, or deployment behavior changes.

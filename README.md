@@ -2,39 +2,32 @@
 
 <h1 align="center">Autocode</h1>
 
-<p align="center">Autocode is an OpenCode plugin that bundles research, design, drafting, execution, review, termination, and documentation workflows into one curated plugin. It helps OpenCode users move from optional concepts and Research Reports into solution plans, then through assistive or autonomous job execution with traceable lifecycle state.</p>
+<p align="center">Your OpenCode workflow engine for researched design brainstorming, traceable autonomous jobs, and isolated executions.</p>
+
+Autocode is an OpenCode plugin that turns rough conceptual ideas into completed solutions by means of various workflow phases and optional review gates.
+
+Run jobs autonomously with **Auto mode**, or stay in control with **Assist mode**, where Autocode does the safe hard work and separates dangerous operations into guided manual steps.
+
+No special UI required. Autocode runs in OpenCode, keeps progress in version-controllable text files, and lets you track multiple jobs across their full lifecycle making it the ideal solution for remote development or server administration.
 
 ---
 
 ## Features
 
-- 🧭 **Concept-to-job workflow**: Moves work from optional concepts to drafted solution plans, then into assistive or autonomous execution with explicit review and termination stages.
-- 📝 **Plan-save API**: Uses `autocode_plan_save` to create or update executable plans with canonical `Problem`, `Requirements`, `Constraints`, `Risks`, and `Proposed Solution` headings.
-- ⚙️ **OpenCode configuration injection**: Registers managed agents, commands, generated skills, and runtime tools through the plugin config hook.
-- 🧑‍💻 **Primary user agents**: Provides `research`, `design`, `auto`, and `assist` agents for evidence gathering, solution design, autonomous execution, and interactive execution.
-- 🧩 **Specialist subagents**: Delegates focused work to `auto_*`, `query_*`, `execute_*`, and `document_*` subagents.
-- 🗄️ **Read-only database inspection**: Exposes safe database discovery and single-table read tools, plus a `query_db` specialist for database research without write access.
-- 📂 **Job lifecycle management**: Tracks concepts and planned jobs in canonical lifecycle directories `.agents/jobs/concepts`, `.agents/jobs/drafts`, `.agents/jobs/assist`, `.agents/jobs/executing`, `.agents/jobs/facilitate`, `.agents/jobs/review`, and `.agents/jobs/terminated`.
-- ✅ **Lifecycle audit logging**: Stores active measurable `C*` criteria as flat id-to-metric mappings in the job's current canonical lifecycle directory; status changes and accepted criteria append guarded audit entries to `solution.md`.
-- 🔐 **Centralised external directory control**: Shares one `permission.external_directory` rule map across agent external-directory access and the `task_external` cross-project handoff tool.
-- 📝 **Documentation support**: Includes documentation commands and document-focused agents for README, AGENTS, conventions, technical design, installation, PRD, and UX updates.
-
-## Integration
-
-Autocode integrates with the OpenCode host as a plugin. OpenCode loads the built plugin, then Autocode injects its managed configuration and runtime tools.
-
-```mermaid
-flowchart TD
-  Host[OpenCode host] --> Plugin[Autocode plugin]
-  Plugin --> Agents
-  Plugin --> Commands
-  Plugin --> Tools
-  Plugin --> Skills
-  Commands --> Jobs
-  Agents --> Jobs
-  Tools --> Jobs
-  Skills --> Jobs
-```
+- 🧭 **Concept-to-job workflow** — follow structured phases: concept → research → design → execution → review → learning.
+- 🧠 **Research-backed design** — brainstorm approaches, compare trade-offs, and produce evidence-based solution plans.
+- 🤖 **Auto mode** — execute planned jobs autonomously with traceable progress reports.
+- 🧑‍💻 **Assist mode** — keep the user in the loop while Autocode handles safe implementation work.
+- ⚠️ **Manual task separation** — dangerous operations are stopped and explained with responsible user steps.
+- 📂 **Lifecycle tracking** — track resumable jobs progress in version controlled text files.
+- ✅ **Acceptance criteria** — auto define measurable criteria and record proof when work is accepted.
+- 📝 **Audit logs** — preserve status changes and completion evidence in text files.
+- 🧩 **Specialist subagents** — delegate code, docs, research, debugging, DB, OS, browser, git, and testing tasks.
+- 🗄️ **Read-only DB insight** — inspect configured databases safely without write access.
+- 🧪 **Sandboxed execution** — test risky commands or environments in temporary sandboxes.
+- 📦 **Cross-project tasking** — delegate work into other project directories with controlled permissions.
+- ⚡ **Token-optimized workflows** — agents are assigned to smart, balanced, fast, or cheap tiers for optimal performance and cost saving.
+- 🔌 **OpenCode-native extensibility** — customize agents, tools, commands, skills, MCPs, and model providers.
 
 ## Installation
 

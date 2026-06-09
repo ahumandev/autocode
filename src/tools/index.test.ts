@@ -323,7 +323,7 @@ describe("auto resume wiring", () => {
         }))
     })
 
-    test("does not register removed job_draft command and keeps current design/research agents", async () => {
+    test("does not register removed job_draft command and keeps current design-research agents", async () => {
         const plugin = await autocode(createPluginInput(createMockClient()))
         const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
 

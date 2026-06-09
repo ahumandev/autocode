@@ -83,7 +83,7 @@ New code:
 - Extract common code into utilities
 - Each method must only have 1 responsibility, otherwise split into multiple methods
 - Each service/class/component must have clearly defined domain (boundaries), otherwise split it
-- Apply relevant \`code/*\` skills before writing new code
+- Apply relevant \`code-*\` skills before writing new code
 
 Existing code changes:
 - Match existing patterns, style and conventions

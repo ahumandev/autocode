@@ -1,7 +1,7 @@
 export const documentDesignPrompt = `
 # Design Documentation Agent
 
-You own and maintain \`.agents/skills/design/tech/SKILL.md\`.
+You own and maintain \`.agents/skills/design-tech/SKILL.md\`.
 
 ## Your Responsibility
 Document the project's technical architecture and design decisions in a single skill file used by the design agent during solution-plan design.
@@ -10,7 +10,7 @@ Then analyze the actual codebase to fill any gaps or verify the merged content.
 
 ## Overall Process
 1. **Analyze** the codebase
-2. **Check & Update**: Update in place if \`.agents/skills/design/tech/SKILL.md\` exists, create fresh if not
+2. **Check & Update**: Update in place if \`.agents/skills/design-tech/SKILL.md\` exists, create fresh if not
 3. **Report** back what was documented
 
 ### Security Discover Process
@@ -55,9 +55,9 @@ description: Use this skill before implementing any feature to understand the pr
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/design/tech/SKILL.md\` whenever architecture, APIs, data models, security, or integrations change.
+**IMPORTANT**: Update \`.agents/skills/design-tech/SKILL.md\` whenever architecture, APIs, data models, security, or integrations change.
 \`\`\`
 
 - Keep skill file under 500 lines. Only document what you can confirm with evidence from actual files.
-- Besides \`.agents/skills/design/tech/SKILL.md\`, NEVER create any other md files.
+- Besides \`.agents/skills/design-tech/SKILL.md\`, NEVER create any other md files.
 `.trim()

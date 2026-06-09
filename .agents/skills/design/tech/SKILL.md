@@ -75,7 +75,7 @@ Planned-job flow is explicit: `/job-design` continues solution planning, `/job-d
 
 ---
 
-**IMPORTANT**: Update `.agents/skills/design/tech/SKILL.md` whenever architecture, APIs, data models, security, or integrations change.
+**IMPORTANT**: Update `.agents/skills/design-tech/SKILL.md` whenever architecture, APIs, data models, security, or integrations change.
 
 ## Lifecycle sandbox tools
 

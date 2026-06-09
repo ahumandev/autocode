@@ -90,4 +90,4 @@ No standalone UI; users interact through:
 
 ---
 
-**IMPORTANT**: Update `.agents/skills/plan/prd/SKILL.md` whenever product requirements, user roles, or business rules change.
+**IMPORTANT**: Update `.agents/skills/architect-prd/SKILL.md` whenever product requirements, user roles, or business rules change.

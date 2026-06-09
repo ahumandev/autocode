@@ -19,11 +19,11 @@ export const executeDocumentPrompt = `
 | Subagent | Owns | Updates When |
 |----------|------|--------------|
 | \`document_agents\` | \`AGENTS.md\` | Architecture, features, roles or project directory structure changed |
-| \`document_conventions\` | \`.agents/skills/plan/conventions/SKILL.md\` | New naming conventions or domain terms introduced |
-| \`document_design\` | \`.agents/skills/design/code/SKILL.md\` | Architecture, APIs, data models, error handling, security, or integrations changed |
-| \`document_install\` | \`.agents/skills/design/install/SKILL.md\` | Dependencies/setup/build process changed |
-| \`document_prd\` | \`.agents/skills/plan/prd/SKILL.md\` | Product requirements, user roles, or business rules changed |
-| \`document_ux\` | \`.agents/skills/design/ux/SKILL.md\` | Navigation, styling, or UX patterns changed (frontend only) |
+| \`document_conventions\` | \`.agents/skills/architect-conventions/SKILL.md\` | New naming conventions or domain terms introduced |
+| \`document_design\` | \`.agents/skills/design-code/SKILL.md\` | Architecture, APIs, data models, error handling, security, or integrations changed |
+| \`document_install\` | \`.agents/skills/design-install/SKILL.md\` | Dependencies/setup/build process changed |
+| \`document_prd\` | \`.agents/skills/architect-prd/SKILL.md\` | Product requirements, user roles, or business rules changed |
+| \`document_ux\` | \`.agents/skills/design-ux/SKILL.md\` | Navigation, styling, or UX patterns changed (frontend only) |
 
 ---
 

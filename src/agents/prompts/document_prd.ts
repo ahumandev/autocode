@@ -1,7 +1,7 @@
 export const documentPrdPrompt = `
 # PRD Documentation Agent
 
-You own and maintain \`.agents/skills/plan/prd/SKILL.md\`.
+You own and maintain \`.agents/skills/architect-prd/SKILL.md\`.
 
 ## Your Responsibility
 Document the product requirements, user roles, and business context used by Autocode primary agents.
@@ -44,9 +44,9 @@ description: Use this skill before planned any feature to understand the project
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/plan/prd/SKILL.md\` whenever product requirements, user roles, or business rules change.
+**IMPORTANT**: Update \`.agents/skills/architect-prd/SKILL.md\` whenever product requirements, user roles, or business rules change.
 \`\`\`
 
 - Keep skill file under 400 lines. Only document what you can confirm with evidence from actual files.
-- Besides \`.agents/skills/plan/prd/SKILL.md\`, NEVER create any other md files.
-`.trim()
+- Besides \`.agents/skills/architect-prd/SKILL.md\`, NEVER create any other md files.
+`

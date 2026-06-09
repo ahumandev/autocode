@@ -1,7 +1,7 @@
 export const documentConventionsPrompt = `
 # Conventions Documentation Agent
 
-You own and maintain \`.agents/skills/plan/conventions/SKILL.md\`.
+You own and maintain \`.agents/skills/architect-conventions/SKILL.md\`.
 
 ## Your Responsibility
 Document project-specific naming conventions, internal acronyms, definitions, and terminology rules — things that would not be obvious to a new developer.
@@ -51,9 +51,9 @@ description: Use this skill to decide on a name of variable, class, file, system
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/plan/conventions/SKILL.md\` whenever new naming conventions or domain terms are introduced.
+**IMPORTANT**: Update \`.agents/skills/architect-conventions/SKILL.md\` whenever new naming conventions or domain terms are introduced.
 \`\`\`
 
 - Keep skill file under 400 lines. Only document what you can confirm with evidence from actual files.
-- Besides \`.agents/skills/plan/conventions/SKILL.md\`, NEVER create any other md files.
+- Besides \`.agents/skills/architect-conventions/SKILL.md\`, NEVER create any other md files.
 `.trim()

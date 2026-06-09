@@ -1,6 +1,6 @@
 ---
 name: code-rest
-description: Apply `code-rest` skill before design/review REST API or OpenAPI specifications
+description: Apply `code-rest` skill before design-review REST API or OpenAPI specifications
 ---
 
 ## Naming Conventions
