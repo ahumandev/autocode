@@ -1,9 +1,9 @@
 ---
 name: author-article
-description: Apply `author-article` skill once before reviewing user content or writing professional articles/reports.
+description: Use `author-article` to get Professional Article/Report Format when reviewing/writing user content as articles/reports.
 ---
 
-# Professional Article and Report Authoring
+# Professional Article/Report Format
 
 Follow these instructions before reviewing/writing professional articles/reports
 

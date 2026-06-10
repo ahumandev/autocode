@@ -1,33 +1,38 @@
-<p align="center"><span style="font-size: 96px; text-shadow: -3px -3px 0 #000, 3px -3px 0 #000, -3px  3px 0 #000, 3px 3px 0 #000, 0 -3px 0 #000, 0 3px 0 #000, -3px 0 0 #000, 3px 0 0 #000;">🤖</span></p>
+<div align="center"><div style="font-family: monospace; font-size: 0.7rem; line-height: normal; letter-spacing: 0; background: linear-gradient(to right, #800, #770, #060, #077, #008); white-space: pre; overflow: hidden">
+                                                                     ██           
+       ▄██  ██    ██  ████████  ████████  ████████  ████████  ████████  ████████
+     ▄████  ██    ██     ██     ██    ██  ██        ██    ██  ██    ██  ██    ██
+   ▄██▀ ██  ██    ██     ██     ██    ██  ██        ██    ██  ██    ██  ████████
+ ▄████████  ██    ██     ██     ██    ██  ██        ██    ██  ██    ██  ██      
+██▀     ██  ████████     ██     ████████  ████████  ████████  ████████  ████████
 
-<h1 align="center">Autocode</h1>
+</div></div>
 
-<p align="center">Your OpenCode workflow engine for researched design brainstorming, traceable autonomous jobs, and isolated executions.</p>
+<h3 align="center">The workflow engine for traceable autonomous job execution</h3>
 
-Autocode is an OpenCode plugin that turns rough conceptual ideas into completed solutions by means of various workflow phases and optional review gates.
+---
 
-Run jobs autonomously with **Auto mode**, or stay in control with **Assist mode**, where Autocode does the safe hard work and separates dangerous operations into guided manual steps.
+AutoCode is an OpenCode plugin that turns rough conceptual ideas into completed solutions by means of structured workflow phases and optional review gates.
 
-No special UI required. Autocode runs in OpenCode, keeps progress in version-controllable text files, and lets you track multiple jobs across their full lifecycle making it the ideal solution for remote development or server administration.
+Run jobs autonomously with **Auto mode**, or stay in control with **Assist mode**, where AutoCode does the safe hard work and separates dangerous operations into guided manual steps.
+
+No special UI required. AutoCode runs in OpenCode, keeps progress in version-controllable text files, and lets you track multiple jobs across their full lifecycle making it the ideal solution for remote development or server administration.
 
 ---
 
 ## Features
 
-- 🧭 **Concept-to-job workflow** — follow structured phases: concept → research → design → execution → review → learning.
-- 🧠 **Research-backed design** — brainstorm approaches, compare trade-offs, and produce evidence-based solution plans.
-- 🤖 **Auto mode** — execute planned jobs autonomously with traceable progress reports.
-- 🧑‍💻 **Assist mode** — keep the user in the loop while Autocode handles safe implementation work.
-- ⚠️ **Manual task separation** — dangerous operations are stopped and explained with responsible user steps.
-- 📂 **Lifecycle tracking** — track resumable jobs progress in version controlled text files.
-- ✅ **Acceptance criteria** — auto define measurable criteria and record proof when work is accepted.
-- 📝 **Audit logs** — preserve status changes and completion evidence in text files.
-- 🧩 **Specialist subagents** — delegate code, docs, research, debugging, DB, OS, browser, git, and testing tasks.
-- 🗄️ **Read-only DB insight** — inspect configured databases safely without write access.
-- 🧪 **Sandboxed execution** — test risky commands or environments in temporary sandboxes.
-- 📦 **Cross-project tasking** — delegate work into other project directories with controlled permissions.
-- ⚡ **Token-optimized workflows** — agents are assigned to smart, balanced, fast, or cheap tiers for optimal performance and cost saving.
-- 🔌 **OpenCode-native extensibility** — customize agents, tools, commands, skills, MCPs, and model providers.
+- 🧭 **Structured lifecycle** — move researched work from concept to solution in phases: concept ➔ draft ➔ executing job ➔ review.
+- 🧠 **Research-backed design** — use specialist agents to gather evidence, compare trade-offs, and prepare solution plans before implementation starts.
+- 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
+- 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
+- ⚠️ **Safe hand-offs** — stop risky or blocked work and move it to facilitation instead of silently continuing with unsafe assumptions.
+- ✅ **Acceptance criteria** — record measurable criteria and require unresolved criteria to be cleared before job acceptance.
+- ⚡ **Token-optimized workflows** — smart orchestrators delegate to faster specialists to improve performance and reduce token use.
+- 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
+- 🧪 **Sandboxed execution** — run supported risky commands in Linux bubblewrap sandboxes when the host supports user namespaces.
+- 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in other directories after permission checks.
+- 🔌 **OpenCode-native packaging** — register agents, commands, tools, and generated skills from one TypeScript plugin.
 
 ## Installation
 
@@ -36,9 +41,13 @@ No special UI required. Autocode runs in OpenCode, keeps progress in version-con
 - [Bun](https://bun.sh) is required for dependency installation, builds, tests, and type checks.
 - [OpenCode](https://opencode.ai) is required to load and use the plugin.
 
+#### Optional
+
+- [Bubblewrap](https://github.com/containers/bubblewrap) is required only when sandbox execution is enabled on Linux.
+
 ### Local setup
 
-1. Install project dependencies from the repository root.
+1. Install dependencies from the repository root.
 
    ```bash
    bun install
@@ -52,191 +61,171 @@ No special UI required. Autocode runs in OpenCode, keeps progress in version-con
    bun run build
    ```
 
-   The build script removes `dist`, builds [`src/plugin.ts`](src/plugin.ts), emits TypeScript declarations, copies Markdown skill sources into `dist/skills`, and then runs [`scripts/install-plugin-shim.mjs`](scripts/install-plugin-shim.mjs). The shim writes an OpenCode plugin file under the current user's OpenCode plugin directory that re-exports the built `dist/plugin.js`.
+   The build removes `dist`, bundles [`src/plugin.ts`](src/plugin.ts), emits TypeScript declarations, copies generated skill sources, and runs [`scripts/install-plugin-shim.mjs`](scripts/install-plugin-shim.mjs).
 
-3. Configure OpenCode to load the plugin according to your OpenCode plugin setup. The build installs a shim at `~/.config/opencode/plugins/autocode.js`, and for local development in this repository [`.opencode/plugin/autocode.ts`](.opencode/plugin/autocode.ts) re-exports the built plugin from `dist/plugin.js`.
+3. Load the plugin in OpenCode.
+
+   The build installs a shim at `~/.config/opencode/plugins/autocode.js`. For local development in this repository, [`.opencode/plugin/AutoCode.ts`](.opencode/plugin/AutoCode.ts) re-exports the built plugin from `dist/plugin.js`.
 
 ### Development watch mode
 
-Use watch mode while editing the plugin source.
+Use watch mode while editing plugin source files.
 
 ```bash
 bun run watch
 ```
 
-The watch script copies Markdown skill sources once, then watches the Bun bundle and TypeScript declarations as source files change.
+The watch script copies generated skill sources once, then watches the Bun bundle and TypeScript declarations as source files change.
 
 ## Usage
 
-Autocode is used from inside OpenCode after the plugin is loaded. It registers primary agents and workflow commands.
+AutoCode is used from inside OpenCode after the plugin is loaded. It is not a standalone application and does not start a web server or expose a local URL. It registers managed agents, slash commands, generated skills, and tools.
 
-### Primary agents
+### Primary Agents
 
-| Agent      | Purpose                                                                     |
-|------------|-----------------------------------------------------------------------------|
-| `research` | Gather evidence and produce Research Reports.                               |
-| `design`   | Design *solution plans* from conversation and optional Research Report data. |
-| `auto`     | Autonomously executes drafted *jobs* from *solution plans*. |
-| `assist`   | Interactively executes immediate tasks with human control (optionally using *solution plans* as guidance).                 |
+| Agent      | Purpose                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------- |
+| `research` | Gathers evidence and produces Research Reports.                                                         |
+| `design`   | Creates solution plans from conversation and optional Research Report data.                             |
+| `auto`     | Autonomously executes drafted jobs from solution plans.                                                 |
+| `assist`   | Interactively executes immediate tasks with human control, optionally using solution plans as guidance. |
 
-```mermaid
-flowchart TD
-  research --> design
-  design --> auto
-  design --> assist
-```
-
-### Workflow Commands
-
-Normal prompts can start or resume jobs and provide review or completion decisions. Slash commands are compatibility/convenience wrappers, not required lifecycle gates.
-
-| Command           | Purpose                                                                                                                                                       |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `/job-concepts`  | Creates *concept* Markdown files in `.agents/jobs/concepts/`.                                                                                                        |
-| `/job-design`    | Design the *solution plan* from a selected *concept* or current planning context.                                                                             |
-| `/job-draft`     | Save the *solution plan* as a *draft* in `.agents/jobs/drafts` for *job* execution approval.                                                                         |
-| `/job-execute-assist` | Approve assistive *job* execution by moving it to `.agents/jobs/assist`.                                                                                             |
-| `/job-execute-auto`   | Approve fully autonomous *job* execution by moving it to `.agents/jobs/executing`. Jobs that hit an obstacle move to `.agents/jobs/facilitate`, and completed jobs move to `.agents/jobs/review`. |
-| `/job-review`    | User verified *review* will be committed to source control, then *terminated*.                                                                                |
-| `/job-terminate` | Terminate a *solution plan* / *job* / *review* without committing to source control.                                                                          |                                                                         |
-
-### Typical Job Workflow
+### Typical job workflow
 
 ```mermaid
 flowchart TD
-  any([any agent]) -->|/job-concepts| concepts[.agents/jobs/concepts] -->|/job-design| design([design]) -->|/job-draft| drafts[.agents/jobs/drafts]
-  drafts --> |/job-execute-assist| assist[.agents/jobs/assist]
-  assist --> |/job-terminate| terminated
-   
-  drafts -->|/job-execute-auto| executing[.agents/jobs/executing]
-  executing -->|plan completes| reviews[.agents/jobs/review]
-  reviews -->|/job-review| terminated
- 
-  executing .->|job hits obstacle| facilitate[.agents/jobs/facilitate]
-  facilitate .->|job is unblocked| executing
-  
-  reviews .->|user revise plan| executing
+  Concepts[.agents/jobs/concepts] --> Drafts[.agents/jobs/drafts]
+  Drafts --> Assist[.agents/jobs/assist]
+  Drafts --> Executing[.agents/jobs/executing]
+  Executing --> Review[.agents/jobs/review]
+  Executing -.blocked.-> Facilitate[.agents/jobs/facilitate]
+  Facilitate -.unblocked.-> Executing
+  Assist --> Terminated[.agents/jobs/terminated]
+  Review --> Terminated
 ```
 
-1. You can optionally create *concepts* in `.agents/jobs/concepts`, either manually or by `/job-concepts`.
-2. You can revise concept files if needed.
-3. You run `/job-design` to design the *solution plan* from the selected context.
-4. You run `/job-draft` to save the *solution plan* as a *draft* in `.agents/jobs/drafts` for execution approval.
-5. You can revise *draft* in `.agents/jobs/drafts` if needed.
+1. Create or select a concept in `.agents/jobs/concepts`.
+2. Run `/job-design` to create a solution plan from the selected concept or current planning context.
+3. Run `/job-draft` to save the plan in `.agents/jobs/drafts/{job_name}/plan.md`.
+4. Run `/job-execute-assist` to execute with human steering, or `/job-execute-auto` to execute autonomously.
+5. Review the completed work from `.agents/jobs/review`.
+6. Run `/job-review` to accept and terminate the job, or `/job-terminate` to close it without acceptance.
 
-At this point you have a choice to run the *draft* fully autonomously or assistive (you stay in control).
+### Workflow commands
 
-#### Assistive Job Workflow
+Normal prompts can start or resume work. Slash commands are convenience wrappers around the same lifecycle.
 
-6. You run `/job-execute-assist` to move the *draft* into `.agents/jobs/assist` as a new *job*.
-7. The `assist` agent will make recommendations based on the *solution plan* and track *job* progress, but you steer task execution.
-8. Once done, the job can proceed to review or be closed with `/job-terminate`.
+| Command               | Purpose                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `/job-concepts`       | Saves concept Markdown files in `.agents/jobs/concepts/`.                                   |
+| `/job-design`         | Designs a solution plan from a selected concept or current planning context.                |
+| `/job-draft`          | Saves a solution plan as a draft in `.agents/jobs/drafts/{job_name}/plan.md`.               |
+| `/job-execute`        | Selects and executes a job in the current session with either `auto` or `assist`.           |
+| `/job-execute-assist` | Moves an approved draft to `.agents/jobs/assist/{job_name}/` and starts an assist session.  |
+| `/job-execute-auto`   | Moves an approved draft to `.agents/jobs/executing/{job_name}/` and starts an auto session. |
+| `/job-review`         | Accepts reviewed work, commits when applicable, and terminates the job.                     |
+| `/job-terminate`      | Moves the current or selected job to `.agents/jobs/terminated/{job_name}/`.                 |
 
-#### Autonomous Job Workflow
+### Handover commands
 
-6. You run `/job-execute-auto` to approve the *draft* for autonomous execution by moving it to `.agents/jobs/executing`.
-7. The `auto` agent will take over here and complete the designed *solution plan*.
-8. If the `auto` agent hits an obstacle, you will be notified and the *job* will move to `.agents/jobs/facilitate`.
-9. Once the *solution plan* completes, the `auto` agent will review its own work and produce a *review* in `.agents/jobs/review`.
-10. You can then verify if the *review* and solution meet your expectations.
-11. You can optionally revise the *solution plan* if necessary, or accept the solution with `/job-review`, which commits the changes to source control and cleans up the *job*.
+| Command             | Purpose                                                                  |
+| ------------------- | ------------------------------------------------------------------------ |
+| `/new-research`     | Creates a new research session from recent context.                      |
+| `/new-design`       | Creates a new design session for a solution plan.                        |
+| `/new-assist`       | Creates a new assist session for interactive implementation.             |
+| `/new-auto`         | Creates a new auto session for autonomous implementation.                |
+| `/new-troubleshoot` | Creates a new troubleshooting session from recent symptoms and evidence. |
 
-### Job Directories
+### Documentation commands
 
-Jobs are located in `.agents/jobs/{status}/{job_name}/` directories, where `{status}` is one of `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, or `terminated`. In these directories are the following files:
+| Command                 | Purpose                                                                |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `/document`             | Document all recent changes.                                           |
+| `/document-code`        | Documents recent technical architecture and code design decisions.     |
+| `/document-conventions` | Documents recent naming conventions and project terminology.           |
+| `/document-install`     | Document recent project installation steps changes.                    |
+| `/document-prd`         | Documents recently updated product requirements and user roles.        |
+| `/document-ux`          | Documents recently updated UX flows, navigation, and styling patterns. |
+| `/init`                 | Documents the entire project.                                          |
 
-| Path           | Purpose                                                                                                       |
-|----------------|---------------------------------------------------------------------------------------------------------------|
-| `concept.md`   | A copy of the original concept that for which the plan was designed.                                          |
-| `criteria.yml` | Unmet acceptance criteria mappings to their `C*` codes.                                                       |
-| `plan.md`      | Solution plan which defines the problem, requirements, constraints, risks and proposed a high-level solution. |
-| `session.yml` | Keep track of Opencode session IDs for resume functionality.                                                  |
-| `solution.md`  | Audit log that chronologically summarize how the solution was implemented.                                    |
+### Utility commands
 
-### Handover Commands
+| Command           | Purpose                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `/author-article` | Authors a professional article or report from the supplied context.                  |
+| `/git-commit`     | Creates a commit message and commits staged changes through the git commit subagent. |
+| `/git-conflict`   | Handles git merge conflict work through the git conflict subagent.                   |
+| `/repeat-as-md`   | Repeats the last response inside a fenced Markdown code block.                       |
+| `/repeat-as-wiki` | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting.           |
+| `/report-session` | Reports on the entire current session.                                               |
+| `/report-task`    | Reports on only the most recent user-requested assignment.                           |
+| `/resume`         | Resumes an interrupted session by calling the resume tool.                           |
 
-| Command         | Purpose                                                                                                          |
-|-----------------|------------------------------------------------------------------------------------------------------------------|
-| `/new-research` | Creates a new research session that gathers evidence and produces a Research Report from recent context.         |
-| `/new-design`   | Creates a new design session to propose the solution plan based on recent conversation and Research Report data. |
-| `/new-assist`   | Creates a new assist session for to assistively implement a solution.                                            |
-| `/new-auto`     | Creates a new auto session to autonomously implement a solution plan.                                            |
+### Job files
 
-### Documentation Commands
+Jobs are stored in `.agents/jobs/{status}/{job_name}/`. The valid statuses are `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, and `terminated`.
 
-| Command                 | Purpose                                                                              |
-|-------------------------|--------------------------------------------------------------------------------------|
-| `/document`             | Requests a comprehensive documentation update for the project.                       |
-| `/document_conventions` | Documents naming conventions and terminology.                                        |
-| `/document_design`      | Documents technical architecture and design decisions.                               |
-| `/document_prd`         | Documents product requirements and user roles.                                       |
-| `/document_ux`          | Documents UX flows, navigation, and styling patterns.                                |
-
-### Utility Commands
-
-| Command           | Purpose                                                                                                          |
-|-------------------|------------------------------------------------------------------------------------------------------------------|
-| `/git_commit`     | Creates a commit message and commits staged changes through the git commit subagent.                             |
-| `/git_conflict`   | Handles git merge conflict work through the git conflict subagent.                                               |
-| `/repeat_as_md`   | Repeats the last response inside a fenced Markdown code block.                                                   |
-| `/repeat_as_wiki` | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting.                                       |
-| `/report-session` | Provides a detailed report for the entire current session.                                                       |
-| `/report-task`    | Provides a detailed report for only the most recent user-requested assignment or task, ignoring earlier context. |
-| `/resume`         | Resumes an interrupted session by calling the `task_resume` tool.                                                |
+| Path           | Purpose                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `concept.md`   | Copy of the concept used to design the plan.                                                  |
+| `criteria.yml` | Acceptance criteria mappings with IDs such as `C1`, `C2`, and `C3`.                           |
+| `plan.md`      | Solution plan covering problems, requirements, constraints, risks, and the selected proposal. |
+| `session.yml`  | OpenCode session IDs used for resume functionality.                                           |
+| `solution.md`  | Chronological implementation and audit log.                                                   |
 
 ### Database inspection
 
-Autocode can inspect environment-configured databases through read-only tools and the hidden `query_db` specialist agent. This capability is intended for safe lookup and analysis, not schema changes, joins across multiple tables, or write operations.
+AutoCode can inspect environment-configured databases through read-only tools and the hidden database specialist agent. This capability is intended for safe lookup and analysis, not schema changes, joins across multiple tables, or write operations.
 
-#### Safe read limits
-
-- All DB access is read-only.
+- All database access is read-only.
 - Reads are limited to a single table at a time.
-- Identifiers must be simple names only, such as schema, table, and field names.
-- `autocode_db_table_read` supports `fields`, `filters`, `limit`, and one sort key only.
+- Identifiers must be simple schema, table, or field names.
+- `autocode_db_table_read` supports `fields`, `filters`, `limit`, and one sort key.
 - `limit` accepts `1` to `100` and defaults to `7`.
 - Supported filter operators are `=`, `!=`, `<`, `<=`, `>`, `>=`, `like`, `in`, and `is_null`.
 
-#### Configuration
-
-Set one database key per target connection using the following environment variable pattern:
-
-| Variable                          | Required | Purpose                                                   |
-| --------------------------------- | -------- | --------------------------------------------------------- |
-| `AUTOCODE_DB_{db_key}_CONNECTION` | Yes      | Connection string used to detect the adapter and connect. |
-| `AUTOCODE_DB_{db_key}_USERNAME`   | No       | Optional username override for the connection.            |
-| `AUTOCODE_DB_{db_key}_PASSWORD`   | No       | Optional password override for the connection.            |
-
-Replace `{db_key}` with letters, digits, or underscores. Environment lookup is case-insensitive at the tool input level and is normalised to uppercase for variable names.
-
 ## Configuration
 
-Autocode reads optional JSONC configuration from the global OpenCode config first, then from the current project locations. Later candidates override earlier candidates per tier, so local worktree or directory settings can replace global defaults without copying the whole configuration.
+AutoCode reads optional JSONC configuration from global OpenCode configuration first, then from project locations. Later candidates override earlier candidates, so local worktree or directory settings can replace global defaults without copying the whole file.
 
 ### Configuration locations
 
-| Precedence | Location                                                                             | Behaviour                                                                        |
-| ---------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| 1          | `~/.config/opencode/autocode.jsonc`                                                  | Global defaults considered earliest and used unless later config overrides them. |
-| 2          | `.opencode/autocode.jsonc` in the OpenCode worktree                                  | Project or worktree settings override matching global tier values.               |
-| 3          | `.opencode/autocode.jsonc` in the active directory, when different from the worktree | Directory-specific settings override matching worktree and global tier values.   |
+| Precedence | Location                                                                             | Behaviour                                                                 |
+| ---------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| 1          | `~/.config/opencode/autocode.jsonc`                                                  | Global defaults are considered first.                                     |
+| 2          | `.opencode/autocode.jsonc` in the OpenCode worktree                                  | Project or worktree settings override matching global values.             |
+| 3          | `.opencode/autocode.jsonc` in the active directory, when different from the worktree | Directory-specific settings override matching worktree and global values. |
 
-Tier values can therefore be configured globally, for example with a `litellm` tier set, and selectively overridden in a local working directory, worktree, or nested directory config.
+### Configuration keys
 
-### External directory permission rules
+| Key                                  | Type             | Description                                                                                                                        | Default                                          |
+| ------------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `autocode.tier`                      | string           | Selects a named tier set from `autocode.tiers`.                                                                                    | No selected set.                                 |
+| `autocode.tiers`                     | object           | Either a direct map of `cheap`, `fast`, `balanced`, and `smart` tier settings, or a map of named tier sets containing those tiers. | No overrides.                                    |
+| `autocode.tiers.<tier>.model`        | string           | Optional model override for a tier.                                                                                                | Uses the agent or OpenCode default when omitted. |
+| `autocode.tiers.<tier>.variant`      | string           | Optional variant override for a tier.                                                                                              | Uses the agent or OpenCode default when omitted. |
+| `permission.external_directory`      | object or string | Path-pattern permissions for external-directory access. Values are `allow`, `ask`, or `deny`.                                      | `{}`                                             |
+| `autocode.sandbox.sync_method`       | string           | Sandbox sync strategy. Valid values are `auto`, `overlayfs`, `reflink`, and `copy`.                                                | Unset.                                           |
+| `autocode.sandbox.distro.cache_path` | string           | Optional sandbox distribution cache path.                                                                                          | Unset.                                           |
+| `autocode.sandbox.distro.expire`     | string or number | Optional sandbox distribution expiry value.                                                                                        | Unset.                                           |
 
-Autocode also reads `permission.external_directory` from the same config locations and precedence chain. This central rule map is reused for both agent `external_directory` permissions and the `task_external` handoff tool.
-
-OpenCode applies the **last matching rule wins** model, so place broad defaults first and more specific overrides later. When the same pattern key appears in a later config file, the later file overrides the earlier value for that pattern. Agents that can ask the user questions fall back to `ask` when no configured pattern matches; non-interactive agents fall back to `deny`.
-
-| Key                               | Type   | Description                                                                                       | Default |
-| --------------------------------- | ------ | ------------------------------------------------------------------------------------------------- | ------- |
-| `permission.external_directory` | object | Map of absolute path patterns to `allow`, `ask`, or `deny` rules shared by agent and tool checks. | `{}`    |
+Recognised model tiers are `cheap`, `fast`, `balanced`, and `smart`. The `cheap` tier is also used as the `small_model` fallback for OpenCode title generation and compaction when OpenCode has no explicit `small_model`.
 
 For example:
 
 ```jsonc
 {
+  "autocode": {
+    "tier": "openai",
+    "tiers": {
+      "openai": {
+        "smart": { "model": "openai/gpt-5.5", "variant": "high" },
+        "balanced": { "model": "openai/gpt-5.4", "variant": "medium" },
+        "fast": { "model": "openai/gpt-5.3-spark", "variant": "low" },
+        "cheap": { "model": "openai/gpt-5.4-mini", "variant": "low" }
+      }
+    }
+  },
   "permission": {
     "external_directory": {
       "/tmp/safe/**": "allow",
@@ -246,68 +235,21 @@ For example:
 }
 ```
 
-### Current configuration shape
-
-| Key                             | Type   | Description                                                                                                                        | Default                                          |
-| ------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `autocode.tier`                 | string | Selects a named tier set from `autocode.tiers`, such as the sets shown in [`.opencode/autocode.jsonc`](.opencode/autocode.jsonc).  | No selected set.                                 |
-| `autocode.tiers`                | object | Either a direct map of `cheap`, `fast`, `balanced`, and `smart` tier settings, or a map of named tier sets containing those tiers. | No overrides.                                    |
-| `autocode.tiers.<tier>.model`   | string | Optional model override for a tier.                                                                                                | Uses the agent or OpenCode default when omitted. |
-| `autocode.tiers.<tier>.variant` | string | Optional variant override for a tier.                                                                                              | Uses the agent or OpenCode default when omitted. |
-
-Recognised model tiers are `cheap`, `fast`, `balanced`, and `smart`.
-
-The `cheap` tier powers trivial Autocode operations, including the managed autocode dispatcher and compaction. When a configured `cheap.model` exists and the user top-level OpenCode `small_model` is absent, Autocode uses `cheap` as the `small_model` fallback for OpenCode title generation and compaction; explicit `small_model` and `agent.title` overrides are preserved.
-
-For example:
-
-```jsonc
-"autocode": {
-  "tier": "openai",
-  "tiers": {
-    "openai": {
-      
-      // Smart tier: used by auto, plan and other reasoning-heavy agents.
-      "smart": {
-        "model": "openai/gpt-5.5",
-        "variant": "high"
-      },
-      
-      // Balanced tier: used by assist, query, and execute subagents.
-      "balanced": {
-        "model": "openai/gpt-5.4",
-        "variant": "medium"
-      },
-      
-      // Fast tier: used by command dispatch and lightweight agents.
-      "fast": {
-        "model": "openai/gpt-5.3-spark",
-        "variant": "low"
-      },
-      
-      // Cheap tier: used for trivial tool-trigger operations.
-      "cheap": {
-        "model": "openai/gpt-5.4-mini",
-        "variant": "low"
-      }
-    }
-  }
-}
-```
+OpenCode applies a last-matching-rule-wins model to external-directory permissions. Place broad defaults first and more specific overrides later.
 
 ### Database environment variables
 
-Autocode also supports optional database inspection configuration through environment variables.
-
 | Variable pattern                  | Description                                                                                                           | Default |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------- |
-| `AUTOCODE_DB_{db_key}_CONNECTION` | Required connection string for one configured database target. Supported formats determine the adapter automatically. | None    |
-| `AUTOCODE_DB_{db_key}_USERNAME`   | Optional username supplied alongside the connection when needed.                                                      | Unset   |
-| `AUTOCODE_DB_{db_key}_PASSWORD`   | Optional password supplied alongside the connection when needed.                                                      | Unset   |
+| `AUTOCODE_DB_{db_key}_CONNECTION` | Required connection string for one configured database target. Supported formats determine the adapter automatically. | None.   |
+| `AUTOCODE_DB_{db_key}_USERNAME`   | Optional username supplied alongside the connection when needed.                                                      | Unset.  |
+| `AUTOCODE_DB_{db_key}_PASSWORD`   | Optional password supplied alongside the connection when needed.                                                      | Unset.  |
+
+Replace `{db_key}` with letters, digits, or underscores. Environment lookup is case-insensitive at the tool input level and is normalised to uppercase for variable names.
 
 ## Development
 
-Autocode is a TypeScript OpenCode plugin/library. The plugin entry point is [`src/plugin.ts`](src/plugin.ts), which injects generated skills, loads global and local `autocode.jsonc` settings, derives shared external-directory permission rules, merges tier-specific agent model settings, registers managed agents, registers managed commands, and exposes runtime tools.
+AutoCode is a TypeScript OpenCode plugin/library. The plugin entry point is [`src/plugin.ts`](src/plugin.ts), which injects generated skills, loads configuration, derives external-directory permission rules, merges tier-specific agent model settings, registers managed agents, registers managed commands, and exposes runtime tools.
 
 ```mermaid
 flowchart LR
@@ -319,30 +261,31 @@ flowchart LR
   Tools --> Utils[src/utils]
 ```
 
-The managed agent catalogue lives in [`src/agents/index.ts`](src/agents/index.ts), and prompt templates live under [`src/agents/prompts/`](src/agents/prompts/). Commands are registered in [`src/commands/index.ts`](src/commands/index.ts) so the published package does not need separate command Markdown files. Bundled skill sources are Markdown files under `src/skills/<skill-name>/SKILL.md`, and `ensureGeneratedSkills` refreshes runtime-generated skills under `~/.agents/skills/autocode` before injecting the generated path into `skills.paths`. The `autocode` subdirectory is reserved for plugin-managed output; sibling directories under `~/.config/opencode/skills` are custom user skills.
+The managed agent catalogue lives in [`src/agents/index.ts`](src/agents/index.ts), and prompt templates live under [`src/agents/prompts/`](src/agents/prompts/). Commands are registered in [`src/commands/index.ts`](src/commands/index.ts), so the published package does not need separate command Markdown files. Generated skills are bundled from source during builds, and [`scripts/copy-skill-sources.mjs`](scripts/copy-skill-sources.mjs) copies them into `dist/skills`.
 
-Runtime tools live in [`src/tools/`](src/tools/). Current tools include Research Report listing and reading via legacy-named `autocode_concept_*` tools, plan creation, plan section reading and saving, job listing, job status updates, job start/resume, job acceptance and termination support, criteria set/list/remove, read-only database table discovery and single-table reads, logo discovery, cross-project task execution, and session resume support. Config loading in [`src/config.ts`](src/config.ts) merges global, worktree, and active-directory JSONC inputs so shared tier and permission rules can be overridden locally without copying the whole file.
+Runtime tools live in [`src/tools/`](src/tools/). They cover concept and plan management, job lifecycle updates, criteria tracking, read-only database discovery and table reads, sandbox lifecycle operations, cross-project task execution, and session resume support. Shared tool error handling should stay aligned with [`src/utils/tools.ts`](src/utils/tools.ts) and the agent error rules.
 
-The `task_external` custom tool resolves and canonicalises the requested target directory, asks OpenCode for `external_directory` permission using the shared rule map, then spawns a new OpenCode CLI session in another project or directory with `opencode run --dir` if access is allowed. Through normal CLI behaviour, the spawned session loads the target directory's OpenCode configuration, skills, MCPs, and `AGENTS.md`. Its required inputs are `target_directory` and `prompt`. The tool always runs the spawned session with the built-in `general` agent. Use it for cross-project or dependency investigation and edits where the target project context matters; avoid it when the current project context is sufficient.
+### Generated skills
+
+Builds copy bundled skills into `dist/skills`, and the plugin can install the generated output for OpenCode under `~/.agents/skills/autocode/` or the equivalent XDG configuration location. Skills are knowledge files that OpenCode loads into AI context so agents and workflows can follow project-specific instructions; users do not need to invoke these files directly.
 
 ### Sandbox execution
 
-Linux sandbox execution requires usable bubblewrap (`bwrap`). Autocode does not use `proot` or `proot-distro` fallbacks.
+Linux sandbox execution requires usable [Bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`).
 
-Unsupported hosts/platforms are macOS, Windows, Android/Termux, non-Linux hosts, and Linux hosts without usable `bwrap` or user namespace support. During startup/configuration, after user config overrides are merged, unsupported hosts disable the `execute_sandbox` agent and force-deny `autocode_sandbox_create`, `autocode_sandbox_cli`, and `autocode_sandbox_delete`, including wildcard permission overrides.
-
-Runtime diagnostics: missing or unusable `bwrap` means install or expose bubblewrap and ensure user namespaces work. Sandboxes whose metadata references legacy `proot` or `proot-distro` backends cannot run and should be recreated or migrated.
-
-Security caveats: bubblewrap is the isolation mechanism; actual policy depends on explicit mounts and namespaces. Host kernel and user namespace support are security-relevant.
+Unsupported hosts include macOS, Windows, Android or Termux, non-Linux systems, and Linux systems without usable `bwrap` or user namespace support. When sandboxing is unsupported, AutoCode disables the sandbox execution agent and force-denies sandbox create, CLI, and delete tools.
 
 ### Development commands
 
-| Command             | Purpose                                                                                                                                              |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run build`     | Removes `dist`, builds `src/plugin.ts`, emits declarations, copies Markdown skill sources into `dist/skills`, and installs the OpenCode plugin shim. |
-| `bun run watch`     | Copies Markdown skill sources once, then watches the Bun bundle and declarations as source files change.                                             |
-| `bun test`          | Runs the Bun test suite.                                                                                                                             |
-| `bun run typecheck` | Runs TypeScript type checking without emitting files.                                                                                                |
+| Command                         | Purpose                                                                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `bun run build`                 | Removes `dist`, builds `src/plugin.ts`, emits declarations, copies generated skills, and installs the OpenCode plugin shim. |
+| `bun run watch`                 | Copies generated skills once, then watches the Bun bundle and declarations as source files change.                          |
+| `bun test`                      | Runs the Bun test suite under `src`.                                                                                        |
+| `bun run typecheck`             | Runs TypeScript type checking without emitting files.                                                                       |
+| `bun run verify:sandbox-online` | Runs the sandbox verification script.                                                                                       |
+
+There is no `lint` script in the current `package.json`.
 
 ### Testing
 
@@ -354,7 +297,15 @@ bun test
 
 Review the Bun test summary in your terminal to confirm whether the suite passed.
 
-### Building
+Run TypeScript type checking separately.
+
+```bash
+bun run typecheck
+```
+
+TypeScript reports diagnostics if type checking fails, and exits successfully when no diagnostics are emitted.
+
+### Deployment
 
 Build the distributable plugin before loading it through the local shim or packaging it for use elsewhere.
 
@@ -362,4 +313,14 @@ Build the distributable plugin before loading it through the local shim or packa
 bun run build
 ```
 
-The build output is written to `dist/`, including `dist/plugin.js`, declarations, and copied Markdown skill sources under `dist/skills`, matching the `main`, `types`, and `exports` fields in [`package.json`](package.json).
+The build output is written to `dist/`, including `dist/plugin.js`, declarations, and copied generated skills under `dist/skills`, matching the `main`, `types`, and `exports` fields in [`package.json`](package.json).
+
+## Terminology
+
+| Term       | Definition                                                                           |
+| ---------- | ------------------------------------------------------------------------------------ |
+| Concept    | Early Markdown description of a desired change, saved before a solution plan exists. |
+| Draft      | Approved solution plan saved under `.agents/jobs/drafts/{job_name}/`.                |
+| Job        | A tracked unit of work that moves through AutoCode lifecycle directories.            |
+| Facilitate | Blocked autonomous work that needs human help before it can continue safely.         |
+| Terminated | Closed job state used after accepted review or explicit termination.                 |

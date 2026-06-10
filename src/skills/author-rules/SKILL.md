@@ -1,25 +1,11 @@
 ---
 name: author-rules
-description: Apply `author-rules` skill before reviewing/writing agentic skills, prompts, commands or AGENTS.md
+description: Use `author-rules` get Agent Rule Format when reviewing/writing agent prompts, commands or AGENTS.md
 ---
 
-# Agent Rule Writing
+# Agent Rule Format
 
-When writing agent skills, prompts, commands or AGENTS.md apply this layout:
-
-## Communication Rules
-
-Verbose English: "Sure! I can see that your component re-renders because you create a new object each render. Perhaps wrap it in useMemo."
-Caveman English: "New obj each render. New ref = re-render. Wrap in useMemo."
-
-Caveman English Rules:
-- Cut pleasantries, filler, hedging, articles (a/an/the) when meaning stays clear
-- Prefer short plain words. Keep exact technical terms.
-- Use common abbreviations
-- Fragments OK if cause/action stays clear
-- Emoji only when it clarifies
-
-You MUST write Caveman English except: multi-step steps instructions, SQL, errors, quotes, links, code, technical terms, values.
+When writing agent prompts, commands or AGENTS.md apply this layout:
 
 ## Layout 
 
@@ -179,9 +165,7 @@ Briefly describe goal of specific STEP in < 20 words
 
 ## Rules
 
-- Use this same skill text as an example on how to format other skills
-
-- Use logically organize bullet points in sections
+- ALWAYS speak and write Caveman English
 - Each point < 20 words
 - No repetitions
 - Only use emojis to highlight important aspects to LLM, like attention, warning, checklists, correct vs wrong

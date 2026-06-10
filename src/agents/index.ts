@@ -16,7 +16,7 @@ import { buildTroubleshootPrompt } from "./prompts/auto_troubleshoot";
 import { designPrompt } from "./prompts/design";
 import { documentAgentsPrompt } from "./prompts/document_agents"
 import { documentConventionsPrompt } from "./prompts/document_conventions"
-import { documentDesignPrompt } from "./prompts/document_design"
+import { documentCodePrompt } from "./prompts/document_code"
 import { documentInstallPrompt } from "./prompts/document_install"
 import { documentPrdPrompt } from "./prompts/document_prd"
 import { documentUxPrompt } from "./prompts/document_ux"
@@ -41,7 +41,7 @@ import { researchPrompt } from "./prompts/research";
 import { tempConceptPrompt } from "./prompts/temp_concept";
 import { tempManualPrompt } from "./prompts/temp_manual";
 import { tempReportPrompt } from "@/agents/prompts/temp_report";
-
+`.agents/jobs/facilitate`
 type AgentConfigWithTier = AgentConfig & { permission?: PermissionConfig, tier?: ModelTier }
 type AgentMap = Record<string, AgentConfigWithTier>
 type PermissionObject = Exclude<PermissionConfig, PermissionAction>
@@ -363,6 +363,11 @@ const baseAgents: AgentMap = {
             lsp: "allow",
             question: "allow",
             read: "allow",
+            skill: {
+                "*": "ask",
+                "code*": "allow",
+                "execute*": "allow",
+            },
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -395,7 +400,7 @@ const baseAgents: AgentMap = {
             question: "allow",
             skill: {
                 "*": "ask",
-                "design*": "allow",
+                "execute*": "allow",
             },
             task: {
                 "*": "deny",
@@ -426,7 +431,8 @@ const baseAgents: AgentMap = {
             doom_loop: "ask",
             skill: {
                 "*": "deny",
-                "design*": "allow",
+                "code*": "allow",
+                "execute*": "allow",
             },
             task: {
                 "*": "deny",
@@ -487,7 +493,8 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "design*": "allow",
+                "code*": "allow",
+                "execute*": "allow",
             },
             task: {
                 "*": "deny",
@@ -646,7 +653,7 @@ const baseAgents: AgentMap = {
 
     document_agents: {
         color: colorDocumentWorker,
-        description: "Task `document_agents` to convert latest `README.md` to `AGENTS.md`",
+        description: "Task `document_agents` to convert latest `README.md` to `AGENTS.md`.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -669,7 +676,7 @@ const baseAgents: AgentMap = {
 
     document_conventions: {
         color: colorDocumentWorker,
-        description: "Task `document_conventions` to document naming conventions and project terminology",
+        description: "Task `document_conventions` to document naming conventions and project terminology.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -683,7 +690,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-rules": "allow"
+                "author-skill": "allow"
             },
         },
         prompt: documentConventionsPrompt,
@@ -691,9 +698,9 @@ const baseAgents: AgentMap = {
         tier: "fast",
     },
 
-    document_design: {
+    document_code: {
         color: colorDocumentWorker,
-        description: "Task `document_design` to document technical architecture and design decisions",
+        description: "Task `document_code` to document technical architecture and design decisions or sourcode code/config locations.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -707,17 +714,17 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-rules": "allow"
+                "author-skill": "allow"
             },
         },
-        prompt: documentDesignPrompt,
+        prompt: documentCodePrompt,
         temperature: 0.3,
         tier: "fast",
     },
 
     document_install: {
         color: colorDocumentWorker,
-        description: "Task document_install to document project installation and usage guide",
+        description: "Task document_install to document project installation and usage guide.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -730,7 +737,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-rules": "allow"
+                "author-skill": "allow"
             },
         },
         prompt: documentInstallPrompt,
@@ -740,7 +747,7 @@ const baseAgents: AgentMap = {
 
     document_prd: {
         color: colorDocumentWorker,
-        description: "Task `document_prd` to document product requirements and user roles",
+        description: "Task `document_prd` to document product requirements and user roles.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -754,7 +761,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-rules": "allow"
+                "author-skill": "allow"
             },
         },
         prompt: String(documentPrdPrompt),
@@ -778,7 +785,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-rules": "allow"
+                "author-skill": "allow"
             },
         },
         prompt: documentUxPrompt,
@@ -871,6 +878,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
+                "author-caveman": "allow",
                 "author-readme": "allow",
                 "author-tutorial": "allow",
             },
@@ -951,7 +959,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "design-install": "allow",
+                "execute-install": "allow",
             },
             "todo*": "allow",
         },
@@ -970,7 +978,7 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "design-install": "allow",
+                "execute-install": "allow",
             },
             "todo*": "allow",
         },
@@ -1000,7 +1008,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "design-install": "allow",
+                "execute-install": "allow",
             },
             "todo*": "allow",
             webfetch: "allow",
@@ -1022,7 +1030,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "design*": "allow",
-                "plan*": "allow",
+                "execute*": "allow"
             },
             "todo*": "allow"
         },
@@ -1041,7 +1049,7 @@ const baseAgents: AgentMap = {
             "doom_loop": "deny",
             skill: {
                 "*": "deny",
-                "design-ux": "allow",
+                "execute-ux": "allow",
             },
             "todo*": "allow"
         },
@@ -1066,7 +1074,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "design*": "allow",
+                "execute*": "allow",
             },
         },
         prompt: queryCodePrompt,
@@ -1170,7 +1178,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "design-install": "allow",
+                "execute-install": "allow",
             },
         },
         prompt: queryTextPrompt,

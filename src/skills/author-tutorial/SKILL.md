@@ -1,6 +1,6 @@
 ---
 name: author-tutorial
-description: Apply `author-tutorial` skill once before reviewing/writing a tutorial or manual user step guide.
+description: Use `author-tutorial` to get Tutorial Format when reviewing/writing tutorial or manual user step guide.
 ---
 
 # Tutorial Format
@@ -15,7 +15,7 @@ A tutorial guide a human user to complete an assignment manually.
 
 ## Important Tutorial Rules   
 
-- Communicate to human: Full sentences, first person as guide
+- Communicate to human: Full but concise sentences, first person as guide
 - Tutorial Steps must be placed in correct sequential order
 - Entire tutorial must be < 400 lines (remove trivial examples if necessary)    
 - Where user can decide on different workflow paths, format each workflow as different subsection

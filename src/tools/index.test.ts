@@ -498,7 +498,7 @@ describe("auto resume wiring", () => {
 
         await configurePlugin(plugin, cfg)
 
-        expect(cfg.command.git_conflict?.agent).toBe("assist_git_conflict")
+        expect(cfg.command["git-conflict"]?.agent).toBe("assist_git_conflict")
     })
 
     test("omits removed legacy public tool names from injected prompts", async () => {

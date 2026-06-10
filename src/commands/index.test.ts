@@ -14,27 +14,28 @@ describe("commands", () => {
             "job-terminate",
             "author-article",
             "document",
-            "document_conventions",
-            "document_design",
-            "document_prd",
-            "document_ux",
-            "git_commit",
-            "git_conflict",
+            "document-conventions",
+            "document-code",
+            "document-prd",
+            "document-ux",
+            "git-commit",
+            "git-conflict",
+            "init",
             "new-assist",
             "new-auto",
             "new-design",
             "new-research",
             "new-troubleshoot",
-            "repeat_as_md",
-            "repeat_as_wiki",
+            "repeat-as-md",
+            "repeat-as-wiki",
             "report-session",
             "report-task",
             "resume",
         ])
 
-        for (const command of Object.values(commands)) {
+        for (const [commandName, command] of Object.entries(commands)) {
             expect(command).toEqual(expect.objectContaining({
-                subtask: false,
+                subtask: commandName === "init",
                 template: expect.any(String),
             }))
             expect(command.template).not.toBe("")
@@ -75,7 +76,7 @@ describe("commands", () => {
     })
 
     test("keeps repeat_as_md template intent independent of stale description", () => {
-        const command = commands.repeat_as_md
+        const command = commands["repeat-as-md"]
 
         expect(command?.agent).toBe("assist")
         expect(command?.subtask).toBe(false)

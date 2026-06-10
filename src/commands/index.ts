@@ -168,41 +168,47 @@ Apply \`author-article\` skill to edit user provided article.`
     },
 
     "document": {
-        agent: "execute_document",
-        description: "Document the entire project.",
+        agent: "document",
+        description: "Document recent project changes.",
         subtask: false,
-        template: `Perform a comprehensive documentation update for the entire project.`,
+        template: `
+1. Determine responsible subagents to document recent project changes: \`document_conventions\`, \`document_code\`, \`document_install\`, \`document_prd\`, \`document_ux\`
+2. Task responsible subagent with instruction to update their SKILL.md file with only relevant changes (include only related changes in prompt - must match subagent description).
+3. Collect subagent reports
+4. Update \`README.md\` using collected reports (only update applicable sections - not entire file)
+5. Only task \`document_agents\` *AFTER* you had updated \`README.md\` with prompt to check if any of recent changes are applicable to content in AGENTS.md (only update AGENTS.md if outdated)
+`,
     },
 
-    "document_conventions": {
+    "document-conventions": {
         agent: "document_conventions",
-        description: "Document the project's naming conventions and terminology.",
+        description: "Document recently updated naming conventions and terminology.",
         subtask: false,
         template: `$ARGUMENTS`,
     },
 
-    "document_design": {
-        agent: "document_design",
-        description: "Document the project's technical architecture and design decisions.",
+    "document-code": {
+        agent: "document_code",
+        description: "Document recently updated technical architecture and design decisions.",
         subtask: false,
         template: `$ARGUMENTS`,
     },
 
-    "document_prd": {
+    "document-prd": {
         agent: "document_prd",
-        description: "Document the project's product requirements and user roles.",
+        description: "Document recently updated product requirements and user roles.",
         subtask: false,
         template: `$ARGUMENTS`,
     },
 
-    "document_ux": {
+    "document-ux": {
         agent: "document_ux",
-        description: "Document the project's UX flows, navigation, and styling patterns.",
+        description: "Document recently updated UX flows, navigation, and styling patterns.",
         subtask: false,
         template: `$ARGUMENTS`,
     },
 
-    "git_commit": {
+    "git-commit": {
         agent: "execute_git_commit",
         description: "Automatically commit staged changes.",
         subtask: false,
@@ -214,11 +220,24 @@ Base your git commit message on the following:
 `
     },
 
-    "git_conflict": {
+    "git-conflict": {
         agent: "assist_git_conflict",
         description: "Automatically handle git merge conflicts.",
         subtask: false,
         template: `$ARGUMENTS`
+    },
+
+    "init": {
+        agent: "execute_document",
+        description: "Document the entire project.",
+        subtask: true,
+        template: `
+1. Task subagents in parallel: \`document_conventions\`, \`document_code\`, \`document_install\`, \`document_prd\` 
+2. Additionally task \`document_ux\` for frontend/web projects
+3. Collect all subagent reports
+4. Use \`author-readme\` skill to update \`README.md\` using collected reports
+5. Only task \`document_agents\` *AFTER* you had updated \`README.md\` because \`document_agents\` will read your updated \`README.md\` file
+        `
     },
 
     "new-assist": {
@@ -288,7 +307,7 @@ Base your git commit message on the following:
     - REPRODUCTION = steps to reproduce SYMPTOM in ENVIRONMENT include sample input data in blockcode (if possible)`, "Follow troubleshoot session")
     },
 
-    "repeat_as_md": {
+    "repeat-as-md": {
         agent: "assist",
         description: "Repeat the last response inside a fenced Markdown code block.",
         subtask: false,
@@ -303,7 +322,7 @@ Last response goes here...
 `
     },
 
-    "repeat_as_wiki": {
+    "repeat-as-wiki": {
         agent: "assist",
         description: "Repeat last response in Atlassian Wiki Markup",
         subtask: false,

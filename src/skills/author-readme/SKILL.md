@@ -1,7 +1,9 @@
 ---
 name: author-readme
-description: Apply `author-readme` skill before reviewing/writing or updating README.md files
+description: Use `author-readme` to get "README.md Format" when reviewing/writing or updating README.md files.
 ---
+
+# README.md Format
 
 - README.md must be written for humans in professional, user-manual style natural language 
 - Use full sentences except diagrams and listing items like features
@@ -30,7 +32,9 @@ description: Apply `author-readme` skill before reviewing/writing or updating RE
 
 <h1 align="center">[Project Name]</h1>
 
-<p align="center">[PURPOSE]</p>
+<h3 align="center">[HERO]</p>
+
+[PURPOSE]
 
 ---
 
@@ -89,17 +93,28 @@ Replace placeholders in README.md as follows:
     2. If `autocode_logo_find` returns a logo path, replace [LOGO] with `<img src="{path to logo}" alt="Project Logo" height="128">`. 
     3. If no logo was found, use an appropriate emoji to replace [LOGO] with `<span style="font-size: 96px; text-shadow: -3px -3px 0 #000, 3px -3px 0 #000, -3px  3px 0 #000, 3px 3px 0 #000, 0 -3px 0 #000, 0 3px 0 #000, -3px 0 0 #000, 3px 0 0 #000;">{emoji}</span>`.
 - [Project Name]: Project name in a natural title format. If unknown: derive title from repo name
+- [HERO]: Catching advertising title as follows:
+    - Summarize what project does in positive way like marketing advert
+    - Max 20 words
+    - No definitions in this section
+    - Use only common words, not project specific terminology (except for naming components)
 - [PURPOSE]: Motivate why this project should exist as follows:
     - Briefly describe problem it solves and solution/benefit of using this project
-    - Wording should encourage stakeholders to invest time to setup and use system
-    - Don't repeat features listed in [FEATURES]
-    - Max 100 words
+    - Use marking style: Wording should encourage stakeholders to invest time to setup and use system
+    - Do not list any technical features, instead mention problems it solve (use cases)
+    - Max 80 words
+    - No definitions in this section
+    - Use only common words, not project specific terminology (except for naming components)
 - [FEATURES]: Advertise core features in markdown bullets as follows: 
     - 1 feature per bullet
     - Unique emoji per feature
     - Max 40 words per feature
-- [INTEGRATION]: If project integrates with external systems (like microservices): Include high-level Mermaid diagram of how it integrates with with other systems
-    - Only include [INTEGRATION] section if this project does integrate with other systems
+    - No definitions in this section
+    - Use only common words, not project specific terminology (except for naming components)
+- [INTEGRATION]: Explain how project integration with external systems (like miroservices):
+    - Title summarize how it integrations (max 7 words), like "REST Integration" or "Microservice Architecture"
+    - Include high-level Mermaid diagram of how it integrates
+    - Only include [INTEGRATION] section if this project does integrate with external systems
 - [PREREQUISITES]: System requirements and dependencies needed before installation as follows:
     - List prerequisites as bullet points: 1 per dependency
     - Provide markdown links in text to online sources that provide guidance where to download or how to install dependency
@@ -179,5 +194,8 @@ Replace placeholders in README.md as follows:
 - Ensure all markdown links to internal project files or external sites are valid
 - Updated/Remove outdated info (if detected)
 - Avoid duplicated content (instead add markdown links in text that refers to previous sections of same content applies)
+- First time non-standard acronym is used: include definition in round brackets (), for example: "It guard UST (User Security Tables) when configured."
+- First time non-standard definition is used: include an INFO block below the paragraph where it was used to explain what it is in < 20 words.
+- NEVER repeat definitions, only first occurrence.
 - NEVER mention deprecated tools or configs
 - Keep examples updated with current tools/APIs/configs
