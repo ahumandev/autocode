@@ -1,12 +1,12 @@
-<div align="center"><div style="font-family: monospace; font-size: 0.7rem; line-height: normal; letter-spacing: 0; background: linear-gradient(to right, #800, #770, #060, #077, #008); white-space: pre; overflow: hidden">
-                                                                     ██           
+```
+                                                                    ██           
        ▄██  ██    ██  ████████  ████████  ████████  ████████  ████████  ████████
      ▄████  ██    ██     ██     ██    ██  ██        ██    ██  ██    ██  ██    ██
    ▄██▀ ██  ██    ██     ██     ██    ██  ██        ██    ██  ██    ██  ████████
  ▄████████  ██    ██     ██     ██    ██  ██        ██    ██  ██    ██  ██      
 ██▀     ██  ████████     ██     ████████  ████████  ████████  ████████  ████████
 
-</div></div>
+```
 
 <h3 align="center">The workflow engine for traceable autonomous job execution</h3>
 
@@ -273,7 +273,9 @@ Builds copy bundled skills into `dist/skills`, and the plugin can install the ge
 
 Linux sandbox execution requires usable [Bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`).
 
-Unsupported hosts include macOS, Windows, Android or Termux, non-Linux systems, and Linux systems without usable `bwrap` or user namespace support. When sandboxing is unsupported, AutoCode disables the sandbox execution agent and force-denies sandbox create, CLI, and delete tools.
+Sandbox tools include `autocode_sandbox_create`, `autocode_sandbox_cli`, `autocode_sandbox_delete`, `autocode_sandbox_read`, `autocode_sandbox_glob`, `autocode_sandbox_grep`, `autocode_sandbox_edit`, and `autocode_sandbox_copy`. Sandboxes expose `/sandbox` for writable work, `/home` for the sandbox home, and `/workspace` as a read-only project mount.
+
+Unsupported hosts include macOS, Windows, Android or Termux, non-Linux systems, and Linux systems without usable `bwrap` or user namespace support. When sandboxing is unsupported, AutoCode disables the sandbox execution agent and force-denies sandbox create, CLI, delete, read, glob, grep, edit, and copy tools.
 
 ### Development commands
 

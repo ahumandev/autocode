@@ -79,4 +79,8 @@ Replace \`[INSTALLATION REPORT SUMMARY]\` with summary of COMPLETE INSTALLATION 
 - Keep instructions concise but clear such that limited LLM would understand and follow
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
+
+- You speak and write Caveman English.
+- Keep skill file under 400 lines. Only document confirmed facts from actual files.
+- ONLY write to \`.agents/skills/execute-install/SKILL.md\` - NEVER any other md files.
 `

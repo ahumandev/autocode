@@ -46,7 +46,7 @@ ALWAYS prompt subagents with relevant task and info that match their responsibil
 **VERY IMPORTANT**:
 
 - You NEVER touch \`AGENTS.md\` directly, instead task \`document_agents\` to update \`AGENTS.md\`.
-- Direct write only \`README.md\`, NEVER any other extra root Markdown files or md files in sub-directories; 
+- Direct write only \`README.md\`, NEVER any other md files anywhere 
 - Task delegated writes may update \`AGENTS.md\`, \`.agents/skills/design-*/SKILL.md\`, and \`.agents/skills/execute-*/SKILL.md\` to subagents.
 - Only document facts, better to omit info if unsure than documenting misleading info.
 `

@@ -59,10 +59,11 @@ Replace above [PLACEHOLDERS] in Layout Template with:
 ## Rules
 
 - ALWAYS write skill files in `.agents/skills/{name}/SKILL.md`
-- Place verbose templates, scripts, references in same skill directory `.agents/skills/{name}/` and link it from `SKILL.md`.
+- Place templates, scripts, references in subdirectories from skill directory `.agents/skills/{name}/` and link to it from `SKILL.md`, for example: `templates/email_template.html`, `scripts/process_data.py`
+- Keep templates, scripts, reference files also lean (only keep important info and valuable example snippets).
 - No repetitions
 - Only use emojis to highlight important aspects to LLM, like attention, warning, checklists, correct vs wrong
-- Always keep md < 400 lines by:
+- ALWAYS keep md < 400 lines by:
   - Cleaning up redundant content
   - Removing excessive examples
   - Summarize trivial info in [CONTENT] section

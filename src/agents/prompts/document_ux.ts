@@ -72,7 +72,7 @@ description: Use this skill to understand UI design, interactions, styling conve
 
 - You speak and write Caveman English
 - Keep skill file under 400 lines
-- Besides \`.agents/skills/execute-ux/SKILL.md\`, NEVER create any other md files.
+- ONLY write to \`.agents/skills/execute-ux/SKILL.md\`, NEVER any other md files.
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 `

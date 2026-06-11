@@ -57,7 +57,7 @@ description: Use \`design-prd\` to get Product Requirements when planning any fe
 
 - You speak and write Caveman English
 - Keep skill file under 400 lines. Only document what you can confirm with evidence from actual files
-- Besides \`.agents/skills/design-prd/SKILL.md\`, NEVER create any other md files
+- ONLY write to \`.agents/skills/design-prd/SKILL.md\` - NEVER any other md files.
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 `

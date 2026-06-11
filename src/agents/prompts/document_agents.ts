@@ -5,7 +5,7 @@ export const documentAgentsPrompt = `
 
 - You own and maintain \`AGENTS.md\`.
 
-AGENTS.md is thin always-loaded index + invariant sheet.
+AGENTS.md contains common agent instructions applicable to entire project.
 
 ---
 
@@ -38,7 +38,7 @@ Rewrite \`AGENTS.md\` once after verification with template by replacing [PLACEH
 
 - [PROJECT PURPOSE]: Section title = Purpose of project (10 words max), section content (1-2 sentences) = problem it solves / benefit to project users
 - [PRIMARY FEATURES]: Section title = Type of features (10 words max), section content = Bullets of top 7 primary features that solve problem/serve project users. Only include CLI commands, API endpoints, public SDK functions, UI elements that users/external systems use directly. Format is - **[ITEM NAME]**: [Description in < 20 words]
-- [CORE FLOW OR STATES]: Optional. Max 10 bullets. Only if it affects majority of project.
+- [CORE FLOW OR STATES]: Optional. Max 10 bullets focussed only on internal state/flow that affects majority of project.
 - [ARCHITECTURE MAP]: Optional. Max 7 bullets. Entrypoint + top modules only + purpose. No deep details.
 - Rules: Required only if critical invariants exist in old AGENTS.md or repo docs.
 
@@ -62,5 +62,5 @@ ${cavemanEnglish}
 - NEVER include build/test/deploy recipes.
 - NEVER include long architecture, API docs, data model details, UX details, PRD details, or conventions catalogs.
 - NEVER include directory listings unless tiny Architecture Map.
-- Besides \`AGENTS.md\`, NEVER create or update any other md files.
+- Only write AGENTS.md - NEVER any other md files.
 `

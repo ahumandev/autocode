@@ -181,8 +181,6 @@ Replace placeholders in README.md as follows:
     - Format examples with proper markdown block formatting where appropriate
     - If different deployment environments are supported (e.g. local vs docker): Organize in sub-sections
     - Only include this section if production deployment is different from [LOCAL SETUP STEPS]
-- [ACRONYMS]: Internal project-specific acronyms
-- [DEFINITIONS]: Domain-specific terms and definitions
 
 ## Rules for Updates
 - If current README.md already follows this layout, only update outdated or missing sections
