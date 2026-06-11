@@ -253,11 +253,11 @@ const baseAgents: AgentMap = {
             "*": "deny",
             "autocode_criteria_*": "allow",
             autocode_agent_swap: "allow",
+            autocode_dependencies: "allow",
             autocode_job_status: "allow",
             autocode_sandbox_create: "ask",
             autocode_sandbox_delete: "allow",
             edit: "allow",
-            plan_enter: "allow",
             question: "allow",
             read: "allow",
             task: {

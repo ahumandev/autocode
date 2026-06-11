@@ -287,6 +287,16 @@ describe("auto resume wiring", () => {
         expect(cfg.command["job-design"]?.template).toContain("autocode_concept_list")
     })
 
+    test("allows assist to call dependency checks", async () => {
+        const plugin = await autocode(createPluginInput(createMockClient()))
+        const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
+
+        await configurePlugin(plugin, cfg)
+
+        expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_dependencies")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
+    })
+
     test("applies native external_directory rules before agent-specific fallback", async () => {
         const plugin = await autocode(createPluginInput(createMockClient()))
         const cfg: ConfigWithRuntimeSections = {
@@ -429,7 +439,8 @@ describe("auto resume wiring", () => {
         const sandboxRead = tools.autocode_sandbox_read as unknown as { description: string, args: Record<string, unknown> }
         const sandboxCopy = tools.autocode_sandbox_copy as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]))
+        expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
         expect(sandboxCreate.description).toContain("Create")
         expect(sandboxCreate.description).toContain("Omit `distro` for fast startup using read-only host OS filesystem mounts. Use `alpine` for isolated OS/installation testing and experimentation. Use `debian` when Alpine is incompatible with project dependencies or glibc expectations.")
@@ -1155,6 +1166,7 @@ describe("autocode_plan_save tool", () => {
             "autocode_criteria_remove",
             "autocode_criteria_set",
             "autocode_db_schemas",
+            "autocode_dependencies",
             "autocode_sandbox_cli",
             "autocode_sandbox_copy",
             "autocode_sandbox_create",
@@ -1213,6 +1225,8 @@ describe("autocode_plan_save tool", () => {
         expect(plugin.tool?.autocode_db_table).toBeDefined()
         expect(plugin.tool?.autocode_db_table_read).toBeDefined()
         expect(plugin.tool?.autocode_db_tables).toBeDefined()
+        expect(plugin.tool?.autocode_dependencies).toBeDefined()
+        expect(toolSurfaceText(plugin.tool?.autocode_dependencies)).toContain("Detect Autocode runtime dependencies")
         expect(plugin.tool?.autocode_revise_job).toBeUndefined()
         expect(plugin.tool?.autocode_criteria_set).toBeDefined()
         expect(plugin.tool?.autocode_criteria_accept).toBeDefined()
@@ -1259,6 +1273,8 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_agent_swap")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_session_create")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_dependencies")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto_general?.permission, "*")).toBe("allow")
         expect(getPermissionRule(cfg.agent.auto_general?.permission, "doom_loop")).toBe("deny")
         expect(getPermissionRule(cfg.agent.auto_general?.permission, "task_resume")).toBe("allow")

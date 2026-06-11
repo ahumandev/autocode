@@ -6,6 +6,7 @@ import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptReadTool } from "./autocode_concept_read"
 import { createAutocodeCriteriaAcceptTool, createAutocodeCriteriaListTool, createAutocodeCriteriaRemoveTool, createAutocodeCriteriaSetTool } from "./autocode_criteria"
 import { createAutocodeDbSchemasTool, createAutocodeDbTableReadTool, createAutocodeDbTableTool, createAutocodeDbTablesTool } from "./autocode_db"
+import { createAutocodeDependenciesTool } from "./autocode_dependencies"
 import { createAutocodeJobExecuteTool } from "./autocode_job_execute"
 import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createAutocodeJobStatusTool } from "./autocode_job_status"
@@ -34,6 +35,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_db_table_read: createAutocodeDbTableReadTool(),
         autocode_db_table: createAutocodeDbTableTool(),
         autocode_db_tables: createAutocodeDbTablesTool(),
+        autocode_dependencies: createAutocodeDependenciesTool(),
         autocode_job_list: createAutocodeJobListTool(),
         autocode_job_execute: createAutocodeJobExecuteTool(client),
         autocode_job_status: createAutocodeJobStatusTool(client),

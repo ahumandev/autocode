@@ -20,6 +20,7 @@ describe("commands", () => {
             "document-ux",
             "git-commit",
             "git-conflict",
+            "install",
             "init",
             "new-assist",
             "new-auto",
@@ -66,6 +67,39 @@ describe("commands", () => {
         expect(commands["job-terminate"]?.template).toContain("Call `autocode_job_status` with `status: 'terminated'`")
         expect(commands["init"]?.template).toContain("Task subagents in parallel: `document_conventions`, `document_code`, `document_install`, `document_prd`")
         expect(commands["resume"]?.template).toContain("Call `task_resume` tool")
+    })
+
+    test("keeps init documentation-only", () => {
+        const template = commands.init?.template ?? ""
+
+        expect(commands.init?.agent).toBe("execute_document")
+        expect(template).toContain("Task subagents in parallel: `document_conventions`, `document_code`, `document_install`, `document_prd`")
+        expect(template).toContain("Use `author-readme` skill to update `README.md` using collected reports")
+        expect(template).toContain("Only task `document_agents` *AFTER*")
+        expect(template).not.toContain("autocode_dependencies")
+        expect(template).not.toContain("preflight")
+        expect(template).not.toContain("bwrap")
+        expect(template).not.toContain("opencode upgrade")
+    })
+
+    test("keeps install dependency remediation-only", () => {
+        const template = commands.install?.template ?? ""
+
+        expect(commands.install?.agent).toBe("assist")
+        expect(template).toContain("Call `autocode_dependencies` first.")
+        expect(template).toContain("If there are no issues, report dependencies OK and stop.")
+        expect(template).toContain("suggested `opencode upgrade` command")
+        expect(template).toContain("bwrap install is needed")
+        expect(template).toContain("dangerous-operation/manual confirmation rules")
+        expect(template).toContain("rerun `autocode_dependencies` and report remaining issues")
+        expect(template).toContain("Do not perform documentation tasks")
+        expect(template).toContain("do not task any `document_*` subagents")
+        expect(template).not.toContain("document_conventions")
+        expect(template).not.toContain("document_code")
+        expect(template).not.toContain("document_install")
+        expect(template).not.toContain("document_prd")
+        expect(template).not.toContain("document_ux")
+        expect(template).not.toContain("README")
     })
 
     test("keeps duplicated new session command template intent", () => {

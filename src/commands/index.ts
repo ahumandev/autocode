@@ -227,6 +227,19 @@ Base your git commit message on the following:
         template: `$ARGUMENTS`
     },
 
+    "install": {
+        agent: "assist",
+        description: "Install or remediate Autocode runtime dependencies.",
+        subtask: false,
+        template: `
+1. Call \`autocode_dependencies\` first.
+2. If there are no issues, report dependencies OK and stop.
+3. If OpenCode upgrade is needed, run safe remediation using the appropriate subagent/command with the suggested \`opencode upgrade\` command.
+4. If bwrap install is needed, then: install it according from host os package manager (see https://github.com/containers/bubblewrap details)
+5. After remediation, rerun \`autocode_dependencies\` and report remaining issues.
+`
+    },
+
     "init": {
         agent: "execute_document",
         description: "Document the entire project.",

@@ -128,5 +128,7 @@ describe("agent policies", () => {
         }))
         expect(agents.auto?.tier).toBe("smart")
         expect(agents.assist?.tier).toBe("balanced")
+        expect(permissionRule(agents.assist?.permission, "autocode_dependencies")).toBe("allow")
+        expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
     })
 })
