@@ -58,6 +58,16 @@ describe("commands", () => {
         }
     })
 
+    test("keeps key command template substrings stable", () => {
+        expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
+        expect(commands["job-draft"]?.template).toContain("Call `autocode_plan_save` tool with planned sections: PROBLEMS, REQUIREMENTS, CONSTRAINTS, RISKS, and user chosen PROPOSAL.")
+        expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_swap` with `agent` set to the selected agent.")
+        expect(commands["job-review"]?.template).toContain("Call `autocode_criteria_list` tool, if output show any unmet criteria")
+        expect(commands["job-terminate"]?.template).toContain("Call `autocode_job_status` with `status: 'terminated'`")
+        expect(commands["init"]?.template).toContain("Task subagents in parallel: `document_conventions`, `document_code`, `document_install`, `document_prd`")
+        expect(commands["resume"]?.template).toContain("Call `task_resume` tool")
+    })
+
     test("keeps duplicated new session command template intent", () => {
         const sessionCommands = {
             "new-assist": { agent: "assist", response: "Assist task execution session" },
@@ -79,8 +89,10 @@ describe("commands", () => {
         const command = commands["repeat-as-md"]
 
         expect(command?.agent).toBe("assist")
+        expect(command?.description).toBe("Repeat the last response inside a fenced Markdown code block.")
         expect(command?.subtask).toBe(false)
         expect(command?.template).toContain("Repeat your last response wrapped in markdown codeblock")
         expect(command?.template).toContain("Last response goes here")
+        expect(command?.template).not.toContain("fenced Markdown code block")
     })
 })

@@ -172,8 +172,6 @@ AutoCode can inspect environment-configured databases through read-only tools an
 - All database access is read-only.
 - Reads are limited to a single table at a time.
 - Identifiers must be simple schema, table, or field names.
-- `autocode_db_table_read` supports `fields`, `filters`, `limit`, and one sort key.
-- `limit` accepts `1` to `100` and defaults to `7`.
 - Supported filter operators are `=`, `!=`, `<`, `<=`, `>`, `>=`, `like`, `in`, and `is_null`.
 
 ## Configuration
@@ -237,7 +235,7 @@ OpenCode applies a last-matching-rule-wins model to external-directory permissio
 | `AUTOCODE_DB_{db_key}_USERNAME`   | Optional username supplied alongside the connection when needed.                                                      | Unset.  |
 | `AUTOCODE_DB_{db_key}_PASSWORD`   | Optional password supplied alongside the connection when needed.                                                      | Unset.  |
 
-Replace `{db_key}` with letters, digits, or underscores. Environment lookup is case-insensitive at the tool input level and is normalised to uppercase for variable names.
+Replace `{db_key}` with letters, digits, or underscores. Environment lookup is case-insensitive. Then instruct agent to use your chosen `{db_key}` to access your DB.
 
 ## Development
 

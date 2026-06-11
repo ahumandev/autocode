@@ -81,6 +81,25 @@ describe("agent policies", () => {
         expect(permissionRule(agents.unrelated?.permission, "autocode_sandbox_cli")).toBeUndefined()
     })
 
+    test("keeps sandbox permissions unchanged on supported sandbox platforms", () => {
+        const agents = applySandboxPlatformPolicy({
+            execute_sandbox: {
+                permission: {
+                    autocode_sandbox_cli: "allow",
+                },
+            },
+            wildcard_sandbox: {
+                permission: {
+                    "autocode_sandbox_*": "allow",
+                },
+            },
+        }, { platform: "linux", bwrapUsable: true })
+
+        expect(agents.execute_sandbox?.disable).toBeUndefined()
+        expect(permissionRule(agents.execute_sandbox?.permission, "autocode_sandbox_cli")).toBe("allow")
+        expect(permissionRule(agents.wildcard_sandbox?.permission, "autocode_sandbox_*")).toBe("allow")
+    })
+
     test("execute_sandbox allows native sandbox file tools", () => {
         const agents = buildAgents()
 
@@ -95,6 +114,10 @@ describe("agent policies", () => {
             "/configured/*": "allow",
         })
 
+        expect(agents.assist?.mode).toBe("primary")
+        expect(agents.auto?.mode).toBe("primary")
+        expect(agents.execute_sandbox?.mode).toBe("subagent")
+        expect(agents.temp_session?.permission).toEqual(expect.objectContaining({ autocode_session_create: "allow" }))
         expect(permissionRule(agents.design?.permission, "external_directory")).toEqual(expect.objectContaining({
             "*": "ask",
             "/configured/*": "allow",
