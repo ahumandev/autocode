@@ -15,6 +15,7 @@ import { createAutocodePlanSaveTool } from "./autocode_plan_save"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
+import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
 import { createTaskResumeTool } from "./task_resume"
@@ -40,8 +41,13 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_plan_read: createAutocodePlanReadTool(client),
         autocode_plan_save: createAutocodePlanSaveTool(client),
         autocode_sandbox_cli: createAutocodeSandboxCliTool(client),
+        autocode_sandbox_copy: createAutocodeSandboxCopyTool(client),
         autocode_sandbox_create: createAutocodeSandboxCreateTool(client, undefined, sandboxConfig),
         autocode_sandbox_delete: createAutocodeSandboxDeleteTool(client),
+        autocode_sandbox_edit: createAutocodeSandboxEditTool(client),
+        autocode_sandbox_glob: createAutocodeSandboxGlobTool(client),
+        autocode_sandbox_grep: createAutocodeSandboxGrepTool(client),
+        autocode_sandbox_read: createAutocodeSandboxReadTool(client),
         autocode_session_create: createAutocodeSessionCreateTool(client),
         task_external: createTaskExternalTool(),
         task_resume: createTaskResumeTool(client),

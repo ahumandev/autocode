@@ -423,8 +423,14 @@ describe("auto resume wiring", () => {
         const sandboxCreate = tools.autocode_sandbox_create as unknown as { description: string, args: Record<string, unknown> }
         const sandboxCli = tools.autocode_sandbox_cli as unknown as { description: string, args: Record<string, unknown> }
         const sandboxDelete = tools.autocode_sandbox_delete as unknown as { description: string }
+        const sandboxEdit = tools.autocode_sandbox_edit as unknown as { description: string, args: Record<string, unknown> }
+        const sandboxGlob = tools.autocode_sandbox_glob as unknown as { description: string, args: Record<string, unknown> }
+        const sandboxGrep = tools.autocode_sandbox_grep as unknown as { description: string, args: Record<string, unknown> }
+        const sandboxRead = tools.autocode_sandbox_read as unknown as { description: string, args: Record<string, unknown> }
+        const sandboxCopy = tools.autocode_sandbox_copy as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]))
+        expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
         expect(sandboxCreate.description).toContain("Create")
         expect(sandboxCreate.description).toContain("Omit `distro` for fast startup using read-only host OS filesystem mounts. Use `alpine` for isolated OS/installation testing and experimentation. Use `debian` when Alpine is incompatible with project dependencies or glibc expectations.")
         expect(toolSurfaceText(sandboxCreate)).toContain("Enable sandbox network access; defaults to false.")
@@ -437,19 +443,30 @@ describe("auto resume wiring", () => {
         expect(toolSurfaceText(sandboxCli)).not.toContain("share-net")
         expect(toolSurfaceText(sandboxCli)).not.toContain("sync_method")
         expect(sandboxDelete.description).toContain("Delete")
+        expect(Object.keys(sandboxEdit.args)).toEqual(["sandbox_name", "path", "oldString", "newString", "replaceAll"])
+        expect(Object.keys(sandboxGlob.args)).toEqual(["sandbox_name", "pattern", "path", "limit"])
+        expect(Object.keys(sandboxGrep.args)).toEqual(["sandbox_name", "pattern", "path", "include", "limit"])
+        expect(Object.keys(sandboxRead.args)).toEqual(["sandbox_name", "path", "offset", "limit"])
+        expect(Object.keys(sandboxCopy.args)).toEqual(["sandbox_name", "local_source", "local_target", "sandbox_source", "sandbox_target"])
+        expect(sandboxEdit.description).toContain("Edit")
+        expect(sandboxGlob.description).toContain("Find")
+        expect(sandboxGrep.description).toContain("Search")
+        expect(sandboxRead.description).toContain("Read")
+        expect(sandboxCopy.description).toContain("Copy")
     })
 
     test("unsupported sandbox policy disables execute_sandbox and denies explicit sandbox permissions", () => {
         const agents = applySandboxPlatformPolicy({
-            auto: { permission: { "*": "allow", autocode_sandbox_create: "allow", autocode_sandbox_cli: "ask", autocode_sandbox_delete: "allow" } },
-            execute_sandbox: { disable: false, permission: { "*": "deny", autocode_sandbox_cli: "allow" } },
+            auto: { permission: { "*": "allow", autocode_sandbox_create: "allow", autocode_sandbox_cli: "ask", autocode_sandbox_delete: "allow", autocode_sandbox_read: "allow" } },
+            execute_sandbox: { disable: false, permission: { "*": "deny", autocode_sandbox_cli: "allow", autocode_sandbox_edit: "allow" } },
         }, "darwin")
 
-        expect(getPermissionRule(agents.auto?.permission as RuntimePermission, "autocode_sandbox_create")).toBe("deny")
-        expect(getPermissionRule(agents.auto?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
-        expect(getPermissionRule(agents.auto?.permission as RuntimePermission, "autocode_sandbox_delete")).toBe("deny")
+        for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]) {
+            expect(getPermissionRule(agents.auto?.permission as RuntimePermission, toolName)).toBe("deny")
+        }
         expect(agents.execute_sandbox?.disable).toBe(true)
         expect(getPermissionRule(agents.execute_sandbox?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
+        expect(getPermissionRule(agents.execute_sandbox?.permission as RuntimePermission, "autocode_sandbox_edit")).toBe("deny")
     })
 
     test("unsupported sandbox policy covers non-linux, android, linux without bwrap, and Termux signals", () => {
@@ -478,14 +495,14 @@ describe("auto resume wiring", () => {
 
         expect(getPermissionRule(agents.wildcard?.permission as RuntimePermission, "*")).toBe("allow")
         expect(getPermissionRule(agents.wildcard?.permission as RuntimePermission, "read")).toBe("allow")
-        expect(getPermissionRule(agents.wildcard?.permission as RuntimePermission, "autocode_sandbox_create")).toBe("deny")
-        expect(getPermissionRule(agents.wildcard?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
-        expect(getPermissionRule(agents.wildcard?.permission as RuntimePermission, "autocode_sandbox_delete")).toBe("deny")
+        for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]) {
+            expect(getPermissionRule(agents.wildcard?.permission as RuntimePermission, toolName)).toBe("deny")
+        }
         expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, "autocode_sandbox_*")).toBe("allow")
         expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, "autocode_criteria_*")).toBe("allow")
-        expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, "autocode_sandbox_create")).toBe("deny")
-        expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
-        expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, "autocode_sandbox_delete")).toBe("deny")
+        for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]) {
+            expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, toolName)).toBe("deny")
+        }
         expect(getPermissionRule(agents.stringPermission?.permission as RuntimePermission, "*")).toBe("ask")
         expect(getPermissionRule(agents.stringPermission?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
     })
@@ -1139,8 +1156,13 @@ describe("autocode_plan_save tool", () => {
             "autocode_criteria_set",
             "autocode_db_schemas",
             "autocode_sandbox_cli",
+            "autocode_sandbox_copy",
             "autocode_sandbox_create",
             "autocode_sandbox_delete",
+            "autocode_sandbox_edit",
+            "autocode_sandbox_glob",
+            "autocode_sandbox_grep",
+            "autocode_sandbox_read",
             "autocode_session_create",
             "task_external",
             "task_resume",

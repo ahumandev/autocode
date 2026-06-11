@@ -1,10 +1,10 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolContext } from "@opencode-ai/plugin"
-import { Cause, Effect, Exit } from "effect"
 import { spawn as nodeSpawn } from "child_process"
 import { realpath as nodeRealpath, stat as nodeStat } from "fs/promises"
 import { isAbsolute, resolve } from "path"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
+import { authorizeToolAsk } from "@/utils/tool_permission"
 
 type RunResult = {
     stdout: string
@@ -146,37 +146,6 @@ async function resolveTargetDirectory(
     }
 }
 
-function isPromiseLike(value: unknown): value is PromiseLike<void> {
-    return typeof value === "object" && value !== null && typeof (value as PromiseLike<void>).then === "function"
-}
-
-async function authorizeExternalDirectory(authorization: unknown): Promise<void> {
-    if (Effect.isEffect(authorization)) {
-        const exit = await Effect.runPromiseExit(authorization as Effect.Effect<void>)
-        if (Exit.isSuccess(exit)) {
-            return
-        }
-
-        const reason = exit.cause.reasons[0]
-        if (reason && Cause.isFailReason(reason)) {
-            throw reason.error
-        }
-
-        if (reason && Cause.isDieReason(reason)) {
-            throw reason.defect
-        }
-
-        throw exit.cause
-    }
-
-    if (isPromiseLike(authorization)) {
-        await authorization
-        return
-    }
-
-    throw new Error("Tool context ask() returned a non-promise result")
-}
-
 function createExternalDirectoryAuthorizationRequest(
     canonicalTargetDirectory: string,
     requestedTargetDirectory: string,
@@ -286,7 +255,7 @@ export function createTaskProjectTool(deps: TaskProjectDependencies = defaultDep
                     resolvedTargetDirectory,
                 ))
 
-                await authorizeExternalDirectory(authorization)
+                await authorizeToolAsk(authorization)
             }
             catch (error) {
                 return createAbortResponse("authorize external directory", error)

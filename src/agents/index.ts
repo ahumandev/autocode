@@ -1,4 +1,4 @@
-import type { AgentConfig, PermissionConfig } from "@opencode-ai/sdk/v2"
+import type { AgentConfig } from "@opencode-ai/sdk/v2"
 import type { ExternalDirectoryRules, ModelTier, PermissionAction } from "@/config"
 import { isSandboxPlatformSupported, type SandboxPlatformSupportOptions } from "@/utils/sandbox"
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
@@ -42,19 +42,32 @@ import { tempConceptPrompt } from "./prompts/temp_concept";
 import { tempManualPrompt } from "./prompts/temp_manual";
 import { tempReportPrompt } from "@/agents/prompts/temp_report";
 `.agents/jobs/facilitate`
-type AgentConfigWithTier = AgentConfig & { permission?: PermissionConfig, tier?: ModelTier }
+type PermissionTargetRules = Record<string, PermissionAction>
+type AutocodePermissionRule = PermissionAction | PermissionTargetRules
+type AutocodeTaskPermissionRules = Record<string, AutocodePermissionRule>
+type AutocodePermissionObject = {
+    task?: PermissionAction | AutocodeTaskPermissionRules
+    [key: string]: AutocodePermissionRule | AutocodeTaskPermissionRules | undefined
+}
+export type AutocodeAgentConfig = Omit<AgentConfig, "permission"> & { permission?: PermissionAction | AutocodePermissionObject, tier?: ModelTier }
+type AgentConfigWithTier = AutocodeAgentConfig
 type AgentMap = Record<string, AgentConfigWithTier>
-type PermissionObject = Exclude<PermissionConfig, PermissionAction>
+type PermissionObject = AutocodePermissionObject
 type SandboxPlatformPolicyOptions = NodeJS.Platform | SandboxPlatformSupportOptions
 
-const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete"] as const
+const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"] as const
 
-function hasAskCapableQuestionPermission(permission: PermissionConfig | undefined): boolean {
+function hasAskCapableQuestionPermission(permission: AutocodeAgentConfig["permission"]): boolean {
     if (!permission || typeof permission === "string") {
         return false
     }
 
     return permission.question === "ask" || permission.question === "allow"
+}
+
+const sandboxCopyTargetPermission: PermissionTargetRules = {
+    sandbox_target: "allow",
+    local_target: "allow",
 }
 
 function isPermissionAction(action: unknown): action is PermissionAction {
@@ -359,7 +372,6 @@ const baseAgents: AgentMap = {
             git_git_status: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             question: "allow",
             read: "allow",
@@ -394,6 +406,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_sandbox_create: "ask",
+            autocode_sandbox_delete: "allow",
             "context7*": "allow",
             doom_loop: "ask",
             external_directory: "ask",
@@ -404,10 +418,9 @@ const baseAgents: AgentMap = {
             },
             task: {
                 "*": "deny",
-                autocode_sandbox_create: "ask",
-                autocode_sandbox_delete: "allow",
                 execute_code: "allow",
                 execute_debug: "allow",
+                execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 "query*": "allow",
@@ -428,6 +441,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_sandbox_copy: sandboxCopyTargetPermission,
+            autocode_sandbox_delete: "allow",
             doom_loop: "ask",
             skill: {
                 "*": "deny",
@@ -436,12 +451,11 @@ const baseAgents: AgentMap = {
             },
             task: {
                 "*": "deny",
-                autocode_sandbox_create: "allow",
-                autocode_sandbox_delete: "allow",
                 auto_test: "allow",
                 auto_troubleshoot: "allow",
                 execute_code: "allow",
                 execute_os: "allow",
+                execute_sandbox: "allow",
                 query_code: "allow",
                 query_git: "allow",
                 query_text: "allow"
@@ -490,6 +504,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_sandbox_create: "allow",
+            autocode_sandbox_delete: "allow",
             doom_loop: "deny",
             skill: {
                 "*": "deny",
@@ -498,9 +514,8 @@ const baseAgents: AgentMap = {
             },
             task: {
                 "*": "deny",
-                autocode_sandbox_create: "allow",
-                autocode_sandbox_delete: "allow",
                 execute_code: "allow",
+                execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 query_code: "allow",
@@ -541,12 +556,13 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_sandbox_create: "allow",
+            autocode_sandbox_delete: "allow",
             doom_loop: "deny",
             task: {
                 "*": "deny",
-                autocode_sandbox_create: "allow",
-                autocode_sandbox_delete: "allow",
                 execute_code: "allow",
+                execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 query_architect: "allow",
@@ -569,12 +585,13 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_sandbox_create: "allow",
+            autocode_sandbox_delete: "allow",
             doom_loop: "deny",
             task: {
                 "*": "deny",
-                autocode_sandbox_create: "allow",
-                autocode_sandbox_delete: "allow",
                 execute_code: "allow",
+                execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 query_architect: "allow",
@@ -598,6 +615,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_sandbox_create: "allow",
+            autocode_sandbox_delete: "allow",
             doom_loop: "deny",
             edit: "allow",
             skill: {
@@ -606,9 +625,8 @@ const baseAgents: AgentMap = {
             },
             task: {
                 "*": "deny",
-                autocode_sandbox_create: "allow",
-                autocode_sandbox_delete: "allow",
                 execute_code: "allow",
+                execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 query_code: "allow",
@@ -629,14 +647,15 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_sandbox_create: "allow",
+            autocode_sandbox_delete: "allow",
             "context7*": "allow",
             doom_loop: "deny",
             task: {
                 "*": "deny",
-                autocode_sandbox_create: "allow",
-                autocode_sandbox_delete: "allow",
                 execute_code: "allow",
                 execute_debug: "allow",
+                execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 "query*": "allow",
@@ -662,7 +681,6 @@ const baseAgents: AgentMap = {
             edit: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             read: "allow",
             skill: {
                 "*": "deny",
@@ -685,7 +703,6 @@ const baseAgents: AgentMap = {
             edit: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
             skill: {
@@ -709,7 +726,6 @@ const baseAgents: AgentMap = {
             edit: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
             skill: {
@@ -733,7 +749,6 @@ const baseAgents: AgentMap = {
             edit: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             read: "allow",
             skill: {
                 "*": "deny",
@@ -756,7 +771,6 @@ const baseAgents: AgentMap = {
             edit: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
             skill: {
@@ -780,7 +794,6 @@ const baseAgents: AgentMap = {
             edit: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
             skill: {
@@ -806,7 +819,6 @@ const baseAgents: AgentMap = {
             edit: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             read: "allow",
             skill: {
                 "*": "deny",
@@ -831,7 +843,6 @@ const baseAgents: AgentMap = {
             "intellij_*": "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
             skill: {
@@ -857,7 +868,6 @@ const baseAgents: AgentMap = {
             "intellij_*": "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
             "todo*": "allow"
@@ -954,12 +964,12 @@ const baseAgents: AgentMap = {
             "filesystem*": "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             "pty*": "allow",
             read: "allow",
             skill: {
                 "*": "deny",
                 "execute-install": "allow",
+                "execute-sandbox": "allow",
             },
             "todo*": "allow",
         },
@@ -975,10 +985,16 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_sandbox_cli: "allow",
+            autocode_sandbox_copy: sandboxCopyTargetPermission,
+            autocode_sandbox_edit: "allow",
+            autocode_sandbox_glob: "allow",
+            autocode_sandbox_grep: "allow",
+            autocode_sandbox_read: "allow",
             doom_loop: "deny",
             skill: {
                 "*": "deny",
                 "execute-install": "allow",
+                "execute-sandbox": "allow",
             },
             "todo*": "allow",
         },
@@ -994,8 +1010,11 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_sandbox_cli: "allow",
-            autocode_sandbox_create: "allow",
-            autocode_sandbox_delete: "allow",
+            autocode_sandbox_copy: sandboxCopyTargetPermission,
+            autocode_sandbox_edit: "allow",
+            autocode_sandbox_glob: "allow",
+            autocode_sandbox_grep: "allow",
+            autocode_sandbox_read: "allow",
             bash: "allow",
             doom_loop: "deny",
             edit: "allow",
@@ -1003,12 +1022,12 @@ const baseAgents: AgentMap = {
             glob: "allow",
             grep: "allow",
             "intellij_*": "allow",
-            list: "allow",
             "pty*": "allow",
             read: "allow",
             skill: {
                 "*": "deny",
                 "execute-install": "allow",
+                "execute-sandbox": "allow",
             },
             "todo*": "allow",
             webfetch: "allow",
@@ -1069,7 +1088,6 @@ const baseAgents: AgentMap = {
             glob: "allow",
             grep: "allow",
             "intellij_read*": "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
             skill: {
@@ -1111,7 +1129,6 @@ const baseAgents: AgentMap = {
             "excel_read*": "allow",
             "excel_validate*": "allow",
             glob: "allow",
-            list: "allow",
         },
         prompt: queryExcelPrompt,
         temperature: 0.1,
@@ -1133,7 +1150,6 @@ const baseAgents: AgentMap = {
             git_git_status: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             read: "allow",
         },
         prompt: queryGitPrompt,
@@ -1153,7 +1169,6 @@ const baseAgents: AgentMap = {
             external_directory: "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
         },
@@ -1173,7 +1188,6 @@ const baseAgents: AgentMap = {
             "intellij_read*": "allow",
             glob: "allow",
             grep: "allow",
-            list: "allow",
             lsp: "allow",
             read: "allow",
             skill: {
@@ -1280,7 +1294,7 @@ export function buildAgents(externalDirectories: ExternalDirectoryRules = {}): A
     return applyBundledAgentPolicy(baseAgents, externalDirectories)
 }
 
-export function getAgentPermission(agentName: string, externalDirectories: ExternalDirectoryRules = {}): PermissionConfig | undefined {
+export function getAgentPermission(agentName: string, externalDirectories: ExternalDirectoryRules = {}): AutocodeAgentConfig["permission"] {
     return buildAgents(externalDirectories)[agentName]?.permission
 }
 

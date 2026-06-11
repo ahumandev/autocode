@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { homedir } from "os"
 import { join } from "path"
 import { applyExternalDirectoryPolicy, buildAgents } from "./agents"
+import type { AutocodeAgentConfig } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig } from "./config"
 import type { ConfigFileSystem } from "./config"
-import type { PermissionConfig } from "@opencode-ai/sdk/v2"
 
 function makeFs(files: Record<string, string>, createdPaths: string[] = [], readPaths: string[] = []): ConfigFileSystem {
     return {
@@ -28,7 +28,7 @@ function globalAutocodeConfigPath(): string {
     return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode", "autocode.jsonc")
 }
 
-function getPermissionRule(permission: PermissionConfig | undefined, key: string): unknown {
+function getPermissionRule(permission: AutocodeAgentConfig["permission"] | undefined, key: string): unknown {
     if (!permission || typeof permission === "string") {
         return undefined
     }
@@ -36,7 +36,7 @@ function getPermissionRule(permission: PermissionConfig | undefined, key: string
     return (permission as Record<string, unknown>)[key]
 }
 
-function getTaskPermissionRule(permission: PermissionConfig | undefined, key: string): unknown {
+function getTaskPermissionRule(permission: AutocodeAgentConfig["permission"] | undefined, key: string): unknown {
     if (!permission || typeof permission === "string") {
         return undefined
     }

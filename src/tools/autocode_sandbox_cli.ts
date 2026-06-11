@@ -115,7 +115,7 @@ async function validateRootfsMetadata(deps: SandboxDependencies, paths: SandboxP
     return { ok: true, rootfsPath: safeRootfsPath.value }
 }
 
-async function createCommand(deps: SandboxDependencies, metadata: SandboxMetadata, workingDir: string, command: string): Promise<{ command: string, args: string[] } | undefined> {
+async function createCommand(deps: SandboxDependencies, metadata: SandboxMetadata, projectRoot: string, workingDir: string, command: string): Promise<{ command: string, args: string[] } | undefined> {
     if (metadata.backend !== "bubblewrap") return undefined
 
     const sandboxHome = path.join(metadata.root_path, "home")
@@ -159,6 +159,7 @@ async function createCommand(deps: SandboxDependencies, metadata: SandboxMetadat
         await addOptionalBubblewrapReadOnlyBind(deps, args, "/etc/resolv.conf")
     }
 
+    addBubblewrapBind(args, projectRoot, "/workspace", true)
     addBubblewrapBind(args, metadata.root_path, "/sandbox", false)
     if (await pathExists(deps, sandboxHome)) addBubblewrapBind(args, sandboxHome, "/home", false)
     args.push("--chdir", workingDir, "/bin/sh", "-lc", command)
@@ -234,7 +235,7 @@ export function createAutocodeSandboxCliTool(client?: OpencodeClient, deps: Sand
                     if (!rootfsMetadata.ok) return JSON.stringify({ ok: false, status: "invalid_metadata", backend: metadata.backend, reason: rootfsMetadata.reason, guidance: limitationGuidance })
                     metadata.backend_data.rootfs_path = rootfsMetadata.rootfsPath
                 }
-                const command = await createCommand(deps, metadata, workingDir.value, commandText)
+                const command = await createCommand(deps, metadata, job.storageRoot, workingDir.value, commandText)
                 if (!command) return JSON.stringify({ ok: false, status: "unsupported", backend: metadata.backend, reason: "Sandbox backend metadata is unsupported or incomplete; bubblewrap metadata is required.", guidance: limitationGuidance })
 
                 const lockPath = path.join(paths.sandboxPath, ".autocode_run_lock")

@@ -1,12 +1,16 @@
 import { describe, expect, mock, test } from "bun:test"
 import { EventEmitter } from "events"
 import type { Dirent } from "fs"
+import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "fs/promises"
+import { tmpdir } from "os"
+import path from "path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { getSandboxPaths, type SandboxDependencies } from "@/utils/sandbox"
-import { createToolContext } from "./test_context"
+import { createAskEffect, createToolContext } from "./test_context"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
+import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 
 type FakeChild = EventEmitter & { stdout: EventEmitter & { setEncoding: (encoding: string) => void }, stderr: EventEmitter & { setEncoding: (encoding: string) => void }, pid: number, kill: ReturnType<typeof mock> }
 
@@ -24,8 +28,16 @@ function dirent(name: string): Dirent {
     return { name, isDirectory: () => true, isFile: () => false } as Dirent
 }
 
-function createClient(title = "My Feature"): OpencodeClient {
-    return { session: { get: mock(async () => ({ data: { id: "session-1", title, directory: "/workspace" } })) } } as unknown as OpencodeClient
+function createClient(title = "My Feature", directory = "/workspace"): OpencodeClient {
+    return { session: { get: mock(async () => ({ data: { id: "session-1", title, directory } })) } } as unknown as OpencodeClient
+}
+
+function createProjectToolContext(projectRoot: string): ReturnType<typeof createToolContext> {
+    return { ...createToolContext(), directory: projectRoot, worktree: projectRoot }
+}
+
+function hasBindTriple(args: readonly string[], flag: string, source: string, target: string): boolean {
+    return args.some((arg, index) => arg === flag && args[index + 1] === source && args[index + 2] === target)
 }
 
 function createDeps(options?: { existing?: string[], files?: Record<string, string>, platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, fetchOk?: boolean, spawnExit?: number }): SandboxDependencies & { spawnProcess: ReturnType<typeof mock> } {
@@ -95,6 +107,30 @@ function createChild(_command: string, _args: string[]): FakeChild {
 
 function createBubblewrapMetadata(paths: ReturnType<typeof getSandboxPaths>, backendData: Record<string, string | number | boolean | undefined> = { bwrap: "bwrap" }): string {
     return JSON.stringify({ sandbox_name: paths.sandboxName, job_name: paths.jobName, distro: "alpine", backend: "bubblewrap", root_path: paths.sandboxPath, backend_data: backendData })
+}
+
+function createRealDeps(): SandboxDependencies {
+    return {
+        fileSystem: { mkdir, readFile: readFile as SandboxDependencies["fileSystem"]["readFile"], readdir: readdir as SandboxDependencies["fileSystem"]["readdir"], rename: async () => { }, rm, stat, writeFile, cp },
+        spawn: mock(async () => ({ exitCode: 0, stdout: "out", stderr: "err" })),
+        commandExists: mock(async (command: string) => command === "bwrap"),
+        fetch: mock(async () => ({ ok: true, status: 200, text: async () => alpineLatestReleasesYaml(), arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer } as Response)),
+        process: { platform: "linux", arch: "arm64", env: {} },
+    }
+}
+
+async function withSandboxFixture<T>(fn: (fixture: { projectRoot: string, paths: ReturnType<typeof getSandboxPaths>, deps: SandboxDependencies, client: OpencodeClient, context: ReturnType<typeof createToolContext> }) => Promise<T>): Promise<T> {
+    const projectRoot = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-tools-"))
+    const paths = getSandboxPaths(projectRoot, "my_feature", "dev")
+    const deps = createRealDeps()
+    try {
+        await mkdir(paths.sandboxPath, { recursive: true })
+        await writeFile(paths.metadataFile, createBubblewrapMetadata(paths))
+        return await fn({ projectRoot, paths, deps, client: createClient("My Feature", projectRoot), context: createProjectToolContext(projectRoot) })
+    }
+    finally {
+        await rm(projectRoot, { recursive: true, force: true })
+    }
 }
 
 describe("autocode sandbox tools", () => {
@@ -293,9 +329,217 @@ describe("autocode sandbox tools", () => {
 
         expect(result).toEqual(expect.objectContaining({ status: "completed", stdout: "stdout", stderr: "stderr", output: "stdoutstderr", exit_code: 0, timed_out: false, success: true }))
         expect(deps.spawnProcess).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--die-with-parent", "--unshare-all", "--new-session", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", "/home", "--dir", "/sandbox", "--bind", paths.sandboxPath, "/sandbox", "--bind", `${paths.sandboxPath}/home`, "/home", "--chdir", "/", "/bin/sh", "-lc", "pwd"]), expect.any(Object))
+        const cliArgs = deps.spawnProcess.mock.calls[0]?.[1] as string[]
+        expect(hasBindTriple(cliArgs, "--ro-bind", "/workspace", "/workspace")).toBe(true)
+        expect(hasBindTriple(cliArgs, "--bind", "/workspace", "/workspace")).toBe(false)
         expect(deps.spawnProcess.mock.calls[0]?.[0]).toBe("bwrap")
         expect(JSON.stringify(deps.spawnProcess.mock.calls)).not.toContain("proot")
     })
+
+    test("rootfs CLI binds project root read-only at /workspace", async () => {
+        const paths = getSandboxPaths("/workspace", "my_feature", "dev")
+        const deps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, `${paths.sandboxPath}/rootfs`], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", rootfs_path: `${paths.sandboxPath}/rootfs`, filesystem_mode: "rootfs" }) }, commands: { bwrap: true } })
+        const tool = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
+
+        await tool.execute({ sandbox_name: "dev", command: "pwd" }, createToolContext())
+
+        const cliArgs = deps.spawnProcess.mock.calls[0]?.[1] as string[]
+        expect(hasBindTriple(cliArgs, "--ro-bind", "/workspace", "/workspace")).toBe(true)
+        expect(hasBindTriple(cliArgs, "--bind", "/workspace", "/workspace")).toBe(false)
+        expect(hasBindTriple(cliArgs, "--bind", `${paths.sandboxPath}/rootfs`, "/")).toBe(true)
+    })
+
+    test("read returns OpenCode-like file pages and directory entries", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {
+        await mkdir(path.join(paths.sandboxPath, "src"), { recursive: true })
+        await writeFile(path.join(paths.sandboxPath, "src/app.ts"), "one\ntwo\nthree")
+        await writeFile(path.join(paths.sandboxPath, "src/a.txt"), "alpha")
+        const tool = createAutocodeSandboxReadTool(client, deps)
+
+        const file = parseResult(await tool.execute({ sandbox_name: "dev", path: "src/app.ts", offset: 2, limit: 1 }, context))
+        const directory = parseResult(await tool.execute({ sandbox_name: "dev", path: "src", limit: 1 }, context))
+
+        expect(file).toEqual({ path: "src/app.ts", type: "file", content: "two", offset: 2, limit: 1, lines: 1, truncated: true })
+        expect(directory).toEqual(expect.objectContaining({ path: "src", type: "directory", entries: [expect.objectContaining({ path: "src/a.txt", type: "file" })] }))
+    }))
+
+    test("edit creates files, replaces exact text, replaces all matches, and retries invalid replacements", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {
+        const tool = createAutocodeSandboxEditTool(client, deps)
+        const created = parseResult(await tool.execute({ sandbox_name: "dev", path: "docs/readme.md", oldString: "", newString: "hello" }, context))
+        const replaced = parseResult(await tool.execute({ sandbox_name: "dev", path: "docs/readme.md", oldString: "ell", newString: "ipp" }, context))
+        await mkdir(path.join(paths.sandboxPath, "docs"), { recursive: true })
+        await writeFile(path.join(paths.sandboxPath, "docs/repeat.md"), "x x x")
+        const replaceAll = parseResult(await tool.execute({ sandbox_name: "dev", path: "docs/repeat.md", oldString: "x", newString: "y", replaceAll: true }, context))
+
+        expect(created).toEqual(expect.objectContaining({ operation: "write", target: "docs/readme.md", path: "docs/readme.md", resource: "sandbox:dev/docs/readme.md", existed: false, replacements: 0 }))
+        expect(replaced).toEqual(expect.objectContaining({ operation: "write", target: "docs/readme.md", resource: "sandbox:dev/docs/readme.md", existed: true, replacements: 1 }))
+        expect(replaceAll).toEqual(expect.objectContaining({ replacements: 3 }))
+        expect(await readFile(path.join(paths.sandboxPath, "docs/repeat.md"), "utf8")).toBe("y y y")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", path: "docs/readme.md", oldString: "same", newString: "same" }, context)).error).toContain("must differ")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", path: "docs/readme.md", newString: "missing" } as never, context)).error).toContain("oldString")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", path: "docs/readme.md", oldString: "missing", newString: "value" }, context)).error).toContain("not found")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", path: "docs/repeat.md", oldString: "y", newString: "z" }, context)).error).toContain("multiple")
+    }))
+
+    test("glob and grep return deterministic sorted limited results", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {
+        await mkdir(path.join(paths.sandboxPath, "src/nested"), { recursive: true })
+        await writeFile(path.join(paths.sandboxPath, "src/b.ts"), "skip\nneedle b")
+        await writeFile(path.join(paths.sandboxPath, "src/a.ts"), "needle a")
+        await writeFile(path.join(paths.sandboxPath, "src/nested/c.txt"), "needle c")
+        const globTool = createAutocodeSandboxGlobTool(client, deps)
+        const grepTool = createAutocodeSandboxGrepTool(client, deps)
+
+        const globbed = parseResult(await globTool.execute({ sandbox_name: "dev", path: "src", pattern: "*.ts", limit: 2 }, context)) as unknown as unknown[]
+        const grepped = parseResult(await grepTool.execute({ sandbox_name: "dev", path: "src", pattern: "needle", include: "**/*.ts", limit: 2 }, context)) as unknown as unknown[]
+
+        expect(globbed).toEqual([expect.objectContaining({ path: "src/a.ts", type: "file" }), expect.objectContaining({ path: "src/b.ts", type: "file" })])
+        expect(grepped).toEqual([expect.objectContaining({ path: "src/a.ts", line: 1, column: 1, text: "needle a" }), expect.objectContaining({ path: "src/b.ts", line: 2, column: 1, text: "needle b" })])
+    }))
+
+    test("file tools reject unsafe paths and symlink traversal outside sandbox", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        await writeFile(path.join(projectRoot, "outside.txt"), "outside")
+        await symlink(path.join(projectRoot, "outside.txt"), path.join(paths.sandboxPath, "escape"))
+        const readTool = createAutocodeSandboxReadTool(client, deps)
+        const editTool = createAutocodeSandboxEditTool(client, deps)
+
+        for (const [value, error] of [
+            ["", "path must be a non-empty relative path."],
+            ["bad\0path", "path must not contain NUL bytes."],
+            ["/absolute", "path must be relative."],
+            ["../escape", "path must not escape its root."],
+            ["workspace/file", "path must not target /workspace; /workspace is a read-only CLI mount only."],
+        ]) {
+            expect(parseResult(await readTool.execute({ sandbox_name: "dev", path: value }, context)).error).toBe(error)
+        }
+        expect(parseResult(await readTool.execute({ sandbox_name: "dev", path: "escape" }, context)).error).toContain("Symlink")
+        expect(parseResult(await editTool.execute({ sandbox_name: "dev", path: "escape", oldString: "outside", newString: "inside" }, context)).error).toContain("Symlink")
+        expect(await realpath(path.join(paths.sandboxPath, "escape"))).toBe(path.join(projectRoot, "outside.txt"))
+    }))
+
+    test("file tools reject tampered metadata root outside job sandbox root", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        const outsideRoot = path.join(projectRoot, "outside-root")
+        await mkdir(outsideRoot, { recursive: true })
+        await writeFile(path.join(outsideRoot, "secret.txt"), "secret")
+        await writeFile(paths.metadataFile, JSON.stringify({ sandbox_name: paths.sandboxName, job_name: paths.jobName, distro: "alpine", backend: "bubblewrap", root_path: outsideRoot, backend_data: { bwrap: "bwrap" } }))
+        const readTool = createAutocodeSandboxReadTool(client, deps)
+
+        const result = parseResult(await readTool.execute({ sandbox_name: "dev", path: "secret.txt" }, context))
+
+        expect(result.ok).toBe(false)
+        expect(result.status).toBe("unsafe_path")
+        expect(String(result.reason)).toContain("inside the current job sandbox root")
+    }))
+
+    test("copy validates source and target selection and copies local/sandbox paths", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        await mkdir(path.join(projectRoot, "local_dir"), { recursive: true })
+        await writeFile(path.join(projectRoot, "local.txt"), "local")
+        await writeFile(path.join(projectRoot, "local_dir/a.txt"), "a")
+        await writeFile(path.join(paths.sandboxPath, "sandbox.txt"), "sandbox")
+        const tool = createAutocodeSandboxCopyTool(client, deps)
+
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt" }, context)).error).toContain("exactly one target")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt", sandbox_source: "sandbox.txt", sandbox_target: "copy.txt" }, context)).error).toContain("Exactly one source")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt", local_target: "other.txt" }, context)).error).toContain("local to local")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt", sandbox_target: "workspace/out.txt" }, context)).error).toContain("/workspace")
+
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt", sandbox_target: "copy.txt" }, context))).toEqual(expect.objectContaining({ operation: "copy", source: "local.txt", target: "copy.txt", resource: "sandbox:dev/copy.txt" }))
+        expect(await readFile(path.join(paths.sandboxPath, "copy.txt"), "utf8")).toBe("local")
+        await tool.execute({ sandbox_name: "dev", sandbox_source: "copy.txt", local_target: "roundtrip.txt" }, context)
+        expect(await readFile(path.join(projectRoot, "roundtrip.txt"), "utf8")).toBe("local")
+        await tool.execute({ sandbox_name: "dev", sandbox_source: "copy.txt", sandbox_target: "nested/copy.txt" }, context)
+        expect(await readFile(path.join(paths.sandboxPath, "nested/copy.txt"), "utf8")).toBe("local")
+        await tool.execute({ sandbox_name: "dev", local_source: "local_dir", sandbox_target: "merged" }, context)
+        await writeFile(path.join(projectRoot, "local_dir/a.txt"), "overwritten")
+        await tool.execute({ sandbox_name: "dev", local_source: "local_dir", sandbox_target: "merged" }, context)
+        expect(await readFile(path.join(paths.sandboxPath, "merged/a.txt"), "utf8")).toBe("overwritten")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt", sandbox_target: "merged" }, context)).error).toContain("file onto existing directory")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local_dir", sandbox_target: "copy.txt" }, context)).error).toContain("directory onto existing file")
+    }))
+
+    test("copy rejects invalid source and target counts before permission request", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        const requests: unknown[] = []
+        await writeFile(path.join(projectRoot, "local.txt"), "local")
+        await writeFile(path.join(paths.sandboxPath, "sandbox.txt"), "sandbox")
+        const tool = createAutocodeSandboxCopyTool(client, deps)
+        const askContext = { ...context, ask: createAskEffect((request) => { requests.push(request) }) }
+
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", sandbox_target: "copy.txt" }, askContext)).error).toContain("Exactly one source")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt", sandbox_source: "sandbox.txt", sandbox_target: "copy.txt" }, askContext)).error).toContain("Exactly one source")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt" }, askContext)).error).toContain("exactly one target")
+        expect(parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt", local_target: "other.txt", sandbox_target: "copy.txt" }, askContext)).error).toContain("exactly one target")
+        expect(requests).toEqual([])
+    }))
+
+    test("copy permission request picks sandbox_target for local source", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        const requests: unknown[] = []
+        await writeFile(path.join(projectRoot, "local.txt"), "local")
+        const tool = createAutocodeSandboxCopyTool(client, deps)
+
+        await tool.execute({ sandbox_name: "dev", local_source: "local.txt", sandbox_target: "copy.txt" }, { ...context, ask: createAskEffect((request) => { requests.push(request) }) })
+
+        expect(requests).toEqual([expect.objectContaining({
+            permission: "autocode_sandbox_copy",
+            patterns: ["sandbox_target"],
+            always: ["sandbox_target"],
+            metadata: expect.objectContaining({ target_type: "sandbox_target" }),
+        })])
+        expect(requests).toEqual([expect.not.objectContaining({ metadata: expect.objectContaining({ direction: expect.any(String) }) })])
+        expect(await readFile(path.join(paths.sandboxPath, "copy.txt"), "utf8")).toBe("local")
+    }))
+
+    test("copy permission request picks local_target", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        const requests: unknown[] = []
+        await writeFile(path.join(paths.sandboxPath, "sandbox.txt"), "sandbox")
+        const tool = createAutocodeSandboxCopyTool(client, deps)
+
+        await tool.execute({ sandbox_name: "dev", sandbox_source: "sandbox.txt", local_target: "roundtrip.txt" }, { ...context, ask: createAskEffect((request) => { requests.push(request) }) })
+
+        expect(requests).toEqual([expect.objectContaining({
+            permission: "autocode_sandbox_copy",
+            patterns: ["local_target"],
+            always: ["local_target"],
+            metadata: expect.objectContaining({ target_type: "local_target" }),
+        })])
+        expect(requests).toEqual([expect.not.objectContaining({ metadata: expect.objectContaining({ direction: expect.any(String) }) })])
+        expect(await readFile(path.join(projectRoot, "roundtrip.txt"), "utf8")).toBe("sandbox")
+    }))
+
+    test("copy permission request picks sandbox_target for sandbox source", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {
+        const requests: unknown[] = []
+        await writeFile(path.join(paths.sandboxPath, "sandbox.txt"), "sandbox")
+        const tool = createAutocodeSandboxCopyTool(client, deps)
+
+        await tool.execute({ sandbox_name: "dev", sandbox_source: "sandbox.txt", sandbox_target: "nested/copy.txt" }, { ...context, ask: createAskEffect((request) => { requests.push(request) }) })
+
+        expect(requests).toEqual([expect.objectContaining({
+            permission: "autocode_sandbox_copy",
+            patterns: ["sandbox_target"],
+            always: ["sandbox_target"],
+            metadata: expect.objectContaining({ target_type: "sandbox_target" }),
+        })])
+        expect(requests).toEqual([expect.not.objectContaining({ metadata: expect.objectContaining({ direction: expect.any(String) }) })])
+        expect(await readFile(path.join(paths.sandboxPath, "nested/copy.txt"), "utf8")).toBe("sandbox")
+    }))
+
+    test("copy preserves simple permission behavior through same permission key", async () => withSandboxFixture(async ({ projectRoot, deps, client, context }) => {
+        const requests: unknown[] = []
+        await writeFile(path.join(projectRoot, "local.txt"), "local")
+        const tool = createAutocodeSandboxCopyTool(client, deps)
+
+        await tool.execute({ sandbox_name: "dev", local_source: "local.txt", sandbox_target: "copy.txt" }, { ...context, ask: createAskEffect((request) => { requests.push(request) }) })
+
+        expect(requests).toEqual([expect.objectContaining({ permission: "autocode_sandbox_copy" })])
+    }))
+
+    test("copy rejects local_to_local before permission request", async () => withSandboxFixture(async ({ projectRoot, deps, client, context }) => {
+        const requests: unknown[] = []
+        await writeFile(path.join(projectRoot, "local.txt"), "local")
+        const tool = createAutocodeSandboxCopyTool(client, deps)
+
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", local_source: "local.txt", local_target: "other.txt" }, { ...context, ask: createAskEffect((request) => { requests.push(request) }) }))
+
+        expect(result.error).toContain("local to local")
+        expect(requests).toEqual([])
+    }))
 
     test("cli network mode comes only from metadata and schema has no per-run network option", async () => {
         const paths = getSandboxPaths("/workspace", "my_feature", "dev")

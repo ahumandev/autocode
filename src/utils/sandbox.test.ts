@@ -1,7 +1,11 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { Dirent } from "fs"
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "fs/promises"
+import { tmpdir } from "os"
+import path from "path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, createSandboxAlias, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getJobSandboxRoot, getNamedSandboxPath, getSandboxPaths, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, resolveSandboxJob, type SandboxCacheEntry, type SandboxDependencies } from "./sandbox"
+import { copyPath, resolveSafeRelativePath, validateSafeWriteTarget } from "./sandbox_file_tools"
 
 function missingError(): NodeJS.ErrnoException {
     const error = new Error("missing") as NodeJS.ErrnoException
@@ -302,5 +306,53 @@ describe("sandbox utils", () => {
 
         expect(result.items.map((item) => item.sandbox_name)).toEqual(["dev", "bad-name"])
         expect(deps.fileSystem.rm).toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job/dev", { recursive: true, force: true })
+    })
+
+    test("file tool path guards reject malformed roots and symlink escapes", async () => {
+        const root = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-utils-"))
+        const outside = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-outside-"))
+        try {
+            await mkdir(path.join(root, "dir"), { recursive: true })
+            await writeFile(path.join(root, "dir/file.txt"), "safe")
+            await writeFile(path.join(outside, "escape.txt"), "escape")
+            await symlink(path.join(outside, "escape.txt"), path.join(root, "escape"))
+            await symlink(outside, path.join(root, "escape_dir"))
+
+            for (const value of ["", "bad\0path", "/absolute", "../escape", "workspace/file"]) {
+                expect((await resolveSafeRelativePath(root, value, "path", true, true)).ok).toBe(false)
+                expect((await validateSafeWriteTarget(root, value, "target", true)).ok).toBe(false)
+            }
+
+            expect(await resolveSafeRelativePath(root, "dir/file.txt", "path", true, true)).toEqual({ ok: true, value: { absolutePath: path.join(root, "dir/file.txt"), relativePath: "dir/file.txt" } })
+            expect((await resolveSafeRelativePath(root, "escape", "path", true, true)).ok).toBe(false)
+            expect((await validateSafeWriteTarget(root, "escape_dir/file.txt", "target", true)).ok).toBe(false)
+        }
+        finally {
+            await rm(root, { recursive: true, force: true })
+            await rm(outside, { recursive: true, force: true })
+        }
+    })
+
+    test("copyPath recursively copies files and directories with overwrite and merge semantics", async () => {
+        const root = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-copy-"))
+        try {
+            await mkdir(path.join(root, "source_dir"), { recursive: true })
+            await mkdir(path.join(root, "target_dir"), { recursive: true })
+            await writeFile(path.join(root, "source.txt"), "source")
+            await writeFile(path.join(root, "target.txt"), "old")
+            await writeFile(path.join(root, "source_dir/a.txt"), "a")
+            await writeFile(path.join(root, "target_dir/a.txt"), "old-a")
+            await writeFile(path.join(root, "target_dir/b.txt"), "b")
+
+            await copyPath(path.join(root, "source.txt"), path.join(root, "target.txt"))
+            await copyPath(path.join(root, "source_dir"), path.join(root, "target_dir"))
+
+            expect(await readFile(path.join(root, "target.txt"), "utf8")).toBe("source")
+            expect(await readFile(path.join(root, "target_dir/a.txt"), "utf8")).toBe("a")
+            expect(await readFile(path.join(root, "target_dir/b.txt"), "utf8")).toBe("b")
+        }
+        finally {
+            await rm(root, { recursive: true, force: true })
+        }
     })
 })

@@ -1,13 +1,13 @@
 import type { Plugin, PluginInput, Hooks } from "@opencode-ai/plugin"
 import type { AgentConfig, Config } from "@opencode-ai/sdk/v2"
-import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents } from "./agents"
+import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, type AutocodeAgentConfig } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig, mergeExternalDirectoryRules } from "./config"
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { commands } from "./commands"
 import { ensureGeneratedSkills, injectGeneratedSkillsPath } from "./skills"
 import { createTools } from "./tools"
 
-type PluginAgentConfig = AgentConfig & { tier?: ModelTier }
+type PluginAgentConfig = AutocodeAgentConfig
 
 function mergePluginAgentConfig(
     agentDef: PluginAgentConfig,
@@ -16,10 +16,10 @@ function mergePluginAgentConfig(
 ): PluginAgentConfig {
     const { tier, ...agentBase } = agentDef
     const tierMapping = tier && tiers[tier] ? tiers[tier] : {}
-    return { ...agentBase, ...tierMapping, ...userOverride } as PluginAgentConfig
+    return { ...agentBase, ...tierMapping, ...userOverride }
 }
 
-function stripRuntimeAgentTier(agent: PluginAgentConfig): AgentConfig {
+function stripRuntimeAgentTier(agent: PluginAgentConfig): Omit<PluginAgentConfig, "tier"> {
     const { tier, ...runtimeAgent } = agent
     return runtimeAgent
 }
@@ -27,7 +27,7 @@ function stripRuntimeAgentTier(agent: PluginAgentConfig): AgentConfig {
 function finalizePluginAgentsAfterOverrides(
     agents: Record<string, PluginAgentConfig>,
     externalDirectories: ExternalDirectoryRules,
-): Record<string, AgentConfig> {
+): Record<string, Omit<PluginAgentConfig, "tier">> {
     const externalDirectoryFinalizedAgents = applyExternalDirectoryPolicy(agents, externalDirectories)
     const sandboxFinalizedAgents = applySandboxPlatformPolicy(externalDirectoryFinalizedAgents)
     return Object.fromEntries(Object.entries(sandboxFinalizedAgents).map(([name, agent]) => [
