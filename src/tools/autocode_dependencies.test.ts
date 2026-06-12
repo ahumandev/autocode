@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test"
-import { createAutocodeDependenciesTool, isAtLeastMinimumOpencodeVersion, parseTolerantSemver } from "./autocode_dependencies"
+import { createAutocodeDependenciesTool } from "./autocode_dependencies"
 import { createToolContext } from "./test_context"
+import { inspectAutocodeDependencies, isAtLeastMinimumOpencodeVersion, parseTolerantSemver, type DependencyDebugEvent } from "@/utils/autocode_dependencies"
 import type { SandboxDependencies } from "@/utils/sandbox"
 
 type DependencyToolResult = Record<string, unknown> & {
@@ -37,6 +38,8 @@ function createDeps(options?: {
     bwrapExit?: number | null
     commandMap?: CommandMap
     commandErrorMap?: Record<string, Error>
+    fileMap?: Record<string, string>
+    readdirMap?: Record<string, string[]>
 }): SandboxDependencies {
     const spawn = mock(async (command: string, args: readonly string[]) => {
         if (command === "opencode" && args[0] === "--version") {
@@ -69,11 +72,12 @@ function createDeps(options?: {
         fileSystem: {
             async readFile(filePath: string) {
                 if (filePath === "/etc/os-release") return options?.osRelease ?? "ID=ubuntu\nID_LIKE=debian\n"
+                if (options?.fileMap?.[filePath] !== undefined) return options.fileMap[filePath]
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
             },
-            async readdir() { return [] },
+            async readdir(dirPath: string) { return options?.readdirMap?.[dirPath] ?? [] },
             async mkdir() {},
             async writeFile() {},
             async stat() {
@@ -194,6 +198,190 @@ describe("autocode_dependencies", () => {
         expect(optionalDependencies.browser.install_command).not.toContain("zypper install")
     })
 
+    test("detects optional MCP from OpenCode config entry under global and local paths", async () => {
+        const globalConfig = "/xdg/opencode/opencode.jsonc"
+        const worktreeConfig = "/repo/.opencode/opencode.json"
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            env: { XDG_CONFIG_HOME: "/xdg" },
+            fileMap: {
+                [globalConfig]: `{
+                    // global config
+                    "mcp": {
+                        "servers": {
+                            "context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] }
+                        }
+                    }
+                }`,
+                [worktreeConfig]: JSON.stringify({
+                    mcp: {
+                        servers: {
+                            "excel-mcp-server": {},
+                        },
+                    },
+                }),
+            },
+        })).execute({}, createToolContext({ directory: "/repo/app", worktree: "/repo" })) as string)
+
+        expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.context7_mcp?.detection_source).toBe("launcher_command")
+        expect(result.optional_dependencies?.context7_mcp?.config_path).toBe(globalConfig)
+        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp")
+        expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.excel_mcp?.detection_source).toBe("config_entry")
+        expect(result.optional_dependencies?.excel_mcp?.config_path).toBe(worktreeConfig)
+    })
+
+    test("detects launcher and path forms from ancestor config without PATH bin", async () => {
+        const ancestorConfig = "/repo/packages/.opencode/opencode.jsonc"
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            fileMap: {
+                [ancestorConfig]: JSON.stringify({
+                    mcp: {
+                        servers: {
+                            git: { command: "uvx", args: ["mcp-server-git"] },
+                            chrome: { command: "node", args: ["/opt/tools/chrome-devtools-mcp/dist/index.js"] },
+                        },
+                    },
+                }),
+            },
+            commandMap: { git: true },
+        })).execute({}, createToolContext({ directory: "/repo/packages/app", worktree: "/repo" })) as string)
+
+        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_mcp?.detection_source).toBe("launcher_command")
+        expect(result.optional_dependencies?.git_mcp?.configured_command).toBe("uvx mcp-server-git")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.configured_command).toBe("node /opt/tools/chrome-devtools-mcp/dist/index.js")
+    })
+
+    test("detects windows cmd wrappers from config", async () => {
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            fileMap: {
+                "/xdg/opencode/opencode.json": JSON.stringify({
+                    mcp: {
+                        servers: {
+                            chrome: { command: "cmd.exe", args: ["/c", "npx", "chrome-devtools-mcp@latest"] },
+                        },
+                    },
+                }),
+            },
+            env: { XDG_CONFIG_HOME: "/xdg" },
+        })).execute({}, createToolContext()) as string)
+
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.detection_source).toBe("launcher_command")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.configured_command).toBe("npx chrome-devtools-mcp@latest")
+    })
+
+    test("detects MCP config entries with command arrays and ignores non-string items", async () => {
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            env: { XDG_CONFIG_HOME: "/xdg" },
+            fileMap: {
+                "/xdg/opencode/opencode.json": JSON.stringify({
+                    mcpServers: {
+                        chrome: { command: ["node", "/opt/tools/chrome-devtools-mcp.js"] },
+                        context7: { command: ["npx", "-y", "@upstash/context7-mcp"] },
+                        excel: { command: ["excel-mcp-server"] },
+                        git: { command: ["/opt/mcp/.venv/bin/mcp-server-git", 123, null] },
+                    },
+                }),
+            },
+        })).execute({}, createToolContext()) as string)
+
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.configured_command).toBe("node /opt/tools/chrome-devtools-mcp.js")
+        expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp")
+        expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
+        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_mcp?.configured_command).toBe("/opt/mcp/.venv/bin/mcp-server-git")
+    })
+
+    test("unwraps windows command arrays from config", async () => {
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            env: { XDG_CONFIG_HOME: "/xdg" },
+            fileMap: {
+                "/xdg/opencode/opencode.json": JSON.stringify({
+                    mcp: {
+                        servers: {
+                            chrome: { command: ["cmd.exe", "/c", "npx", "chrome-devtools-mcp@latest"] },
+                        },
+                    },
+                }),
+            },
+        })).execute({}, createToolContext()) as string)
+
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.configured_command).toBe("npx chrome-devtools-mcp@latest")
+    })
+
+    test("does not detect MCP from unrelated config objects", async () => {
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            env: { XDG_CONFIG_HOME: "/xdg" },
+            fileMap: {
+                "/xdg/opencode/opencode.json": JSON.stringify({
+                    tools: {
+                        servers: {
+                            context7: { command: "npx", args: ["@upstash/context7-mcp"] },
+                        },
+                    },
+                }),
+            },
+        })).execute({}, createToolContext()) as string)
+
+        expect(result.optional_dependencies?.context7_mcp?.status).toBe("missing")
+        expect(result.optional_dependencies?.context7_mcp?.config_path).toBeUndefined()
+        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBeUndefined()
+    })
+
+    test("detects MCP from supplemental OpenCode config files and ignores unrelated files", async () => {
+        const supplementalConfig = "/xdg/opencode/sample.opencode.jsonc"
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            env: { XDG_CONFIG_HOME: "/xdg" },
+            readdirMap: {
+                "/xdg/opencode": ["notes.json", "nested", "sample.opencode.jsonc", "sample.opencode.yaml"],
+            },
+            fileMap: {
+                [supplementalConfig]: JSON.stringify({
+                    mcpServers: {
+                        context7: { command: ["npx", "-y", "@upstash/context7-mcp"] },
+                        excel: { command: ["excel-mcp-server"] },
+                    },
+                }),
+            },
+        })).execute({}, createToolContext()) as string)
+
+        expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.context7_mcp?.config_path).toBe(supplementalConfig)
+        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp")
+        expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.excel_mcp?.config_path).toBe(supplementalConfig)
+        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
+        expect(result.optional_dependencies?.git_mcp?.status).toBe("missing")
+    })
+
+    test("resolves relative OPENCODE_CONFIG from context directory first", async () => {
+        const configPath = "/repo/app/config/opencode.jsonc"
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            env: { OPENCODE_CONFIG: "config/opencode.jsonc" },
+            fileMap: {
+                [configPath]: JSON.stringify({
+                    mcp: {
+                        servers: {
+                            git: { command: "uvx", args: ["mcp-server-git"] },
+                        },
+                    },
+                }),
+            },
+            commandMap: { git: true },
+        })).execute({}, createToolContext({ directory: "/repo/app", worktree: "/repo" })) as string)
+
+        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_mcp?.config_path).toBe(configPath)
+        expect(result.optional_dependencies?.git_mcp?.configured_command).toBe("uvx mcp-server-git")
+    })
+
     test("isolates optional dependency inspection errors", async () => {
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
             commandErrorMap: { "chrome-devtools-mcp": new Error("could not inspect chrome-devtools-mcp") },
@@ -233,5 +421,86 @@ describe("autocode_dependencies", () => {
 
     test("registers as no-arg tool", () => {
         expect(createAutocodeDependenciesTool(createDeps()).args).toEqual({})
+    })
+
+    test("utility inspection keeps tool result shape", async () => {
+        const result = await inspectAutocodeDependencies(createDeps(), { directory: "/repo/app", worktree: "/repo" }) as DependencyToolResult
+
+        expect(result.detect_only).toBe(true)
+        expect(result.required_ok).toBe(true)
+        expect(result.optional_dependencies?.git_mcp?.status).toBe("missing")
+        expect(result.dependencies?.opencode).toEqual(result.opencode)
+        expect(result.dependencies?.bwrap).toEqual(result.bwrap)
+    })
+
+    test("debug mode reports missed config files, supplemental config matches, and final reason", async () => {
+        const events: DependencyDebugEvent[] = []
+        await inspectAutocodeDependencies(createDeps({
+            env: { XDG_CONFIG_HOME: "/xdg" },
+            readdirMap: {
+                "/xdg/opencode": ["sample.opencode.jsonc"],
+            },
+            fileMap: {
+                "/xdg/opencode/sample.opencode.jsonc": JSON.stringify({
+                    mcpServers: [
+                        { name: "context7", command: ["npx", "-y", "@upstash/context7-mcp"] },
+                    ],
+                }),
+            },
+        }), {}, {
+            debug: true,
+            debugLog(event: DependencyDebugEvent): void {
+                events.push(event)
+            },
+        })
+
+        expect(events).toContainEqual(expect.objectContaining({
+            dependency: "context7_mcp",
+            stage: "config_paths",
+            config_paths: expect.arrayContaining(["/xdg/opencode/opencode.jsonc", "/xdg/opencode/sample.opencode.jsonc"]),
+        }))
+        expect(events).toContainEqual(expect.objectContaining({
+            dependency: "context7_mcp",
+            stage: "config_file",
+            config_path: "/xdg/opencode/opencode.jsonc",
+            outcome: "missing",
+        }))
+        expect(events).toContainEqual(expect.objectContaining({
+            dependency: "context7_mcp",
+            stage: "config_match",
+            config_path: "/xdg/opencode/sample.opencode.jsonc",
+            section: "mcpServers",
+            key: "context7",
+            detection_source: "launcher_command",
+            configured_command: "npx -y @upstash/context7-mcp",
+        }))
+        expect(events).toContainEqual(expect.objectContaining({
+            dependency: "excel_mcp",
+            stage: "final",
+            status: "missing",
+            reason: "No PATH command or matching OpenCode config found.",
+        }))
+    })
+
+    test("detects MCP array entries in config", async () => {
+        const result = await inspectAutocodeDependencies(createDeps({
+            env: { XDG_CONFIG_HOME: "/xdg" },
+            fileMap: {
+                "/xdg/opencode/opencode.jsonc": JSON.stringify({
+                    mcp: {
+                        servers: [
+                            { name: "excel-mcp-server", command: ["excel-mcp-server"] },
+                            { id: "git", command: "uvx", args: ["mcp-server-git"] },
+                        ],
+                    },
+                }),
+            },
+            commandMap: { git: true },
+        })) as DependencyToolResult
+
+        expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
+        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_mcp?.configured_command).toBe("uvx mcp-server-git")
     })
 })

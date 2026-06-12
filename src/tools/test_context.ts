@@ -14,7 +14,7 @@ export function createAskEffect(run: (request: unknown) => void | Promise<void>)
     }) as ReturnType<ToolContext["ask"]>
 }
 
-export function createToolContext(): ToolContext {
+export function createToolContext(overrides: Partial<ToolContext> = {}): ToolContext {
     return {
         sessionID: "session-1",
         messageID: "message-1",
@@ -25,5 +25,6 @@ export function createToolContext(): ToolContext {
         metadata() {
         },
         ask: createNoopAsk(),
+        ...overrides,
     }
 }

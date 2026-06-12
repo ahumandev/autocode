@@ -22,6 +22,7 @@ describe("commands", () => {
             "git-commit",
             "git-conflict",
             "install",
+            "autocode-install",
             "init",
             "new-assist",
             "new-auto",
@@ -91,6 +92,9 @@ describe("commands", () => {
         const template = commands.install?.template ?? ""
 
         expect(commands.install?.agent).toBe("assist")
+        expect(commands["autocode-install"]).toBe(commands.install)
+        expect(commands["autocode-install"]?.description).toBe(commands.install?.description)
+        expect(commands["autocode-install"]?.template).toBe(commands.install?.template)
         expect(template).toContain("Call `autocode_dependencies` first.")
         expect(template).toContain("Only treat as no issues")
         expect(template).toContain("report dependencies OK and stop")

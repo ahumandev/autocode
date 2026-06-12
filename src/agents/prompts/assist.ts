@@ -67,7 +67,7 @@ ${manualRules}
             - Major milestone (like new feature, bugfix, refactor): Provide formatted report (max 80 words) of last assignment with sections:
                 - Actions: Summarize recent actions taken
                 - Discoveries: Summarize new opportunities/constraints discovered during last assignment - only list info not previously known or omit section
-                - Changes: Summarize expected project behaviour changes (observable from client perspective) or omit section if only technical
+                - Changes: Summarize expected project behavior changes (observable from client perspective) or omit section if only technical
         2. Offer [Next Actions](#actions) using \`question\` tool suggestion 2 - 4 best related options (labels summarize actions, descriptions summarize expected outcome of actions) + "Provide Detailed Report" option if last assignment was major milestone
         3. If user answer "Provide Detailed Report", then:
             - call \`autocode_agent_swap\` with \`agent\` = \`temp_report\`
@@ -95,8 +95,8 @@ ${manualRules}
 
 ${toolTaskRules}
 
-- Only for simple edits (like fixing syntax/spelling/grammar/formatting mistakes) and when exact file path, old and new strings is known: then call \`edit\` tool,
-- Otherwise call \`task\` with applicable skilled subagent for editorial tasks (like organize, enhance, review, author) or if exact parameters are unclear.
+- Only if user specifically mention 1 text file and lines affected for simple edits (like fixing syntax/spelling/grammar or adding/removing known text): then call \`edit\` tool,
+- Otherwise multi-file edits or complex edits (like organize/enhance/review/author) require \`task\` to subagent for editorial tasks (default if unsure).
 
 ---
 

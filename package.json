@@ -1,12 +1,33 @@
 {
-  "name": "autocode",
-  "version": "0.1.0",
+  "name": "@ahumandev/autocode",
+  "version": "0.0.1",
   "type": "module",
+  "private": false,
   "main": "./dist/plugin.js",
   "types": "./dist/plugin.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ahumandev/autocode.git"
+  },
+  "homepage": "https://github.com/ahumandev/autocode#readme",
+  "bugs": {
+    "url": "https://github.com/ahumandev/autocode/issues"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "ai-agents",
+    "agent-workflow",
+    "job-workflow",
+    "workflow-automation",
+    "developer-tools"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
-    "dist",
-    "scripts"
+    "dist"
   ],
   "exports": {
     ".": {
@@ -15,11 +36,14 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && bun build src/plugin.ts --outdir dist --target bun && tsc --emitDeclarationOnly --noEmit false && bun run copy:skills && bun scripts/install-plugin-shim.mjs",
+    "build": "rm -rf dist && bun build src/plugin.ts --outdir dist --target bun && tsc --emitDeclarationOnly --noEmit false && bun run copy:skills",
+    "install:shim": "bun scripts/install-plugin-shim.mjs",
     "watch": "rm -rf dist && bun run copy:skills && bun build src/plugin.ts --outdir dist --target bun --watch & tsc --emitDeclarationOnly --noEmit false --watch",
     "copy:skills": "bun scripts/copy-skill-sources.mjs",
     "test": "bun test src",
     "typecheck": "tsc --noEmit",
+    "verify:package": "node scripts/verify-package-artifacts.mjs",
+    "prepublishOnly": "bun run test && bun run typecheck && bun run build && bun run verify:package",
     "verify:sandbox-online": "node scripts/verify-sandbox-online.mjs"
   },
   "dependencies": {

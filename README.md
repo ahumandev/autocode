@@ -30,34 +30,68 @@ No special UI required. AutoCode runs in OpenCode, keeps progress in version-con
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) is required for dependency installation, builds, tests, and type checks.
-- [OpenCode](https://opencode.ai) is required to load and use the plugin.
+- [OpenCode](https://opencode.ai) is required to load and use AutoCode.
+- The npm package / plugin entry is `@ahumandev/autocode`.
 
 #### Optional
 
-- [Bubblewrap](https://github.com/containers/bubblewrap) is required only when sandbox execution is enabled on Linux.
+- [Bubblewrap](https://github.com/containers/bubblewrap) is required only for Linux sandbox execution.
+- [Bun](https://bun.sh) is required only to build the plugin from source or run tests.
 
-### Local setup
+### Installation for LLM Agents
 
-1. Install dependencies from the repository root.
+Fetch installation guide and follow it:
 
-   ```bash
-   bun install
-   ```
+```bash
+curl -s https://raw.githubusercontent.com/ahumandev/autocode/refs/heads/main/docs/installation.md
+```
 
-   Bun installs the dependencies declared in [`package.json`](package.json).
+### Installation for Humans
 
-2. Build the plugin.
+OpenCode installs npm plugins automatically at startup when they are listed in the global plugin configuration.
 
-   ```bash
-   bun run build
-   ```
+Use the global OpenCode config at `~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`, then merge the plugin entry into the existing `plugin` array instead of overwriting the file.
 
-   The build removes `dist`, bundles [`src/plugin.ts`](src/plugin.ts), emits TypeScript declarations, copies generated skill sources, and runs [`scripts/install-plugin-shim.mjs`](scripts/install-plugin-shim.mjs).
+```json
+{
+  "plugin": ["@ahumandev/autocode"]
+}
+```
 
-3. Load the plugin in OpenCode.
+If your config already contains other plugins or settings, keep them and add `@ahumandev/autocode` to the existing array.
 
-   The build installs a shim at `~/.config/opencode/plugins/autocode.js`. For local development in this repository, [`.opencode/plugin/AutoCode.ts`](.opencode/plugin/AutoCode.ts) re-exports the built plugin from `dist/plugin.js`.
+#### Verify installation
+
+1. Save the updated OpenCode config.
+2. Start or restart OpenCode.
+3. Confirm OpenCode loads AutoCode commands or agents after startup.
+
+See [`docs/installation.md`](docs/installation.md) for copy/paste installation, update, uninstall, and troubleshooting steps.
+
+### Update the plugin version
+
+To update the public package version, change the plugin entry to `@ahumandev/autocode@latest` in your OpenCode config, save the file, and restart OpenCode.
+
+```jsonc
+{
+  "plugin": ["@ahumandev/autocode@latest"]
+}
+```
+
+OpenCode re-installs the requested npm plugin version during startup.
+
+### Uninstall
+
+Remove `@ahumandev/autocode` from the OpenCode `plugin` array, save the config, and restart OpenCode.
+
+If you previously used the repository-only shim workflow, also remove `~/.config/opencode/plugins/autocode.js`.
+
+### Troubleshooting
+
+- Confirm the config file is `~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`.
+- Confirm your JSON or JSONC stays valid after merging the plugin entry.
+- Confirm the plugin entry uses `@ahumandev/autocode` or `@ahumandev/autocode@latest` exactly.
+- Restart OpenCode after every config change so startup installation can run again.
 
 ### Development watch mode
 
@@ -267,6 +301,30 @@ Linux sandbox execution requires usable [Bubblewrap](https://github.com/containe
 Sandbox tools include `autocode_sandbox_create`, `autocode_sandbox_cli`, `autocode_sandbox_delete`, `autocode_sandbox_read`, `autocode_sandbox_glob`, `autocode_sandbox_grep`, `autocode_sandbox_edit`, and `autocode_sandbox_copy`. Sandboxes expose `/sandbox` for writable work, `/home` for the sandbox home, and `/workspace` as a read-only project mount.
 
 Unsupported hosts include macOS, Windows, Android or Termux, non-Linux systems, and Linux systems without usable `bwrap` or user namespace support. When sandboxing is unsupported, AutoCode disables the sandbox execution agent and force-denies sandbox create, CLI, delete, read, glob, grep, edit, and copy tools.
+
+### Local setup
+
+Local setup is for repository development only. It is not the public npm installation flow.
+
+1. Install dependencies from the repository root.
+
+   ```bash
+   bun install
+   ```
+
+   Bun installs the dependencies declared in [`package.json`](package.json).
+
+2. Build the plugin.
+
+   ```bash
+   bun run build
+   ```
+
+   The build removes `dist`, bundles [`src/plugin.ts`](src/plugin.ts), emits TypeScript declarations, copies generated skill sources, and runs [`scripts/install-plugin-shim.mjs`](scripts/install-plugin-shim.mjs).
+
+3. Load the plugin in OpenCode.
+
+   The build installs a shim at `~/.config/opencode/plugins/autocode.js`. This local shim is a developer workflow only. For local development in this repository, [`.opencode/plugin/AutoCode.ts`](.opencode/plugin/AutoCode.ts) re-exports the built plugin from `dist/plugin.js`.
 
 ### Development commands
 
