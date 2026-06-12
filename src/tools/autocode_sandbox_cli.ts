@@ -4,7 +4,7 @@ import { spawn as nodeSpawn } from "child_process"
 import path from "path"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { assertSafeSandboxPath, defaultSandboxDependencies, detectSandboxBackend, findSandboxLookupMatches, getSandboxPaths, normalizeSandboxName, readSandboxMetadata, resolveSandboxJob, type SandboxDependencies, type SandboxLookupMatch, type SandboxMetadata, type SandboxPaths } from "@/utils/sandbox"
-import { addBubblewrapBind, addOptionalBubblewrapReadOnlyBind, bubblewrapQuickEtcReadOnlyBinds, bubblewrapQuickRootReadOnlyBinds, pathExists } from "@/utils/autocode_sandbox_helpers"
+import { addBubblewrapBind, addBubblewrapProxyEnv, addOptionalBubblewrapReadOnlyBind, bubblewrapHostNetworkReadOnlyBinds, bubblewrapQuickEtcReadOnlyBinds, bubblewrapQuickRootReadOnlyBinds, optionalPathExists, pathExists } from "@/utils/autocode_sandbox_helpers"
 
 type CliRunResult = {
     stdout: string
@@ -111,7 +111,7 @@ async function validateRootfsMetadata(deps: SandboxDependencies, paths: SandboxP
         return { ok: false, reason: "Rootfs path must be inside the sandbox root path." }
     }
 
-    if (!await pathExists(deps, safeRootfsPath.value)) return { ok: false, reason: "Rootfs path from sandbox metadata does not exist." }
+    if (!await optionalPathExists(deps, safeRootfsPath.value)) return { ok: false, reason: "Rootfs path from sandbox metadata does not exist." }
     return { ok: true, rootfsPath: safeRootfsPath.value }
 }
 
@@ -148,6 +148,7 @@ async function createCommand(deps: SandboxDependencies, metadata: SandboxMetadat
         "--setenv", "HOME", "/home/root",
         "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     )
+    if (internetEnabled) addBubblewrapProxyEnv(args, deps.process.env)
     if (filesystemMode === "quick") args.push("--dir", "/etc")
 
     if (filesystemMode === "quick") {
@@ -155,8 +156,10 @@ async function createCommand(deps: SandboxDependencies, metadata: SandboxMetadat
             await addOptionalBubblewrapReadOnlyBind(deps, args, hostPath)
         }
     }
-    else {
-        await addOptionalBubblewrapReadOnlyBind(deps, args, "/etc/resolv.conf")
+    else if (internetEnabled) {
+        for (const hostPath of bubblewrapHostNetworkReadOnlyBinds) {
+            await addOptionalBubblewrapReadOnlyBind(deps, args, hostPath)
+        }
     }
 
     addBubblewrapBind(args, projectRoot, "/workspace", true)

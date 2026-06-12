@@ -233,10 +233,15 @@ Base your git commit message on the following:
         subtask: false,
         template: `
 1. Call \`autocode_dependencies\` first.
-2. If there are no issues, report dependencies OK and stop.
-3. If OpenCode upgrade is needed, run safe remediation using the appropriate subagent/command with the suggested \`opencode upgrade\` command.
-4. If bwrap install is needed, then: install it according from host os package manager (see https://github.com/containers/bubblewrap details)
-5. After remediation, rerun \`autocode_dependencies\` and report remaining issues.
+2. Only treat as no issues when \`next_actions\` is empty, \`required_ok\` is not false, and every optional dependency is ok/skipped/unsupported or has no manual action; then report dependencies OK and stop.
+3. Do not stop just because top-level \`ok\` is true. Remediate every dependency as optional when safe; continue after failures and do not let one failure stop the rest.
+4. If OpenCode upgrade is needed, use the suggested \`opencode upgrade\` command.
+5. If bwrap install is needed, use the reported install command.
+6. Handle chrome-devtools MCP (chrome_devtools_mcp), Context7 MCP (context7_mcp), Excel MCP (excel_mcp), Git MCP (git_mcp), and browser (browser) availability using reported install_command/guidance.
+7. Follow dangerous-operation/manual confirmation rules: sudo, password prompts, API keys, manual confirmation, and destructive operations must stop/ask/report, not force.
+8. After remediation, rerun \`autocode_dependencies\` and report remaining issues.
+9. Summarize succeeded, failed, skipped, unsupported, manual-action, and still missing dependencies.
+10. Do not perform documentation tasks and do not task any \`document_*\` subagents.
 `
     },
 

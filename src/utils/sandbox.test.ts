@@ -1,10 +1,11 @@
 import { describe, expect, mock, test } from "bun:test"
+import { spawn as nodeSpawn } from "child_process"
 import type { Dirent } from "fs"
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "fs/promises"
+import { cp, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import path from "path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, createSandboxAlias, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getJobSandboxRoot, getNamedSandboxPath, getSandboxPaths, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, resolveSandboxJob, type SandboxCacheEntry, type SandboxDependencies } from "./sandbox"
+import { assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, createSandboxAlias, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getJobSandboxRoot, getNamedSandboxPath, getSandboxPaths, materializeSandboxRootfs, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, resolveSandboxJob, type SandboxCacheEntry, type SandboxDependencies } from "./sandbox"
 import { copyPath, resolveSafeRelativePath, validateSafeWriteTarget } from "./sandbox_file_tools"
 
 function missingError(): NodeJS.ErrnoException {
@@ -17,7 +18,7 @@ function dirent(name: string, directory = true): Dirent {
     return { name, isDirectory: () => directory, isFile: () => !directory } as Dirent
 }
 
-function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, files?: Record<string, string>, existing?: string[], spawnExit?: number, fetchOk?: boolean, fetch?: SandboxDependencies["fetch"] }): SandboxDependencies {
+function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, files?: Record<string, string>, existing?: string[], spawnExit?: number, fetchOk?: boolean, fetch?: SandboxDependencies["fetch"], tarCreatesBinSh?: boolean }): SandboxDependencies {
     const existing = new Set(options?.existing ?? [])
     const files = { ...(options?.files ?? {}) }
     return {
@@ -34,10 +35,20 @@ function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?:
                 if (existing.has(filePath)) return { mtimeMs: 1 }
                 throw missingError()
             }),
+            lstat: mock(async (filePath: string) => {
+                if (existing.has(filePath)) return { mtimeMs: 1 }
+                throw missingError()
+            }),
             writeFile: mock(async (filePath: string, content: string | Uint8Array) => { files[filePath] = String(content) }),
             cp: mock(async (_source: unknown, destination: unknown) => { existing.add(String(destination)) }),
         },
-        spawn: mock(async () => ({ exitCode: options?.spawnExit ?? 0, stdout: "", stderr: "" })),
+        spawn: mock(async (command: string, args: readonly string[]) => {
+            if (command === "tar" && options?.tarCreatesBinSh !== false) {
+                const directory = args.find((arg) => arg.startsWith("--directory="))?.slice("--directory=".length)
+                if (directory) existing.add(path.join(directory, "bin", "sh"))
+            }
+            return { exitCode: options?.spawnExit ?? 0, stdout: "", stderr: "" }
+        }),
         commandExists: mock(async (command: string) => Boolean(options?.commands?.[command])),
         fetch: options?.fetch ?? mock(async () => ({ ok: options?.fetchOk ?? true, status: options?.fetchOk === false ? 500 : 200, text: async () => alpineLatestReleasesYaml(), arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer } as Response)),
         process: { platform: options?.platform ?? "linux", arch: options?.arch ?? "arm64", env: options?.env ?? {} },
@@ -45,26 +56,28 @@ function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?:
 }
 
 function alpineLatestReleasesYaml(): string {
-    return `- file: alpine-standard-3.20.3-x86_64.iso
+    return `---
+-
+  title: "Mini root filesystem"
+  desc: |
+    version: ignored-description-line
+  branch: v3.24
   arch: x86_64
-  flavor: standard
-  version: 3.20.3
-  sha256: iso-sha256
-- file: alpine-minirootfs-3.20.3-aarch64.tar.gz
-  arch: aarch64
-  flavor: minirootfs
-  version: 3.20.3
-  sha256: aarch64-sha256
-- file: alpine-minirootfs-3.20.3-x86_64.tar.gz
-  arch: x86_64
-  flavor: minirootfs
-  version: 3.20.3
+  version: 3.24.0
+  flavor: alpine-minirootfs
+  file: alpine-minirootfs-3.24.0-x86_64.tar.gz
   sha256: x86-sha256
   sha512: x86-sha512
-- file: alpine-minirootfs-latest-x86_64.tar.gz
-  arch: x86_64
-  flavor: minirootfs
-  sha256: latest-sha256
+-
+  title: "Mini root filesystem"
+  desc: |
+    version: ignored-description-line
+  branch: v3.24
+  arch: aarch64
+  version: 3.24.0
+  flavor: alpine-minirootfs
+  file: alpine-minirootfs-3.24.0-aarch64.tar.gz
+  sha256: aarch64-sha256
 `
 }
 
@@ -76,6 +89,18 @@ function getMetadataWrite(deps: SandboxDependencies, metadataFile: string): Reco
 
 function createClient(title: string): OpencodeClient {
     return { session: { get: mock(async () => ({ data: { title } })) } } as unknown as OpencodeClient
+}
+
+async function runCommand(command: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv, cwd?: string }): Promise<{ exitCode: number | null, stdout: string, stderr: string }> {
+    return await new Promise((resolve, reject) => {
+        const child = nodeSpawn(command, [...args], { env: options?.env, cwd: options?.cwd })
+        let stdout = ""
+        let stderr = ""
+        child.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString() })
+        child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString() })
+        child.on("error", reject)
+        child.on("close", (exitCode) => resolve({ exitCode, stdout, stderr }))
+    })
 }
 
 describe("sandbox utils", () => {
@@ -112,8 +137,56 @@ describe("sandbox utils", () => {
         expect(await detectEffectiveSandboxSyncMethod(undefined, copyDeps)).toBe("copy")
     })
 
+    test("rootfs materialization copies broken symlinks without dereferencing targets", async () => {
+        const tempRoot = await mkdtemp(path.join(tmpdir(), "autocode-rootfs-copy-"))
+        const cacheRootfs = path.join(tempRoot, "cache", "rootfs")
+        const destinationRootfs = path.join(tempRoot, "sandbox", "rootfs")
+        try {
+            await mkdir(path.join(cacheRootfs, "etc"), { recursive: true })
+            await symlink("/proc/self/mounts", path.join(cacheRootfs, "etc", "mtab"))
+            const deps = createDeps()
+            deps.spawn = runCommand
+            deps.fileSystem = { ...deps.fileSystem, mkdir, rm, stat, lstat, cp }
+
+            await materializeSandboxRootfs(cacheRootfs, destinationRootfs, "copy", deps)
+
+            expect((await lstat(path.join(destinationRootfs, "etc", "mtab"))).isSymbolicLink()).toBe(true)
+        }
+        finally {
+            await rm(tempRoot, { recursive: true, force: true })
+        }
+    })
+
+    test("rootfs materialization copies rootfs contents without nesting rootfs directory", async () => {
+        const tempRoot = await mkdtemp(path.join(tmpdir(), "autocode-rootfs-copy-"))
+        const cacheRootfs = path.join(tempRoot, "cache", "rootfs")
+        const destinationRootfs = path.join(tempRoot, "sandbox", "rootfs")
+        try {
+            await mkdir(path.join(cacheRootfs, "bin"), { recursive: true })
+            await writeFile(path.join(cacheRootfs, "bin", "busybox"), "busybox")
+            const deps = createDeps()
+            deps.spawn = runCommand
+            deps.fileSystem = { ...deps.fileSystem, mkdir, rm, stat, lstat, cp }
+
+            await materializeSandboxRootfs(cacheRootfs, destinationRootfs, "copy", deps)
+
+            expect((await stat(path.join(destinationRootfs, "bin", "busybox"))).isFile()).toBe(true)
+            let nestedRootfsExists = true
+            try {
+                await lstat(path.join(destinationRootfs, "rootfs", "bin", "busybox"))
+            }
+            catch {
+                nestedRootfsExists = false
+            }
+            expect(nestedRootfsExists).toBe(false)
+        }
+        finally {
+            await rm(tempRoot, { recursive: true, force: true })
+        }
+    })
+
     test("rootfs cache downloads versioned entries and reuses them across projects", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64" })
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { xz: true } })
 
         const first = await ensureSandboxRootfsCache("debian", undefined, deps)
         const metadataFile = first.ok ? first.cache.metadata_file : ""
@@ -132,7 +205,7 @@ describe("sandbox utils", () => {
 
     test("alpine rootfs cache resolves versioned minirootfs metadata for process architecture", async () => {
         const metadataUrl = "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/latest-releases.yaml"
-        const versionedUrl = "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-minirootfs-3.20.3-x86_64.tar.gz"
+        const versionedUrl = "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-minirootfs-3.24.0-x86_64.tar.gz"
         const versionlessUrl = "alpine-minirootfs-latest-x86_64.tar.gz"
         const fetch = mock(async (url: string) => {
             if (url === metadataUrl) return { ok: true, status: 200, text: async () => alpineLatestReleasesYaml() } as Response
@@ -149,8 +222,8 @@ describe("sandbox utils", () => {
         if (result.ok) {
             const metadata = getMetadataWrite(deps, result.cache.metadata_file)
             const serializedMetadata = JSON.stringify(metadata)
-            expect(metadata).toEqual(expect.objectContaining({ architecture: "x86_64", version: "3.20.3", source_url: versionedUrl, verification: expect.objectContaining({ sha256: "x86-sha256", sha512: "x86-sha512", source_url_sha256: expect.any(String) }) }))
-            expect(String(metadata.entry_path)).toContain("/alpine/x86_64/alpine-x86_64-3.20.3-gzip-")
+            expect(metadata).toEqual(expect.objectContaining({ architecture: "x86_64", version: "3.24.0", source_url: versionedUrl, verification: expect.objectContaining({ sha256: "x86-sha256", sha512: "x86-sha512", source_url_sha256: expect.any(String) }) }))
+            expect(String(metadata.entry_path)).toContain("/alpine/x86_64/alpine-x86_64-3.24.0-gzip-")
             expect(serializedMetadata).not.toContain(versionlessUrl)
             expect(serializedMetadata).not.toMatch(/alpine-minirootfs-(latest|x86_64)\.tar\.gz/)
         }
@@ -166,10 +239,78 @@ describe("sandbox utils", () => {
 
         const result = await ensureSandboxRootfsCache("alpine", undefined, deps)
 
-        expect(result).toEqual({ ok: false, status: "503", reason: "Alpine rootfs metadata fetch failed with HTTP 503." })
+        expect(result).toEqual({ ok: false, status: "503", reason: `Alpine rootfs metadata fetch failed for ${metadataUrl} with HTTP 503.`, source_url: metadataUrl })
         expect(fetch).toHaveBeenCalledWith(metadataUrl)
         expect(fetch).toHaveBeenCalledTimes(1)
         expect(deps.fileSystem.writeFile).not.toHaveBeenCalled()
+    })
+
+    test("rootfs cache reports source URL on rootfs download failure", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", fetchOk: false })
+
+        const result = await ensureSandboxRootfsCache("debian", undefined, deps)
+
+        expect(result).toEqual(expect.objectContaining({ ok: false, status: "500", source_url: "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/dist-amd64/bookworm/rootfs.tar.xz", reason: expect.stringContaining("rootfs.tar.xz") }))
+    })
+
+    test("rootfs extraction puts tar options before file operand", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { zstd: true } })
+
+        await ensureSandboxRootfsCache("archlinux", undefined, deps)
+
+        const tarCall = (deps.spawn as ReturnType<typeof mock>).mock.calls.find((call) => call[0] === "tar")
+        const tarArgs = tarCall?.[1] as string[]
+        expect(tarArgs).toEqual(expect.arrayContaining(["--extract", "--zstd", "--strip-components=1"]))
+        expect(tarArgs.indexOf("--strip-components=1")).toBeLessThan(tarArgs.findIndex((arg) => arg.startsWith("--file=")))
+        expect(tarArgs.find((arg) => arg.startsWith("--file="))).toContain("rootfs.tar.zstd")
+        expect(tarArgs.find((arg) => arg.startsWith("--directory="))).toContain("/rootfs")
+    })
+
+    test("alpine rootfs extraction does not strip archive paths", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64" })
+
+        await ensureSandboxRootfsCache("alpine", undefined, deps)
+
+        const tarCall = (deps.spawn as ReturnType<typeof mock>).mock.calls.find((call) => call[0] === "tar")
+        const tarArgs = tarCall?.[1] as string[]
+        expect(tarArgs).toEqual(expect.arrayContaining(["--extract", "--gzip"]))
+        expect(tarArgs).not.toContain("--strip-components=1")
+        expect(tarArgs.some((arg) => arg.startsWith("--strip-components="))).toBe(false)
+    })
+
+    test("rootfs extraction accepts /bin/sh symlink without following it", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64" })
+        const originalStat = deps.fileSystem.stat
+        const binShPath = path.join("rootfs", "bin", "sh")
+        deps.fileSystem.stat = mock(async (filePath: string) => {
+            if (filePath.endsWith(binShPath)) throw missingError()
+            return originalStat(filePath)
+        })
+
+        const result = await ensureSandboxRootfsCache("alpine", undefined, deps)
+
+        expect(result).toEqual(expect.objectContaining({ ok: true }))
+        expect(deps.fileSystem.lstat).toHaveBeenCalledWith(expect.stringContaining(binShPath))
+    })
+
+    test("rootfs extraction reports malformed rootfs before cache metadata", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { xz: true }, tarCreatesBinSh: false })
+
+        const result = await ensureSandboxRootfsCache("debian", undefined, deps)
+
+        expect(result).toEqual(expect.objectContaining({ ok: false, source_url: "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/dist-amd64/bookworm/rootfs.tar.xz", reason: expect.stringContaining("missing /bin/sh") }))
+        expect(deps.fileSystem.writeFile).not.toHaveBeenCalledWith(expect.stringContaining("metadata.json"), expect.any(String))
+    })
+
+    test("rootfs extraction reports missing zstd before tar", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { zstd: false } })
+
+        const result = await ensureSandboxRootfsCache("archlinux", undefined, deps)
+
+        expect(result).toEqual(expect.objectContaining({ ok: false, source_url: "https://geo.mirror.pkgbuild.com/iso/latest/archlinux-bootstrap-x86_64.tar.zst", reason: "Missing host dependency zstd required to extract zstd rootfs archive; rootfs download already succeeded." }))
+        expect(deps.fetch).toHaveBeenCalledTimes(1)
+        expect(deps.fileSystem.writeFile).toHaveBeenCalledWith(expect.stringContaining("rootfs.tar.zstd"), expect.any(Uint8Array))
+        expect((deps.spawn as ReturnType<typeof mock>).mock.calls.find((call) => call[0] === "tar")).toBeUndefined()
     })
 
     test("cache cleanup expires copy entries and protects metadata references", async () => {
@@ -306,6 +447,25 @@ describe("sandbox utils", () => {
 
         expect(result.items.map((item) => item.sandbox_name)).toEqual(["dev", "bad-name"])
         expect(deps.fileSystem.rm).toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job/dev", { recursive: true, force: true })
+        expect(deps.fileSystem.rm).not.toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job", { recursive: true, force: true })
+    })
+
+    test("cleans job sandbox root after deleting all sandbox children", async () => {
+        const paths = getSandboxPaths("/repo", "my_job", "dev")
+        const deps = createDeps({ existing: [paths.jobSandboxRoot, paths.sandboxPath] })
+        let remainingEntries = [dirent("dev")]
+        deps.fileSystem.readdir = mock(async (filePath: string) => {
+            if (filePath !== paths.jobSandboxRoot) return []
+            const entries = remainingEntries
+            remainingEntries = []
+            return entries
+        })
+
+        const result = await cleanupJobSandboxes("/repo", "my_job", deps)
+
+        expect(result).toEqual(expect.objectContaining({ status: "deleted", deleted: 1 }))
+        expect(deps.fileSystem.rm).toHaveBeenCalledWith(paths.sandboxPath, { recursive: true, force: true })
+        expect(deps.fileSystem.rm).toHaveBeenCalledWith(paths.jobSandboxRoot, { recursive: true, force: true })
     })
 
     test("file tool path guards reject malformed roots and symlink escapes", async () => {

@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { cleanupJobSandboxes, defaultSandboxDependencies, deleteSandboxPath, getJobSandboxRoot, getSandboxPaths, normalizeSandboxName, resolveSandboxJob, type SandboxDependencies } from "@/utils/sandbox"
+import { cleanupEmptyJobSandboxRoot, cleanupJobSandboxes, defaultSandboxDependencies, deleteSandboxPath, getJobSandboxRoot, getSandboxPaths, normalizeSandboxName, resolveSandboxJob, type SandboxDependencies } from "@/utils/sandbox"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { pathExists } from "@/utils/autocode_sandbox_helpers"
 
@@ -29,6 +29,7 @@ export function createAutocodeSandboxDeleteTool(client?: OpencodeClient, deps: S
                     return JSON.stringify({ ok: true, status: "missing", sandbox_name: sandboxName.value, job_name: job.jobName, guidance: limitationGuidance })
                 }
                 const result = await deleteSandboxPath(paths, deps)
+                if (result.status !== "missing") await cleanupEmptyJobSandboxRoot(job.storageRoot, job.jobName, deps)
                 return JSON.stringify({ ok: result.status !== "warning", status: result.status, sandbox_name: sandboxName.value, job_name: job.jobName, warning: result.warning, job_sandbox_root: getJobSandboxRoot(job.storageRoot, job.jobName), guidance: limitationGuidance })
             }
             catch (error) {

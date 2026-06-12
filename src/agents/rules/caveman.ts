@@ -9,7 +9,6 @@ Caveman English Rules:
 - Prefer short plain words. Keep exact technical terms.
 - Use common abbreviations
 - Fragments OK if cause/action stays clear
-- Emoji only when it clarifies
 
 Caveman English applies to: tool parameters, prompts, user responses (excluding reports)
 

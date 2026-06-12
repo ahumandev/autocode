@@ -5,9 +5,22 @@ import type { SandboxDependencies } from "@/utils/sandbox"
 
 type DependencyToolResult = Record<string, unknown> & {
     bwrap: Record<string, unknown>
+    dependencies?: Record<string, DependencyEntry>
     next_actions: string[]
     opencode: Record<string, unknown>
+    optional_dependencies?: Record<string, DependencyEntry>
+    optional_ok?: boolean
+    required_ok?: boolean
+    status?: string
 }
+
+type DependencyEntry = Record<string, unknown> & {
+    guidance?: string
+    notes?: string
+    status?: string
+}
+
+type CommandMap = Record<string, boolean | { path?: string, version?: string }>
 
 function parseResult(result: string): DependencyToolResult {
     return JSON.parse(result) as DependencyToolResult
@@ -22,6 +35,8 @@ function createDeps(options?: {
     opencodeStderr?: string
     bwrapExists?: boolean
     bwrapExit?: number | null
+    commandMap?: CommandMap
+    commandErrorMap?: Record<string, Error>
 }): SandboxDependencies {
     const spawn = mock(async (command: string, args: readonly string[]) => {
         if (command === "opencode" && args[0] === "--version") {
@@ -29,6 +44,23 @@ function createDeps(options?: {
         }
         if (command === "bwrap") {
             return { exitCode: options?.bwrapExit ?? 0, stdout: "", stderr: options?.bwrapExit === 0 ? "" : "probe failed" }
+        }
+        if (command === "sh" && args[0] === "-c") {
+            const match = /^command -v (.+)$/.exec(args[1] ?? "")
+            if (match) {
+                const commandEntry = options?.commandMap?.[match[1]]
+                if (!commandEntry) return { exitCode: 127, stdout: "", stderr: "not found" }
+
+                const path = typeof commandEntry === "object" ? commandEntry.path : undefined
+                return { exitCode: 0, stdout: `${path ?? `/usr/bin/${match[1]}`}\n`, stderr: "" }
+            }
+        }
+        if (args[0] === "--version") {
+            const commandEntry = options?.commandMap?.[command]
+            if (!commandEntry) return { exitCode: 127, stdout: "", stderr: "not found" }
+
+            const version = typeof commandEntry === "object" ? commandEntry.version : undefined
+            return { exitCode: 0, stdout: `${version ?? `${command} 1.0.0`}\n`, stderr: "" }
         }
         return { exitCode: 127, stdout: "", stderr: "not found" }
     })
@@ -44,11 +76,18 @@ function createDeps(options?: {
             async readdir() { return [] },
             async mkdir() {},
             async writeFile() {},
-            async stat() { throw new Error("not implemented") },
+            async stat() {
+                const error = new Error("missing") as NodeJS.ErrnoException
+                error.code = "ENOENT"
+                throw error
+            },
         },
         spawn,
         async commandExists(command: string) {
+            const commandError = options?.commandErrorMap?.[command]
+            if (commandError) throw commandError
             return command === "bwrap" && (options?.bwrapExists ?? true)
+                || command !== "bwrap" && Boolean(options?.commandMap?.[command])
         },
         process: { platform: options?.platform ?? "linux", arch: "x64", env: options?.env ?? {} },
     } as unknown as SandboxDependencies
@@ -105,6 +144,7 @@ describe("autocode_dependencies", () => {
         const result = parseResult(await createAutocodeDependenciesTool(deps).execute({}, createToolContext()) as string)
         const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls.map(([command]) => command)
 
+        expect(createAutocodeDependenciesTool(deps).args).toEqual({})
         expect(result.detect_only).toBe(true)
         expect(result.status).toBe("action_required")
         expect(calls).toContain("opencode")
@@ -114,6 +154,81 @@ describe("autocode_dependencies", () => {
         expect(calls).not.toContain("pacman")
         expect(calls).not.toContain("zypper")
         expect((deps.spawn as ReturnType<typeof mock>).mock.calls).not.toContainEqual(["opencode", ["upgrade"], expect.anything()])
+    })
+
+    test("reports missing optional dependencies without blocking required dependencies", async () => {
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps()).execute({}, createToolContext()) as string)
+        const optionalDependencies = result.optional_dependencies ?? {}
+
+        expect(Object.keys(optionalDependencies)).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_mcp", "browser"])
+        for (const key of ["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_mcp", "browser"]) {
+            expect(result.dependencies?.[key]).toEqual(optionalDependencies[key])
+        }
+        expect(result.required_ok).toBe(true)
+        expect(result.optional_ok).toBe(false)
+        expect(result.status).toBe("action_required")
+        expect(result.next_actions).toContain("Install or use `chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
+        expect(result.next_actions).toContain("Install or use `@upstash/context7-mcp` for Context7 MCP.")
+        expect(result.next_actions).toContain("Install or use `excel-mcp-server` for Excel MCP.")
+        expect(result.next_actions).toContain("Install or use `mcp-server-git` for Git MCP.")
+        expect(result.next_actions).toContain("Install Google Chrome / Chrome for Testing for official Chrome DevTools MCP support. Chromium may work but is not guaranteed.")
+        expect(optionalDependencies.chrome_devtools_mcp.package).toBe("chrome-devtools-mcp")
+        expect(optionalDependencies.chrome_devtools_mcp.install_command).toBe("npm install -g chrome-devtools-mcp@latest or use `npx chrome-devtools-mcp@latest`")
+        expect(optionalDependencies.chrome_devtools_mcp.docs_url).toBe("https://developer.chrome.com/docs/chrome-devtools/mcp")
+        expect(optionalDependencies.context7_mcp.package).toBe("@upstash/context7-mcp")
+        expect(optionalDependencies.context7_mcp.install_command).toBe("npm install -g @upstash/context7-mcp or use `npx @upstash/context7-mcp`")
+        expect(optionalDependencies.context7_mcp.docs_url).toBe("https://github.com/upstash/context7")
+        expect(optionalDependencies.excel_mcp.package).toBe("excel-mcp-server")
+        expect(optionalDependencies.excel_mcp.install_command).toBe("npm install -g excel-mcp-server or use `npx excel-mcp-server`")
+        expect(optionalDependencies.excel_mcp.docs_url).toBe("https://www.npmjs.com/package/excel-mcp-server")
+        expect(optionalDependencies.git_mcp.package).toBe("mcp-server-git")
+        expect(optionalDependencies.git_mcp.install_command).toBe("pipx install mcp-server-git or use `uvx mcp-server-git`")
+        expect(optionalDependencies.git_mcp.docs_url).toBe("https://github.com/modelcontextprotocol/servers/tree/main/src/git")
+        expect(optionalDependencies.browser.install_command).toContain("Google Chrome / Chrome for Testing")
+        expect(optionalDependencies.browser.install_command).toContain("https://developer.chrome.com/docs/chrome-devtools/mcp")
+        expect(optionalDependencies.browser.install_command).not.toContain("chromium")
+        expect(optionalDependencies.browser.install_command).not.toContain("apt-get install")
+        expect(optionalDependencies.browser.install_command).not.toContain("dnf install")
+        expect(optionalDependencies.browser.install_command).not.toContain("apk add")
+        expect(optionalDependencies.browser.install_command).not.toContain("pacman -S")
+        expect(optionalDependencies.browser.install_command).not.toContain("zypper install")
+    })
+
+    test("isolates optional dependency inspection errors", async () => {
+        const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+            commandErrorMap: { "chrome-devtools-mcp": new Error("could not inspect chrome-devtools-mcp") },
+            commandMap: {
+                "context7-mcp": true,
+                "excel-mcp-server": true,
+                "mcp-server-git": true,
+                git: true,
+                "google-chrome": true,
+            },
+        })).execute({}, createToolContext()) as string)
+
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("unknown")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.error).toContain("could not inspect chrome-devtools-mcp")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.guidance).toContain("Inspect chrome-devtools MCP manually.")
+        expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.browser?.status).toBe("ok")
+        expect(result.optional_dependencies?.browser?.guidance).toContain("Chrome DevTools MCP")
+    })
+
+    test("browser distinguishes Google Chrome from Chromium", async () => {
+        const both = parseResult(await createAutocodeDependenciesTool(createDeps({ commandMap: { "google-chrome": true, chromium: true } })).execute({}, createToolContext()) as string)
+        const chromiumOnly = parseResult(await createAutocodeDependenciesTool(createDeps({ commandMap: { chromium: true } })).execute({}, createToolContext()) as string)
+
+        expect(both.optional_dependencies?.browser?.status).toBe("ok")
+        expect(both.optional_dependencies?.browser?.command).toBe("google-chrome")
+        expect(both.optional_dependencies?.browser?.chromium_command).toBe("chromium")
+        expect(both.optional_dependencies?.browser?.guidance).toContain("Google Chrome")
+        expect(both.optional_dependencies?.browser?.guidance).toContain("Chrome DevTools MCP")
+        expect(chromiumOnly.optional_dependencies?.browser?.status).toBe("unknown")
+        expect(chromiumOnly.optional_dependencies?.browser?.command).toBe("chromium")
+        expect(chromiumOnly.optional_dependencies?.browser?.guidance).toContain("Install Google Chrome")
+        expect(chromiumOnly.optional_dependencies?.browser?.notes).toContain("Chromium found")
     })
 
     test("registers as no-arg tool", () => {

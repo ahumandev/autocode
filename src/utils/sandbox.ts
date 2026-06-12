@@ -1,7 +1,7 @@
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { createHash } from "crypto"
 import { spawn, spawnSync } from "child_process"
-import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "fs/promises"
+import { cp, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "fs/promises"
 import { existsSync } from "fs"
 import path from "path"
 import { createDirectoryFileSystem, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type PlannedJobIdentityResolution, type ResolvedPlannedJob, type SessionJobContext } from "./jobs"
@@ -58,6 +58,7 @@ export type SandboxProcessInfo = {
 export type SandboxFileSystem = Omit<JobToolFileSystem, "writeFile"> & {
     writeFile: (filePath: string, content: string | Uint8Array) => Promise<void>
     cp?: typeof cp
+    lstat?: (filePath: string) => Promise<unknown>
 }
 
 export type SandboxCleanupFileSystem = Pick<JobToolFileSystem, "readFile" | "readdir" | "rm" | "stat">
@@ -91,7 +92,7 @@ export type SandboxCacheEntry = {
 
 export type SandboxRootfsResolution =
     | { ok: true, cache: SandboxCacheEntry, downloaded: boolean }
-    | { ok: false, reason: string, status?: string, command?: string, stdout?: string, stderr?: string, exit_code?: number | null }
+    | { ok: false, reason: string, status?: string, source_url?: string, command?: string, stdout?: string, stderr?: string, exit_code?: number | null }
 
 export type SandboxCleanupDependencies = Omit<SandboxDependencies, "fileSystem"> & {
     fileSystem: SandboxCleanupFileSystem
@@ -158,7 +159,7 @@ export type SandboxCleanupResult = {
 
 export type ManualRootfsDownloadResolution =
     | { ok: true, distro: SandboxDistro, architecture: ManualArchitecture, url: string, archive_format: ManualRootfsArchiveFormat, strip_components?: number, version?: string, verification?: Record<string, string | number | boolean | undefined> }
-    | { ok: false, distro: SandboxDistro, architecture?: string, status: string, reason: string }
+    | { ok: false, distro: SandboxDistro, architecture?: string, status: string, reason: string, source_url?: string }
 
 type AlpineReleaseMetadata = {
     arch?: string
@@ -295,6 +296,7 @@ export const defaultSandboxDependencies: SandboxDependencies = {
         rename,
         rm,
         stat,
+        lstat,
         writeFile,
         cp,
     },
@@ -359,31 +361,45 @@ function cacheEntryId(distro: SandboxDistro, download: ManualRootfsDownloadResol
 function parseAlpineLatestReleasesYaml(content: string): AlpineReleaseMetadata[] | undefined {
     const releases: AlpineReleaseMetadata[] = []
     let current: AlpineReleaseMetadata | undefined
+    let blockScalarIndent: number | undefined
 
     for (const rawLine of content.split(/\r?\n/)) {
         const line = rawLine.trim()
-        if (!line || line.startsWith("#")) continue
-        if (line.startsWith("- ")) {
-            if (current) releases.push(current)
+        if (!line || line === "---" || line.startsWith("#")) continue
+        const indent = rawLine.length - rawLine.trimStart().length
+        if (blockScalarIndent !== undefined) {
+            if (indent > blockScalarIndent) continue
+            blockScalarIndent = undefined
+        }
+        if (line === "-") {
+            if (current && Object.keys(current).length > 0) releases.push(current)
             current = {}
-            parseAlpineMetadataField(line.slice(2), current)
             continue
         }
-        if (!current) return undefined
-        parseAlpineMetadataField(line, current)
+        if (line.startsWith("- ")) {
+            const next: AlpineReleaseMetadata = {}
+            parseAlpineMetadataField(line.slice(2), next)
+            if (current && Object.keys(current).length > 0) releases.push(current)
+            current = next
+            continue
+        }
+        if (!current) continue
+        if (parseAlpineMetadataField(line, current)) blockScalarIndent = indent
     }
-    if (current) releases.push(current)
+    if (current && Object.keys(current).length > 0) releases.push(current)
 
     return releases.length > 0 ? releases : undefined
 }
 
-function parseAlpineMetadataField(line: string, release: AlpineReleaseMetadata): void {
+function parseAlpineMetadataField(line: string, release: AlpineReleaseMetadata): boolean {
     const separator = line.indexOf(":")
-    if (separator <= 0) return
+    if (separator <= 0) return false
     const key = line.slice(0, separator).trim()
     const rawValue = line.slice(separator + 1).trim()
+    const isBlockScalar = rawValue === "|" || rawValue === ">"
     const value = rawValue.replace(/^['"]|['"]$/g, "")
     if ((alpineReleaseMetadataKeys as readonly string[]).includes(key)) release[key as AlpineReleaseMetadataKey] = value
+    return isBlockScalar
 }
 
 function isAlpineMinirootfsRelease(release: AlpineReleaseMetadata, architecture: AlpineArchitecture): boolean {
@@ -391,7 +407,7 @@ function isAlpineMinirootfsRelease(release: AlpineReleaseMetadata, architecture:
     const flavor = release.flavor ?? release.title ?? file
     const archMatches = release.arch === undefined || release.arch === architecture
 
-    return archMatches && flavor.includes("minirootfs") && file.includes("minirootfs") && file.endsWith(".tar.gz")
+    return archMatches && flavor.toLowerCase().includes("minirootfs") && file.includes("minirootfs") && file.endsWith(".tar.gz")
 }
 
 function buildAlpineMinirootfsDownload(metadataUrl: string, architecture: AlpineArchitecture, release: AlpineReleaseMetadata): ManualRootfsDownloadResolution & { ok: true } | undefined {
@@ -419,22 +435,22 @@ async function resolveAlpineMinirootfsDownload(architecture: ManualArchitecture,
         response = await deps.fetch(metadataUrl)
     }
     catch (error) {
-        return { ok: false, distro: "alpine", architecture, status: "not_feasible", reason: `Alpine rootfs metadata fetch failed: ${error instanceof Error ? error.message : String(error)}` }
+        return { ok: false, distro: "alpine", architecture, status: "not_feasible", reason: `Alpine rootfs metadata fetch failed for ${metadataUrl}: ${error instanceof Error ? error.message : String(error)}`, source_url: metadataUrl }
     }
-    if (!response.ok) return { ok: false, distro: "alpine", architecture, status: String(response.status), reason: `Alpine rootfs metadata fetch failed with HTTP ${response.status}.` }
+    if (!response.ok) return { ok: false, distro: "alpine", architecture, status: String(response.status), reason: `Alpine rootfs metadata fetch failed for ${metadataUrl} with HTTP ${response.status}.`, source_url: metadataUrl }
 
     let releases: AlpineReleaseMetadata[] | undefined
     try {
         releases = parseAlpineLatestReleasesYaml(await response.text())
     }
     catch {
-        return { ok: false, distro: "alpine", architecture, status: "not_feasible", reason: "Alpine rootfs metadata is malformed." }
+        return { ok: false, distro: "alpine", architecture, status: "not_feasible", reason: `Alpine rootfs metadata is malformed: ${metadataUrl}.`, source_url: metadataUrl }
     }
-    if (!releases) return { ok: false, distro: "alpine", architecture, status: "not_feasible", reason: "Alpine rootfs metadata is malformed." }
+    if (!releases) return { ok: false, distro: "alpine", architecture, status: "not_feasible", reason: `Alpine rootfs metadata is malformed: ${metadataUrl}.`, source_url: metadataUrl }
 
     const release = releases.find((candidate) => isAlpineMinirootfsRelease(candidate, alpineArchitecture))
     const download = release ? buildAlpineMinirootfsDownload(metadataUrl, alpineArchitecture, release) : undefined
-    if (!download) return { ok: false, distro: "alpine", architecture, status: "not_feasible", reason: "Alpine rootfs metadata does not include a matching minirootfs release." }
+    if (!download) return { ok: false, distro: "alpine", architecture, status: "not_feasible", reason: `Alpine rootfs metadata does not include a matching minirootfs release: ${metadataUrl}.`, source_url: metadataUrl }
 
     return download
 }
@@ -475,7 +491,7 @@ async function writeJsonFile(fileSystem: Pick<SandboxFileSystem, "mkdir" | "writ
 export async function ensureSandboxRootfsCache(distro: SandboxDistro, config: SandboxConfig | undefined, deps: SandboxDependencies = defaultSandboxDependencies): Promise<SandboxRootfsResolution> {
     const architecture = getArchitecture(deps.process.arch)
     const download = distro === "alpine" ? await resolveAlpineMinirootfsDownload(architecture, deps) : getManualRootfsDownload(distro, architecture)
-    if (!download.ok) return { ok: false, reason: download.reason, status: download.status }
+    if (!download.ok) return { ok: false, reason: download.reason, status: download.status, source_url: download.source_url }
     if (!deps.fetch) return { ok: false, reason: "Unable to download distro rootfs: fetch is unavailable." }
 
     const version = download.version ?? (distro === "debian" ? "bookworm" : "latest-stable")
@@ -483,20 +499,30 @@ export async function ensureSandboxRootfsCache(distro: SandboxDistro, config: Sa
     const rootfsPath = path.join(entryPath, "rootfs")
     const metadataFile = path.join(entryPath, "metadata.json")
     const existing = await readJsonFile<SandboxCacheEntry>(deps.fileSystem, metadataFile)
-    if (existing && await pathExists(deps.fileSystem, existing.rootfs_path)) return { ok: true, cache: existing, downloaded: false }
+    if (existing && await pathExists(deps.fileSystem, existing.rootfs_path) && await optionalPathExists(deps.fileSystem, path.join(existing.rootfs_path, "bin", "sh"))) return { ok: true, cache: existing, downloaded: false }
     if (existing && deps.fileSystem.rm) await deps.fileSystem.rm(entryPath, { recursive: true, force: true })
 
     await deps.fileSystem.mkdir(rootfsPath, { recursive: true })
     const archivePath = path.join(entryPath, `rootfs.tar.${download.archive_format}`)
     const response = await deps.fetch(download.url)
-    if (!response.ok) return { ok: false, reason: `Rootfs download failed with HTTP ${response.status}.`, status: String(response.status) }
+    if (!response.ok) return { ok: false, reason: `Rootfs download failed for ${download.url} with HTTP ${response.status}.`, status: String(response.status), source_url: download.url }
     await deps.fileSystem.writeFile(archivePath, new Uint8Array(await response.arrayBuffer()))
-    const tarArgs = ["-xf", archivePath, "-C", rootfsPath]
-    if (download.strip_components !== undefined) tarArgs.splice(1, 0, `--strip-components=${download.strip_components}`)
+
+    const missingCompressor = await getMissingRootfsArchiveCompressor(download.archive_format, deps)
+    if (missingCompressor) {
+        await deps.fileSystem.rm?.(entryPath, { recursive: true, force: true })
+        return { ok: false, reason: `Missing host dependency ${missingCompressor} required to extract ${download.archive_format} rootfs archive; rootfs download already succeeded.`, source_url: download.url }
+    }
+
+    const tarArgs = createRootfsTarExtractArgs(archivePath, rootfsPath, download.archive_format, download.strip_components)
     const extract = await deps.spawn("tar", tarArgs, { env: deps.process.env })
     if (extract.exitCode !== 0) {
         await deps.fileSystem.rm?.(entryPath, { recursive: true, force: true })
         return { ok: false, reason: "Rootfs extraction failed.", command: `tar ${tarArgs.join(" ")}`, stdout: extract.stdout, stderr: extract.stderr, exit_code: extract.exitCode }
+    }
+    if (!await optionalPathExists(deps.fileSystem, path.join(rootfsPath, "bin", "sh"))) {
+        await deps.fileSystem.rm?.(entryPath, { recursive: true, force: true })
+        return { ok: false, reason: `Rootfs extraction produced malformed ${distro} rootfs: missing /bin/sh. Verify archive strip_components setting for ${download.url}.`, source_url: download.url }
     }
 
     const now = new Date().toISOString()
@@ -516,20 +542,55 @@ export async function ensureSandboxRootfsCache(distro: SandboxDistro, config: Sa
     return { ok: true, cache, downloaded: true }
 }
 
+async function getMissingRootfsArchiveCompressor(archiveFormat: ManualRootfsArchiveFormat, deps: Pick<SandboxDependencies, "commandExists" | "spawn" | "process">): Promise<string | undefined> {
+    const command = getRootfsArchiveCompressorCommand(archiveFormat)
+    if (!command) return undefined
+
+    return await isCommandCallable(command, deps) ? undefined : command
+}
+
+function getRootfsArchiveCompressorCommand(archiveFormat: ManualRootfsArchiveFormat): string | undefined {
+    if (archiveFormat === "xz") return "xz"
+    if (archiveFormat === "zstd") return "zstd"
+    return undefined
+}
+
+function createRootfsTarExtractArgs(archivePath: string, rootfsPath: string, archiveFormat: ManualRootfsArchiveFormat, stripComponents?: number): string[] {
+    const args = ["--extract"]
+    if (archiveFormat === "gzip") args.push("--gzip")
+    if (archiveFormat === "xz") args.push("--xz")
+    if (archiveFormat === "zstd") args.push("--zstd")
+    if (stripComponents !== undefined) args.push(`--strip-components=${stripComponents}`)
+    args.push(`--file=${archivePath}`, `--directory=${rootfsPath}`)
+    return args
+}
+
 export async function materializeSandboxRootfs(cacheRootfsPath: string, destinationRootfsPath: string, method: EffectiveSandboxSyncMethod, deps: SandboxDependencies = defaultSandboxDependencies): Promise<EffectiveSandboxSyncMethod> {
     await deps.fileSystem.rm?.(destinationRootfsPath, { recursive: true, force: true })
-    await deps.fileSystem.mkdir(path.dirname(destinationRootfsPath), { recursive: true })
+    await deps.fileSystem.mkdir(destinationRootfsPath, { recursive: true })
     if (method === "reflink") {
-        const result = await deps.spawn("cp", ["-a", "--reflink=always", cacheRootfsPath, destinationRootfsPath], { env: deps.process.env })
+        const result = await deps.spawn("cp", ["-a", "--reflink=always", `${cacheRootfsPath}/.`, `${destinationRootfsPath}/`], { env: deps.process.env })
         if (result.exitCode === 0) return "reflink"
     }
+    const archiveCopy = await copySandboxRootfsWithCpArchive(cacheRootfsPath, destinationRootfsPath, deps)
+    if (archiveCopy) return "copy"
     if (deps.fileSystem.cp) {
-        await deps.fileSystem.cp(cacheRootfsPath, destinationRootfsPath, { recursive: true, force: true, preserveTimestamps: true })
+        await deps.fileSystem.cp(path.join(cacheRootfsPath, "."), destinationRootfsPath, { recursive: true, force: true, preserveTimestamps: true, dereference: false, verbatimSymlinks: true })
         return "copy"
     }
-    const result = await deps.spawn("cp", ["-a", cacheRootfsPath, destinationRootfsPath], { env: deps.process.env })
-    if (result.exitCode !== 0) throw new Error(`Rootfs copy failed: ${result.stderr || result.stdout}`)
-    return "copy"
+    throw new Error("Rootfs copy failed: cp -a failed and fs.cp is unavailable.")
+}
+
+async function copySandboxRootfsWithCpArchive(cacheRootfsPath: string, destinationRootfsPath: string, deps: SandboxDependencies): Promise<boolean> {
+    try {
+        const result = await deps.spawn("cp", ["-a", `${cacheRootfsPath}/.`, `${destinationRootfsPath}/`], { env: deps.process.env })
+        if (result.exitCode === 0) return true
+        if (!deps.fileSystem.cp) throw new Error(`Rootfs copy failed: ${result.stderr || result.stdout}`)
+    }
+    catch (error) {
+        if (!deps.fileSystem.cp) throw error
+    }
+    return false
 }
 
 function parseExpire(value: string | number | undefined, effectiveMethod: EffectiveSandboxSyncMethod): number | undefined {
@@ -636,6 +697,27 @@ export function assertSafeSandboxDeletionPath(candidatePath: string, storageRoot
     return assertSafeSandboxPath(candidatePath, jobSandboxRoot)
 }
 
+function assertSafeJobSandboxRootDeletionPath(candidatePath: string, storageRoot: string, jobName: string): SandboxValidationResult<string> {
+    const resolvedStorageRoot = path.resolve(storageRoot)
+    const resolvedAgentsRoot = path.join(resolvedStorageRoot, ".agents")
+    const resolvedSandboxesRoot = path.join(resolvedAgentsRoot, "sandboxes")
+    const resolvedExpectedRoot = path.resolve(getJobSandboxRoot(storageRoot, jobName))
+    const resolvedPath = path.resolve(candidatePath)
+    const relativePath = path.relative(resolvedSandboxesRoot, resolvedExpectedRoot)
+
+    if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+        return { ok: false, reason: "Refusing to delete protected sandbox storage directory." }
+    }
+    if ([resolvedAgentsRoot, resolvedSandboxesRoot].includes(resolvedPath)) {
+        return { ok: false, reason: "Refusing to delete protected sandbox storage directory." }
+    }
+    if (resolvedPath !== resolvedExpectedRoot) {
+        return { ok: false, reason: "Job sandbox root must match the resolved job sandbox directory." }
+    }
+
+    return { ok: true, value: resolvedPath }
+}
+
 export async function resolveSandboxJob(
     client: OpencodeClient | undefined,
     context: SessionJobContext,
@@ -672,7 +754,7 @@ function addSandboxProbeBind(args: string[], hostPath: string, guestPath: string
 }
 
 async function addOptionalSandboxProbeBind(deps: Pick<SandboxDependencies, "fileSystem">, args: string[], hostPath: string, guestPath: string = hostPath): Promise<void> {
-    if (await pathExists(deps.fileSystem, hostPath)) addSandboxProbeBind(args, hostPath, guestPath)
+    if (await optionalPathExists(deps.fileSystem, hostPath)) addSandboxProbeBind(args, hostPath, guestPath)
 }
 
 async function createBwrapUsabilityProbeArgs(deps: Pick<SandboxDependencies, "fileSystem">): Promise<string[]> {
@@ -871,9 +953,37 @@ async function pathExists(fileSystem: Pick<SandboxFileSystem, "stat">, candidate
     }
 }
 
+async function optionalPathExists(fileSystem: Pick<SandboxFileSystem, "stat" | "lstat">, candidatePath: string): Promise<boolean> {
+    try {
+        await (fileSystem.lstat ?? fileSystem.stat)(candidatePath)
+        return true
+    }
+    catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
+        throw error
+    }
+}
+
 async function removePath(fileSystem: Pick<SandboxCleanupFileSystem, "rm">, candidatePath: string): Promise<void> {
     if (!fileSystem.rm) throw new Error("Unable to remove sandbox path: rm is unavailable")
     await fileSystem.rm(candidatePath, { recursive: true, force: true })
+}
+
+export async function cleanupEmptyJobSandboxRoot(
+    storageRoot: string,
+    jobName: string,
+    deps: SandboxCleanupDependencies = defaultSandboxDependencies,
+): Promise<boolean> {
+    const jobSandboxRoot = getJobSandboxRoot(storageRoot, jobName)
+    const safePath = assertSafeJobSandboxRootDeletionPath(jobSandboxRoot, storageRoot, jobName)
+    if (!safePath.ok) return false
+    if (!await pathExists(deps.fileSystem, safePath.value)) return false
+
+    const entries = await deps.fileSystem.readdir(safePath.value, { withFileTypes: true }) as import("fs").Dirent[]
+    if (entries.length > 0) return false
+
+    await removePath(deps.fileSystem, safePath.value)
+    return true
 }
 
 export async function deleteSandboxPath(
@@ -918,6 +1028,7 @@ export async function cleanupJobSandboxes(
         }
         items.push(await deleteSandboxPath(getSandboxPaths(storageRoot, jobName, validName.value), deps))
     }
+    await cleanupEmptyJobSandboxRoot(storageRoot, jobName, deps)
 
     const warnings = items.flatMap((item) => item.warning ? [item.warning] : [])
     return {

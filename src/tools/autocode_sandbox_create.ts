@@ -3,9 +3,10 @@ import type { OpencodeClient } from "@opencode-ai/sdk"
 import path from "path"
 import { createAbortResponse, createRetryResponse, flattenError } from "@/utils/tools"
 import { assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, defaultSandboxDependencies, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getSandboxPaths, materializeSandboxRootfs, normalizeOptionalDistro, normalizeSandboxName, readSandboxMetadata, resolveSandboxJob, writeSandboxMetadata, type EffectiveSandboxSyncMethod, type SandboxConfig, type SandboxDependencies, type SandboxDistro, type SandboxMetadata } from "@/utils/sandbox"
-import { addBubblewrapBind, addOptionalBubblewrapReadOnlyBind, bubblewrapQuickEtcReadOnlyBinds, bubblewrapQuickRootReadOnlyBinds, pathExists } from "@/utils/autocode_sandbox_helpers"
+import { addBubblewrapBind, addBubblewrapProxyEnv, addOptionalBubblewrapReadOnlyBind, bubblewrapHostNetworkReadOnlyBinds, bubblewrapQuickEtcReadOnlyBinds, bubblewrapQuickRootReadOnlyBinds, pathExists, redactProxyCredentials } from "@/utils/autocode_sandbox_helpers"
 
 const limitationGuidance = "Sandbox uses bubblewrap (bwrap) only; proot and proot-distro are unsupported."
+const internetValidationUrls = ["https://github.com", "https://registry.npmjs.org", "https://dl-cdn.alpinelinux.org", "http://example.com", "http://dl-cdn.alpinelinux.org"]
 
 type InternetValidationCleanupDiagnostics = {
     attempted_path: string
@@ -13,6 +14,14 @@ type InternetValidationCleanupDiagnostics = {
     status: "succeeded" | "failed" | "skipped"
     reason?: string
     error?: string
+}
+
+type InternetEndpointDiagnostics = {
+    url: string
+    stdout: string
+    stderr: string
+    status: number | null
+    command: string
 }
 
 function createMetadata(sandboxName: string, jobName: string, distro: SandboxDistro | "quick", backend: SandboxMetadata["backend"], rootPath: string, backendData?: SandboxMetadata["backend_data"]): SandboxMetadata {
@@ -47,29 +56,39 @@ async function createBubblewrapSandbox(deps: SandboxDependencies, paths: ReturnT
 async function validateInternet(deps: SandboxDependencies, metadata: SandboxMetadata): Promise<{ ok: true } | { ok: false, diagnostics: Record<string, unknown> }> {
     const filesystemMode = metadata.backend_data?.filesystem_mode === "rootfs" ? "rootfs" : "quick"
     const rootfsPath = typeof metadata.backend_data?.rootfs_path === "string" ? metadata.backend_data.rootfs_path : undefined
-    const args = ["--die-with-parent", "--unshare-all", "--share-net", "--new-session"]
+    const baseArgs = ["--die-with-parent", "--unshare-all", "--share-net", "--new-session"]
     if (filesystemMode === "rootfs" && rootfsPath) {
-        addBubblewrapBind(args, rootfsPath, "/", false)
+        addBubblewrapBind(baseArgs, rootfsPath, "/", false)
     }
     else {
         for (const hostPath of bubblewrapQuickRootReadOnlyBinds) {
-            await addOptionalBubblewrapReadOnlyBind(deps, args, hostPath)
+            await addOptionalBubblewrapReadOnlyBind(deps, baseArgs, hostPath)
         }
     }
-    args.push("--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", "/sandbox", "--dir", "/home", "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-    if (filesystemMode === "quick") args.push("--dir", "/etc")
+    baseArgs.push("--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", "/sandbox", "--dir", "/home", "--setenv", "PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+    addBubblewrapProxyEnv(baseArgs, deps.process.env)
+    if (filesystemMode === "quick") baseArgs.push("--dir", "/etc")
     if (filesystemMode === "quick") {
         for (const hostPath of bubblewrapQuickEtcReadOnlyBinds) {
-            await addOptionalBubblewrapReadOnlyBind(deps, args, hostPath)
+            await addOptionalBubblewrapReadOnlyBind(deps, baseArgs, hostPath)
         }
     }
-    else if (await pathExists(deps, "/etc/resolv.conf")) {
-        addBubblewrapBind(args, "/etc/resolv.conf", "/etc/resolv.conf", true)
+    else {
+        for (const hostPath of bubblewrapHostNetworkReadOnlyBinds) {
+            await addOptionalBubblewrapReadOnlyBind(deps, baseArgs, hostPath)
+        }
     }
-    args.push("--bind", metadata.root_path, "/sandbox", "--bind", path.join(metadata.root_path, "home"), "/home", "/bin/sh", "-lc", "(command -v curl >/dev/null && curl -fsSI https://github.com >/dev/null) || (command -v wget >/dev/null && wget -q --spider https://github.com)")
-    const result = await deps.spawn("bwrap", args, { env: deps.process.env })
-    if (result.exitCode === 0) return { ok: true }
-    return { ok: false, diagnostics: { error: "GitHub connectivity validation failed.", stdout: result.stdout, stderr: result.stderr, status: result.exitCode, command: `bwrap ${args.join(" ")}`, context: { url: "https://github.com", filesystem_mode: filesystemMode } } }
+    baseArgs.push("--bind", metadata.root_path, "/sandbox", "--bind", path.join(metadata.root_path, "home"), "/home")
+
+    const endpointDiagnostics: InternetEndpointDiagnostics[] = []
+    for (const url of internetValidationUrls) {
+        const args = [...baseArgs, "/bin/sh", "-lc", `(command -v curl >/dev/null && curl -fsSI ${url} >/dev/null) || (command -v wget >/dev/null && wget -q --spider ${url})`]
+        const result = await deps.spawn("bwrap", args, { env: deps.process.env })
+        if (result.exitCode === 0) return { ok: true }
+        endpointDiagnostics.push({ url, stdout: redactProxyCredentials(result.stdout, deps.process.env), stderr: redactProxyCredentials(result.stderr, deps.process.env), status: result.exitCode, command: redactProxyCredentials(`bwrap ${args.join(" ")}`, deps.process.env) })
+    }
+
+    return { ok: false, diagnostics: { error: "Internet connectivity validation failed.", stdout: endpointDiagnostics.map((diagnostic) => diagnostic.stdout).join("\n"), stderr: endpointDiagnostics.map((diagnostic) => diagnostic.stderr).join("\n"), status: "all_endpoints_failed", command: endpointDiagnostics.map((diagnostic) => diagnostic.command).join("\n"), endpoint_diagnostics: endpointDiagnostics, context: { attempted_urls: internetValidationUrls, filesystem_mode: filesystemMode } } }
 }
 
 async function cleanupInternetValidationFailure(deps: SandboxDependencies, sandboxPath: string): Promise<InternetValidationCleanupDiagnostics> {
@@ -166,7 +185,7 @@ export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: S
                 if (distro.value) {
                     effectiveSyncMethod = await detectEffectiveSandboxSyncMethod(sandboxConfig, deps)
                     const cache = await ensureSandboxRootfsCache(distro.value, sandboxConfig, deps)
-                    if (!cache.ok) return JSON.stringify({ ok: false, status: cache.status ?? "rootfs_error", reason: cache.reason, stdout: cache.stdout, stderr: cache.stderr, exit_code: cache.exit_code, command: cache.command, guidance: limitationGuidance })
+                    if (!cache.ok) return JSON.stringify({ ok: false, status: cache.status ?? "rootfs_error", reason: cache.reason, source_url: cache.source_url, stdout: cache.stdout, stderr: cache.stderr, exit_code: cache.exit_code, command: cache.command, guidance: limitationGuidance })
                     const rootfsPath = path.join(safePath.value, "rootfs")
                     const actualSyncMethod = await materializeSandboxRootfs(cache.cache.rootfs_path, rootfsPath, effectiveSyncMethod, deps)
                     await cleanupExpiredSandboxCacheEntries(cache.cache, paths.storageRoot, sandboxConfig, actualSyncMethod, deps)
