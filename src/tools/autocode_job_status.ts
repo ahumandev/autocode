@@ -3,8 +3,8 @@ import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "fs/promises"
 import { createAbortResponse, createLifecycleJobRequiredRetryResponse, createRetryResponse } from "@/utils/tools"
 import { createDirectoryFileSystem, getEffectiveJobStatus, isJobStatus, movePlannedJobToStatus, readLatestAssistantResponseText, resolveAgentsStorageRoot, resolvePlannedJobIdentity, updateCurrentSessionTitleToJobName, type JobStatus, type JobToolFileSystem, type PlannedJobIdentityResolution } from "@/utils/jobs"
-import { cleanupJobSandboxes, defaultSandboxDependencies } from "@/utils/sandbox"
 import { createSolutionUtils, SolutionLogEvent } from "@/utils/solution"
+import { shelveResolvedPlannedJob } from "@/utils/shelve"
 
 async function readDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
     return options?.withFileTypes ? readdir(dirPath, { withFileTypes: true }) : readdir(dirPath)
@@ -45,13 +45,13 @@ function createCollisionRetryResponse(jobName: string, status: JobStatus): strin
     return createRetryResponse(
         "update job status",
         `Planned job lifecycle collision: ${jobName}`,
-        status === "terminated" ? "Resolve duplicate active lifecycle directories for this job before terminating." : "Resolve duplicate active lifecycle directories for this job before retrying."
+        status === "shelved" ? "Resolve duplicate active lifecycle directories for this job before shelving." : "Resolve duplicate active lifecycle directories for this job before retrying."
     )
 }
 
 function createNextAction(status: JobStatus): string {
-    return status === "terminated"
-        ? "Termination complete; the job has no active lifecycle directory."
+    return status === "shelved"
+        ? "Shelve complete; the job has no active lifecycle directory."
         : `Continue the job from status ${status}.`
 }
 
@@ -69,7 +69,7 @@ function getRequestedStatus(args: Record<string, unknown>): { status?: JobStatus
                 error: createRetryResponse(
                     "update job status",
                     `Invalid status: ${args.status}`,
-                    "Use one of: concepts, drafts, assist, executing, facilitate, review, terminated."
+                    "Use one of: concepts, drafts, assist, executing, facilitate, review, shelved."
                 )
             }
         }
@@ -81,7 +81,7 @@ function getRequestedStatus(args: Record<string, unknown>): { status?: JobStatus
         error: createRetryResponse(
             "update job status",
             `Invalid status: ${args.status}`,
-            "Use one of: concepts, drafts, assist, executing, facilitate, review, terminated."
+            "Use one of: concepts, drafts, assist, executing, facilitate, review, shelved."
         )
     }
 }
@@ -99,12 +99,12 @@ function getIdentityRetryResponse(identity: PlannedJobIdentityResolution, status
     return createMissingIdentityRetryResponse()
 }
 
-export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient | JobToolFileSystem, fileSystemOrNow?: JobToolFileSystem | (() => Date), maybeNow?: () => Date) {
+export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient | JobToolFileSystem, fileSystemOrNow?: JobToolFileSystem | (() => Date), maybeNow?: () => Date): ReturnType<typeof tool> {
     const { client, fileSystem, now } = normalizeJobStatusToolArgs(clientOrFileSystem, fileSystemOrNow, maybeNow)
     return tool({
         description: "Update canonical lifecycle statuses for jobs under .agents/jobs/*.",
         args: {
-            status: tool.schema.string().optional().describe("concepts, drafts, assist, executing, facilitate, review, terminated"),
+            status: tool.schema.string().optional().describe("concepts, drafts, assist, executing, facilitate, review, shelved"),
         },
         async execute(args, context) {
             const requestedStatusResult = getRequestedStatus(args as Record<string, unknown>)
@@ -120,7 +120,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                 const storageRoot = resolveAgentsStorageRoot(context)
                 const directoryFileSystem = createDirectoryFileSystem(fileSystem)
                 const status = requestedStatusResult.status!
-                const identity = await resolvePlannedJobIdentity(directoryFileSystem, client, context)
+                const identity = await resolvePlannedJobIdentity(directoryFileSystem, client, context, { includeShelved: status === "shelved" })
                 if (identity.mode !== "planned" || !identity.job_name) {
                     return getIdentityRetryResponse(identity, status)
                 }
@@ -138,7 +138,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                     rename: directoryFileSystem.rename,
                 }
                 const effectiveStatus = getEffectiveJobStatus(status, resolvedJob.status)
-                
+
                 const reportContentResult = await readLatestAssistantResponseText(client, context)
                 if (reportContentResult.error) {
                     return createAbortResponse("inspect current session messages", reportContentResult.error)
@@ -154,6 +154,41 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                     )
                 }
 
+                if (effectiveStatus === "shelved") {
+                    const shelved = await shelveResolvedPlannedJob({
+                        storageRoot,
+                        client,
+                        context,
+                        fileSystem,
+                        moveFileSystem,
+                        now,
+                        resolvedJob,
+                        assistantResponseText: reportContentResult.text,
+                    })
+                    if (shelved.type === "missing") {
+                        return createMissingJobRetryResponse(jobName)
+                    }
+                    if (shelved.type === "collision") {
+                        return createCollisionRetryResponse(jobName, effectiveStatus)
+                    }
+                    if (shelved.type === "destination_collision") {
+                        return createRetryResponse("update job status", `Destination lifecycle directory already exists for ${jobName}`, "Resolve the existing lifecycle directory collision before shelving.")
+                    }
+                    if (!shelved.sandbox_archive.ok) {
+                        return createRetryResponse("archive job sandboxes", shelved.sandbox_archive.reason, "Resolve the sandbox archive collision or unsafe path before retrying. Do not overwrite existing sandbox archives.")
+                    }
+
+                    return JSON.stringify({
+                        job_name: shelved.moved.job.job_name,
+                        current_status: shelved.moved.job.status,
+                        job_path: shelved.moved.job.job_path,
+                        solution_path: shelved.solution.relativeSolutionPath,
+                        sandbox_archive: shelved.sandbox_archive,
+                        title_warning: shelved.title.warning,
+                        next_action: createNextAction(shelved.moved.job.status),
+                    })
+                }
+
                 const moved = await movePlannedJobToStatus(storageRoot, jobName, effectiveStatus, moveFileSystem)
                 if (moved.type === "missing") {
                     return createMissingJobRetryResponse(jobName)
@@ -162,7 +197,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                     return createCollisionRetryResponse(jobName, effectiveStatus)
                 }
                 if (moved.type === "destination_collision") {
-                    return createRetryResponse("update job status", `Destination lifecycle directory already exists for ${jobName}`, effectiveStatus === "terminated" ? "Resolve the existing lifecycle directory collision before terminating." : "Resolve the existing lifecycle directory collision before retrying.")
+                    return createRetryResponse("update job status", `Destination lifecycle directory already exists for ${jobName}`, "Resolve the existing lifecycle directory collision before retrying.")
                 }
 
                 const solution = createSolutionUtils(fileSystem, storageRoot, {
@@ -171,16 +206,12 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                 })
                 const logged = await solution.log(jobName, SolutionLogEvent.UpdateStatus, moved.job.status, reportContentResult.text, reportContentResult.text)
                 await updateCurrentSessionTitleToJobName(client, context, moved.job.job_name, moved.job.status)
-                const sandboxCleanup = moved.job.status === "terminated"
-                    ? await cleanupJobSandboxes(storageRoot, moved.job.job_name, { ...defaultSandboxDependencies, fileSystem })
-                    : undefined
 
                 return JSON.stringify({
                     job_name: moved.job.job_name,
                     current_status: moved.job.status,
                     job_path: moved.job.job_path,
                     solution_path: logged.relativeSolutionPath,
-                    sandbox_cleanup: sandboxCleanup,
                     next_action: createNextAction(moved.job.status),
                 })
             }

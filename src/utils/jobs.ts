@@ -5,8 +5,8 @@ import type { Dirent } from "fs"
 import { readLatestSolutionStatus } from "./solution"
 
 export const activeJobLifecycleDirectories = ["concepts", "drafts", "assist", "executing", "facilitate", "review"] as const
-export const completedJobLifecycleDirectory = "terminated" as const
-export const jobStatuses = ["concepts", "drafts", "assist", "executing", "facilitate", "review", "terminated"] as const
+export const completedJobLifecycleDirectory = "shelved" as const
+export const jobStatuses = ["concepts", "drafts", "assist", "executing", "facilitate", "review", "shelved"] as const
 export const listedActiveJobStatuses = ["concepts", "drafts", "assist", "executing", "facilitate", "review"] as const satisfies readonly JobStatus[]
 export const selectableExecutionJobStatuses = ["drafts", "assist", "executing"] as const satisfies readonly JobStatus[]
 
@@ -120,7 +120,7 @@ export type MoveJobFileSystem = DirectoryFileSystem & {
 }
 
 type ResolveOptions = {
-    includeTerminated?: boolean
+    includeShelved?: boolean
     ignoreCollisions?: boolean
 }
 
@@ -191,7 +191,7 @@ type ResolvePlannedJobResult =
     | { type: "missing" }
     | { type: "collision", collision: PlannedJobCollision }
 
-type MovePlannedJobResult =
+export type MovePlannedJobResult =
     | { type: "success", job: ResolvedPlannedJob, from_status: JobStatus }
     | { type: "missing" }
     | { type: "collision", collision: PlannedJobCollision }
@@ -261,10 +261,10 @@ export async function listPlannedJobs(
     worktree: string,
     options: {
         filter?: JobStatus
-        includeTerminated?: boolean
+        includeShelved?: boolean
     } = {},
 ): Promise<PlannedJobListResult> {
-    const scanned = await scanPlannedJobs(createDirectoryScanFileSystem(fileSystem), worktree, { includeTerminated: options.includeTerminated })
+    const scanned = await scanPlannedJobs(createDirectoryScanFileSystem(fileSystem), worktree, { includeShelved: options.includeShelved })
     const jobs = await Promise.all(scanned.jobs
         .filter((job) => options.filter === undefined || job.status === options.filter)
         .sort((left, right) => left.job_name.localeCompare(right.job_name))
@@ -338,8 +338,8 @@ export function getCanonicalDirectoryForStatus(status: JobStatus): ActiveJobLife
             return "facilitate"
         case "review":
             return "review"
-        case "terminated":
-            return "terminated"
+        case "shelved":
+            return "shelved"
     }
 }
 
@@ -357,8 +357,8 @@ export function getDefaultStatusForDirectory(directory: JobDirectory): JobStatus
             return "facilitate"
         case "review":
             return "review"
-        case "terminated":
-            return "terminated"
+        case "shelved":
+            return "shelved"
     }
 }
 
@@ -585,7 +585,7 @@ export async function scanPlannedJobs(
         await collectDirectoryJobs(fileSystem, worktree, directory, jobsByName)
     }
 
-    if (options.includeTerminated) {
+    if (options.includeShelved) {
         await collectDirectoryJobs(fileSystem, worktree, completedJobLifecycleDirectory, jobsByName)
     }
 
@@ -899,7 +899,7 @@ export async function countCurrentSessionUserMessages(client: OpencodeClient | u
 
 export function getEffectiveJobStatus(requestedStatus: JobStatus, currentStatus: JobStatus): JobStatus {
     if (requestedStatus === "review" && currentStatus === "review") {
-        return "terminated"
+        return "shelved"
     }
 
     return requestedStatus

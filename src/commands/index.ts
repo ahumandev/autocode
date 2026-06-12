@@ -138,20 +138,27 @@ Replace [job_path] with \`job_path\` value from \`autocode_plan_save\` tool resp
 
     "job-review": {
         agent: "auto",
-        description: "Commit accepted work and terminate into .agents/jobs/terminated/{name}/",
+        description: "Commit accepted work and shelve into .agents/jobs/shelved/{name}/",
         subtask: false,
         template: `
 1. Call \`autocode_criteria_list\` tool, if output show any unmet criteria, then inform user about unmet criteria and stop.
 2. If this is git repo, then base your git commit message on plan of this job and Review Report.
-3. Lastly when done, call \`autocode_job_status\` with \`status: 'terminated'\` to terminate the current or selected job, then stop.
+3. Lastly when done, call \`autocode_shelve\` to shelve accepted review into \`.agents/jobs/shelved/{name}/\`, then stop.
 `
     },
 
-    "job-terminate": {
+    "job-shelved": {
         agent: "auto",
-        description: "Terminate current job and move job to .agents/jobs/terminated/{name}/",
+        description: "Shelve current job and move job to .agents/jobs/shelved/{name}/",
         subtask: false, 
-        template: "Call \`autocode_job_status\` with \`status: 'terminated'\` to terminate job, then stop."
+        template: "Call \`autocode_shelve\` to shelve job into \`.agents/jobs/shelved/{name}/\`, then stop."
+    },
+
+    "shelve": {
+        agent: "auto",
+        description: "Shelve current job and move job to .agents/jobs/shelved/{name}/",
+        subtask: false,
+        template: "Call \`autocode_shelve\` to shelve job into \`.agents/jobs/shelved/{name}/\`, then stop."
     },
 
     // Ad-hoc commands

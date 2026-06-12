@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { deriveJobNameFromTitle, deriveJobTitleFromFileName, formatJobSessionTitle, getCanonicalDirectoryForStatus, getCanonicalDirectoryPathForStatus, getCurrentSessionTitle, getDefaultStatusForDirectory, getStorageRelativePath, isCompatibleJobName, isJobStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity } from "./jobs"
+import { deriveJobNameFromTitle, deriveJobTitleFromFileName, formatJobSessionTitle, getCanonicalDirectoryForStatus, getCanonicalDirectoryPathForStatus, getCurrentSessionTitle, getDefaultStatusForDirectory, getStorageRelativePath, isCompatibleJobName, isJobStatus, jobStatuses, resolveAgentsStorageRoot, resolvePlannedJobIdentity } from "./jobs"
 
 function createFileSystem(activeJobs: Record<string, string[]> = {}, files: Record<string, string> = {}) {
     return {
@@ -59,21 +59,28 @@ describe("jobs utilities", () => {
         expect(formatJobSessionTitle("jira_25422", "executing")).toBe("Jira 25422 (executing)")
     })
 
-    test("maps canonical directories and statuses without unsupported states", () => {
+    test("maps canonical directories and statuses without legacy final status", () => {
+        const legacyFinalStatus = ["termi", "nated"].join("")
+
         expect(getCanonicalDirectoryForStatus("concepts")).toBe("concepts")
         expect(getCanonicalDirectoryForStatus("drafts")).toBe("drafts")
         expect(getCanonicalDirectoryForStatus("assist")).toBe("assist")
         expect(getCanonicalDirectoryForStatus("executing")).toBe("executing")
         expect(getCanonicalDirectoryForStatus("facilitate")).toBe("facilitate")
         expect(getCanonicalDirectoryForStatus("review")).toBe("review")
-        expect(getCanonicalDirectoryForStatus("terminated")).toBe("terminated")
+        expect(getCanonicalDirectoryForStatus("shelved")).toBe("shelved")
         expect(getCanonicalDirectoryPathForStatus("drafts")).toBe(".agents/jobs/drafts")
         expect(getCanonicalDirectoryPathForStatus("facilitate")).toBe(".agents/jobs/facilitate")
+        expect(getCanonicalDirectoryPathForStatus("shelved")).toBe(".agents/jobs/shelved")
         expect(getDefaultStatusForDirectory("drafts")).toBe("drafts")
         expect(getDefaultStatusForDirectory("facilitate")).toBe("facilitate")
         expect(getDefaultStatusForDirectory("executing")).toBe("executing")
         expect(isJobStatus("facilitate")).toBe(true)
+        expect(isJobStatus("shelved")).toBe(true)
         expect(isJobStatus("failed")).toBe(false)
+        expect(isJobStatus(legacyFinalStatus)).toBe(false)
+        expect(jobStatuses).toContain("shelved")
+        expect(jobStatuses).not.toContain(legacyFinalStatus)
     })
 
     test("resolves a safe .agents storage root and relative path", () => {
@@ -102,7 +109,7 @@ describe("jobs utilities", () => {
         expect(deriveJobTitleFromFileName("Some_Job_Name.md", "executing")).toBe("Some Job Name (executing)")
         expect(deriveJobTitleFromFileName("Some_Job_Name.md", "facilitate")).toBe("Some Job Name (facilitate)")
         expect(deriveJobTitleFromFileName("Some_Job_Name.md", "review")).toBe("Some Job Name (review)")
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "terminated")).toBe("Some Job Name (terminated)")
+        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "shelved")).toBe("Some Job Name (shelved)")
     })
 
     test("derives job titles from path-qualified filenames using the basename", () => {

@@ -92,8 +92,8 @@ flowchart TD
   Executing --> Review[.agents/jobs/review]
   Executing -.blocked.-> Facilitate[.agents/jobs/facilitate]
   Facilitate -.unblocked.-> Executing
-  Assist --> Terminated[.agents/jobs/terminated]
-  Review --> Terminated
+  Assist --> Shelved[.agents/jobs/shelved]
+  Review --> Shelved
 ```
 
 1. Create or select a concept in `.agents/jobs/concepts`.
@@ -101,7 +101,7 @@ flowchart TD
 3. Run `/job-draft` to save the plan in `.agents/jobs/drafts/{job_name}/plan.md`.
 4. Run `/job-execute-assist` to execute with human steering, or `/job-execute-auto` to execute autonomously.
 5. Review the completed work from `.agents/jobs/review`.
-6. Run `/job-review` to accept and terminate the job, or `/job-terminate` to close it without acceptance.
+6. Run `/job-review` to accept and shelve the job, or `/job-shelved` (alias `/shelve`) to close it without acceptance.
 
 ### Workflow commands
 
@@ -115,8 +115,9 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | `/job-execute`        | Selects and executes a job in the current session with either `auto` or `assist`.           |
 | `/job-execute-assist` | Moves an approved draft to `.agents/jobs/assist/{job_name}/` and starts an assist session.  |
 | `/job-execute-auto`   | Moves an approved draft to `.agents/jobs/executing/{job_name}/` and starts an auto session. |
-| `/job-review`         | Accepts reviewed work, commits when applicable, and terminates the job.                     |
-| `/job-terminate`      | Moves the current or selected job to `.agents/jobs/terminated/{job_name}/`.                 |
+| `/job-review`         | Accepts reviewed work, commits when applicable, and shelves the job.                        |
+| `/job-shelved`        | Moves the current or selected job to `.agents/jobs/shelved/{job_name}/`.                    |
+| `/shelve`             | Alias for `/job-shelved`.                                                                   |
 
 ### Handover commands
 
@@ -155,7 +156,7 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 
 ### Job files
 
-Jobs are stored in `.agents/jobs/{status}/{job_name}/`. The valid statuses are `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, and `terminated`.
+Jobs are stored in `.agents/jobs/{status}/{job_name}/`. The valid statuses are `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, and `shelved`.
 
 | Path           | Purpose                                                                                       |
 | -------------- | --------------------------------------------------------------------------------------------- |
@@ -315,4 +316,4 @@ The build output is written to `dist/`, including `dist/plugin.js`, declarations
 | Draft      | Approved solution plan saved under `.agents/jobs/drafts/{job_name}/`.                |
 | Job        | A tracked unit of work that moves through AutoCode lifecycle directories.            |
 | Facilitate | Blocked autonomous work that needs human help before it can continue safely.         |
-| Terminated | Closed job state used after accepted review or explicit termination.                 |
+| Shelved    | Closed job state used after accepted review or explicit shelving.                    |

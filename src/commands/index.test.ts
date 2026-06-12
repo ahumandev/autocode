@@ -11,7 +11,8 @@ describe("commands", () => {
             "job-execute-auto",
             "job-execute",
             "job-review",
-            "job-terminate",
+            "job-shelved",
+            "shelve",
             "author-article",
             "document",
             "document-conventions",
@@ -59,12 +60,16 @@ describe("commands", () => {
         }
     })
 
-    test("keeps key command template substrings stable", () => {
+    test("keeps key command template substrings stable without legacy command", () => {
+        const legacyCommand = ["job-termi", "nate"].join("")
+
         expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
         expect(commands["job-draft"]?.template).toContain("Call `autocode_plan_save` tool with planned sections: PROBLEMS, REQUIREMENTS, CONSTRAINTS, RISKS, and user chosen PROPOSAL.")
         expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_swap` with `agent` set to the selected agent.")
         expect(commands["job-review"]?.template).toContain("Call `autocode_criteria_list` tool, if output show any unmet criteria")
-        expect(commands["job-terminate"]?.template).toContain("Call `autocode_job_status` with `status: 'terminated'`")
+        expect(commands["job-shelved"]?.template).toContain("Call `autocode_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
+        expect(commands["shelve"]?.template).toContain("Call `autocode_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
+        expect(commands[legacyCommand]).toBeUndefined()
         expect(commands["init"]?.template).toContain("Task subagents in parallel: `document_conventions`, `document_code`, `document_install`, `document_prd`")
         expect(commands["resume"]?.template).toContain("Call `task_resume` tool")
     })

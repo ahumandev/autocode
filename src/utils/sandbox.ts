@@ -98,6 +98,10 @@ export type SandboxCleanupDependencies = Omit<SandboxDependencies, "fileSystem">
     fileSystem: SandboxCleanupFileSystem
 }
 
+export type SandboxArchiveDependencies = Omit<SandboxDependencies, "fileSystem"> & {
+    fileSystem: SandboxCleanupFileSystem & Pick<SandboxFileSystem, "mkdir" | "rename">
+}
+
 export type SandboxBackendDetection = {
     backend: SandboxBackend
     reason?: string
@@ -156,6 +160,16 @@ export type SandboxCleanupResult = {
     items: SandboxCleanupItemResult[]
     guidance: string
 }
+
+export type SandboxArchiveItemResult = {
+    sandbox_name: string
+    status: "archived"
+    path: string
+}
+
+export type SandboxArchiveResult =
+    | { ok: true, status: "missing" | "empty" | "archived", job_name: string, archived: number, items: SandboxArchiveItemResult[] }
+    | { ok: false, status: "collision" | "unsafe_path", job_name: string, collision_path?: string, collision_name?: string, reason: string }
 
 export type ManualRootfsDownloadResolution =
     | { ok: true, distro: SandboxDistro, architecture: ManualArchitecture, url: string, archive_format: ManualRootfsArchiveFormat, strip_components?: number, version?: string, verification?: Record<string, string | number | boolean | undefined> }
@@ -725,7 +739,7 @@ export async function resolveSandboxJob(
     jobNameOverride?: string,
 ): Promise<SandboxJobResolution> {
     const storageRoot = resolveAgentsStorageRoot(context)
-    const identity = await resolvePlannedJobIdentity(createDirectoryFileSystem(fileSystem), client, context, { jobNameOverride: jobNameOverride ?? "", includeTerminated: true, ignoreCollisions: true })
+    const identity = await resolvePlannedJobIdentity(createDirectoryFileSystem(fileSystem), client, context, { jobNameOverride: jobNameOverride ?? "", includeShelved: true, ignoreCollisions: true })
 
     if (identity.resolution === "found" && identity.resolved_job && identity.job_name) {
         return { ok: true, storageRoot, jobName: identity.job_name, resolvedJob: identity.resolved_job }
@@ -969,6 +983,10 @@ async function removePath(fileSystem: Pick<SandboxCleanupFileSystem, "rm">, cand
     await fileSystem.rm(candidatePath, { recursive: true, force: true })
 }
 
+function isPathCollisionError(error: unknown): boolean {
+    return ["EEXIST", "ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code ?? "")
+}
+
 export async function cleanupEmptyJobSandboxRoot(
     storageRoot: string,
     jobName: string,
@@ -984,6 +1002,80 @@ export async function cleanupEmptyJobSandboxRoot(
 
     await removePath(deps.fileSystem, safePath.value)
     return true
+}
+
+function assertSafeShelvedSandboxArchivePath(candidatePath: string, shelvedJobPath: string): SandboxValidationResult<string> {
+    if (!candidatePath.trim()) return { ok: false, reason: "Sandbox archive path must be non-empty." }
+    if (candidatePath.split(/[\\/]+/).includes("..")) {
+        return { ok: false, reason: "Sandbox archive path must not contain unsafe relative traversal." }
+    }
+
+    const resolvedRoot = path.resolve(shelvedJobPath)
+    const resolvedPath = path.resolve(candidatePath)
+    const relativePath = path.relative(resolvedRoot, resolvedPath)
+    if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+        return { ok: false, reason: "Sandbox archive path must be inside the shelved job directory." }
+    }
+    if (relativePath.split(path.sep).includes("..")) {
+        return { ok: false, reason: "Sandbox archive path must not contain unsafe relative traversal." }
+    }
+
+    return { ok: true, value: resolvedPath }
+}
+
+export async function archiveJobSandboxesForShelvedJob(
+    storageRoot: string,
+    jobName: string,
+    shelvedJobPath: string,
+    deps: SandboxArchiveDependencies = defaultSandboxDependencies,
+): Promise<SandboxArchiveResult> {
+    const jobSandboxRoot = getJobSandboxRoot(storageRoot, jobName)
+    const safeSourcePath = assertSafeJobSandboxRootDeletionPath(jobSandboxRoot, storageRoot, jobName)
+    if (!safeSourcePath.ok) return { ok: false, status: "unsafe_path", job_name: jobName, reason: safeSourcePath.reason }
+    if (!await pathExists(deps.fileSystem, safeSourcePath.value)) {
+        return { ok: true, status: "missing", job_name: jobName, archived: 0, items: [] }
+    }
+
+    const entries = await deps.fileSystem.readdir(safeSourcePath.value, { withFileTypes: true }) as import("fs").Dirent[]
+    const sandboxDirectories = entries.filter((entry) => entry.isDirectory())
+    if (sandboxDirectories.length === 0) {
+        await cleanupEmptyJobSandboxRoot(storageRoot, jobName, deps)
+        return { ok: true, status: "empty", job_name: jobName, archived: 0, items: [] }
+    }
+
+    const archiveRoot = path.join(shelvedJobPath, "sandboxes")
+    const safeArchiveRoot = assertSafeShelvedSandboxArchivePath(archiveRoot, shelvedJobPath)
+    if (!safeArchiveRoot.ok) return { ok: false, status: "unsafe_path", job_name: jobName, reason: safeArchiveRoot.reason }
+
+    for (const entry of sandboxDirectories) {
+        const destinationPath = path.join(safeArchiveRoot.value, entry.name)
+        const safeDestinationPath = assertSafeShelvedSandboxArchivePath(destinationPath, shelvedJobPath)
+        if (!safeDestinationPath.ok) return { ok: false, status: "unsafe_path", job_name: jobName, reason: safeDestinationPath.reason }
+        if (await pathExists(deps.fileSystem, safeDestinationPath.value)) {
+            return { ok: false, status: "collision", job_name: jobName, collision_path: safeDestinationPath.value, collision_name: entry.name, reason: `Sandbox archive destination already exists: ${safeDestinationPath.value}` }
+        }
+    }
+
+    await deps.fileSystem.mkdir(safeArchiveRoot.value, { recursive: true })
+    const items: SandboxArchiveItemResult[] = []
+    for (const entry of sandboxDirectories) {
+        const sourcePath = path.join(safeSourcePath.value, entry.name)
+        const destinationPath = path.join(safeArchiveRoot.value, entry.name)
+        if (!deps.fileSystem.rename) throw new Error("Unable to archive sandbox directory: rename is unavailable")
+        try {
+            await deps.fileSystem.rename(sourcePath, destinationPath)
+        }
+        catch (error) {
+            if (isPathCollisionError(error)) {
+                return { ok: false, status: "collision", job_name: jobName, collision_path: destinationPath, collision_name: entry.name, reason: `Sandbox archive destination already exists: ${destinationPath}` }
+            }
+            throw error
+        }
+        items.push({ sandbox_name: entry.name, status: "archived", path: destinationPath })
+    }
+
+    await cleanupEmptyJobSandboxRoot(storageRoot, jobName, deps)
+    return { ok: true, status: "archived", job_name: jobName, archived: items.length, items }
 }
 
 export async function deleteSandboxPath(

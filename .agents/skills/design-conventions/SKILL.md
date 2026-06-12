@@ -15,8 +15,8 @@ description: Use `design-conventions` to get Project Conventions when deciding o
 - **Concept**: Idea note saved under `.agents/jobs/concepts/` before planning.
 - **Draft / plan**: Proposed solution saved as `plan.md` under `.agents/jobs/drafts/{name}/`.
 - **Planned job**: Job with a stable `job_name` and lifecycle directory.
-- **Lifecycle directory**: One of `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `terminated`.
-- **Active lifecycle**: Any lifecycle except `terminated`.
+- **Lifecycle directory**: One of `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `shelved`.
+- **Active lifecycle**: Any lifecycle except `shelved`.
 - **Generated skill**: Rendered copy of `src/skills/*/SKILL.md` written to the user skill store.
 - **Primary agent**: One of `assist`, `auto`, `research`, `design`.
 - **Temp agent**: Internal orchestration agent prefixed with `temp_`.
@@ -24,7 +24,7 @@ description: Use `design-conventions` to get Project Conventions when deciding o
 ## Naming Rules
 ### Job lifecycle names
 **Purpose:** Keep job state and filesystem paths aligned.
-**Pattern:** Use exact lifecycle names: `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `terminated`. Do not invent new status words.
+**Pattern:** Use exact lifecycle names: `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `shelved`. Do not invent new status words.
 
 ### Planned job folder shape
 **Purpose:** Make jobs discoverable and movable across states.

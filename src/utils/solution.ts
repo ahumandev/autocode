@@ -1,7 +1,7 @@
 import path from "path"
 
-const solutionLifecycleDirectories = ["concepts", "drafts", "assist", "executing", "facilitate", "review", "terminated"] as const
-const statusEventPattern = /^# (\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - Update Status To (concepts|drafts|assist|executing|facilitate|review|terminated)$/m
+const solutionLifecycleDirectories = ["concepts", "drafts", "assist", "executing", "facilitate", "review", "shelved"] as const
+const statusEventPattern = /^# (\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - Update Status To (concepts|drafts|assist|executing|facilitate|review|shelved)$/m
 
 export enum SolutionLogEvent {
     UpdateStatus = "update_status",

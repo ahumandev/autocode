@@ -24,7 +24,7 @@ function stripRuntimeAgentTier(agent: PluginAgentConfig): Omit<PluginAgentConfig
     return runtimeAgent
 }
 
-function finalizePluginAgentsAfterOverrides(
+function preparePluginAgentsAfterOverrides(
     agents: Record<string, PluginAgentConfig>,
     externalDirectories: ExternalDirectoryRules,
 ): Record<string, Omit<PluginAgentConfig, "tier">> {
@@ -61,7 +61,7 @@ async function mergeConfig(cfg: Config, input: PluginInput): Promise<void> {
         const userOverride = cfg.agent[name]
         mergedAgents[name] = mergePluginAgentConfig(agentDef, tiers, userOverride)
     }
-    for (const [name, agent] of Object.entries(finalizePluginAgentsAfterOverrides(mergedAgents, agentExternalDirectories))) {
+    for (const [name, agent] of Object.entries(preparePluginAgentsAfterOverrides(mergedAgents, agentExternalDirectories))) {
         ;(cfg.agent as Record<string, unknown>)[name] = agent
     }
 

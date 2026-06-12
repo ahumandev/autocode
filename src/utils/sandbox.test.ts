@@ -5,7 +5,7 @@ import { cp, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } fro
 import { tmpdir } from "os"
 import path from "path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, createSandboxAlias, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getJobSandboxRoot, getNamedSandboxPath, getSandboxPaths, materializeSandboxRootfs, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, resolveSandboxJob, type SandboxCacheEntry, type SandboxDependencies } from "./sandbox"
+import { archiveJobSandboxesForShelvedJob, assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, createSandboxAlias, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getJobSandboxRoot, getNamedSandboxPath, getSandboxPaths, materializeSandboxRootfs, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, resolveSandboxJob, type SandboxCacheEntry, type SandboxDependencies } from "./sandbox"
 import { copyPath, resolveSafeRelativePath, validateSafeWriteTarget } from "./sandbox_file_tools"
 
 function missingError(): NodeJS.ErrnoException {
@@ -466,6 +466,40 @@ describe("sandbox utils", () => {
         expect(result).toEqual(expect.objectContaining({ status: "deleted", deleted: 1 }))
         expect(deps.fileSystem.rm).toHaveBeenCalledWith(paths.sandboxPath, { recursive: true, force: true })
         expect(deps.fileSystem.rm).toHaveBeenCalledWith(paths.jobSandboxRoot, { recursive: true, force: true })
+    })
+
+    test("archives job sandboxes into shelved job directory", async () => {
+        const deps = createDeps({ existing: ["/repo/.agents/sandboxes/my_job", "/repo/.agents/sandboxes/my_job/dev", "/repo/.agents/sandboxes/my_job/other"] })
+        deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => filePath === "/repo/.agents/sandboxes/my_job" && options?.withFileTypes ? [dirent("dev"), dirent("other"), dirent("note.txt", false)] : [])
+        deps.fileSystem.stat = mock(async (filePath: string) => filePath === "/repo/.agents/jobs/shelved/my_job/sandboxes/dev" || filePath === "/repo/.agents/jobs/shelved/my_job/sandboxes/other" ? Promise.reject(missingError()) : { mtimeMs: 1 })
+
+        const result = await archiveJobSandboxesForShelvedJob("/repo", "my_job", "/repo/.agents/jobs/shelved/my_job", deps)
+
+        expect(result).toEqual(expect.objectContaining({ ok: true, status: "archived", job_name: "my_job", archived: 2 }))
+        expect(deps.fileSystem.mkdir).toHaveBeenCalledWith("/repo/.agents/jobs/shelved/my_job/sandboxes", { recursive: true })
+        expect(deps.fileSystem.rename).toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job/dev", "/repo/.agents/jobs/shelved/my_job/sandboxes/dev")
+        expect(deps.fileSystem.rename).toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job/other", "/repo/.agents/jobs/shelved/my_job/sandboxes/other")
+    })
+
+    test("does not create shelved sandbox archive directory when root is missing or empty", async () => {
+        const missingDeps = createDeps()
+        const emptyDeps = createDeps({ existing: ["/repo/.agents/sandboxes/my_job"] })
+        emptyDeps.fileSystem.readdir = mock(async () => [])
+
+        expect(await archiveJobSandboxesForShelvedJob("/repo", "my_job", "/repo/.agents/jobs/shelved/my_job", missingDeps)).toEqual({ ok: true, status: "missing", job_name: "my_job", archived: 0, items: [] })
+        expect(await archiveJobSandboxesForShelvedJob("/repo", "my_job", "/repo/.agents/jobs/shelved/my_job", emptyDeps)).toEqual({ ok: true, status: "empty", job_name: "my_job", archived: 0, items: [] })
+        expect(missingDeps.fileSystem.mkdir).not.toHaveBeenCalledWith("/repo/.agents/jobs/shelved/my_job/sandboxes", expect.any(Object))
+        expect(emptyDeps.fileSystem.mkdir).not.toHaveBeenCalledWith("/repo/.agents/jobs/shelved/my_job/sandboxes", expect.any(Object))
+    })
+
+    test("sandbox archive collision does not overwrite destination", async () => {
+        const deps = createDeps({ existing: ["/repo/.agents/sandboxes/my_job", "/repo/.agents/sandboxes/my_job/dev", "/repo/.agents/jobs/shelved/my_job/sandboxes/dev"] })
+        deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => filePath === "/repo/.agents/sandboxes/my_job" && options?.withFileTypes ? [dirent("dev")] : [])
+
+        const result = await archiveJobSandboxesForShelvedJob("/repo", "my_job", "/repo/.agents/jobs/shelved/my_job", deps)
+
+        expect(result).toEqual({ ok: false, status: "collision", job_name: "my_job", collision_path: "/repo/.agents/jobs/shelved/my_job/sandboxes/dev", collision_name: "dev", reason: "Sandbox archive destination already exists: /repo/.agents/jobs/shelved/my_job/sandboxes/dev" })
+        expect(deps.fileSystem.rename).not.toHaveBeenCalled()
     })
 
     test("file tool path guards reject malformed roots and symlink escapes", async () => {

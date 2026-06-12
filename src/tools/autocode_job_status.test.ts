@@ -159,49 +159,47 @@ describe("autocode_job_status tool", () => {
         expect(fs.writeFile).not.toHaveBeenCalled()
     })
 
-    test("treats status review on an already-reviewed job as acceptance termination", async () => {
+    test("treats status review on an already-reviewed job as shelved", async () => {
         const fs = createMockFs()
-        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/review" ? ["my_feature"] : dirPath === "/workspace/.agents/jobs/terminated/my_feature" ? [] : [])
+        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/review" ? ["my_feature"] : dirPath === "/workspace/.agents/jobs/shelved/my_feature" ? [] : [])
+        fs.stat.mockImplementation(async (filePath: string) => filePath === "/workspace/.agents/sandboxes/my_feature" ? Promise.reject(createMissingError()) : { mtimeMs: Date.now() })
 
-        const tool = createAutocodeJobStatusTool(createClient("My Feature", "Accepted and terminated."), fs, () => new Date("2026-05-27T10:11:12Z"))
+        const tool = createAutocodeJobStatusTool(createClient("My Feature", "Accepted and shelved."), fs, () => new Date("2026-05-27T10:11:12Z"))
         const parsed = JSON.parse(await tool.execute({ status: "review" }, createToolContext()) as string)
 
         expect(parsed).toEqual({
             job_name: "my_feature",
-            current_status: "terminated",
-            job_path: ".agents/jobs/terminated/my_feature/",
-            solution_path: ".agents/jobs/terminated/my_feature/solution.md",
-            sandbox_cleanup: expect.any(Object),
-            next_action: "Termination complete; the job has no active lifecycle directory.",
+            current_status: "shelved",
+            job_path: ".agents/jobs/shelved/my_feature/",
+            solution_path: ".agents/jobs/shelved/my_feature/solution.md",
+            sandbox_archive: expect.objectContaining({ ok: true, status: "missing", job_name: "my_feature" }),
+            next_action: "Shelve complete; the job has no active lifecycle directory.",
         })
-        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/terminated/my_feature")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/terminated/my_feature/solution.md", expect.stringContaining("# 26-05-27 10:11:12 - Update Status To terminated"))
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/shelved/my_feature/solution.md", expect.stringContaining("# 26-05-27 10:11:12 - Update Status To shelved"))
     })
 
-    test("cleans current job sandboxes when moving to terminated", async () => {
+    test("archives current job sandboxes when moving to shelved", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string, options?: { withFileTypes?: boolean }) => {
             if (dirPath === "/workspace/.agents/jobs/review") return ["my_feature"]
-            if (dirPath === "/workspace/.agents/jobs/terminated/my_feature") return []
+            if (dirPath === "/workspace/.agents/jobs/shelved/my_feature") return []
             if (dirPath === "/workspace/.agents/sandboxes/my_feature" && options?.withFileTypes) return [createDirent("dev"), createDirent("other")]
             return []
         })
         fs.stat.mockImplementation(async (filePath: string) => {
             if (filePath === "/workspace/.agents/sandboxes/my_feature" || filePath === "/workspace/.agents/sandboxes/my_feature/dev" || filePath === "/workspace/.agents/sandboxes/my_feature/other") return { mtimeMs: Date.now() }
+            if (filePath === "/workspace/.agents/jobs/shelved/my_feature/sandboxes/dev" || filePath === "/workspace/.agents/jobs/shelved/my_feature/sandboxes/other") throw createMissingError()
             return { mtimeMs: Date.now() }
         })
 
-        const tool = createAutocodeJobStatusTool(createClient("My Feature", "Terminated."), fs, () => new Date("2026-05-27T10:11:12Z"))
-        const parsed = JSON.parse(await tool.execute({ status: "terminated" }, createToolContext()) as string)
+        const tool = createAutocodeJobStatusTool(createClient("My Feature", "Shelved."), fs, () => new Date("2026-05-27T10:11:12Z"))
+        const parsed = JSON.parse(await tool.execute({ status: "shelved" }, createToolContext()) as string)
 
-        expect(parsed.current_status).toBe("terminated")
-        expect(parsed.sandbox_cleanup).toEqual(expect.objectContaining({ status: "deleted", deleted: 2, job_name: "my_feature" }))
-        expect(fs.rm).toHaveBeenCalledWith("/workspace/.agents/sandboxes/my_feature/dev", { recursive: true, force: true })
-        expect(fs.rm).toHaveBeenCalledWith("/workspace/.agents/sandboxes/my_feature/other", { recursive: true, force: true })
-        for (const call of fs.rm.mock.calls) {
-            expect(call[0]).toContain("/workspace/.agents/sandboxes/my_feature/")
-            expect(call[0]).not.toContain("/workspace/.agents/jobs/")
-        }
+        expect(parsed.current_status).toBe("shelved")
+        expect(parsed.sandbox_archive).toEqual(expect.objectContaining({ ok: true, status: "archived", archived: 2, job_name: "my_feature" }))
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/sandboxes/my_feature/dev", "/workspace/.agents/jobs/shelved/my_feature/sandboxes/dev")
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/sandboxes/my_feature/other", "/workspace/.agents/jobs/shelved/my_feature/sandboxes/other")
     })
 
     test("rejects invalid status using canonical help text", async () => {
@@ -213,7 +211,7 @@ describe("autocode_job_status tool", () => {
         expect(result).toBe(createRetryResponse(
             "update job status",
             "Invalid status: drafting",
-            "Use one of: concepts, drafts, assist, executing, facilitate, review, terminated."
+            "Use one of: concepts, drafts, assist, executing, facilitate, review, shelved."
         ))
         expect(fs.writeFile).not.toHaveBeenCalled()
     })
@@ -269,23 +267,28 @@ describe("autocode_job_status tool", () => {
         ))
     })
 
-    test("rejects removed legacy status aliases", async () => {
+    test("rejects removed legacy final status aliases", async () => {
         const fs = createMockFs()
         const tool = createAutocodeJobStatusTool(fs)
+        const instruction = "Use one of: concepts, drafts, assist, executing, facilitate, review, shelved."
+        const legacyFinalStatus = ["termi", "nated"].join("")
 
         const blockedResult = await tool.execute({ status: "blocked" }, createToolContext())
         const abortedResult = await tool.execute({ status: "aborted" }, createToolContext())
+        const oldLifecycleResult = await tool.execute({ status: legacyFinalStatus }, createToolContext())
 
-        expect(blockedResult).toBe(createRetryResponse(
-            "update job status",
-            "Invalid status: blocked",
-            "Use one of: concepts, drafts, assist, executing, facilitate, review, terminated."
-        ))
-        expect(abortedResult).toBe(createRetryResponse(
-            "update job status",
-            "Invalid status: aborted",
-            "Use one of: concepts, drafts, assist, executing, facilitate, review, terminated."
-        ))
+        for (const [legacyStatus, result] of [
+            ["blocked", blockedResult],
+            ["aborted", abortedResult],
+            [legacyFinalStatus, oldLifecycleResult],
+        ] as const) {
+            expect(JSON.parse(result as string)).toEqual({
+                failedAction: "update job status",
+                error: `Invalid status: ${legacyStatus}`,
+                instruction,
+            })
+            expect(JSON.parse(result as string).instruction).not.toContain(legacyStatus)
+        }
     })
 
     test("returns retry response when the job is missing", async () => {

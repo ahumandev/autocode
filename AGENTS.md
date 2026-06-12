@@ -9,8 +9,8 @@ It turns concepts into plans, runs work in OpenCode, and keeps state in text fil
 - **Generated skills**: Bundle `src/skills` into `dist/skills` for OpenCode auto-load.
 
 # Core flow or states
-- Concept -> draft -> assist or auto -> review -> terminated.
-- Valid job states: `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `terminated`.
+- Concept -> draft -> assist or auto -> review -> shelved.
+- Valid job states: `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `shelved`.
 - `auto` jobs live in `.agents/jobs/executing/`.
 - Blocked `auto` jobs move to `.agents/jobs/facilitate/`.
 - `assist` jobs live in `.agents/jobs/assist/`.

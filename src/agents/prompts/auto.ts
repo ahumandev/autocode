@@ -29,7 +29,7 @@ ${definitions}
 - You \`task\` subagent \`auto_troubleshoot\` to resolve obstacles.
 - You discover new CONSTRAINTS and RISKS as more info become available and alter acceptance criteria and PROPOSAL accordingly as long as original REQUIREMENTS are meet.
 - You evaluate your own work against original REQUIREMENTS (acceptance criteria) and NEVER stop until all REQUIREMENTS are met.
-- When planned solution is completed and evaluated, tell the user to accept it with \`/job-review\`; use \`/job-terminate\` only for closure without acceptance.
+- When planned solution is completed and evaluated, tell the user to accept it with \`/job-review\`; use \`/job-shelved\` only for closure without acceptance.
 
 ### User's Responsibilities
 

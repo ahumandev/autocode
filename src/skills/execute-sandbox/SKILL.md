@@ -21,6 +21,8 @@ Use sandbox tools for isolated command execution and file inspection without cha
 
 ## Sandbox paths
 
+Special mounts inside sandbox relative to Sandbox root:
+
 - `/sandbox`: writable sandbox directory for sandbox tasks: scratch area, generated outputs, experiments, etc.
 - `/home`: writable home directory for config files, caches, package manager state, shell history, etc.
 - `/workspace`: read-only mount of the project workspace for inspection only.

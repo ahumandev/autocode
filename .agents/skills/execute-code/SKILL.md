@@ -17,7 +17,7 @@ OpenCode plugin that injects agents, commands, tools, and generated skills. Runt
 ## Key Data Models
 - **AgentConfig** (`src/agents/index.ts`): Agent prompt, permissions, model tier, and sandbox policy.
 - **Autocode config** (`src/config.ts`): Tier map, external directory rules, sandbox sync settings.
-- **Job lifecycle state** (`src/utils/jobs.ts`): concepts → drafts → assist/executing/facilitate/review → terminated.
+- **Job lifecycle state** (`src/utils/jobs.ts`): concepts → drafts → assist/executing/facilitate/review → shelved.
 - **ManagedSkillDefinition** (`src/skills/index.ts`): Bundled skill frontmatter + body.
 
 ## Key API Endpoints
@@ -26,8 +26,8 @@ OpenCode plugin that injects agents, commands, tools, and generated skills. Runt
 - `/job-draft` (`src/commands/index.ts`): Save plan to draft folder.
 - `/job-execute-assist` (`src/commands/index.ts`): Start assisted execution session.
 - `/job-execute-auto` (`src/commands/index.ts`): Start autonomous execution session.
-- `/job-review` (`src/commands/index.ts`): Check criteria, terminate accepted work.
-- `/job-terminate` (`src/commands/index.ts`): Close job without acceptance.
+- `/job-review` (`src/commands/index.ts`): Check criteria, shelve accepted work.
+- `/job-shelved` (`src/commands/index.ts`): Close job without acceptance.
 
 ## Error Handling
 - **Tool error JSON** (`src/utils/tools.ts`): Normalized `failedAction`, `error`, `instruction` payloads.
@@ -49,7 +49,7 @@ Auth is delegated to OpenCode session/client context. Security control is mostly
 - **Tools** (`src/tools/`): OpenCode tool implementations and tests.
 - **Utils** (`src/utils/`): Shared config, job, sandbox, and error helpers.
 - **Skills sources** (`src/skills/`): Bundled generated-skill Markdown.
-- **Job storage** (`.agents/jobs/`): Concepts, drafts, execution, review, and termination artifacts.
+- **Job storage** (`.agents/jobs/`): Concepts, drafts, execution, review, and shelving artifacts.
 
 ## Special Files
 - `src/skills/index.ts`: Bundles managed skills into generated config path.
