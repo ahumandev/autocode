@@ -1235,21 +1235,6 @@ const baseAgents: AgentMap = {
 
     // Temporary agents: execute 1 task then move out of the way so that original agent can continue
 
-    temp_agent: {
-        color: colorWritableWorker,
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_agent_swap: "allow",
-            autocode_job_list: "allow",
-            autocode_plan_read: "allow", // Used by job-execute command
-        },
-        prompt: "---",
-        temperature: 0.5,
-        tier: "fast",
-    },
-
     temp_concept: {
         color: colorWritableWorker,
         hidden: true,
@@ -1265,6 +1250,22 @@ const baseAgents: AgentMap = {
         },
         prompt: tempConceptPrompt,
         tier: "fast"
+    },
+
+    temp_execute: {
+        color: colorWritableWorker,
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            autocode_agent_swap: "allow",
+            autocode_job_list: "allow",
+            autocode_plan_read: "allow", // Used by job-execute command
+            question: "allow",
+        },
+        prompt: "---",
+        temperature: 0.5,
+        tier: "fast",
     },
 
     temp_manual: {

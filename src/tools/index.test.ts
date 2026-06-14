@@ -394,7 +394,7 @@ describe("auto resume wiring", () => {
 
         await configurePlugin(plugin, cfg)
 
-        expect(cfg.command["job-execute"]?.agent).toBe("temp_agent")
+        expect(cfg.command["job-execute"]?.agent).toBe("temp_execute")
         expect(cfg.command["job-execute"]?.subtask).toBe(false)
         expect(cfg.command["job-execute"]?.template).toContain("autocode_job_list")
         expect(cfg.command["job-execute"]?.template).toContain("question")
@@ -1271,7 +1271,7 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_swap")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.temp_agent?.permission, "autocode_plan_read")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_plan_read")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_plan_save")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")

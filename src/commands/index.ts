@@ -146,7 +146,7 @@ Replace [job_path] with \`job_path\` value from \`autocode_plan_save\` tool resp
     },
 
     "job-execute": {
-        agent: "temp_agent",
+        agent: "temp_execute",
         description: "Select and execute job in the current session.",
         subtask: false,
         template: `
