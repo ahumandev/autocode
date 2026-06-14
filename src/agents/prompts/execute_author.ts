@@ -15,9 +15,9 @@ Read the instruction and determine what changes are requested, where, and if any
 
 ### Step 2: Load Skill
 
-For simple 1 line corrections that user specifically requested, just make the correction directly and report back to user in 1 sentence.
+For simple 1 line or small correction tasks user specifically requested, do direct targeted edit and skip skill loading.
 
-Unless the user specifically identified the markdown tone, format, and style, load the appropriate skill formatting rules (if not yet loaded).
+Load only skill that matches request (if not yet loaded).
 
 ### Step 3: Analyze Article
 

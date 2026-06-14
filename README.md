@@ -135,7 +135,7 @@ flowchart TD
 3. Run `/job-draft` to save the plan in `.agents/jobs/drafts/{job_name}/plan.md`.
 4. Run `/job-execute-assist` to execute with human steering, or `/job-execute-auto` to execute autonomously.
 5. Review the completed work from `.agents/jobs/review`.
-6. Run `/job-review` to accept and shelve the job, or `/job-shelved` (alias `/shelve`) to close it without acceptance.
+6. Run `/job-review` to accept (git commit) and shelve (clean up files) the job, or `/job-shelve` (alias `/shelve`) to close it without acceptance.
 
 ### Workflow commands
 
@@ -150,8 +150,7 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | `/job-execute-assist` | Moves an approved draft to `.agents/jobs/assist/{job_name}/` and starts an assist session.  |
 | `/job-execute-auto`   | Moves an approved draft to `.agents/jobs/executing/{job_name}/` and starts an auto session. |
 | `/job-review`         | Accepts reviewed work, commits when applicable, and shelves the job.                        |
-| `/job-shelved`        | Moves the current or selected job to `.agents/jobs/shelved/{job_name}/`.                    |
-| `/shelve`             | Alias for `/job-shelved`.                                                                   |
+| `/job-shelve`         | Moves the current or selected job to `.agents/jobs/shelved/{job_name}/`.                    |
 
 ### Handover commands
 
@@ -187,6 +186,7 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | `/report-session` | Reports on the entire current session.                                               |
 | `/report-last`    | Reports on only the most recent user-requested assignment.                           |
 | `/resume`         | Resumes an interrupted session by calling the resume tool.                           |
+| `/shelve`         | Clean up sandbox files (if any). Alias for `/job-shelve`.                            |
 
 ### Job files
 

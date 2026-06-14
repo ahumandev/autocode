@@ -197,6 +197,10 @@ export type MovePlannedJobResult =
     | { type: "collision", collision: PlannedJobCollision }
     | { type: "destination_collision", destinationDir: string }
 
+export type MovePlannedJobOptions = {
+    shelvedCollisionTimestamp?: Date
+}
+
 type ResolvePlannedJobBySessionResult = ResolvePlannedJobResult
 
 export function isMissingFile(error: unknown): boolean {
@@ -1101,6 +1105,15 @@ export function createTimestampedJobFileName(prefix: string, date = new Date()):
     return `${prefix}_${pad(date.getFullYear() % 100)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}.md`
 }
 
+export function formatTimestampPostfix(date: Date = new Date()): string {
+    const pad = (value: number): string => String(value).padStart(2, "0")
+    return `${String(date.getFullYear()).slice(-2)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`
+}
+
+export function createShelvedCollisionJobName(jobName: string, date: Date = new Date()): string {
+    return `${jobName}_${formatTimestampPostfix(date)}`
+}
+
 function formatStatusReportTimestamp(date: Date): string {
     const pad = (value: number): string => String(value).padStart(2, "0")
     return `${String(date.getFullYear()).slice(-2)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`
@@ -1131,9 +1144,16 @@ export async function writeJobStatusReport(
     return { fileName, filePath }
 }
 
-export async function moveResolvedPlannedJobToStatus(worktree: string, source: ResolvedPlannedJob, status: JobStatus, fileSystem: MoveJobFileSystem = defaultMoveJobFileSystem): Promise<MovePlannedJobResult> {
+export async function moveResolvedPlannedJobToStatus(
+    worktree: string,
+    source: ResolvedPlannedJob,
+    status: JobStatus,
+    fileSystem: MoveJobFileSystem = defaultMoveJobFileSystem,
+    options: MovePlannedJobOptions = {},
+): Promise<MovePlannedJobResult> {
     const destinationDirectory = getCanonicalDirectoryForStatus(status)
-    const destinationDir = getJobDirectoryPath(worktree, destinationDirectory, source.job_name)
+    let destinationJobName = source.job_name
+    let destinationDir = getJobDirectoryPath(worktree, destinationDirectory, destinationJobName)
     if (source.absolute_path !== destinationDir) {
         await fileSystem.mkdir(getJobDirectoryPath(worktree, destinationDirectory, ""), { recursive: true })
         try {
@@ -1141,9 +1161,27 @@ export async function moveResolvedPlannedJobToStatus(worktree: string, source: R
         }
         catch (error) {
             if (isCollisionError(error)) {
-                return { type: "destination_collision", destinationDir }
+                if (status !== "shelved" || !options.shelvedCollisionTimestamp) {
+                    return { type: "destination_collision", destinationDir }
+                }
+
+                destinationJobName = createShelvedCollisionJobName(source.job_name, options.shelvedCollisionTimestamp)
+                destinationDir = getJobDirectoryPath(worktree, destinationDirectory, destinationJobName)
+
+                try {
+                    await fileSystem.rename!(source.absolute_path, destinationDir)
+                }
+                catch (retryError) {
+                    if (isCollisionError(retryError)) {
+                        return { type: "destination_collision", destinationDir }
+                    }
+
+                    throw retryError
+                }
             }
-            throw error
+            else {
+                throw error
+            }
         }
     }
 
@@ -1152,24 +1190,30 @@ export async function moveResolvedPlannedJobToStatus(worktree: string, source: R
     return {
         type: "success",
         job: {
-            job_name: source.job_name,
+            job_name: destinationJobName,
             status,
             directory: destinationDirectory,
             absolute_path: destinationDir,
-            job_path: getRelativeJobDirectoryPath(destinationDirectory, source.job_name),
-            relative_job_path: getRelativeJobDirectoryPath(destinationDirectory, source.job_name),
+            job_path: getRelativeJobDirectoryPath(destinationDirectory, destinationJobName),
+            relative_job_path: getRelativeJobDirectoryPath(destinationDirectory, destinationJobName),
         },
         from_status: source.status,
     }
 }
 
-export async function movePlannedJobToStatus(worktree: string, jobName: string, status: JobStatus, fileSystem: MoveJobFileSystem = defaultMoveJobFileSystem): Promise<MovePlannedJobResult> {
+export async function movePlannedJobToStatus(
+    worktree: string,
+    jobName: string,
+    status: JobStatus,
+    fileSystem: MoveJobFileSystem = defaultMoveJobFileSystem,
+    options: MovePlannedJobOptions = {},
+): Promise<MovePlannedJobResult> {
     const resolved = await resolvePlannedJob(fileSystem, worktree, jobName)
     if (resolved.type !== "found") {
         return resolved.type === "missing" ? { type: "missing" } : { type: "collision", collision: resolved.collision }
     }
 
-    return moveResolvedPlannedJobToStatus(worktree, resolved.job, status, fileSystem)
+    return moveResolvedPlannedJobToStatus(worktree, resolved.job, status, fileSystem, options)
 }
 
 export async function findExistingJobFile(

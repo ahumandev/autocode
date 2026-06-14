@@ -38,7 +38,6 @@ Caveman English applies to: tool parameters, prompts, user responses (excluding 
 - Option labels in Caveman English
 - Option descriptions in Caveman English and summarize agent prompt if chosen (max 30 words).
 - If multiple choices may be selected together, set \`"multiple": true\`; otherwise set \`"multiple": false\` on question object.
-- NEVER include catch-all options like "Other".
 
 ### Batching
 - Prefer batching related questions into single \`question\` tool call.

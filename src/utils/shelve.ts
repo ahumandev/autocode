@@ -26,23 +26,29 @@ export type ShelveResolvedPlannedJobOptions = {
 }
 
 export async function shelveResolvedPlannedJob(options: ShelveResolvedPlannedJobOptions): Promise<ShelveResolvedPlannedJobResult> {
-    const moved = await moveResolvedPlannedJobToStatus(options.storageRoot, options.resolvedJob, "shelved", options.moveFileSystem)
+    const timestamp = options.now()
+    const moved = await moveResolvedPlannedJobToStatus(options.storageRoot, options.resolvedJob, "shelved", options.moveFileSystem, {
+        shelvedCollisionTimestamp: timestamp,
+    })
     if (moved.type !== "success") return moved
 
     const solution = createSolutionUtils(options.fileSystem, options.storageRoot, {
         getDirectory: async () => moved.job.directory,
-        now: options.now,
+        now: () => timestamp,
     })
     const logged = await solution.log(moved.job.job_name, SolutionLogEvent.UpdateStatus, "shelved", options.assistantResponseText, "Job shelved.")
     const title = await updateCurrentSessionTitleToJobName(options.client, options.context, moved.job.job_name, moved.job.status)
     const sandboxDeps = options.sandboxDependencies ?? { ...defaultSandboxDependencies, fileSystem: options.fileSystem }
-    const sandboxArchive = await archiveJobSandboxesForShelvedJob(options.storageRoot, moved.job.job_name, moved.job.absolute_path, sandboxDeps)
+    const sandboxArchive = await archiveJobSandboxesForShelvedJob(options.storageRoot, options.resolvedJob.job_name, moved.job.absolute_path, sandboxDeps)
 
     return {
         type: "success",
         moved,
         solution: logged,
         title,
-        sandbox_archive: sandboxArchive,
+        sandbox_archive: {
+            ...sandboxArchive,
+            job_name: moved.job.job_name,
+        },
     }
 }

@@ -420,16 +420,16 @@ describe("auto resume wiring", () => {
 
         await configurePlugin(plugin, cfg)
 
-        expect(cfg.command["job-review"]?.agent).toBe("auto")
+        expect(cfg.command["job-review"]?.agent).toBe("execute_git_commit")
         expect(cfg.command["job-review"]?.description).toContain("Commit accepted work and shelve into .agents/jobs/shelved/{name}/")
         expect(cfg.command["job-review"]?.description).toContain(".agents/jobs/shelved/{name}/")
-        expect(cfg.command["job-review"]?.template).toContain("autocode_shelve")
-        expect(cfg.command["job-shelved"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
-        expect(cfg.command["job-shelved"]?.agent).toBe("auto")
-        expect(cfg.command["job-shelved"]?.template).toContain("autocode_shelve")
+        expect(cfg.command["job-review"]?.template).toContain("autocode_job_shelve")
+        expect(cfg.command["job-shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
+        expect(cfg.command["job-shelve"]?.agent).toBe("temp_shelve")
+        expect(cfg.command["job-shelve"]?.template).toContain("autocode_job_shelve")
         expect(cfg.command["shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
-        expect(cfg.command["shelve"]?.agent).toBe("auto")
-        expect(cfg.command["shelve"]?.template).toContain("autocode_shelve")
+        expect(cfg.command["shelve"]?.agent).toBe("temp_shelve")
+        expect(cfg.command["shelve"]?.template).toContain("autocode_job_shelve")
         expect(cfg.command[legacyCommand]).toBeUndefined()
     })
 
@@ -444,7 +444,7 @@ describe("auto resume wiring", () => {
         const sandboxRead = tools.autocode_sandbox_read as unknown as { description: string, args: Record<string, unknown> }
         const sandboxCopy = tools.autocode_sandbox_copy as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_shelve", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]))
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
         expect(sandboxCreate.description).toContain("Create")
@@ -1165,6 +1165,7 @@ describe("autocode_plan_save tool", () => {
             "autocode_db_tables",
             "autocode_job_execute",
             "autocode_job_list",
+            "autocode_job_shelve",
             "autocode_job_status",
             "autocode_logo_find",
             "autocode_criteria_list",
@@ -1181,7 +1182,6 @@ describe("autocode_plan_save tool", () => {
             "autocode_sandbox_grep",
             "autocode_sandbox_read",
             "autocode_session_create",
-            "autocode_shelve",
             "task_external",
             "task_resume",
         ].sort())

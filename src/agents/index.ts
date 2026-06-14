@@ -947,6 +947,8 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_agent_swap: "allow",
+            autocode_criteria_list: "allow",
+            autocode_job_shelve: "allow",
             doom_loop: "deny",
             git_git_add: "allow",
             git_git_commit: "allow",
@@ -1302,6 +1304,19 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_agent_swap: "allow",
             autocode_session_create: "allow",
+        },
+        prompt: "---",
+        temperature: 0.5,
+        tier: "fast",
+    },
+
+    temp_shelve: {
+        color: colorWritableWorker,
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            autocode_job_shelve: "allow",
         },
         prompt: "---",
         temperature: 0.5,

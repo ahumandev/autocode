@@ -54,7 +54,7 @@ function getIdentityRetryResponse(identity: PlannedJobIdentityResolution): strin
     return createMissingIdentityRetryResponse()
 }
 
-export function createAutocodeShelveTool(clientOrFileSystem?: OpencodeClient | JobToolFileSystem, fileSystemOrNow?: JobToolFileSystem | (() => Date), maybeNow?: () => Date): ReturnType<typeof tool> {
+export function createAutocodeJobShelveTool(clientOrFileSystem?: OpencodeClient | JobToolFileSystem, fileSystemOrNow?: JobToolFileSystem | (() => Date), maybeNow?: () => Date): ReturnType<typeof tool> {
     const { client, fileSystem, now } = normalizeShelveToolArgs(clientOrFileSystem, fileSystemOrNow, maybeNow)
     return tool({
         description: "Shelve current lifecycle job into .agents/jobs/shelved/{name}/.",
@@ -92,7 +92,7 @@ export function createAutocodeShelveTool(clientOrFileSystem?: OpencodeClient | J
                     return createRetryResponse(
                         "shelve job",
                         "No assistant response text was found in the current session.",
-                        "First present the user-facing lifecycle update in assistant text with concrete actions and a separate reason/evidence summary, then call autocode_shelve again."
+                        "First present the user-facing lifecycle update in assistant text with concrete actions and a separate reason/evidence summary, then call autocode_job_shelve again."
                     )
                 }
 

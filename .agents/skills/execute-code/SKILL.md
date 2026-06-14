@@ -27,7 +27,7 @@ OpenCode plugin that injects agents, commands, tools, and generated skills. Runt
 - `/job-execute-assist` (`src/commands/index.ts`): Start assisted execution session.
 - `/job-execute-auto` (`src/commands/index.ts`): Start autonomous execution session.
 - `/job-review` (`src/commands/index.ts`): Check criteria, shelve accepted work.
-- `/job-shelved` (`src/commands/index.ts`): Close job without acceptance.
+- `/job-shelve` (`src/commands/index.ts`): Close job without acceptance.
 
 ## Error Handling
 - **Tool error JSON** (`src/utils/tools.ts`): Normalized `failedAction`, `error`, `instruction` payloads.

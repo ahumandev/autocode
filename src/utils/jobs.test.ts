@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { deriveJobNameFromTitle, deriveJobTitleFromFileName, formatJobSessionTitle, getCanonicalDirectoryForStatus, getCanonicalDirectoryPathForStatus, getCurrentSessionTitle, getDefaultStatusForDirectory, getStorageRelativePath, isCompatibleJobName, isJobStatus, jobStatuses, resolveAgentsStorageRoot, resolvePlannedJobIdentity } from "./jobs"
+import { createShelvedCollisionJobName, deriveJobNameFromTitle, deriveJobTitleFromFileName, formatJobSessionTitle, getCanonicalDirectoryForStatus, getCanonicalDirectoryPathForStatus, getCurrentSessionTitle, getDefaultStatusForDirectory, getStorageRelativePath, isCompatibleJobName, isJobStatus, jobStatuses, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity } from "./jobs"
 
 function createFileSystem(activeJobs: Record<string, string[]> = {}, files: Record<string, string> = {}) {
     return {
@@ -33,6 +33,12 @@ function createClient(title: string | null | undefined, messages: Array<{ info: 
             messages: mock(async () => ({ data: messages })),
         },
     } as unknown as OpencodeClient
+}
+
+function createCollisionError(): NodeJS.ErrnoException {
+    const error = new Error("collision") as NodeJS.ErrnoException
+    error.code = "EEXIST"
+    return error
 }
 
 const sessionContext = {
@@ -114,6 +120,50 @@ describe("jobs utilities", () => {
 
     test("derives job titles from path-qualified filenames using the basename", () => {
         expect(deriveJobTitleFromFileName("nested/path/26-01-31_12-59-59.Some_Job_Name.md", "review")).toBe("Some Job Name (review)")
+    })
+
+    test("postfixes shelved collision job names with timestamp", () => {
+        expect(createShelvedCollisionJobName("some_job", new Date("2026-05-27T10:11:12Z"))).toBe("some_job_26-05-27_10-11-12")
+    })
+
+    test("renames shelved job with timestamp when destination already exists", async () => {
+        const fileSystem = {
+            mkdir: mock(async () => undefined as string | undefined),
+            readFile: mock(async () => ""),
+            readdir: mock(async () => [] as import("fs").Dirent[]),
+            rename: mock(async (_oldPath: string, newPath: string) => {
+                if (newPath === "/workspace/.agents/jobs/shelved/my_feature") throw createCollisionError()
+            }),
+            rm: mock(async () => { }),
+            stat: mock(async () => ({ mtimeMs: Date.now() })),
+            writeFile: mock(async () => { }),
+        }
+
+        const result = await moveResolvedPlannedJobToStatus("/workspace", {
+            job_name: "my_feature",
+            status: "review",
+            directory: "review",
+            absolute_path: "/workspace/.agents/jobs/review/my_feature",
+            job_path: ".agents/jobs/review/my_feature/",
+            relative_job_path: ".agents/jobs/review/my_feature/",
+        }, "shelved", fileSystem, {
+            shelvedCollisionTimestamp: new Date("2026-05-27T10:11:12Z"),
+        })
+
+        expect(result).toEqual({
+            type: "success",
+            job: {
+                job_name: "my_feature_26-05-27_10-11-12",
+                status: "shelved",
+                directory: "shelved",
+                absolute_path: "/workspace/.agents/jobs/shelved/my_feature_26-05-27_10-11-12",
+                job_path: ".agents/jobs/shelved/my_feature_26-05-27_10-11-12/",
+                relative_job_path: ".agents/jobs/shelved/my_feature_26-05-27_10-11-12/",
+            },
+            from_status: "review",
+        })
+        expect(fileSystem.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature")
+        expect(fileSystem.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature_26-05-27_10-11-12")
     })
 
     test("infers planned identity from matching session title and lets explicit job_name override stale title", async () => {

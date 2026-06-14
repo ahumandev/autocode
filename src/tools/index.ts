@@ -9,6 +9,7 @@ import { createAutocodeDbSchemasTool, createAutocodeDbTableReadTool, createAutoc
 import { createAutocodeDependenciesTool } from "./autocode_dependencies"
 import { createAutocodeJobExecuteTool } from "./autocode_job_execute"
 import { createAutocodeJobListTool } from "./autocode_job_list"
+import { createAutocodeJobShelveTool } from "./autocode_job_shelve"
 import { createAutocodeJobStatusTool } from "./autocode_job_status"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
@@ -18,7 +19,6 @@ import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
-import { createAutocodeShelveTool } from "./autocode_shelve"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
 import { createTaskResumeTool } from "./task_resume"
 
@@ -39,8 +39,8 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_dependencies: createAutocodeDependenciesTool(),
         autocode_job_list: createAutocodeJobListTool(),
         autocode_job_execute: createAutocodeJobExecuteTool(client),
+        autocode_job_shelve: createAutocodeJobShelveTool(client),
         autocode_job_status: createAutocodeJobStatusTool(client),
-        autocode_shelve: createAutocodeShelveTool(client),
         autocode_logo_find: createAutocodeLogoFindTool(),
         autocode_plan_read: createAutocodePlanReadTool(client),
         autocode_plan_save: createAutocodePlanSaveTool(client),
