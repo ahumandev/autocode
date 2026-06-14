@@ -1,4 +1,4 @@
-import { swap2assistRule } from "@/agents/rules/swap2assist"
+import { swap2previousRule } from "@/agents/rules/swap2previous"
 
 export const gitCommitCommandTemplate = `
 Base your git commit message on the following:
@@ -6,5 +6,5 @@ Base your git commit message on the following:
   - Your recent conversation with user
   - Recent changes
 
-${swap2assistRule}
+${swap2previousRule}
 `

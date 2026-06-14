@@ -1,4 +1,4 @@
-import { swap2assistRule } from "@/agents/rules/swap2assist"
+import { swap2previousRule } from "@/agents/rules/swap2previous"
 
 export const initCommandTemplate = `
 1. Task subagents in parallel: \`document_conventions\`, \`document_code\`, \`document_install\`, \`document_prd\` 
@@ -7,5 +7,5 @@ export const initCommandTemplate = `
 4. Use \`author-readme\` skill to update \`README.md\` using collected reports
 5. Only task \`document_agents\` *AFTER* you had updated \`README.md\` because \`document_agents\` will read your updated \`README.md\` file
 
-${swap2assistRule}
+${swap2previousRule}
 `

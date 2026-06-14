@@ -77,6 +77,29 @@ describe("commands", () => {
         expect(commands["resume"]?.template).toContain("Call `task_resume` tool")
     })
 
+    test("keeps shared return-to-previous-primary rule on command templates", () => {
+        const commandNames = [
+            "author-article",
+            "document",
+            "document-conventions",
+            "document-code",
+            "document-prd",
+            "document-ux",
+            "git-commit",
+            "git-conflict",
+            "init",
+            "job-concepts",
+            "report-last",
+            "report-session",
+        ] as const
+
+        for (const commandName of commandNames) {
+            const template = commands[commandName]?.template ?? ""
+            expect(template).toContain("call `autocode_agent_previous`")
+            expect(template).not.toContain("autocode_agent_swap` with `agent` = `assist`")
+        }
+    })
+
     test("keeps init documentation-only", () => {
         const template = commands.init?.template ?? ""
 

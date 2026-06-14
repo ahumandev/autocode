@@ -1,6 +1,7 @@
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import type { AutocodeSandboxConfig } from "../config"
 import { createAutocodeAgentExecuteTool } from "./autocode_agent_execute"
+import { createAutocodeAgentPreviousTool } from "./autocode_agent_previous"
 import { createAutocodeAgentSwapTool } from "./autocode_agent_swap"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
@@ -26,6 +27,7 @@ import { createTaskResumeTool } from "./task_resume"
 export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandboxConfig = {}) {
     return {
         autocode_agent_execute: createAutocodeAgentExecuteTool(client),
+        autocode_agent_previous: createAutocodeAgentPreviousTool(client),
         autocode_agent_swap: createAutocodeAgentSwapTool(client),
         autocode_concept_create: createAutocodeConceptCreateTool(client),
         autocode_concept_list: createAutocodeConceptListTool(),

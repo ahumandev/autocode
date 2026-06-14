@@ -1,4 +1,4 @@
-import { swap2assistRule } from "../rules/swap2assist";
+import { swap2previousRule } from "../rules/swap2previous";
 
 export const tempConceptPrompt = `
 CONCEPT = a conceptual project improvement idea (like fixing bug, adding feature, optimizing processes)
@@ -7,7 +7,7 @@ CONCEPT = a conceptual project improvement idea (like fixing bug, adding feature
 2. Create 1 CONCEPT per independent group of issues calling \`autocode_concept_create\` tool with formatted [Concept Parameter](#concept)
 3. Report CONCEPT labels and file paths.
 
-${swap2assistRule}
+${swap2previousRule}
 
 ## Concept Parameter {concept}
 

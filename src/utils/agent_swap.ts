@@ -1,13 +1,15 @@
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk"
 import { getAgentTier } from "@/agents"
 import type { ModelTier, TierConfig } from "@/config"
 import { loadAutocodeConfig } from "@/config"
 import { flattenError } from "@/utils/tools"
 
+export const primaryAutocodeAgents = ["assist", "auto", "design", "research"] as const
 export const allowedAutocodeSessionCreateAgents = ["assist", "auto", "research", "design"] as const
 export const allowedAutocodeSessionCreateAgentsText = allowedAutocodeSessionCreateAgents.join(", ")
 
 export type AutocodeSessionCreateAgent = typeof allowedAutocodeSessionCreateAgents[number]
+export type PrimaryAutocodeAgent = typeof primaryAutocodeAgents[number]
 
 type ValidatedAutocodeSessionCreateInput = {
     prompt: string
@@ -46,6 +48,12 @@ type ResolvedAutocodeAgentSessionSettings = {
     resolvedModel: ResolvedAgentModel
 }
 
+type PreviousPrimaryAutocodeAgentResult = {
+    agent?: PrimaryAutocodeAgent
+    skipped: boolean
+    reason?: string
+}
+
 type OpenCodeApiResponse<T> = {
     data?: T
     error?: unknown
@@ -54,6 +62,20 @@ type OpenCodeApiResponse<T> = {
 type OpenCodeApiResponseOrData<T> = OpenCodeApiResponse<T> | T
 
 export type AutocodeSessionClient = Pick<OpencodeClient, "session">
+
+type SessionMessage = {
+    info: Message
+    parts: Part[]
+}
+
+type SessionMessagesMethod = NonNullable<OpencodeClient["session"]["messages"]>
+type SessionMessagesResponse = Awaited<ReturnType<SessionMessagesMethod>>
+
+type SessionMessagesClient = Pick<OpencodeClient, "session"> & {
+    session: {
+        messages?: SessionMessagesMethod
+    }
+}
 
 type AutocodeSessionApi = {
     session: {
@@ -95,6 +117,18 @@ function unwrapOpenCodeError(response: unknown): unknown {
 
 function resolveAutocodeAgentSessionTier(agent: string): ModelTier | undefined {
     return getAgentTier(agent)
+}
+
+function isPrimaryAutocodeAgent(agent: unknown): agent is PrimaryAutocodeAgent {
+    return typeof agent === "string" && primaryAutocodeAgents.includes(agent as PrimaryAutocodeAgent)
+}
+
+function getMessageCreatedTime(message: SessionMessage): number {
+    return message.info.time.created
+}
+
+function getMessageAgent(message: SessionMessage): unknown {
+    return (message.info as Message & { agent?: unknown }).agent
 }
 
 export function resolveTierModel(tier: ModelTier | undefined, tiers: Partial<Record<ModelTier, TierConfig>>): ResolvedAgentModel {
@@ -298,6 +332,78 @@ export function createAutocodeAgentSwapSuccessResponse(agent: string, sessionID:
         session_action: "swapped",
         message,
     })
+}
+
+export function createAutocodeAgentPreviousSkippedResponse(sessionID: string, reason: string): string {
+    const message = `Skipped previous-primary handoff for current session (${sessionID}): ${reason}`
+
+    return JSON.stringify({
+        session_id: sessionID,
+        skipped: true,
+        reason,
+        message,
+    })
+}
+
+export async function findPreviousPrimaryAutocodeAgent(
+    client: SessionMessagesClient,
+    directory: string,
+    sessionID: string,
+    currentAgent?: string,
+): Promise<PreviousPrimaryAutocodeAgentResult | InvalidAutocodeAgentSwapInput> {
+    if (!client.session.messages) {
+        return {
+            error: "Unable to inspect current session history: session.messages is unavailable",
+            instruction: "",
+        }
+    }
+
+    let response: SessionMessagesResponse
+    try {
+        response = await client.session.messages({
+            path: { id: sessionID },
+            query: {
+                directory,
+                limit: 200,
+            },
+        })
+    }
+    catch (error) {
+        return {
+            error: createAutocodeSessionError("session_messages", directory, sessionID, currentAgent ?? "unknown", error),
+            instruction: "",
+        }
+    }
+
+    const responseError = unwrapOpenCodeError(response)
+    if (responseError) {
+        return {
+            error: createAutocodeSessionError("session_messages", directory, sessionID, currentAgent ?? "unknown", responseError),
+            instruction: "",
+        }
+    }
+
+    const responseData = unwrapOpenCodeData<SessionMessage[]>(response) ?? []
+    const sortedMessages = [...responseData].sort((left, right) => getMessageCreatedTime(right) - getMessageCreatedTime(left))
+    for (const message of sortedMessages) {
+        const agent = getMessageAgent(message)
+        if (!isPrimaryAutocodeAgent(agent)) {
+            continue
+        }
+        if (isPrimaryAutocodeAgent(currentAgent) && agent === currentAgent) {
+            continue
+        }
+
+        return {
+            agent,
+            skipped: false,
+        }
+    }
+
+    return {
+        skipped: true,
+        reason: "No previous primary agent found in current session history.",
+    }
 }
 
 export async function swapCurrentAutocodeSession(

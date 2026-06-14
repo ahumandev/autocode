@@ -1,5 +1,5 @@
-import {markdown} from "@/agents/rules/markdown";
-import { swap2assistRule } from "../rules/swap2assist";
+import { markdown } from "@/agents/rules/markdown";
+import { swap2previousRule } from "../rules/swap2previous";
 
 export const tempReportPrompt = `
 
@@ -99,5 +99,5 @@ Rules:
 - Start H2 titles and bullet points with relevant emojis
 ${markdown}
 
-${swap2assistRule}
+${swap2previousRule}
 `

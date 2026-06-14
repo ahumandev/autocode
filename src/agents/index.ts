@@ -685,7 +685,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -708,7 +708,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -732,7 +732,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -756,7 +756,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -779,7 +779,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -803,7 +803,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -828,7 +828,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             autocode_logo_find: "allow",
             doom_loop: "deny",
             edit: "allow",
@@ -947,7 +947,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             autocode_criteria_list: "allow",
             autocode_job_shelve: "allow",
             doom_loop: "deny",
@@ -1244,6 +1244,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_previous: "allow",
             autocode_concept_create: "allow",
             skill: {
                 "*": "deny",
@@ -1276,7 +1277,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
         },
         prompt: tempManualPrompt,
         temperature: 0.3,
@@ -1289,7 +1290,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
         },
         prompt: tempReportPrompt,
         temperature: 0.3,
@@ -1302,7 +1303,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_previous: "allow",
             autocode_session_create: "allow",
         },
         prompt: "---",

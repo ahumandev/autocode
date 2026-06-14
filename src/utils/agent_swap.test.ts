@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createAutocodeAgentSwapSuccessResponse, createAutocodeSession, createAutocodeSessionCreateSuccessResponse, createAutocodeSessionPrompt, deriveAutocodeAgentSwapTitle, dispatchAutocodeAgentPrompt, resolveTierModel, swapCurrentAutocodeSession, validateAutocodeAgentSwapInput, validateAutocodeSessionCreateInput } from "./agent_swap"
+import { createAutocodeAgentPreviousSkippedResponse, createAutocodeAgentSwapSuccessResponse, createAutocodeSession, createAutocodeSessionCreateSuccessResponse, createAutocodeSessionPrompt, deriveAutocodeAgentSwapTitle, dispatchAutocodeAgentPrompt, findPreviousPrimaryAutocodeAgent, resolveTierModel, swapCurrentAutocodeSession, validateAutocodeAgentSwapInput, validateAutocodeSessionCreateInput } from "./agent_swap"
 
 function createClient() {
     return {
@@ -18,6 +18,30 @@ function createClient() {
             create: ReturnType<typeof mock>
             update: ReturnType<typeof mock>
             promptAsync: ReturnType<typeof mock>
+        }
+    }
+}
+
+function createSessionMessage(agent: string, created: number) {
+    return {
+        info: {
+            id: `${agent}-${created}`,
+            role: "assistant",
+            agent,
+            time: { created },
+        },
+        parts: [],
+    }
+}
+
+function createMessagesClient(messages: ReturnType<typeof createSessionMessage>[]) {
+    return {
+        session: {
+            messages: mock(async () => ({ data: messages })),
+        },
+    } as Parameters<typeof findPreviousPrimaryAutocodeAgent>[0] & {
+        session: {
+            messages: ReturnType<typeof mock>
         }
     }
 }
@@ -174,6 +198,63 @@ describe("agent swap utilities", () => {
             agent: "auto",
             session_action: "swapped",
             message: "Swapped current session to auto (session-1).",
+        })
+    })
+
+    test("returns exact skipped previous-primary response fields and message", () => {
+        expect(JSON.parse(createAutocodeAgentPreviousSkippedResponse("session-1", "No previous primary agent found in current session history."))).toEqual({
+            session_id: "session-1",
+            skipped: true,
+            reason: "No previous primary agent found in current session history.",
+            message: "Skipped previous-primary handoff for current session (session-1): No previous primary agent found in current session history.",
+        })
+    })
+
+    test("finds newest primary autocode agent after sorting newest-first and skipping non-primary agents", async () => {
+        const client = createMessagesClient([
+            createSessionMessage("assist", 10),
+            createSessionMessage("pair", 90),
+            createSessionMessage("design", 70),
+            createSessionMessage("temp_report", 100),
+            createSessionMessage("research", 80),
+        ])
+
+        const result = await findPreviousPrimaryAutocodeAgent(client, "/workspace", "session-1")
+
+        expect(result).toEqual({
+            agent: "research",
+            skipped: false,
+        })
+    })
+
+    test("skips current primary agent while scanning session history", async () => {
+        const client = createMessagesClient([
+            createSessionMessage("design", 100),
+            createSessionMessage("pair", 90),
+            createSessionMessage("assist", 80),
+        ])
+
+        const result = await findPreviousPrimaryAutocodeAgent(client, "/workspace", "session-1", "design")
+
+        expect(result).toEqual({
+            agent: "assist",
+            skipped: false,
+        })
+    })
+
+    test("returns skipped result with unresolved reason when no eligible previous primary agent exists", async () => {
+        const client = createMessagesClient([
+            createSessionMessage("design", 100),
+            createSessionMessage("pair", 90),
+            createSessionMessage("temp_report", 80),
+            createSessionMessage("design", 70),
+        ])
+
+        const result = await findPreviousPrimaryAutocodeAgent(client, "/workspace", "session-1", "design")
+
+        expect(result).toEqual({
+            skipped: true,
+            reason: "No previous primary agent found in current session history.",
         })
     })
 })
