@@ -54,7 +54,7 @@ ${manualRules}
 4. Complete the assignment by tasking subagents:
     - Call \`todowrite\` tool to keep track of complex multi-step assignments
     - Repeatedly task subagents until assignment is completed or failed
-5. Summarize output of \`task\` tool in Concise English (max 40 words)
+5. Summarize output of \`task\` tool in Concise English (max 40 words), except if code was written then respond with basic flow diagram in Mermaid syntax
 6. Measure task results according against assignment:
    - Failure: Follow [Troubleshooting Workflow](#troubleshooting)
    - Success, but assignment is incomplete:

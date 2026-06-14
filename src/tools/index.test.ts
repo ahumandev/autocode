@@ -398,8 +398,8 @@ describe("auto resume wiring", () => {
         expect(cfg.command["job-execute"]?.subtask).toBe(false)
         expect(cfg.command["job-execute"]?.template).toContain("autocode_job_list")
         expect(cfg.command["job-execute"]?.template).toContain("question")
-        expect(cfg.command["job-execute"]?.template).toContain("autocode_plan_read")
-        expect(cfg.command["job-execute"]?.template).toContain("autocode_agent_swap")
+        expect(cfg.command["job-execute"]?.template).toContain("autocode_agent_execute")
+        expect(cfg.command["job-execute"]?.template).toContain('output includes `current_status`')
     })
 
     test("registers only canonical lifecycle commands", async () => {
@@ -1153,6 +1153,7 @@ describe("autocode_plan_save tool", () => {
         const cfg = createConfig()
         await configurePlugin(plugin, cfg)
         expect(Object.keys(plugin.tool ?? {}).sort()).toEqual([
+            "autocode_agent_execute",
             "autocode_agent_swap",
             "autocode_concept_create",
             "autocode_concept_list",
@@ -1215,10 +1216,13 @@ describe("autocode_plan_save tool", () => {
         expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("Omit to view all or provide one of these status filters: concepts, drafts, assist, executing, facilitate, review")
         expect(plugin.tool?.autocode_act_prompt).toBeUndefined()
         expect(plugin.tool?.autocode_act).toBeUndefined()
+        expect(plugin.tool?.autocode_agent_execute).toBeDefined()
         expect(plugin.tool?.autocode_agent_swap).toBeDefined()
         expect(plugin.tool?.autocode_session_create).toBeDefined()
         expect(plugin.tool?.autocode_job_execute).toBeDefined()
         expect(plugin.tool?.autocode_execute_job).toBeUndefined()
+        expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Move selected job to execution status")
+        expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Selected planned job_name in safe snake_case.")
         expect(toolSurfaceText(plugin.tool?.autocode_agent_swap)).toContain("Swap agent in this session.")
         expect(toolSurfaceText(plugin.tool?.autocode_agent_swap)).toContain("Name of agent to swap to.")
         const sessionCreateToolText = toolSurfaceText(plugin.tool?.autocode_session_create)
@@ -1268,10 +1272,15 @@ describe("autocode_plan_save tool", () => {
         expect(cfg.agent.ask).toBeUndefined()
         expect(cfg.agent.autocode).toBeUndefined()
         expect(cfg.agent.plan).toEqual({ disable: true })
+        expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_execute")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_swap")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_plan_read")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_execute")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_job_list")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "question")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_swap")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_plan_read")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_plan_save")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")

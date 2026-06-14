@@ -314,6 +314,7 @@ const baseAgents: AgentMap = {
         mode: "primary",
         permission: {
             "*": "deny",
+            autocode_agent_execute: "allow",
             autocode_agent_swap: "allow",
             autocode_concept_list: "allow",
             autocode_concept_read: "allow",
@@ -1260,9 +1261,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_agent_execute: "allow",
             autocode_job_list: "allow",
-            autocode_plan_read: "allow", // Used by job-execute command
             question: "allow",
         },
         prompt: "---",

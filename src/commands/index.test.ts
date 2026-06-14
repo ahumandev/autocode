@@ -66,7 +66,9 @@ describe("commands", () => {
 
         expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
         expect(commands["job-draft"]?.template).toContain("Call `autocode_plan_save` tool with planned sections: PROBLEMS, REQUIREMENTS, CONSTRAINTS, RISKS, and user chosen PROPOSAL.")
-        expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_swap` with `agent` set to the selected agent.")
+        expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_execute` once with selected `job_name` and selected `agent`, then evaluate tool output:")
+        expect(commands["job-execute"]?.template).toContain('output includes `current_status`')
+        expect(commands["job-execute"]?.template).toContain('Continue job in [agent] session.')
         expect(commands["job-review"]?.template).toContain("Call `autocode_criteria_list` tool, if output show any unmet criteria")
         expect(commands["job-shelve"]?.template).toContain("Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
         expect(commands["shelve"]?.template).toContain("Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
