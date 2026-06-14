@@ -1,6 +1,6 @@
-<p align="center"><img src="docs/logo.webp" alt="AutoCode"/></p>
+***The workflow engine for traceable autonomous job execution***
 
-<h3 align="center">The workflow engine for traceable autonomous job execution</h3>
+<p align="center"><img src="docs/logo.webp" alt="AutoCode"/></p>
 
 ---
 

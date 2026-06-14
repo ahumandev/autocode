@@ -28,11 +28,13 @@ description: Use `author-readme` to get "README.md Format" when reviewing/writin
 ## README.md Layout
 
 ```markdown
+***[HERO]***
+
 <p align="center">[LOGO]</p>
 
 <h1 align="center">[Project Name]</h1>
 
-<h3 align="center">[HERO]</p>
+---
 
 [PURPOSE]
 

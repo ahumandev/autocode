@@ -95,13 +95,27 @@ The package exists on npm and the temporary token is no longer active
 
 After the initial package exists on npm, configure Trusted Publisher for future GitHub Actions publishes.
 
+Sign in to npm as `ahumandev`, then open the package page:
+
+- <https://www.npmjs.com/package/@ahumandev/autocode> → `Settings` → `Trusted publishing`
+
+If a Trusted Publisher entry already exists for this package workflow, remove it and create it again.
+
 Use these npm Trusted Publisher settings:
 
 - Provider: `GitHub Actions`
 - Owner: `ahumandev`
 - Repository: `autocode`
 - Workflow filename: `npm-publish.yml`
+- Environment: leave empty
 - Allowed action: `npm publish`
+
+Critical notes:
+
+- Enter the workflow filename only: `npm-publish.yml`
+- Do not enter `.github/workflows/npm-publish.yml`
+- Do not enter `npm publish` in the workflow filename field
+- Do not use `.yaml` if the workflow file is `.yml`
 
 Expected result:
 
@@ -232,10 +246,11 @@ The workflow does this:
 
 1. Checks out the repository at the tag.
 2. Sets up Bun.
-3. Sets up Node.js 20 with the npm registry.
-4. Runs `bun install --frozen-lockfile`.
-5. Runs `npm publish --provenance --access public` through npm Trusted Publishing.
-6. Creates a GitHub release for the same tag with generated release notes.
+3. Sets up Node.js 24 with the npm registry.
+4. Upgrades npm if the workflow includes the npm upgrade step.
+5. Runs `bun install --frozen-lockfile`.
+6. Runs `npm publish --provenance --access public` through npm Trusted Publishing.
+7. Creates a GitHub release for the same tag with generated release notes.
 
 Expected result:
 
@@ -309,10 +324,25 @@ Check:
   - Owner `ahumandev`
   - Repository `autocode`
   - Workflow filename `npm-publish.yml`
+  - Environment empty
   - Allowed action `npm publish`
 - The workflow has OIDC permission through `id-token: write`
 
 If you need to create the package for the first time, use a temporary granular token locally, publish once, then revoke the token immediately.
+
+### ⚠️ `E404` after provenance signing or package PUT
+
+Symptoms:
+
+- GitHub Actions shows provenance signing succeeded
+- `npm publish` then fails with `E404`, often after the package `PUT`
+
+Check:
+
+- This usually means the npm Trusted Publisher entry does not match the workflow or npm permission mapping failed
+- Verify every Trusted Publisher value exactly
+- Delete the existing Trusted Publisher entry and recreate it if anything looks off
+- Confirm the workflow filename is exactly `npm-publish.yml`
 
 ### ⚠️ The workflow did not start
 
