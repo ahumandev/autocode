@@ -1,10 +1,34 @@
+/**
+ * @file verify-package-artifacts.ts
+ * @description Validates the existence and contents of the package artifacts before publishing the plugin package.
+ * 
+ * Why it is used:
+ * Protects against publishing broken builds by verifying required files exist in `dist/` and checking package.json configurations.
+ * 
+ * Where it is called:
+ * - Run via `bun run verify:package` in package.json.
+ * - Run automatically before publishing during the `prepublishOnly` lifecycle hook:
+ *   `bun run test && bun run typecheck && bun run build && bun run verify:package`
+ */
+
 import { access, readFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const packageJsonPath = resolve(rootDir, "package.json")
-const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"))
+
+interface PackageJson {
+  main?: string;
+  types?: string;
+  private?: boolean;
+  publishConfig?: {
+    access?: string;
+  };
+  files?: string[];
+}
+
+const packageJson: PackageJson = JSON.parse(await readFile(packageJsonPath, "utf8"))
 
 const requiredFiles = [
   resolve(rootDir, "dist", "plugin.js"),

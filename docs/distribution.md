@@ -286,6 +286,30 @@ Expected result:
 GitHub Actions publishes and releases from the existing tag you entered
 ```
 
+### ✅ Step 11: Verify the published package with the OpenCode plugin CLI
+
+After the package is published, verify installation with the OpenCode plugin CLI instead of editing config files manually.
+
+Install the published package globally with:
+
+```bash
+opencode plugin @ahumandev/autocode -g
+```
+
+To update or replace an existing global install with the latest published package, run:
+
+```bash
+opencode plugin @ahumandev/autocode@latest -g -f
+```
+
+Local install is optional. Omit `-g` if you want OpenCode to write project-local `.opencode` config instead of a global install.
+
+Expected result:
+
+```text
+OpenCode installs or updates the published AutoCode plugin through the plugin CLI
+```
+
 ---
 
 ## What the GitHub workflow does

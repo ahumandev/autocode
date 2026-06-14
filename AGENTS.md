@@ -22,7 +22,8 @@ It turns concepts into plans, runs work in OpenCode, and keeps state in text fil
 - `src/commands/`: Slash command registration.
 - `src/tools/`: Runtime tools for jobs, DB read, sandbox, cross-project tasks, resume.
 - `src/skills/`: Source guidance bundled into `dist/skills`.
-- `scripts/install-plugin-shim.mjs`: Installs shim at `~/.config/opencode/plugins/autocode.js`.
+- `src/install.ts`: Installs shim at `~/.config/opencode/plugins/autocode.js`.
+- `bun run build`: Builds `dist/` only; does not install the shim.
 
 # Rules
 - Treat repo as OpenCode plugin/library, not standalone app or web server.

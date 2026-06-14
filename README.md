@@ -84,7 +84,7 @@ OpenCode re-installs the requested npm plugin version during startup.
 
 Remove `@ahumandev/autocode` from the OpenCode `plugin` array, save the config, and restart OpenCode.
 
-If you previously used the repository-only shim workflow, also remove `~/.config/opencode/plugins/autocode.js`.
+If you previously used the repository-only shim workflow, also remove `~/.config/opencode/plugins/autocode.js` if present.
 
 ### Troubleshooting
 
@@ -320,21 +320,30 @@ Local setup is for repository development only. It is not the public npm install
    bun run build
    ```
 
-   The build removes `dist`, bundles [`src/plugin.ts`](src/plugin.ts), emits TypeScript declarations, copies generated skill sources, and runs [`scripts/install-plugin-shim.mjs`](scripts/install-plugin-shim.mjs).
+   The build removes `dist`, bundles [`src/plugin.ts`](src/plugin.ts), emits TypeScript declarations, and copies generated skill sources into `dist/`. It does not install the local shim.
 
-3. Load the plugin in OpenCode.
+3. Install the local shim when you want OpenCode to load the repository build.
 
-   The build installs a shim at `~/.config/opencode/plugins/autocode.js`. This local shim is a developer workflow only. For local development in this repository, [`.opencode/plugin/AutoCode.ts`](.opencode/plugin/AutoCode.ts) re-exports the built plugin from `dist/plugin.js`.
+   ```bash
+   bun run install:shim
+   ```
+
+   This writes the local development shim to `~/.config/opencode/plugins/autocode.js`.
+
+4. Load the plugin in OpenCode.
+
+   For local development in this repository, [`.opencode/plugin/AutoCode.ts`](.opencode/plugin/AutoCode.ts) re-exports the built plugin from `dist/plugin.js`.
 
 ### Development commands
 
-| Command                         | Purpose                                                                                                                     |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `bun run build`                 | Removes `dist`, builds `src/plugin.ts`, emits declarations, copies generated skills, and installs the OpenCode plugin shim. |
-| `bun run watch`                 | Copies generated skills once, then watches the Bun bundle and declarations as source files change.                          |
-| `bun test`                      | Runs the Bun test suite under `src`.                                                                                        |
-| `bun run typecheck`             | Runs TypeScript type checking without emitting files.                                                                       |
-| `bun run verify:sandbox-online` | Runs the sandbox verification script.                                                                                       |
+| Command                         | Purpose                                                                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run build`                 | Removes `dist`, builds `src/plugin.ts`, emits declarations, and copies generated skills into `dist/`. Does not install the shim. |
+| `bun run install:shim`          | Installs the local development shim at `~/.config/opencode/plugins/autocode.js`.                                                 |
+| `bun run watch`                 | Copies generated skills once, then watches the Bun bundle and declarations as source files change.                               |
+| `bun test`                      | Runs the Bun test suite under `src`.                                                                                             |
+| `bun run typecheck`             | Runs TypeScript type checking without emitting files.                                                                            |
+| `bun run verify:sandbox-online` | Runs the sandbox verification script.                                                                                            |
 
 There is no `lint` script in the current `package.json`.
 
@@ -362,9 +371,10 @@ Build the distributable plugin only for the local source workflow in this reposi
 
 ```bash
 bun run build
+bun run install:shim
 ```
 
-The build output is written to `dist/`, including `dist/plugin.js`, declarations, and copied generated skills under `dist/skills`, matching the `main`, `types`, and `exports` fields in [`package.json`](package.json).
+The build output is written to `dist/`, including `dist/plugin.js`, declarations, and copied generated skills under `dist/skills`, matching the `main`, `types`, and `exports` fields in [`package.json`](package.json). Run `bun run install:shim` separately when you need the local OpenCode shim.
 
 See [Distribution Guide](docs/distribution.md) for more information about distributing AutoCode on public registries.
 

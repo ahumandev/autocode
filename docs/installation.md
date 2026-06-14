@@ -83,96 +83,28 @@ If `npm` command is missing, stop and use the blocked npm report from If blocked
 
 If `npm ping` fails, stop and use the blocked internet/registry report from If blocked.
 
-### Step 4: Check OpenCode config location
+### Step 4: Install AutoCode plugin
 
-OpenCode reads global config from one of these files.
-
-- `~/.config/opencode/opencode.json`
-- `~/.config/opencode/opencode.jsonc`
-
-Check what already exists.
+Run this.
 
 ```bash
-ls -la "$HOME/.config/opencode" 2>/dev/null || true
-test -f "$HOME/.config/opencode/opencode.json" && echo "have json"
-test -f "$HOME/.config/opencode/opencode.jsonc" && echo "have jsonc"
+opencode plugin -g @ahumandev/autocode@latest
 ```
 
-If folder does not exist, make it.
+`-g` installs the plugin in global OpenCode config.
 
-```bash
-mkdir -p "$HOME/.config/opencode"
-```
+### Step 5: Start AutoCode install command
 
-### Step 5: Add AutoCode plugin
-
-#### If no OpenCode config exists yet
-
-Create `~/.config/opencode/opencode.jsonc` with this exact content.
-
-```jsonc
-{
-  "plugin": [
-    "@ahumandev/autocode"
-  ]
-}
-
-```
-
-#### If config already exists
-
-Do not replace whole file.
-
-Merge `@ahumandev/autocode` into existing `plugin` array.
-
-Example merge:
-
-```jsonc
-{
-  // keep old settings
-  "theme": "dark",
-  "plugin": [
-    "some-other-plugin",
-    "@ahumandev/autocode"
-  ]
-}
-```
-
-Rules:
-
-- Keep old settings.
-- Keep old plugins.
-- Add AutoCode once.
-- If file uses comments or trailing commas, keep `.jsonc`.
-- If file is plain `.json`, keep strict JSON syntax.
-
-### Step 6: Save config safely
-
-Check file before start.
-
-```bash
-sed -n '1,200p' "$HOME/.config/opencode/opencode.jsonc" 2>/dev/null || true
-sed -n '1,200p' "$HOME/.config/opencode/opencode.json" 2>/dev/null || true
-```
-
-Good result:
-
-- File has valid JSON or JSONC.
-- `plugin` array includes `@ahumandev/autocode`.
-- File is not overwritten with unrelated settings removed.
-
-### Step 7: Install AutoCode dependencies
-
-Run:
+Run this.
 
 ```bash
 opencode run --format json --command autocode-install
 ```
 
-- If output contains `"message":"Command not found: \"autocode-install\"`, this means AutoCode plugin not registered, config failed.
-- If output contains `"type":"step_start"`, this means OpenCode found AutoCode and install work started. Wait for optional AutoCode dependency installation to complete.
+- If output contains `"message":"Command not found: \"autocode-install\"`, then AutoCode plugin failed to register.
+- If output contains `"type":"step_start"`, then AutoCode plugin successfully registered and optional dependency installation started -> wait until done.
 
-If AutoCode dependency installation fail, AutoCode will still work.
+If AutoCode dependency installation fails, AutoCode will still work.
 
 ---
 
@@ -250,31 +182,38 @@ If current file uses comments or trailing commas, rename plan should be careful:
 
 ### Fix plugin install failure
 
-Use this if OpenCode starts but cannot install `@ahumandev/autocode`.
+Use this if OpenCode starts but cannot install AutoCode.
 
 Check these things:
 
-- Package name is exact: `@ahumandev/autocode`.
+- Install command uses `@ahumandev/autocode@latest`.
 - Config syntax is valid.
 - OpenCode was restarted after config change.
+
+### Fix stale local shim
+
+Use this only for local repository development with a shim.
+
+If OpenCode keeps loading an old local build, remove both shim filenames if present, then reinstall the shim.
+
+```bash
+rm -f ~/.config/opencode/plugins/autocode.js
+bun run install:shim
+```
+
+- `autocode.js` is the current local shim filename.
+- Run this from the AutoCode repository root.
 
 ---
 
 ## Success
 
-- `opencode` starts without errors.
-- AutoCode plugin in `opencode` registers commands like `autocode-install`.
+- `opencode run --format json --command autocode-install` starts and emits JSON events.
 
 ---
 
 ## Uninstall AutoCode
 
 Remove `@ahumandev/autocode` from `plugin` array.
-
-Then restart OpenCode.
-
-```bash
-opencode
-```
 
 Do not delete unrelated plugins or settings.
