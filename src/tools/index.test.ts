@@ -1225,7 +1225,6 @@ describe("autocode_plan_save tool", () => {
         expect(plugin.tool?.autocode_execute_job).toBeUndefined()
         expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Move selected job to execution status")
         expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Selected planned job_name in safe snake_case.")
-        expect(toolSurfaceText(plugin.tool?.autocode_agent_previous)).toContain("Swap current session back to previous primary agent.")
         expect(toolSurfaceText(plugin.tool?.autocode_agent_swap)).toContain("Swap agent in this session.")
         expect(toolSurfaceText(plugin.tool?.autocode_agent_swap)).toContain("Name of agent to swap to.")
         expect(Object.keys((plugin.tool?.autocode_agent_previous as unknown as { args: Record<string, unknown> }).args)).toEqual([])

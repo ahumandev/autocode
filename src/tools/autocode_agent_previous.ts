@@ -35,7 +35,7 @@ export function createAutocodeAgentPreviousTool(client?: OpencodeClient): Return
                     context.directory,
                     context.sessionID,
                     previousPrimary.agent,
-                    "continue",
+                    "Ask user for Next Action.",
                     sessionSettings.resolvedModel
                 )
                 if ("error" in handoff) {

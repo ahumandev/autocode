@@ -111,7 +111,7 @@ describe("autocode_agent_previous tool", () => {
             query: { directory: "/workspace" },
             body: {
                 agent: previousPrimary,
-                parts: [{ type: "text", text: "continue" }],
+                parts: [{ type: "text", text: "Ask user for Next Action." }],
             },
         })
         expect(parsed).toEqual({

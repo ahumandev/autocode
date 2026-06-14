@@ -6,7 +6,6 @@ It turns concepts into plans, runs work in OpenCode, and keeps state in text fil
 
 - **Read-only DB tools**: Inspect one table at a time.
 - **Cross-project tasking**: Run isolated OpenCode sessions elsewhere.
-- **Generated skills**: Bundle `src/skills` into `dist/skills` for OpenCode auto-load.
 
 # Core flow or states
 - Concept -> draft -> assist or auto -> review -> shelved.
