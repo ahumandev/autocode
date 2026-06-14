@@ -684,6 +684,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -706,6 +707,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -729,6 +731,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -752,6 +755,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -774,6 +778,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -797,6 +802,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -821,6 +827,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             autocode_logo_find: "allow",
             doom_loop: "deny",
             edit: "allow",
@@ -939,6 +946,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             doom_loop: "deny",
             git_git_add: "allow",
             git_git_commit: "allow",
@@ -1251,7 +1259,8 @@ const baseAgents: AgentMap = {
             autocode_concept_create: "allow",
             skill: {
                 "*": "deny",
-                "author-article": "allow"
+                "author-article": "allow",
+                autocode_agent_swap: "allow",
             }
         },
         prompt: tempConceptPrompt,
@@ -1263,7 +1272,8 @@ const baseAgents: AgentMap = {
         hidden: true,
         mode: "subagent",
         permission: {
-            "*": "deny"
+            "*": "deny",
+            autocode_agent_swap: "allow",
         },
         prompt: tempManualPrompt,
         temperature: 0.3,
@@ -1275,7 +1285,8 @@ const baseAgents: AgentMap = {
         hidden: true,
         mode: "subagent",
         permission: {
-            "*": "deny"
+            "*": "deny",
+            autocode_agent_swap: "allow",
         },
         prompt: tempReportPrompt,
         temperature: 0.3,
@@ -1288,6 +1299,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_agent_swap: "allow",
             autocode_session_create: "allow",
         },
         prompt: "---",

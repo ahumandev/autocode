@@ -31,8 +31,8 @@ describe("commands", () => {
             "new-troubleshoot",
             "repeat-as-md",
             "repeat-as-wiki",
+            "report-last",
             "report-session",
-            "report-task",
             "resume",
         ])
 
@@ -153,7 +153,7 @@ describe("commands", () => {
     test("keeps repeat_as_md template intent independent of stale description", () => {
         const command = commands["repeat-as-md"]
 
-        expect(command?.agent).toBe("assist")
+        expect(command?.agent).toBeUndefined()
         expect(command?.description).toBe("Repeat the last response inside a fenced Markdown code block.")
         expect(command?.subtask).toBe(false)
         expect(command?.template).toContain("Repeat your last response wrapped in markdown codeblock")

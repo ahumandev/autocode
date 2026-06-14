@@ -1276,7 +1276,7 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo_find")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_agent_swap")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_agent_swap")).toBe("allow")
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_session_create")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_dependencies")).toBe("allow")

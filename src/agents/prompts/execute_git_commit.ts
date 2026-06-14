@@ -36,7 +36,7 @@ Specifically add files that:
 - match "git commit purpose"
 - AGENTS.md, README.md (if they exist)
 
-For every unstaged file:
+If user attached files, then commit only those files, otherwise for every unstaged file:
 
 Decide if it should be included in commit:
    - If yes, task \`git_git_add\` to stage it

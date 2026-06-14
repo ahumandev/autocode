@@ -185,7 +185,7 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | `/repeat-as-md`   | Repeats the last response inside a fenced Markdown code block.                       |
 | `/repeat-as-wiki` | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting.           |
 | `/report-session` | Reports on the entire current session.                                               |
-| `/report-task`    | Reports on only the most recent user-requested assignment.                           |
+| `/report-last`    | Reports on only the most recent user-requested assignment.                           |
 | `/resume`         | Resumes an interrupted session by calling the resume tool.                           |
 
 ### Job files

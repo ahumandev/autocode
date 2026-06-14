@@ -78,7 +78,10 @@ export const commands: CommandMap = {
         agent: "temp_concept",
         description: "Save concepts in .agents/jobs/concepts/.",
         subtask: false,
-        template: "$ARGUMENTS"
+        template: `$ARGUMENTS
+
+${swap2assistRule}
+`
     },
 
     "job-design": {
@@ -170,7 +173,7 @@ Replace [job_path] with \`job_path\` value from \`autocode_plan_save\` tool resp
     "job-shelved": {
         agent: "auto",
         description: "Shelve current job and move job to .agents/jobs/shelved/{name}/",
-        subtask: false, 
+        subtask: false,
         template: "Call \`autocode_shelve\` to shelve job into \`.agents/jobs/shelved/{name}/\`, then stop."
     },
 
@@ -191,7 +194,10 @@ Replace [job_path] with \`job_path\` value from \`autocode_plan_save\` tool resp
 
 _____________________________
 
-Apply \`author-article\` skill to edit user provided article.`
+Apply \`author-article\` skill to edit user provided article.
+
+${swap2assistRule}
+`
     },
 
     "document": {
@@ -204,6 +210,8 @@ Apply \`author-article\` skill to edit user provided article.`
 3. Collect subagent reports
 4. Update \`README.md\` using collected reports (only update applicable sections - not entire file)
 5. Only task \`document_agents\` *AFTER* you had updated \`README.md\` with prompt to check if any of recent changes are applicable to content in AGENTS.md (only update AGENTS.md if outdated)
+
+${swap2assistRule}
 `,
     },
 
@@ -211,28 +219,40 @@ Apply \`author-article\` skill to edit user provided article.`
         agent: "document_conventions",
         description: "Document recently updated naming conventions and terminology.",
         subtask: false,
-        template: `$ARGUMENTS`,
+        template: `$ARGUMENTS
+
+${swap2assistRule}
+`,
     },
 
     "document-code": {
         agent: "document_code",
         description: "Document recently updated technical architecture and design decisions.",
         subtask: false,
-        template: `$ARGUMENTS`,
+        template: `$ARGUMENTS
+
+${swap2assistRule}
+`,
     },
 
     "document-prd": {
         agent: "document_prd",
         description: "Document recently updated product requirements and user roles.",
         subtask: false,
-        template: `$ARGUMENTS`,
+        template: `$ARGUMENTS
+
+${swap2assistRule}
+`,
     },
 
     "document-ux": {
         agent: "document_ux",
         description: "Document recently updated UX flows, navigation, and styling patterns.",
         subtask: false,
-        template: `$ARGUMENTS`,
+        template: `$ARGUMENTS
+
+${swap2assistRule}
+`,
     },
 
     "git-commit": {
@@ -244,6 +264,8 @@ Base your git commit message on the following:
   - Purpose of this session (see title)
   - Your recent conversation with user
   - Recent changes
+
+${swap2assistRule}
 `
     },
 
@@ -251,7 +273,10 @@ Base your git commit message on the following:
         agent: "assist_git_conflict",
         description: "Automatically handle git merge conflicts.",
         subtask: false,
-        template: `$ARGUMENTS`
+        template: `$ARGUMENTS
+
+${swap2assistRule}
+`
     },
 
     "install": installCommand,
@@ -268,7 +293,9 @@ Base your git commit message on the following:
 3. Collect all subagent reports
 4. Use \`author-readme\` skill to update \`README.md\` using collected reports
 5. Only task \`document_agents\` *AFTER* you had updated \`README.md\` because \`document_agents\` will read your updated \`README.md\` file
-        `
+
+${swap2assistRule}
+`
     },
 
     "new-assist": {
@@ -339,7 +366,6 @@ Base your git commit message on the following:
     },
 
     "repeat-as-md": {
-        agent: "assist",
         description: "Repeat the last response inside a fenced Markdown code block.",
         subtask: false,
         template: `
@@ -354,7 +380,6 @@ Last response goes here...
     },
 
     "repeat-as-wiki": {
-        agent: "assist",
         description: "Repeat last response in Atlassian Wiki Markup",
         subtask: false,
         template: `
@@ -368,18 +393,26 @@ Wiki markup goes here...
 `
     },
 
+    "report-last": {
+        agent: "temp_report",
+        description: "Provide detailed report of last task.",
+        subtask: false,
+        template: `
+Report **ONLY** on your last assignment (last user requested task). Include only last user prompt, recent actions since last user prompt and recent tool outputs into consideration when you compile the report.
+
+${swap2assistRule}
+`
+    },
+
     "report-session": {
         agent: "temp_report",
         description: "Provide detailed report of entire session.",
         subtask: false,
-        template: "Report on entire session taking all actions, tool outputs and prompts in consideration."
-    },
+        template: `
+Report on entire session taking all actions, tool outputs and prompts in consideration.
 
-    "report-task": {
-        agent: "temp_report",
-        description: "Provide detailed report of recent task.",
-        subtask: false,
-        template: "Report **ONLY** on your last assignment (last user requested task). Include only last user prompt, recent actions since last user prompt and recent tool outputs into consideration when you compile the report."
+${swap2assistRule}
+`
     },
 
     "resume": {
