@@ -101,7 +101,7 @@ describe("agent policies", () => {
     })
 
     test("execute_sandbox allows native sandbox file tools", () => {
-        const agents = buildAgents()
+        const agents = buildAgents({}, { platform: "linux", bwrapUsable: true })
 
         for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
             expect(permissionRule(agents.execute_sandbox?.permission, toolName)).toBe("allow")
@@ -112,7 +112,7 @@ describe("agent policies", () => {
     test("buildAgents returns policy-applied definitions with current internal tier metadata", () => {
         const agents = buildAgents({
             "/configured/*": "allow",
-        })
+        }, { platform: "linux", bwrapUsable: true })
 
         expect(agents.assist?.mode).toBe("primary")
         expect(agents.auto?.mode).toBe("primary")

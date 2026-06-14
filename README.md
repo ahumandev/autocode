@@ -356,15 +356,17 @@ bun run typecheck
 
 TypeScript reports diagnostics if type checking fails, and exits successfully when no diagnostics are emitted.
 
-### Deployment
+### Local Plugin Deployment
 
-Build the distributable plugin before loading it through the local shim or packaging it for use elsewhere.
+Build the distributable plugin only for the local source workflow in this repository, when you are building AutoCode yourself and deploying or testing it locally through the local shim. This is not the npm publish or npm install workflow.
 
 ```bash
 bun run build
 ```
 
 The build output is written to `dist/`, including `dist/plugin.js`, declarations, and copied generated skills under `dist/skills`, matching the `main`, `types`, and `exports` fields in [`package.json`](package.json).
+
+See [Distribution Guide](docs/distribution.md) for more information about distributing AutoCode on public registries.
 
 ## Terminology
 

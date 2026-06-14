@@ -207,8 +207,15 @@ function createSandboxDeniedPermission(permission: PermissionObject): Permission
     return permission
 }
 
-function applyBundledAgentPolicy(agents: AgentMap, externalDirectories: ExternalDirectoryRules): AgentMap {
-    return applySandboxPlatformPolicy(applyExternalDirectoryPolicy(agents, externalDirectories))
+function applyBundledAgentPolicy(
+    agents: AgentMap,
+    externalDirectories: ExternalDirectoryRules,
+    sandboxSupportOverride?: SandboxPlatformSupportOptions,
+): AgentMap {
+    return applySandboxPlatformPolicy(
+        applyExternalDirectoryPolicy(agents, externalDirectories),
+        sandboxSupportOverride ?? {},
+    )
 }
 
 const colorAutonomousOrchestrator = "#AA0000"
@@ -1290,8 +1297,11 @@ const baseAgents: AgentMap = {
 
 }
 
-export function buildAgents(externalDirectories: ExternalDirectoryRules = {}): AgentMap {
-    return applyBundledAgentPolicy(baseAgents, externalDirectories)
+export function buildAgents(
+    externalDirectories: ExternalDirectoryRules = {},
+    sandboxSupportOverride?: SandboxPlatformSupportOptions,
+): AgentMap {
+    return applyBundledAgentPolicy(baseAgents, externalDirectories, sandboxSupportOverride)
 }
 
 export function getAgentPermission(agentName: string, externalDirectories: ExternalDirectoryRules = {}): AutocodeAgentConfig["permission"] {
