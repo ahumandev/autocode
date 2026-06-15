@@ -3,7 +3,7 @@ import path from "path"
 import { flattenError } from "@/utils/tools"
 import { defaultSandboxDependencies, detectSandboxBackend, hasTermuxEnvironmentSignal, type SandboxDependencies } from "@/utils/sandbox"
 
-export const MINIMUM_OPENCODE_VERSION = "1.14.28"
+export const MINIMUM_OPENCODE_VERSION = "1.17.7"
 
 export type DependencyStatus = "ok" | "upgrade_required" | "missing" | "unknown" | "unsupported" | "unusable"
 
@@ -85,7 +85,7 @@ type DebugEmitter = (event: DependencyDebugEvent) => void
 
 function createDebugEmitter(options: DependencyInspectionOptions): DebugEmitter {
     if (options.debug !== true && typeof options.debugLog !== "function") {
-        return (): void => {}
+        return (): void => { }
     }
 
     return (event: DependencyDebugEvent): void => {
