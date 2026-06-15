@@ -7,6 +7,7 @@ function permissionRule(permission: AutocodeAgentConfig["permission"], key: stri
 }
 
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]
+const executeRestToolNames = ["autocode_rest", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_rest_response_read"]
 
 describe("agent policies", () => {
     test("applies external-directory rules to external_directory and task_external permissions", () => {
@@ -130,5 +131,57 @@ describe("agent policies", () => {
         expect(agents.assist?.tier).toBe("balanced")
         expect(permissionRule(agents.assist?.permission, "autocode_dependencies")).toBe("allow")
         expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
+    })
+
+    test("buildAgents exposes execute_rest as REST-only worker and allows supported orchestration tasks to call it", () => {
+        const agents = buildAgents({}, { platform: "linux", bwrapUsable: true })
+
+        expect(agents.execute_rest?.mode).toBe("subagent")
+        expect(agents.execute_rest?.hidden).toBe(true)
+        expect(agents.execute_rest?.tier).toBe("fast")
+        expect(agents.execute_rest?.temperature).toBe(0.1)
+        expect(permissionRule(agents.execute_rest?.permission, "*")).toBe("deny")
+        for (const toolName of executeRestToolNames) {
+            expect(permissionRule(agents.execute_rest?.permission, toolName)).toBe("allow")
+        }
+        expect(permissionRule(agents.execute_rest?.permission, "doom_loop")).toBe("deny")
+        expect(agents.execute_rest?.prompt).toContain("autocode_rest")
+        expect(agents.execute_rest?.prompt).toContain("autocode_rest_response_read")
+        expect(agents.execute_rest?.prompt).toContain("autocode_rest_grep")
+        expect(agents.execute_rest?.prompt).toContain("autocode_rest_response_eval")
+        expect(agents.execute_rest?.prompt).toContain("GET, POST, PUT, PATCH, DELETE")
+        expect(agents.execute_rest?.prompt).toContain("Values in `query` map override same query keys already in URL")
+        expect(agents.execute_rest?.prompt).toContain("truncated: true")
+        expect(agents.execute_rest?.prompt).toContain("full_response: false")
+        expect(agents.execute_rest?.prompt).toContain("Never dump full raw REST result unless user specifically asks")
+        expect(agents.execute_rest?.prompt).toContain("Caveman English")
+        expect(agents.execute_rest?.prompt).toContain("ask user confirmation")
+        expect(agents.execute_rest?.prompt).toContain("Do not leak sensitive headers or body unless user explicitly requested")
+        expect(permissionRule(agents.auto_review_api?.permission, "task")).toEqual(expect.objectContaining({
+            execute_rest: "allow",
+        }))
+    })
+
+    test("execute_rest prompt examples use strict JSON object text", () => {
+        const agents = buildAgents({}, { platform: "linux", bwrapUsable: true })
+        const prompt = String(agents.execute_rest?.prompt ?? "")
+        const examplesMatch: RegExpMatchArray | null = prompt.match(/### Examples([\s\S]+?)## Follow-up tools for saved responses/)
+        const examplesSection = examplesMatch?.[1] ?? ""
+        const spans = Array.from(examplesSection.matchAll(/`(\{[^`]+\})`/g), (match): string => match[1]!)
+        const legacyPattern = /[{,]\s*(url|method|query|headers|body|timeout|page|content-type|name|active)\s*:/
+
+        expect(prompt).toContain('{ "url": "https://api.example.com/users", "method": "GET", "query": { "page": "1" }, "timeout": 5000 }')
+        expect(prompt).toContain('{ "url": "https://api.example.com/users", "method": "POST", "headers": { "content-type": "application/json" }, "body": { "name": "Ann" }, "timeout": 5000 }')
+        expect(prompt).toContain('{ "url": "https://api.example.com/users/1", "method": "PUT", "headers": { "content-type": "application/json" }, "body": { "name": "Ann 2" }, "timeout": 5000 }')
+        expect(prompt).toContain('{ "url": "https://api.example.com/users/1", "method": "PATCH", "headers": { "content-type": "application/json" }, "body": { "active": true }, "timeout": 5000 }')
+        expect(prompt).toContain('{ "url": "https://api.example.com/users/1", "method": "DELETE", "timeout": 5000 }')
+        expect(spans).toHaveLength(5)
+
+        const parsedMethods = spans.map((span) => {
+            expect(span).not.toMatch(legacyPattern)
+            return String((JSON.parse(span) as { method?: unknown }).method)
+        })
+
+        expect(parsedMethods).toEqual(["GET", "POST", "PUT", "PATCH", "DELETE"])
     })
 })

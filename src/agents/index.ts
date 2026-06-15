@@ -35,6 +35,7 @@ import { queryDbPrompt } from "./prompts/query_db";
 import { queryExcelPrompt } from "./prompts/query_excel";
 import { queryGitPrompt } from "./prompts/query_git";
 import { queryOsPrompt } from "./prompts/query_os";
+import { executeRestPrompt } from "./prompts/execute_rest";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
 import { researchPrompt } from "./prompts/research";
@@ -271,8 +272,9 @@ const baseAgents: AgentMap = {
                 "*": "allow",
                 assist: "deny",
                 "auto*": "deny",
+                build: "deny",
                 execute_git_commit: "ask",
-                "plan*": "deny",
+                plan: "deny",
             },
             task_external: "ask",
             task_resume: "allow",
@@ -428,6 +430,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 execute_code: "allow",
                 execute_debug: "allow",
+                execute_rest: "allow",
                 execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
@@ -463,7 +466,6 @@ const baseAgents: AgentMap = {
                 auto_troubleshoot: "allow",
                 execute_code: "allow",
                 execute_os: "allow",
-                execute_sandbox: "allow",
                 query_code: "allow",
                 query_git: "allow",
                 query_text: "allow"
@@ -492,7 +494,9 @@ const baseAgents: AgentMap = {
                 "*": "allow",
                 "assist*": "deny",
                 "auto*": "deny",
+                build: "deny",
                 design: "deny",
+                plan: "deny",
                 report: "deny",
                 research: "deny",
                 session: "deny",
@@ -522,8 +526,8 @@ const baseAgents: AgentMap = {
             },
             task: {
                 "*": "deny",
+                auto_troubleshoot: "allow",
                 execute_code: "allow",
-                execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 query_code: "allow",
@@ -573,6 +577,7 @@ const baseAgents: AgentMap = {
                 execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
+                execute_rest: "allow",
                 query_architect: "allow",
                 query_code: "allow",
                 query_git: "allow",
@@ -634,7 +639,6 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "deny",
                 execute_code: "allow",
-                execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 query_code: "allow",
@@ -663,6 +667,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 execute_code: "allow",
                 execute_debug: "allow",
+                execute_rest: "allow",
                 execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
@@ -996,6 +1001,24 @@ const baseAgents: AgentMap = {
         tier: "balanced",
     },
 
+    execute_rest: {
+        color: colorReadOnlyWorker,
+        description: "Task `execute_rest` to make REST/API requests on HTTP/HTTPS endpoints.",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            autocode_rest: "allow",
+            autocode_rest_grep: "allow",
+            autocode_rest_response_eval: "allow",
+            autocode_rest_response_read: "allow",
+            doom_loop: "deny",
+        },
+        prompt: executeRestPrompt,
+        temperature: 0.1,
+        tier: "fast",
+    },
+
     execute_sandbox: {
         color: colorWritableWorker,
         description: "Task `execute_sandbox` to execute single CLI commands in sandbox environment; First create sandbox with `autocode_sandbox_create`, then you run multiple `execute_sandbox` tasks but you MUST include same `sandbox_name` in every `task` prompt",
@@ -1059,7 +1082,7 @@ const baseAgents: AgentMap = {
 
     query_architect: {
         color: colorReadOnlyWorker,
-        description: "Task `query_architect` to review project architecture, design, PRD, conventions, technologies, documentation.",
+        description: "Task `query_architect` to ask 1 question about current project architecture/design/PRD/conventions/technologies/documentation.",
         hidden: true,
         mode: "subagent",
         permission: {

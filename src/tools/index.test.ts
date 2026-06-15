@@ -444,7 +444,7 @@ describe("auto resume wiring", () => {
         const sandboxRead = tools.autocode_sandbox_read as unknown as { description: string, args: Record<string, unknown> }
         const sandboxCopy = tools.autocode_sandbox_copy as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_rest", "autocode_rest_response_read", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]))
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
         expect(sandboxCreate.description).toContain("Create")
@@ -1175,6 +1175,10 @@ describe("autocode_plan_save tool", () => {
             "autocode_criteria_set",
             "autocode_db_schemas",
             "autocode_dependencies",
+            "autocode_rest",
+            "autocode_rest_grep",
+            "autocode_rest_response_eval",
+            "autocode_rest_response_read",
             "autocode_sandbox_cli",
             "autocode_sandbox_copy",
             "autocode_sandbox_create",
@@ -1239,6 +1243,10 @@ describe("autocode_plan_save tool", () => {
         expect(plugin.tool?.autocode_db_table_read).toBeDefined()
         expect(plugin.tool?.autocode_db_tables).toBeDefined()
         expect(plugin.tool?.autocode_dependencies).toBeDefined()
+        expect(plugin.tool?.autocode_rest).toBeDefined()
+        expect(plugin.tool?.autocode_rest_response_read).toBeDefined()
+        expect(plugin.tool?.autocode_rest_grep).toBeDefined()
+        expect(plugin.tool?.autocode_rest_response_eval).toBeDefined()
         expect(toolSurfaceText(plugin.tool?.autocode_dependencies)).toContain("Detect Autocode runtime dependencies")
         expect(plugin.tool?.autocode_revise_job).toBeUndefined()
         expect(plugin.tool?.autocode_criteria_set).toBeDefined()
@@ -1344,6 +1352,38 @@ describe("autocode_plan_save tool", () => {
             doom_loop: "deny",
             external_directory: expect.objectContaining({ "*": "deny" }),
         }))
+        const executeRestAgent = (cfg.agent as Record<string, Record<string, unknown>>).execute_rest
+        expect(getAgentField(cfg, "execute_rest", "mode")).toBe("subagent")
+        expect(getAgentField(cfg, "execute_rest", "hidden")).toBe(true)
+        expect(executeRestAgent.tier).toBeUndefined()
+        expect(getAgentField(cfg, "execute_rest", "temperature")).toBe(0.1)
+        expect(String(executeRestAgent.prompt)).toContain("autocode_rest")
+        expect(String(executeRestAgent.prompt)).toContain("autocode_rest_response_read")
+        expect(String(executeRestAgent.prompt)).toContain("autocode_rest_grep")
+        expect(String(executeRestAgent.prompt)).toContain("autocode_rest_response_eval")
+        expect(String(executeRestAgent.prompt)).toContain("GET, POST, PUT, PATCH, DELETE")
+        expect(String(executeRestAgent.prompt)).toContain("Values in `query` map override same query keys already in URL")
+        expect(String(executeRestAgent.prompt)).toContain("truncated: true")
+        expect(String(executeRestAgent.prompt)).toContain("Never dump full raw REST result unless user specifically asks")
+        expect(String(executeRestAgent.prompt)).toContain("Do not leak sensitive headers or body unless user explicitly requested")
+        expect(String(executeRestAgent.prompt)).toContain("ask user confirmation")
+        expect(String(executeRestAgent.prompt)).toContain("Caveman English")
+        expect(executeRestAgent.permission).toEqual(expect.objectContaining({
+            "*": "deny",
+            autocode_rest: "allow",
+            autocode_rest_grep: "allow",
+            autocode_rest_response_eval: "allow",
+            autocode_rest_response_read: "allow",
+            doom_loop: "deny",
+            external_directory: expect.objectContaining({ "*": "deny" }),
+        }))
+        expect(getPermissionRule(cfg.agent.execute_rest?.permission, "session")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.execute_rest?.permission, "agent")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.execute_rest?.permission, "previous_session")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.execute_rest?.permission, "previous_agent")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.execute_rest?.permission, "autocode_session_create")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.execute_rest?.permission, "autocode_agent_swap")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.execute_rest?.permission, "autocode_agent_previous")).toBeUndefined()
     })
 })
 

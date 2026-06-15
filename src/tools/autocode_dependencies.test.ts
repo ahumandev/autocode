@@ -43,7 +43,7 @@ function createDeps(options?: {
 }): SandboxDependencies {
     const spawn = mock(async (command: string, args: readonly string[]) => {
         if (command === "opencode" && args[0] === "--version") {
-            return { exitCode: options?.opencodeExit ?? 0, stdout: options?.opencodeStdout ?? "opencode 1.14.28", stderr: options?.opencodeStderr ?? "" }
+            return { exitCode: options?.opencodeExit ?? 0, stdout: options?.opencodeStdout ?? "opencode 1.17.7", stderr: options?.opencodeStderr ?? "" }
         }
         if (command === "bwrap") {
             return { exitCode: options?.bwrapExit ?? 0, stdout: "", stderr: options?.bwrapExit === 0 ? "" : "probe failed" }
@@ -102,8 +102,8 @@ describe("autocode_dependencies", () => {
         expect(parseTolerantSemver("opencode 1.14.28\n")?.patch).toBe(28)
         expect(parseTolerantSemver("v2.0.0-beta")?.major).toBe(2)
         expect(parseTolerantSemver("no version")).toBeUndefined()
-        expect(isAtLeastMinimumOpencodeVersion(parseTolerantSemver("1.14.28")!)).toBe(true)
-        expect(isAtLeastMinimumOpencodeVersion(parseTolerantSemver("1.14.27")!)).toBe(false)
+        expect(isAtLeastMinimumOpencodeVersion(parseTolerantSemver("1.17.7")!)).toBe(true)
+        expect(isAtLeastMinimumOpencodeVersion(parseTolerantSemver("1.17.6")!)).toBe(false)
     })
 
     test("reports OpenCode upgrade, missing, and unknown version guidance", async () => {

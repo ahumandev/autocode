@@ -58,7 +58,7 @@ type SessionMessage = {
 
 type SessionTitleClient = Pick<OpencodeClient, "session"> & {
     session: {
-        get?: (args: { path: { id: string }, query: { directory: string } }) => Promise<{ data?: { title?: string | null }, error?: string }>
+        get?: (args: { path: { id: string }, query: { directory: string } }) => Promise<{ data?: { id?: string | null, parentID?: string | null, title?: string | null }, error?: string }>
         update?: (args: { path: { id: string }, query: { directory: string }, body: { title: string } }) => Promise<{ data?: unknown, error?: string }>
     }
 }
@@ -738,6 +738,59 @@ export async function getCurrentSessionTitle(client: OpencodeClient | undefined,
     }
 }
 
+async function getRootSessionTitleForPlannedJobLookup(client: OpencodeClient | undefined, context: Pick<SessionJobContext, "sessionID" | "directory">): Promise<{ title?: string, warning?: string }> {
+    const sessionClient = client as SessionTitleClient | undefined
+    if (!sessionClient?.session.get) {
+        return getCurrentSessionTitle(client, context)
+    }
+
+    try {
+        const currentResponse = await sessionClient.session.get({
+            path: { id: context.sessionID },
+            query: { directory: context.directory },
+        })
+
+        if (currentResponse.error || !currentResponse.data) {
+            return getCurrentSessionTitle(client, context)
+        }
+
+        if (!currentResponse.data.parentID) {
+            return getCurrentSessionTitle(client, context)
+        }
+
+        const seen = new Set<string>()
+        let session = currentResponse.data
+
+        while (session.parentID) {
+            const parentID = session.parentID
+            if (!parentID || seen.has(parentID)) {
+                break
+            }
+            seen.add(parentID)
+
+            const parentResponse = await sessionClient.session.get({
+                path: { id: parentID },
+                query: { directory: context.directory },
+            })
+            if (parentResponse.error || !parentResponse.data) {
+                return getCurrentSessionTitle(client, context)
+            }
+
+            session = parentResponse.data
+        }
+
+        const rootTitle = session.title?.trim()
+        if (rootTitle && !isDefaultSessionTitle(rootTitle)) {
+            return { title: rootTitle }
+        }
+
+        return getCurrentSessionTitle(client, context)
+    }
+    catch {
+        return getCurrentSessionTitle(client, context)
+    }
+}
+
 function isAssistantMessage(message: Message): message is AssistantMessage {
     return message.role === "assistant"
 }
@@ -984,7 +1037,7 @@ export async function resolvePlannedJobIdentity(
         return undefined
     }
 
-    const sessionTitle = await getCurrentSessionTitle(client, context)
+    const sessionTitle = await getRootSessionTitleForPlannedJobLookup(client, context)
     if (!sessionTitle.title) {
         const resolution = getMissingTitleResolution(sessionTitle)
         const fallback = await resolveFromSessionIDFallback(resolution, sessionTitle.warning)

@@ -209,6 +209,20 @@ AutoCode can inspect environment-configured databases through read-only tools an
 - Identifiers must be simple schema, table, or field names.
 - Supported filter operators are `=`, `!=`, `<`, `<=`, `>`, `>=`, `like`, `in`, and `is_null`.
 
+### REST response lookup
+
+AutoCode can also make bounded REST requests and cache long responses for later lookup inside the current job.
+
+- When the response body exceeds 400 characters, AutoCode caches it under the current job `rest/` directory and includes `response_name`, `job_name`, and guidance in the returned output.
+- Cache filename shape: `{timestamp}_{METHOD}_{protocol}_{host-and-credentials}_{encoded-path}.json`.
+- Binary or non-UTF-8 responses are decoded into readable UTF-8 replacement text.
+
+Cached response lookup tools resolve only inside the current job `rest/` directory:
+
+- `autocode_rest_response_read` supports `header`, `offset`, and `limit`.
+- `autocode_rest_grep` supports `header` and `pattern`.
+- `autocode_rest_response_eval` parses cached body JSON and supports only safe path expressions such as `a.b[0]`.
+
 ## Configuration
 
 AutoCode reads optional JSONC configuration from global OpenCode configuration first, then from project locations. Later candidates override earlier candidates, so local worktree or directory settings can replace global defaults without copying the whole file.
@@ -288,7 +302,7 @@ flowchart LR
 
 The managed agent catalogue lives in [`src/agents/index.ts`](src/agents/index.ts), and prompt templates live under [`src/agents/prompts/`](src/agents/prompts/). Commands are registered in [`src/commands/index.ts`](src/commands/index.ts), so the published package does not need separate command Markdown files. Generated skills are bundled from source during builds, and [`scripts/copy-skill-sources.mjs`](scripts/copy-skill-sources.mjs) copies them into `dist/skills`.
 
-Runtime tools live in [`src/tools/`](src/tools/). They cover concept and plan management, job lifecycle updates, criteria tracking, read-only database discovery and table reads, sandbox lifecycle operations, cross-project task execution, and session resume support. Shared tool error handling should stay aligned with [`src/utils/tools.ts`](src/utils/tools.ts) and the agent error rules.
+Runtime tools live in [`src/tools/`](src/tools/). They cover concept and plan management, job lifecycle updates, criteria tracking, read-only database discovery and table reads, REST requests and cached response lookup, sandbox lifecycle operations, cross-project task execution, and session resume support. Shared tool error handling should stay aligned with [`src/utils/tools.ts`](src/utils/tools.ts) and the agent error rules.
 
 ### Generated skills
 

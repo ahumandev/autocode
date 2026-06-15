@@ -35,6 +35,28 @@ function createClient(title: string | null | undefined, messages: Array<{ info: 
     } as unknown as OpencodeClient
 }
 
+function createSessionChainClient(sessions: Record<string, { parentID?: string | null, title?: string | null }>, messages: Array<{ info: { id: string, role: "user" | "assistant", time: { created: number } }, parts: Array<{ type: "text", text: string, messageID?: string }> }> = [], failingSessionIDs: string[] = []): OpencodeClient {
+    return {
+        session: {
+            get: mock(async (args: { path: { id: string }, query: { directory: string } }) => {
+                if (failingSessionIDs.includes(args.path.id)) {
+                    return { error: `missing ${args.path.id}` }
+                }
+
+                const session = sessions[args.path.id]
+                return {
+                    data: {
+                        id: args.path.id,
+                        parentID: session?.parentID,
+                        title: session?.title,
+                    },
+                }
+            }),
+            messages: mock(async () => ({ data: messages })),
+        },
+    } as unknown as OpencodeClient
+}
+
 function createCollisionError(): NodeJS.ErrnoException {
     const error = new Error("collision") as NodeJS.ErrnoException
     error.code = "EEXIST"
@@ -218,6 +240,84 @@ describe("jobs utilities", () => {
             job_name: "session_job",
             session_title: "Mutated Title",
             title_derived_candidate: "mutated_title",
+        })
+        expect(identity.warning).toContain("Resolved planned job session_job from persisted session_id session-1")
+    })
+
+    test("prefers root session title over worker title when resolving planned job identity", async () => {
+        const fileSystem = createFileSystem({ drafts: ["root_job", "worker_noise"] })
+        const client = createSessionChainClient({
+            "session-1": { parentID: "session-2", title: "Worker Noise" },
+            "session-2": { parentID: "session-3", title: "Mid Noise" },
+            "session-3": { title: "Root Job" },
+        })
+
+        const identity = await resolvePlannedJobIdentity(fileSystem, client, sessionContext)
+
+        expect(identity).toMatchObject({
+            mode: "planned",
+            resolution: "found",
+            explicit_override: false,
+            job_name: "root_job",
+            session_title: "Root Job",
+            title_derived_candidate: "root_job",
+        })
+    })
+
+    test("keeps explicit override over parent-chain root title", async () => {
+        const fileSystem = createFileSystem({ drafts: ["root_job"], review: ["review_job"] })
+        const client = createSessionChainClient({
+            "session-1": { parentID: "session-2", title: "Worker Noise" },
+            "session-2": { title: "Root Job" },
+        })
+
+        const identity = await resolvePlannedJobIdentity(fileSystem, client, sessionContext, "review_job")
+
+        expect(identity).toMatchObject({
+            mode: "planned",
+            resolution: "found",
+            explicit_override: true,
+            job_name: "review_job",
+        })
+        expect(identity.session_title).toBeUndefined()
+    })
+
+    test("falls back to current worker title when root title is blank/default", async () => {
+        const fileSystem = createFileSystem({ drafts: ["worker_job"] })
+        const client = createSessionChainClient({
+            "session-1": { parentID: "session-2", title: "Worker Job" },
+            "session-2": { title: "New Session" },
+        })
+
+        const identity = await resolvePlannedJobIdentity(fileSystem, client, sessionContext)
+
+        expect(identity).toMatchObject({
+            mode: "planned",
+            resolution: "found",
+            explicit_override: false,
+            job_name: "worker_job",
+            session_title: "Worker Job",
+            title_derived_candidate: "worker_job",
+        })
+    })
+
+    test("falls back to current title then persisted session_id when parent lookup fails", async () => {
+        const fileSystem = createFileSystem({ executing: ["session_job"] }, {
+            "/workspace/.agents/jobs/executing/session_job/session.yml": "session_id: session-1\n",
+        })
+        const client = createSessionChainClient({
+            "session-1": { parentID: "session-2", title: "Worker Noise" },
+        }, [], ["session-2"])
+
+        const identity = await resolvePlannedJobIdentity(fileSystem, client, sessionContext)
+
+        expect(identity).toMatchObject({
+            mode: "planned",
+            resolution: "found",
+            explicit_override: false,
+            job_name: "session_job",
+            session_title: "Worker Noise",
+            title_derived_candidate: "worker_noise",
         })
         expect(identity.warning).toContain("Resolved planned job session_job from persisted session_id session-1")
     })
