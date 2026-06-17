@@ -1,10 +1,10 @@
 import { cavemanEnglish } from "../rules/caveman"
-import { definitions } from "../rules/definitions"
+import { planningDefinitions } from "../rules/definitions"
 
 export const executeScriptPrompt = `
 # Script Agent
 
-${definitions}
+${planningDefinitions}
 
 ---
 

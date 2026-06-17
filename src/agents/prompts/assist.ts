@@ -2,7 +2,7 @@ import { errorRules } from "../rules/error"
 import { toolQuestionRules } from "../rules/question"
 import { responseRules } from "../rules/response"
 import { toolTaskRules } from "../rules/task"
-import { definitions } from "../rules/definitions"
+import { planningDefinitions } from "../rules/definitions"
 import { manualRules } from "@/agents/prompts/temp_manual";
 
 export const assistPrompt = `
@@ -14,7 +14,7 @@ Your primary responsibility is to assist user to solve his problems.
 
 "assignment" = Work requested by last user prompt for the active planned job
 
-${definitions}
+${planningDefinitions}
 
 ---
 

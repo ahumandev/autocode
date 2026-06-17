@@ -6,7 +6,7 @@ import path from "path"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { activeJobLifecycleDirectories, completedJobLifecycleDirectory, deriveJobNameFromTitle, findExistingJobFile, getCurrentSessionTitle, getJobFilePath, getRelativeJobFilePath, resolveAgentsStorageRoot, updateCurrentSessionTitleToJobName, type ActiveJobLifecycleDirectory, type JobStatus } from "@/utils/jobs"
 
-export const planSections = ["problems", "requirements", "constraints", "risks", "proposal"] as const
+export const planSections = ["problems", "impact", "expectations", "requirements", "risks", "constraints", "proposal"] as const
 
 export type PlanSection = typeof planSections[number]
 
@@ -15,43 +15,21 @@ type PlanSections = Record<PlanSection, string>
 type SummaryMap = Record<string, string>
 
 const planSectionContentDescriptions: Record<PlanSection, string> = {
-    problems: `
-Define Problem as follow:
-
-### Symptoms
-
-- List of behaviours (or missing behaviours) being observed
-- Include all key details provided by user regarding problem (names, keys, values, paths, logs, codes, etc.)
-- Summarize each symptom in < 40 words
-
-### Impact
-
-- Explanation why "Symptoms" are a problem (max 40 words)
-- Who or what is affected (users/stakeholders/systems) (if applicable)
-- Since when is it a problem (if applicable)
-- What is current state vs desired state with examples (if it was provided)
-
-### Cause
-
-- List proven evidence to root cause of problem (max 100 words per fact)
-- List assumptions / suspected causes of problem (max 40 words per assumption)
-
-### Expectations
-
-- List of user's expectations (what user hope to experience)
-- Summarize each expectation in < 40 words
-`,
+    problems: "Define observed wrong/missing project behavior or missing info. Include exact key names, values, paths, codes, and user provided examples.",
+    impact: "Define why problem matters. Describe affected user, system, or workflow impact.",
+    expectations: "Define expected outcome from user perspective. Include target behavior or research goal.",
     requirements: `
-Define 1 requirement per H3 section.
+Define 1 requirement per H3 subsection.
 Define each requirement section as follows:
 - Every requirement must contain 1 or more clearly defined criteria (how to measure if requirement was meet)
+- Put each requirement's criteria in bullet point list in requirement sub-section body
 - Requirements may include input/output examples or technical key details like (names, keys, values, paths, codes, etc.)
 - Include all relevant examples, configs, quotes, acceptance details, and original user-request content inside the matching subsection body.
 `,
-    constraints: "Define 1 factual constraint per H3 section",
-    risks: "Define 1 assumed risk per H3 section",
+    risks: "Define 1 assumed risk per H3 subsection",
+    constraints: "Define 1 factual constraint per H3 subsection",
     proposal: `
-Propose ideal solution to solve \`problem\`:
+Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:
 - Provide ordered list of expected project changes according to chosen solution
 - Include ideal high-level solution design instead of implementation details
 - Must be broad enough to allow expert implementer agent to decide on technical implementation details
@@ -102,15 +80,57 @@ function getRelativePlanPath(job: string, directory: PlanJobDirectory = "drafts"
 function emptyPlanSections(): Record<PlanSection, string> {
     return {
         problems: "",
+        impact: "",
+        expectations: "",
         requirements: "",
-        constraints: "",
         risks: "",
+        constraints: "",
         proposal: "",
     }
 }
 
 export function composePlanMarkdown(sections: Record<PlanSection, string>): string {
-    return `## Problem\n\n${sections.problems.trim()}\n\n---\n\n## Requirements\n\n${sections.requirements.trim()}\n\n---\n\n## Constraints\n\n${sections.constraints.trim()}\n\n---\n\n## Risks\n\n${sections.risks.trim()}\n\n---\n\n## Proposed Solution\n\n${sections.proposal.trim()}\n`
+    return `
+## Problems
+
+${sections.problems.trim()}
+
+---
+
+## Impact
+
+${sections.impact.trim()}
+
+---
+
+## Expectations
+
+${sections.expectations.trim()}
+
+---
+
+## Requirements
+
+${sections.requirements.trim()}
+
+---
+
+## Risks
+
+${sections.risks.trim()}
+
+---
+
+## Constraints
+
+${sections.constraints.trim()}
+
+---
+
+## Proposal
+
+${sections.proposal.trim()}
+`
 }
 
 function normalizePlanValue(content: string | undefined): string | undefined {
@@ -118,16 +138,18 @@ function normalizePlanValue(content: string | undefined): string | undefined {
         return undefined
     }
 
-    return content.trim().replace(/^#{1,2}\s+(?:problem|problems|requirements|constraints|risks|solution|proposed solution|proposal|proposals)\s*\n+/i, "").trim()
+    return content.trim().replace(/^#{1,2}\s+(?:problem|problems|observation|observations|impact|impacts|expectation|expectations|requirements|constraints|risks|solution|proposed solution|proposal|proposals)\s*\n+/i, "").trim()
 }
 
 function getPlanSaveSections(args: PlanSaveArgs, existing: PlanSections | undefined): PlanSections {
     const nextSections = existing ? { ...existing } : emptyPlanSections()
     const providedSections: Array<[PlanSection, string | undefined]> = [
-        ["problems", normalizePlanValue(args.problems)],
+        ["problems", normalizePlanValue(args.problem ?? args.problems)],
+        ["impact", normalizePlanValue(args.impact)],
+        ["expectations", normalizePlanValue(args.expectation)],
         ["requirements", normalizePlanValue(args.requirements)],
-        ["constraints", normalizePlanValue(args.constraints)],
         ["risks", normalizePlanValue(args.risks)],
+        ["constraints", normalizePlanValue(args.constraints)],
         ["proposal", normalizePlanValue(args.proposal)],
     ]
 
@@ -155,6 +177,17 @@ function parseSectionHeading(line: string): PlanSection | undefined {
         case "bug":
         case "bugs":
             return "problems"
+        case "impact":
+        case "impacts":
+            return "impact"
+        case "expectation":
+        case "expectations":
+        case "expected behavior":
+        case "expected behaviours":
+        case "expected behavior/outcome":
+        case "expected outcome":
+        case "goals":
+            return "expectations"
         case "requirement":
         case "requirements":
         case "functional requirements":
@@ -297,10 +330,14 @@ async function resolveWritablePlan(fileSystem: FileSystem, worktree: string, job
 }
 
 type PlanSaveArgs = {
+    problem?: string
+    observation?: string
+    impact?: string
+    expectation?: string
     problems?: string
     requirements?: string
-    constraints?: string
     risks?: string
+    constraints?: string
     proposal?: string
 }
 
@@ -349,19 +386,21 @@ export function createAutocodePlanSaveTool(clientOrFileSystem?: OpencodeClient |
         description: "Create or update plan.md for a planned job.",
         args: {
             problems: tool.schema.string().optional().describe(planSectionContentDescriptions.problems),
+            impact: tool.schema.string().optional().describe(planSectionContentDescriptions.impact),
+            expectations: tool.schema.string().optional().describe(planSectionContentDescriptions.expectations),
             requirements: tool.schema.string().optional().describe(planSectionContentDescriptions.requirements),
-            constraints: tool.schema.string().optional().describe(planSectionContentDescriptions.constraints),
             risks: tool.schema.string().optional().describe(planSectionContentDescriptions.risks),
+            constraints: tool.schema.string().optional().describe(planSectionContentDescriptions.constraints),
             proposal: tool.schema.string().optional().describe(planSectionContentDescriptions.proposal),
         },
         async execute(args, context) {
-            const hasAnyContent = [args.problems, args.requirements, args.constraints, args.risks, args.proposal]
+            const hasAnyContent = [args.problems, args.impact, args.expectations, args.requirements, args.risks, args.constraints, args.proposal]
                 .some((value) => value !== undefined)
             if (!hasAnyContent) {
                 return createRetryResponse(
                     "save plan",
                     "Missing required plan content",
-                    "Provide at least one of: problems, requirements, constraints, risks, or proposal."
+                    "Provide at least one of: problems, impact, expectations, requirements, risks, constraints, proposal."
                 )
             }
 

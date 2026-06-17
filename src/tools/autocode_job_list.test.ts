@@ -50,9 +50,9 @@ describe("autocode_job_list tool", () => {
             return []
         })
         fs.readFile.mockImplementation(async (filePath: string) => {
-            if (filePath.endsWith("job-1/plan.md")) return "# Problem\n\nProblem 1\n\n---\n\n# Requirements\n\n### Requirement 1\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
-            if (filePath.endsWith("job-2/plan.md")) return "# Problem\n\nProblem 2\n\n---\n\n# Requirements\n\n### Requirement 2\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
-            if (filePath.endsWith("job-3/plan.md")) return "# Problem\n\nProblem 3\n\n---\n\n# Requirements\n\n### Requirement 3\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
+            if (filePath.endsWith("job-1/plan.md")) return "# Problem\n\nProblem 1\n\n---\n\n# Impact\n\nImpact 1\n\n---\n\n# Expectations\n\nExpectation 1\n\n---\n\n# Requirements\n\n### Requirement 1\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
+            if (filePath.endsWith("job-2/plan.md")) return "# Problem\n\nProblem 2\n\n---\n\n# Impact\n\nImpact 2\n\n---\n\n# Expectations\n\nExpectation 2\n\n---\n\n# Requirements\n\n### Requirement 2\n\n#### Criteria\n- C2\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
+            if (filePath.endsWith("job-3/plan.md")) return "# Problem\n\nProblem 3\n\n---\n\n# Impact\n\nImpact 3\n\n---\n\n# Expectations\n\nExpectation 3\n\n---\n\n# Requirements\n\n### Requirement 3\n\n#### Criteria\n- C3\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
             throw createMissingError()
         })
 
@@ -75,7 +75,7 @@ describe("autocode_job_list tool", () => {
         const longProblem = `Problem ${"a".repeat(90)}`
         fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["long-job"] : dirPath === "/workspace/.agents/jobs/drafts/long-job" ? [] : [])
         fs.readFile.mockImplementation(async (filePath: string) => {
-            if (filePath === "/workspace/.agents/jobs/drafts/long-job/plan.md") return `# Problem\n\n${longProblem}\n\n---\n\n# Requirements\n\n### Long Requirement\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n`
+            if (filePath === "/workspace/.agents/jobs/drafts/long-job/plan.md") return `# Problem\n\n${longProblem}\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Long Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n`
             throw createMissingError()
         })
 
@@ -129,12 +129,12 @@ describe("autocode_job_list tool", () => {
                 return []
             })
             fs.readFile.mockImplementation(async (filePath: string) => {
-                if (filePath.endsWith("concepts-job/plan.md")) return "# Problem\n\nConcepts problem\n\n---\n\n# Requirements\n\n### Concepts Requirement\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
-                if (filePath.endsWith("drafts-job/plan.md")) return "# Problem\n\nDrafts problem\n\n---\n\n# Requirements\n\n### Drafts Requirement\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
-                if (filePath.endsWith("assist-job/plan.md")) return "# Problem\n\nAssist problem\n\n---\n\n# Requirements\n\n### Assist Requirement\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
-                if (filePath.endsWith("executing-job/plan.md")) return "# Problem\n\nExecuting problem\n\n---\n\n# Requirements\n\n### Executing Requirement\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
-                if (filePath.endsWith("facilitate-job/plan.md")) return "# Problem\n\nFacilitate problem\n\n---\n\n# Requirements\n\n### Facilitate Requirement\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
-                if (filePath.endsWith("review-job/plan.md")) return "# Problem\n\nReview problem\n\n---\n\n# Requirements\n\n### Review Requirement\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\n"
+                if (filePath.endsWith("concepts-job/plan.md")) return "# Problem\n\nConcepts problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Concepts Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
+                if (filePath.endsWith("drafts-job/plan.md")) return "# Problem\n\nDrafts problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Drafts Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
+                if (filePath.endsWith("assist-job/plan.md")) return "# Problem\n\nAssist problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Assist Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
+                if (filePath.endsWith("executing-job/plan.md")) return "# Problem\n\nExecuting problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Executing Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
+                if (filePath.endsWith("facilitate-job/plan.md")) return "# Problem\n\nFacilitate problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Facilitate Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
+                if (filePath.endsWith("review-job/plan.md")) return "# Problem\n\nReview problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Review Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
                 throw createMissingError()
             })
 

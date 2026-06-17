@@ -1196,8 +1196,9 @@ describe("autocode_plan_save tool", () => {
         expect(plugin.tool?.autocode_plan_save).toBeDefined()
         expect(plugin.tool?.autocode_plan_read).toBeDefined()
         expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Create or update plan.md for a planned job.")
-        expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Define Problem as follow:")
-        expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Propose ideal solution to solve `problem`:")
+        expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Define observed wrong/missing project behavior or missing info.")
+        expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Define expected outcome from user perspective.")
+        expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:")
         expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).not.toContain("job_name")
         expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).not.toContain("suggested_name")
         expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).not.toContain("concept_label")
@@ -1539,7 +1540,7 @@ describe("autocode_plan_save behaviour", () => {
         expect(fs.mkdir).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature", { recursive: true })
         expect(fs.writeFile).toHaveBeenCalledWith(
             "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-            "## Problem\n\nProblem text\n\n---\n\n## Requirements\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Risks\n\n\n\n---\n\n## Proposed Solution\n\n\n"
+            "\n## Problems\n\nProblem text\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n\n\n---\n\n## Risks\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Proposal\n\n\n"
         )
         expect((client as any).session.update).toHaveBeenCalledWith({
             path: { id: "session-1" },
@@ -1549,11 +1550,24 @@ describe("autocode_plan_save behaviour", () => {
         expect(fs.rename).not.toHaveBeenCalled()
     })
 
+    test("saves current problems arg", async () => {
+        const fs = createMockFs()
+        const client = createPlanSaveClient("My Feature")
+        const tool = createAutocodePlanSaveTool(client, fs)
+
+        await executePlanSave(tool, { problems: "Legacy problem text" })
+
+        expect(fs.writeFile).toHaveBeenCalledWith(
+            "/workspace/.agents/jobs/drafts/my_feature/plan.md",
+            expect.stringContaining("## Problems\n\nLegacy problem text")
+        )
+    })
+
     test("updates the title-inferred job when the draft already exists", async () => {
         const fs = createMockFs([[{ name: "my_feature" }]])
         fs.readFile.mockImplementation(async (filePath: string) => {
             if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") {
-                return "# Problem\n\nOld problem\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Solution\n\nOld solution\n"
+                return "# Problems\n\nOld problem\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposal\n\nOld solution\n"
             }
             const error = new Error("missing") as NodeJS.ErrnoException
             error.code = "ENOENT"
@@ -1566,7 +1580,7 @@ describe("autocode_plan_save behaviour", () => {
             job_name: "my_feature",
             job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
         })
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "## Problem\n\nUpdated problem\n\n---\n\n## Requirements\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Risks\n\n\n\n---\n\n## Proposed Solution\n\nOld solution\n")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "\n## Problems\n\nUpdated problem\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n\n\n---\n\n## Risks\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Proposal\n\nOld solution\n")
     })
 
     test("uses session-title slug derivation for special characters and truncation", async () => {
@@ -1587,7 +1601,7 @@ describe("autocode_plan_save behaviour", () => {
         const fs = createMockFs([[{ name: "my_feature" }]])
         fs.readFile.mockImplementation(async (filePath: string) => {
             if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") {
-                return "# Problem\n\nOld problem\n\n---\n\n# Requirements\n\n### Requirement One\nKeep this\n\n---\n\n# Constraints\n\n### Constraint One\nKeep this\n\n---\n\n# Risks\n\n### Risk One\nKeep this\n\n---\n\n# Solution\n\nShip it\n"
+                return "# Problems\n\nOld problem\n\n---\n\n# Requirements\n\n### Requirement One\nKeep this\n\n---\n\n# Constraints\n\n### Constraint One\nKeep this\n\n---\n\n# Risks\n\n### Risk One\nKeep this\n\n---\n\n# Proposal\n\nShip it\n"
             }
             const error = new Error("missing") as NodeJS.ErrnoException
             error.code = "ENOENT"
@@ -1602,7 +1616,7 @@ describe("autocode_plan_save behaviour", () => {
         })
         expect(fs.writeFile).toHaveBeenCalledWith(
             "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-            "## Problem\n\nOld problem\n\n---\n\n## Requirements\n\n### Requirement One\nKeep this\n\n---\n\n## Constraints\n\n### Constraint Two\nChange this\n\n---\n\n## Risks\n\n### Risk One\nKeep this\n\n---\n\n## Proposed Solution\n\nShip it\n"
+            "\n## Problems\n\nOld problem\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n### Requirement One\nKeep this\n\n---\n\n## Risks\n\n### Risk One\nKeep this\n\n---\n\n## Constraints\n\n### Constraint Two\nChange this\n\n---\n\n## Proposal\n\nShip it\n"
         )
         expect(fs.rename).not.toHaveBeenCalled()
     })
@@ -1653,7 +1667,7 @@ describe("autocode_plan_save behaviour", () => {
         expect(fs.mkdir).toHaveBeenCalledWith("/workspace/fallback/.agents/jobs/drafts/my_feature", { recursive: true })
         expect(fs.writeFile).toHaveBeenCalledWith(
             "/workspace/fallback/.agents/jobs/drafts/my_feature/plan.md",
-            "## Problem\n\nProblem text\n\n---\n\n## Requirements\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Risks\n\n\n\n---\n\n## Proposed Solution\n\n\n"
+            "\n## Problems\n\nProblem text\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n\n\n---\n\n## Risks\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Proposal\n\n\n"
         )
     })
 
@@ -1674,23 +1688,27 @@ describe("autocode_plan_save behaviour", () => {
 })
 
 describe("autocode_plan tools", () => {
-    test("composes canonical five-section plan.md structure", () => {
+    test("composes canonical seven-section plan.md structure", () => {
         const plan = composePlanMarkdown({
             problems: "Problem text",
+            impact: "Impact text",
+            expectations: "Expectation text",
             requirements: "### Required\nDo it",
-            constraints: "### Constraint\nKeep it",
             risks: "### Risk\nWatch it",
+            constraints: "### Constraint\nKeep it",
             proposal: "Ship it",
         })
 
         expect([...plan.matchAll(/^## .+$/gm)].map(([heading]) => heading)).toEqual([
-            "## Problem",
+            "## Problems",
+            "## Impact",
+            "## Expectations",
             "## Requirements",
-            "## Constraints",
             "## Risks",
-            "## Proposed Solution",
+            "## Constraints",
+            "## Proposal",
         ])
-        expect(plan).toContain("## Problem\n\nProblem text\n\n---\n\n## Requirements")
+        expect(plan).toContain("## Problems\n\nProblem text\n\n---\n\n## Impact\n\nImpact text")
         expect(plan).not.toContain("# Plan")
         expect(plan).not.toContain("goal.md")
     })
@@ -1698,7 +1716,7 @@ describe("autocode_plan tools", () => {
     test("updates an existing execute plan by job_name", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nOld\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Solution\n\nShip it\n"
+                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nOld\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposal\n\nShip it\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -1728,11 +1746,11 @@ describe("autocode_plan tools", () => {
             job_name: "my_feature",
             job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
         })
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "## Problem\n\nProblem text\n\n---\n\n## Requirements\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Risks\n\n\n\n---\n\n## Proposed Solution\n\nShip it\n")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "\n## Problems\n\nProblem text\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n\n\n---\n\n## Risks\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Proposal\n\nShip it\n")
     })
 
     test("reads whole new-format plan.md fields", async () => {
-        const plan = "# Problem\n\nProblem text\n\n---\n\n# Requirements\n\n### Preserve Markdown\n- Keep lists\n> Keep quotes\n```ts\nconst value = \"## not a section\"\n```\n\n---\n\n# Constraints\n\n### Keep Configs\n```yaml\nkey: value\n```\n\n---\n\n# Risks\n\n### Migration Hazard\nMitigate carefully.\n\n---\n\n# Proposed Solution\n\nShip it\n"
+        const plan = "# Problems\n\nProblem text\n\n---\n\n# Impact\n\nImpact text\n\n---\n\n# Expectations\n\nExpectation text\n\n---\n\n# Requirements\n\n### Preserve Markdown\n- Keep lists\n> Keep quotes\n```ts\nconst value = \"## not a section\"\n```\n\n---\n\n# Risks\n\n### Migration Hazard\nMitigate carefully.\n\n---\n\n# Constraints\n\n### Keep Configs\n```yaml\nkey: value\n```\n\n---\n\n# Proposal\n\nShip it\n"
         const fs = {
             readFile: mock(async (filePath: string) => {
                 if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return plan
@@ -1745,21 +1763,25 @@ describe("autocode_plan tools", () => {
         const tool = createAutocodePlanReadTool(fs)
 
         const result = await tool.execute({ job_name: "my_feature" }, createToolContext())
-        expect(parseToolResult(result)).toEqual({
+        const parsed = parseToolResult(result)
+        expect(parsed).toEqual({
             job_name: "my_feature",
             file_path: ".agents/jobs/drafts/my_feature/plan.md",
             problems: "Problem text",
+            impact: "Impact text",
+            expectations: "Expectation text",
             requirements: "### Preserve Markdown\n- Keep lists\n> Keep quotes\n```ts\nconst value = \"## not a section\"\n```",
-            constraints: "### Keep Configs\n```yaml\nkey: value\n```",
             risks: "### Migration Hazard\nMitigate carefully.",
+            constraints: "### Keep Configs\n```yaml\nkey: value\n```",
             proposal: "Ship it",
         })
+        expect(parsed.problem).toBeUndefined()
     })
 
     test("preserves missing sections during partial updates", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problem\n\nProblem text\n\n---\n\n# Requirements\n\n### Requirement One\nKeep this\n\n---\n\n# Constraints\n\nOld constraints\n\n---\n\n# Risks\n\n### Risk One\nKeep risk\n\n---\n\n# Solution\n\nShip it\n"
+                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Requirements\n\n### Requirement One\nKeep this\n\n---\n\n# Constraints\n\nOld constraints\n\n---\n\n# Risks\n\n### Risk One\nKeep risk\n\n---\n\n# Proposal\n\nShip it\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -1788,13 +1810,13 @@ describe("autocode_plan tools", () => {
             job_name: "my_feature",
             job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
         })
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "## Problem\n\nProblem text\n\n---\n\n## Requirements\n\n### Requirement One\nKeep this\n\n---\n\n## Constraints\n\n### Constraint One\nChanged constraints\n\n---\n\n## Risks\n\n### Risk One\nKeep risk\n\n---\n\n## Proposed Solution\n\nShip it\n")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "\n## Problems\n\nProblem text\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n### Requirement One\nKeep this\n\n---\n\n## Risks\n\n### Risk One\nKeep risk\n\n---\n\n## Constraints\n\n### Constraint One\nChanged constraints\n\n---\n\n## Proposal\n\nShip it\n")
     })
 
     test("strips major headings when saving proposal content", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problem\n\nProblem text\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Solution\n\nOld\n"
+                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposal\n\nOld\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -1819,7 +1841,7 @@ describe("autocode_plan tools", () => {
 
         await executePlanSave(tool, { proposal: "## Proposed Solution\nShip it\n## Solution\nAgain" })
 
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("## Proposed Solution\n\nShip it"))
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("## Proposal\n\nShip it"))
         expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("Again\n"))
     })
 
@@ -1851,7 +1873,7 @@ describe("autocode_plan tools", () => {
                     throw error
                 }
 
-                if (filePath === "/workspace/.agents/jobs/executing/my_feature/plan.md") return "# Problems\n\nProblem in executing\n\n---\n\n# Requirements\n\n### Executing Requirement\n- req in executing\n\n---\n\n# Constraints\n\n### Executing Constraint\n- constraint in executing\n\n---\n\n# Risks\n\n### Executing Risk\nRisks in executing\n\n---\n\n# Solution\n\nShip it in executing\n"
+                if (filePath === "/workspace/.agents/jobs/executing/my_feature/plan.md") return "# Problems\n\nProblem in executing\n\n---\n\n# Requirements\n\n### Executing Requirement\n- req in executing\n\n---\n\n# Constraints\n\n### Executing Constraint\n- constraint in executing\n\n---\n\n# Risks\n\n### Executing Risk\nRisks in executing\n\n---\n\n# Proposal\n\nShip it in executing\n"
 
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
@@ -1866,9 +1888,11 @@ describe("autocode_plan tools", () => {
         expect(parseToolResult(result)).toMatchObject({
             file_path: ".agents/jobs/executing/my_feature/plan.md",
             problems: "Problem in executing",
+            impact: "",
+            expectations: "",
             requirements: "### Executing Requirement\n- req in executing",
-            constraints: "### Executing Constraint\n- constraint in executing",
             risks: "### Executing Risk\nRisks in executing",
+            constraints: "### Executing Constraint\n- constraint in executing",
             proposal: "Ship it in executing",
         })
     })
@@ -1879,7 +1903,7 @@ describe("autocode_plan tools", () => {
             : []
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problem\n\nProblem text\n\n---\n\n# Requirements\n\n### Requirement\nKeep it\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\nShip it\n"
+                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Impact\n\nImpact text\n\n---\n\n# Expectations\n\nExpectation text\n\n---\n\n# Requirements\n\n### Requirement\nKeep it\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nShip it\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -1913,7 +1937,7 @@ describe("autocode_plan tools", () => {
     test("reads plans from context.directory when worktree is filesystem root", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/fallback/.agents/jobs/drafts/my_feature/plan.md") return "# Problem\n\nProblem text\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Proposed Solution\n\nShip it\n"
+                if (filePath === "/workspace/fallback/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Impact\n\n\n\n---\n\n# Expectations\n\n\n\n---\n\n# Requirements\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nShip it\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -1932,9 +1956,11 @@ describe("autocode_plan tools", () => {
             job_name: "my_feature",
             file_path: ".agents/jobs/drafts/my_feature/plan.md",
             problems: "Problem text",
+            impact: "",
+            expectations: "",
             requirements: "",
-            constraints: "",
             risks: "",
+            constraints: "",
             proposal: "Ship it",
         })
     })
@@ -1968,7 +1994,7 @@ describe("autocode_plan tools", () => {
     test("saves requirements, constraints and risks as raw markdown", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problem\n\n\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Solution\n\n"
+                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\n\n\n---\n\n# Impact\n\n\n\n---\n\n# Expectations\n\n\n\n---\n\n# Requirements\n\n\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error

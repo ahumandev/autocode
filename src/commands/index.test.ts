@@ -65,7 +65,8 @@ describe("commands", () => {
         const legacyCommand = ["job-termi", "nate"].join("")
 
         expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
-        expect(commands["job-draft"]?.template).toContain("Call `autocode_plan_save` tool with planned sections: PROBLEMS, REQUIREMENTS, CONSTRAINTS, RISKS, and user chosen PROPOSAL.")
+        expect(commands["job-draft"]?.template).toContain("Call `autocode_plan_save` tool with planned sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, RISKS, CONSTRAINTS, and user chosen PROPOSAL.")
+        expect(commands["job-draft"]?.template).not.toContain("OBSERVATION")
         expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_execute` once with selected `job_name` and selected `agent`, then evaluate tool output:")
         expect(commands["job-execute"]?.template).toContain('output includes `current_status`')
         expect(commands["job-execute"]?.template).toContain('Continue job in [agent] session.')
@@ -173,6 +174,13 @@ describe("commands", () => {
             expect(template).toContain(`${expectation.response}: "[session_title]".`)
             expect(template).toContain("Replace [session_title] with `session_title` value from `autocode_session_create` tool response.")
         }
+
+        expect(commands["new-assist"]?.template).toContain("PROBLEMS = wrong/missing behavior or missing info according to user instructions")
+        expect(commands["new-assist"]?.template).toContain("IMPACT = why issue matters to user/workflow/system")
+        expect(commands["new-assist"]?.template).not.toContain("OBSERVATION")
+        expect(commands["new-auto"]?.template).toContain("EXPECTATIONS = expected outcome or target behavior")
+        expect(commands["new-auto"]?.template).toContain("REQUIREMENTS = required project changes or research scope, each with CRITERIA")
+        expect(commands["new-auto"]?.template).not.toContain("OBSERVATION")
     })
 
     test("keeps repeat_as_md template intent independent of stale description", () => {

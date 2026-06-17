@@ -1,5 +1,5 @@
 export const jobDraftCommandTemplate = `
-1. Call \`autocode_plan_save\` tool with planned sections: PROBLEMS, REQUIREMENTS, CONSTRAINTS, RISKS, and user chosen PROPOSAL.
+1. Call \`autocode_plan_save\` tool with planned sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, RISKS, CONSTRAINTS, and user chosen PROPOSAL.
 2. Respond with:
 
 \`\`\`markdown
@@ -15,7 +15,8 @@ Replace [job_path] with \`job_path\` value from \`autocode_plan_save\` tool resp
 # Plan Formatting Rules
 
 - Never include H1, H2, or \`---\` separators in tool input.
-- Requirements, constraints, and risks should use H3 subsections.
+- Requirements, risks, and constraints should use H3 subsections.
+- Each requirement should include bullet point CRITERIA in its subsection body.
 - Keep user examples and quoted evidence intact.
 - Use emojis only to highlight important points.
 - Include markdown links to sources consulted.

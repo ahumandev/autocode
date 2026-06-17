@@ -94,9 +94,11 @@ export function createAutocodePlanReadTool(clientOrFileSystem?: OpencodeClient |
                     job_name: jobName,
                     file_path: result.path,
                     problems: sections.problems,
+                    impact: sections.impact,
+                    expectations: sections.expectations,
                     requirements: sections.requirements,
-                    constraints: sections.constraints,
                     risks: sections.risks,
+                    constraints: sections.constraints,
                     proposal: sections.proposal,
                     warning,
                 })
