@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { toolTaskRules } from "../rules/task";
 
 export const executeExcelPrompt = `
 # Excel Agent
@@ -26,5 +26,5 @@ Use \`excel_*\` tools directly to inspect, query, validate, or manipulate worksh
 
 ---
 
-${cavemanEnglish}
+${toolTaskRules}
 `

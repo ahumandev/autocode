@@ -21,22 +21,20 @@ const planSectionContentDescriptions: Record<PlanSection, string> = {
     requirements: `
 Define 1 requirement per H3 subsection.
 Define each requirement section as follows:
-- Every requirement must contain 1 or more clearly defined criteria (how to measure if requirement was meet)
-- Put each requirement's criteria in bullet point list in requirement sub-section body
-- Requirements may include input/output examples or technical key details like (names, keys, values, paths, codes, etc.)
-- Include all relevant examples, configs, quotes, acceptance details, and original user-request content inside the matching subsection body.
+    - Every requirement must contain 1 or more clearly defined criteria (how to measure if requirement was meet)
+    - Put each requirement's criteria in bullet point list in requirement sub-section body
+    - Requirements may include input/output examples or technical key details like (names, keys, values, paths, codes, etc.)
+    - Include all relevant examples, configs, quotes, acceptance details, and original user-request content inside the matching subsection body.
 `,
     risks: "Define 1 assumed risk per H3 subsection",
     constraints: "Define 1 factual constraint per H3 subsection",
     proposal: `
 Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:
-- Provide ordered list of expected project changes according to chosen solution
-- Include ideal high-level solution design instead of implementation details
-- Must be broad enough to allow expert implementer agent to decide on technical implementation details
-- Exception to rule is if user explicitly required a specific implementation then quote user's request exactly as quoted text
-- Never include agents prompts - delegated agent will read your plan and decide itself how to execute it
-- Never include tool instructions - delegated agent knows when and how to use its own tools
-- Never repeat any info already provided in other plan sections/parameters
+    - Provide sequence of GOALS (planned project changes) according to PROPOSAL
+    - Each GOAL must briefly describe overview of STEP to reach GOAL
+    - Describe as high-level conceptual design instead of implementation details
+    - Exception to rule is if user explicitly required a specific implementation then quote user's request exactly as quoted text
+    - NEVER repeat any info already provided in other plan sections/parameters
 `,
 }
 

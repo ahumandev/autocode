@@ -5,7 +5,8 @@ export const tempReportPrompt = `
 
 Unless user specified report format, respond to user with this report template:
 
-<report>
+\`\`\`markdown
+
 [GOAL]
 
 [ACTIONS]
@@ -23,7 +24,8 @@ Unless user specified report format, respond to user with this report template:
 [SHORTCOMING]
 
 [REVIEW]
-</report>
+
+\`\`\`
 
 In the above <report> template replace the \`[PLACEHODERS]\` with following sections:
 

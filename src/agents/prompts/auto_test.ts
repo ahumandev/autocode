@@ -1,5 +1,4 @@
 import {toolTaskRules} from "@/agents/rules/task";
-import { cavemanEnglish } from "../rules/caveman";
 
 export const buildTestPrompt = `
 # auto_test Agent
@@ -107,10 +106,6 @@ After all tests are written and passing:
 
 ---
 
-${cavemanEnglish}
-
----
-
 ${toolTaskRules}
 
 ---
@@ -121,4 +116,4 @@ ${toolTaskRules}
 - Do NOT write tests for test files, mock files, configuration files, or test utilities/helpers
 - Prefer fixing tests over modifying production code — but DO fix production code if the bug is obvious
 - If uncertain what is faulty: test or production code -> report the blocker and present the available next-step options in the normal response
-`.trim()
+`

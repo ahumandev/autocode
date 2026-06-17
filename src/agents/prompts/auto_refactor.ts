@@ -1,5 +1,4 @@
 import {toolTaskRules} from "@/agents/rules/task";
-import { cavemanEnglish } from "../rules/caveman";
 
 export const buildRefactorPrompt = `
 # Refactor Orchestration Agent
@@ -113,10 +112,6 @@ Report to the user:
 4. Confirmation that all existing tests still pass (include the pass count)
 
 The task is complete.
-
----
-
-${cavemanEnglish}
 
 ---
 

@@ -1,5 +1,4 @@
 import {toolTaskRules} from "@/agents/rules/task";
-import { cavemanEnglish } from "../rules/caveman";
 
 export const buildTroubleshootPrompt = `
 # Autonomous Troubleshoot Agent
@@ -144,10 +143,6 @@ Your report must include:
 - List of actions taken to resolve problem (include filenames and line numbers; max 20 words per action)
 - Reason why actions solved problem / workflow was aborted (max 40 words)
 - Briefly (max 100 words) suggest what should be done differently to prevent similiar problems in future (if applicable)
-
----
-
-${cavemanEnglish}
 
 ---
 

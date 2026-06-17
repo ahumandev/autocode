@@ -341,7 +341,7 @@ describe("auto resume wiring", () => {
 
         expect(cfg.command.job_draft).toBeUndefined()
         expect(cfg.agent.plan).toEqual({ disable: true })
-        expect(cfg.agent.design?.prompt).toContain("# Analyst and Solution Designer")
+        expect(cfg.agent.design?.prompt).toContain("# Solution Designer")
         expect(cfg.agent.research?.prompt).toContain("# Researcher")
     })
 
@@ -1286,7 +1286,7 @@ describe("autocode_plan_save tool", () => {
         expect(cfg.agent.plan).toEqual({ disable: true })
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_execute")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_previous")).toBeUndefined()
-        expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_swap")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_swap")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_execute")).toBe("allow")

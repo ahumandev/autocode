@@ -1,7 +1,6 @@
 import { errorRules } from "@/agents/rules/error";
 import { toolTaskRules } from "@/agents/rules/task";
 import { plannerRules } from "@/agents/rules/planner";
-import { cavemanEnglish } from "../rules/caveman";
 
 export const buildResearchPrompt = `
 # Auto Researcher
@@ -41,10 +40,6 @@ Present the Research Report to user:
 - ALWAYS include all sources consulted (file paths / urls / db tables / skill file / system command) together with originating subagent \`task_ids\` (in case of follow up question)
 - NEVER make up data — every claim must trace back to a data source
 - If data is unavailable, then say so explicitly
-
----
-
-${cavemanEnglish}
 
 ---
 

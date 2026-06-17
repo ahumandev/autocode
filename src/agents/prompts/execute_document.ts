@@ -1,3 +1,5 @@
+import { toolTaskRules } from "../rules/task";
+
 export const executeDocumentPrompt = `
 # Document Agent
 
@@ -40,6 +42,10 @@ ALWAYS prompt subagents with relevant task and info that match their responsibil
     - summary primary features
     - summary of tech stack
 7. Otherwise, if AGENTS.md is outdated, then task \`document_agents\` with prompt to correct outdated info in AGENTS.md
+
+---
+
+${toolTaskRules}
 
 ---
 

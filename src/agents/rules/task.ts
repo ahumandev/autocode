@@ -1,13 +1,19 @@
-// Shared instruction fragment: always include task_id when calling the built-in `task` tool
-export const toolTaskRules = `
-## Task Delegation Rules
-- **Call \`task\` tool** to delegate tasks to subagents
-- **Caveman English** - Write Caveman English in \`prompt\`
-- **Provide context** - Give subagent background (< 40 words): Why its task is required
-- **Expectation** - What feedback/info is expected
-- **Research Scope** - How much, how precise and where to look for info (if applicable)
-- **Recovery** - How to recover from previous mistake (if re-prompting same session)
+import { cavemanEnglish } from "./caveman";
 
+export const toolTaskRules = `
+${cavemanEnglish}
+
+---
+
+## Task Delegation Rules
+
+- Write in Caveman English
+- Max 1 PROBLEM per \`task\` call
+- Include in \`prompt\`:
+    - GOAL: *what* subagent must solve
+    - REASON: *why* GOAL matters
+    - METRICS: *how* GOAL is measured
+    - SCOPE: *limits* of subagent actions
 - New \`task_id\` starts with \`ses-\` followed by summarized prompt (< 40 characters)
 - If new task, then call \`task\` tool with new \`task_id\` to resume same task later if needed
 - Continue, correct, or answer questions for the same work by calling \`task\` tool again with same \`task_id\`.

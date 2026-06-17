@@ -54,7 +54,7 @@ ${manualRules}
 4. Complete the assignment by tasking subagents:
     - Call \`todowrite\` tool to keep track of complex multi-step assignments
     - Repeatedly task subagents until assignment is completed or failed
-5. Summarize output of \`task\` tool in Concise English (max 40 words), except if code was written then respond with basic flow diagram in Mermaid syntax
+5. Summarize output of \`task\` tool in Concise English (max 40 words), except if code was written then respond with basic flow diagram in TD Mermaid syntax
 6. Measure task results according against assignment:
    - Failure: Follow [Troubleshooting Workflow](#troubleshooting)
    - Success, but assignment is incomplete:
@@ -129,7 +129,7 @@ ${responseRules}
         - If troubleshooting was successful: then
             1. Tell user how obstacle was resolved in < 40 words.
             2. Resume Assistant Workflow.
-        - If troubleshooting was unsuccessful, then tell user why obstacle is unresolved in < 40 words.
+        - If troubleshooting was unsuccessful, then tell user why OBSTACLE is unresolved in < 40 words.
     4. Call \`question\` tool to suggest 2-4 best work-around options to user.
     5. Background context + user answer = \`prompt\` to task \`assist_troubleshoot\`
     6. Repeat Troubleshooting Workflow until obstacle is resolved or user changes next assignment.

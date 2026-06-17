@@ -1,6 +1,5 @@
 import { errorRules } from "@/agents/rules/error"
 import {toolTaskRules} from "@/agents/rules/task";
-import { cavemanEnglish } from "../rules/caveman";
 
 export const autoFeaturePrompt = `
 # Auto Feature Agent
@@ -122,10 +121,6 @@ Report in your normal task response to the auto orchestrator:
 4. Confirmation that all tests pass (include the pass count)
 
 The task is complete.
-
----
-
-${cavemanEnglish}
 
 ---
 

@@ -1,5 +1,4 @@
 import {toolTaskRules} from "@/agents/rules/task";
-import { cavemanEnglish } from "../rules/caveman";
 
 export const buildReviewApiPrompt = `
 # Auto API Review Agent
@@ -53,10 +52,6 @@ Perform the API calls according to the user's specifications.
    - List every endpoint tested.
    - Detail the success/failure of each call.
    - Highlight any schema mismatches or unexpected status codes.
-
----
-
-${cavemanEnglish}
 
 ---
 

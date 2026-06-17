@@ -3,6 +3,7 @@ import { toolTaskRules } from "@/agents/rules/task";
 import { toolQuestionRules } from "@/agents/rules/question";
 import { plannerRules } from "@/agents/rules/planner";
 import { responseRules } from "../rules/response";
+import { cavemanEnglish } from "../rules/caveman";
 
 export const researchPrompt = `
 # Researcher
@@ -60,6 +61,10 @@ Unless user specified specific style, present Report as answer to INSTRUCTIONS i
 2. Set INSTRUCTIONS = next user answer/prompt and include relevant facts learned from the last Research Report in INSTRUCTIONS
 3. If user wants Design work: then call \`autocode_agent_swap\` with \`agent\` = \`design\`
 4. Otherwise, restart Research Workflow with new research INSTRUCTIONS
+
+---
+
+${cavemanEnglish}
 
 ---
 

@@ -42,6 +42,7 @@ import { researchPrompt } from "./prompts/research";
 import { tempConceptPrompt } from "./prompts/temp_concept";
 import { tempManualPrompt } from "./prompts/temp_manual";
 import { tempReportPrompt } from "@/agents/prompts/temp_report";
+import { autoDesignPrompt } from "./prompts/auto_design";
 `.agents/jobs/facilitate`
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules
@@ -317,7 +318,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_agent_execute: "allow",
-            autocode_agent_swap: "allow",
             autocode_concept_list: "allow",
             autocode_concept_read: "allow",
             autocode_job_execute: "allow",
@@ -442,6 +442,30 @@ const baseAgents: AgentMap = {
         },
         prompt: assistTroubleshootPrompt,
         temperature: 0.5,
+        tier: "smart",
+    },
+
+    auto_design: {
+        color: colorAutonomousOrchestrator,
+        description: "Task `auto_design` to redesign failed PROPOSAL.",
+        hidden: false,
+        mode: "primary",
+        permission: {
+            "*": "deny",
+            doom_loop: "deny",
+            external_directory: "allow",
+            read: "allow",
+            question: "allow",
+            task: {
+                "*": "deny",
+                "query*": "allow",
+            },
+            task_external: "allow",
+            task_resume: "allow",
+            "todo*": "allow",
+        },
+        prompt: autoDesignPrompt,
+        temperature: 0.7,
         tier: "smart",
     },
 

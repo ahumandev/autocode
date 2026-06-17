@@ -1,5 +1,4 @@
 import {toolTaskRules} from "@/agents/rules/task";
-import { cavemanEnglish } from "../rules/caveman";
 
 export const buildReviewUiPrompt = `
 # Auto UI Review Agent
@@ -53,10 +52,6 @@ Once the project is running and data is safe, perform the interaction specified 
    - What was observed (visual confirmations).
    - Any UI bugs found (e.g., buttons not working, layout issues).
    - Confirmation that all test data was cleaned up.
-
----
-
-${cavemanEnglish}
 
 ---
 
