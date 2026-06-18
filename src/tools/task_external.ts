@@ -54,7 +54,7 @@ type ExternalDirectoryAuthorizationRequest = {
     }
 }
 
-const TASK_EXTERNAL_AGENT = "general"
+const TASK_EXTERNAL_AGENT = "auto"
 
 const defaultDependencies: TaskProjectDependencies = {
     stat: nodeStat,

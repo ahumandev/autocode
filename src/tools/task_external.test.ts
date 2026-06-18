@@ -42,7 +42,7 @@ function createToolContext(overrides: Partial<ExternalToolContext> = {}): Extern
     return {
         sessionID: "session-1",
         messageID: "message-1",
-        agent: "auto_general",
+        agent: "auto",
         directory: "/workspace",
         worktree: "/workspace",
         abort: new AbortController().signal,
@@ -243,7 +243,7 @@ describe("task_external tool", () => {
             "--dir",
             "/real/projects/linked-project",
             "--agent",
-            "general",
+            "auto",
             "Do it",
         ])
     })
@@ -308,7 +308,7 @@ describe("task_external tool", () => {
             "--dir",
             "/real/project",
             "--agent",
-            "general",
+            "auto",
             "Do it",
         ])
     })
@@ -383,7 +383,7 @@ describe("task_external tool", () => {
 
         expect(spawn).toHaveBeenCalledTimes(1)
         expect(getSpawnCall(spawn, 0).command).toBe("opencode")
-        expect(getSpawnCall(spawn, 0).args).toEqual(["run", "--dir", "/project", "--agent", "general", "Do it"])
+        expect(getSpawnCall(spawn, 0).args).toEqual(["run", "--dir", "/project", "--agent", "auto", "Do it"])
         expect(getSpawnCall(spawn, 0).options.stdio).toEqual(["ignore", "pipe", "pipe"])
         expect(getSpawnCall(spawn, 0).options.env).toBeDefined()
         expect(result).toBe(JSON.stringify({
@@ -465,7 +465,7 @@ describe("task_external tool", () => {
             const env = spawnCall.options.env
 
             expect(spawnCall.command).toBe("opencode")
-            expect(spawnCall.args).toEqual(["run", "--dir", "/project", "--agent", "general", "Do it"])
+            expect(spawnCall.args).toEqual(["run", "--dir", "/project", "--agent", "auto", "Do it"])
             expect(spawnCall.options.stdio).toEqual(["ignore", "pipe", "pipe"])
             expect(env).toBeDefined()
             expect(env).not.toBe(process.env)

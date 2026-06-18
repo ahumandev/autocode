@@ -64,9 +64,9 @@ If user changes scope, you repeat Typical Workflow with new EXPECTATIONS, REQUIR
 3. Call \`todowrite\` tool to update todos where each item = GOAL in new PROPOSAL
 4. Loop this *Todos Loop* while pending todos items remains:
     1. Call \`todowrite\` to set highest priority unblocked pending todos item to \`in_progress\`
-    2. Call \`task\` tool with most appropriate subagent to solve that todo item with prompt:
+    2. Call \`task\` tool best subagent to solve that todo item with prompt:
         - GOAL = todo item
-        - REASON = why todo item matter to next STEPS
+        - REASON = why todo item matter to next STEPS (max 20 words)
         - METRICS = how GOAL is measured
         - SCOPE = only include applicable CONSTRAINTS to current STEP
     3. Evaluate \`task\` output against todo item:

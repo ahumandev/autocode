@@ -176,17 +176,18 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 
 ### Utility commands
 
-| Command           | Purpose                                                                              |
-| ----------------- | ------------------------------------------------------------------------------------ |
-| `/author-article` | Authors a professional article or report from the supplied context.                  |
-| `/git-commit`     | Creates a commit message and commits staged changes through the git commit subagent. |
-| `/git-conflict`   | Handles git merge conflict work through the git conflict subagent.                   |
-| `/repeat-as-md`   | Repeats the last response inside a fenced Markdown code block.                       |
-| `/repeat-as-wiki` | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting.           |
-| `/report-session` | Reports on the entire current session.                                               |
-| `/report-last`    | Reports on only the most recent user-requested assignment.                           |
-| `/resume`         | Resumes an interrupted session by calling the resume tool.                           |
-| `/shelve`         | Clean up sandbox files (if any). Alias for `/job-shelve`.                            |
+| Command             | Purpose                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `/autocode-version` | Prints currently installed versions of OpenCode and AutoCode.                        |
+| `/author-article`   | Authors a professional article or report from the supplied context.                  |
+| `/git-commit`       | Creates a commit message and commits staged changes through the git commit subagent. |
+| `/git-conflict`     | Handles git merge conflict work through the git conflict subagent.                   |
+| `/repeat-as-md`     | Repeats the last response inside a fenced Markdown code block.                       |
+| `/repeat-as-wiki`   | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting.           |
+| `/report-session`   | Reports on the entire current session.                                               |
+| `/report-last`      | Reports on only the most recent user-requested assignment.                           |
+| `/resume`           | Resumes an interrupted session by calling the resume tool.                           |
+| `/shelve`           | Clean up sandbox files (if any). Alias for `/job-shelve`.                            |
 
 ### Job files
 

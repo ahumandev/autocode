@@ -1,9 +1,9 @@
 import type { AgentConfig } from "@opencode-ai/sdk/v2"
 import type { ExternalDirectoryRules, ModelTier, PermissionAction } from "@/config"
-import { isSandboxPlatformSupported, type SandboxPlatformSupportOptions } from "@/utils/sandbox"
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
 import { assistPrompt } from "./prompts/assist";
 import { assistTroubleshootPrompt } from "./prompts/assist_troubleshoot";
+import { autoDesignPrompt } from "./prompts/auto_design";
 import { autoFeaturePrompt } from "./prompts/auto_feature";
 import { autoGeneralPrompt } from "./prompts/auto_general";
 import { autoPrompt } from "./prompts/auto"
@@ -15,8 +15,8 @@ import { buildTestPrompt } from "./prompts/auto_test";
 import { buildTroubleshootPrompt } from "./prompts/auto_troubleshoot";
 import { designPrompt } from "./prompts/design";
 import { documentAgentsPrompt } from "./prompts/document_agents"
-import { documentConventionsPrompt } from "./prompts/document_conventions"
 import { documentCodePrompt } from "./prompts/document_code"
+import { documentConventionsPrompt } from "./prompts/document_conventions"
 import { documentInstallPrompt } from "./prompts/document_install"
 import { documentPrdPrompt } from "./prompts/document_prd"
 import { documentUxPrompt } from "./prompts/document_ux"
@@ -27,7 +27,9 @@ import { executeDocumentPrompt } from "./prompts/execute_document"
 import { executeExcelPrompt } from "./prompts/execute_excel";
 import { executeGitCommitPrompt } from "./prompts/execute_git_commit";
 import { executeOsPrompt } from "./prompts/execute_os";
+import { executeRestPrompt } from "./prompts/execute_rest";
 import { executeScriptPrompt } from "./prompts/execute_script";
+import { isSandboxPlatformSupported, type SandboxPlatformSupportOptions } from "@/utils/sandbox"
 import { queryArchitectPrompt } from "./prompts/query_architect";
 import { queryBrowserPrompt } from "./prompts/query_browser";
 import { queryCodePrompt } from "./prompts/query_code";
@@ -35,15 +37,13 @@ import { queryDbPrompt } from "./prompts/query_db";
 import { queryExcelPrompt } from "./prompts/query_excel";
 import { queryGitPrompt } from "./prompts/query_git";
 import { queryOsPrompt } from "./prompts/query_os";
-import { executeRestPrompt } from "./prompts/execute_rest";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
 import { researchPrompt } from "./prompts/research";
 import { tempConceptPrompt } from "./prompts/temp_concept";
 import { tempManualPrompt } from "./prompts/temp_manual";
 import { tempReportPrompt } from "@/agents/prompts/temp_report";
-import { autoDesignPrompt } from "./prompts/auto_design";
-`.agents/jobs/facilitate`
+
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules
 type AutocodeTaskPermissionRules = Record<string, AutocodePermissionRule>
@@ -449,7 +449,7 @@ const baseAgents: AgentMap = {
         color: colorAutonomousOrchestrator,
         description: "Task `auto_design` to redesign failed PROPOSAL.",
         hidden: false,
-        mode: "primary",
+        mode: "subagent",
         permission: {
             "*": "deny",
             doom_loop: "deny",
@@ -504,7 +504,7 @@ const baseAgents: AgentMap = {
 
     auto_general: {
         color: colorAutonomousOrchestrator,
-        description: "Fallback to `auto_general` when no specialized auto agent clearly fits task",
+        description: "Fallback to `auto_general` when no specialized subagent clearly fits task",
         hidden: true,
         mode: "all",
         permission: {
