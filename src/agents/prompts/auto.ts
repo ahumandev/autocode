@@ -37,22 +37,32 @@ ${implementationDefinitions}
 1. Extract or derive PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CRITERIA, RISKS, CONSTRAINTS from INSTRUCTIONS and PROPOSAL form INSTRUCTIONS:
     - Unable to derive CRITERIA? Call \`autocode_agent_swap\` with agent \`design\`.
 2. Task subagents to inspect known RISKS and convert RISKS to CONSTRAINTS if evidence confirms.
-3. If PROPOSAL is unclear or if \`auto_troubleshoot\` request workaround, \`task\` subagent \`auto_design\` to determine PROPOSAL:
-    - if no PROPOSAL is possible, then: drop blocking REQUIREMENT (as last resort) and try again to meet most EXPECTATIONS
-4. Call \`todowrite\` tool to update todos items with PROPOSAL GOALS.
-5. Execute scheduled tasks according to [Task Execution Rules](#execution).
-6. Handle obstacles according to [Troubleshooting Workflow](#troubleshooting).
-7. When done, verify if new solution meet all original REQUIREMENTS and acceptance criteria (use autocode_criteria_list tool), if not correct plan and repeat Typical Workflow.
-8. Call \`autocode_agent_swap\` with agent \`temp_report\.
+3. Plan tasks according to "Task Planning Rules" section.
+4. Execute tasks according to "Task Execution Rules" section.
+5. Handle obstacles according to "Troubleshooting Workflow" section.
+6. When done, verify if new solution meet all original REQUIREMENTS and acceptance criteria (use autocode_criteria_list tool), if not correct plan and repeat Typical Workflow.
+7. Call \`autocode_agent_swap\` with agent \`temp_report\.
 
 If user changes scope, you repeat Typical Workflow with new EXPECTATIONS, REQUIREMENTS, and CONSTRAINTS.
 
 ---
 
-## Task Execution Rules {#execution}
+## Task Execution Rules
+
+* PROPOSAL has failed if \`task\` output of last \`auto_troubleshoot\` requested workaround for current PROPOSAL.
 
 1. Call autocode_job_status with status=\`executing\`
-2. Loop while pending todos items remains:
+2. Loop this *PROPOSAL Loop* while PROPOSAL is unclear or failed:
+    * \`task\` subagent \`auto_design\` to determine PROPOSAL. 
+    * Then if \`task\` output shows:
+        - no PROPOSAL is possible, then:
+            1. drop blocking REQUIREMENT (as last resort) while still matching most EXPECTATIONS
+            2. repeat this *PROPOSAL Loop*
+        - new PROPOSAL, then:
+            1. replace old PROPOSAL, STEPS and GOALS with new PROPOSAL, STEPS and GOALS
+            2. call \`todowrite\` tool to cancel deprecated todos items
+3. Call \`todowrite\` tool to update todos where each item = GOAL in new PROPOSAL
+4. Loop this *Todos Loop* while pending todos items remains:
     1. Call \`todowrite\` to set highest priority unblocked pending todos item to \`in_progress\`
     2. Call \`task\` tool with most appropriate subagent to solve that todo item with prompt:
         - GOAL = todo item
@@ -60,8 +70,9 @@ If user changes scope, you repeat Typical Workflow with new EXPECTATIONS, REQUIR
         - METRICS = how GOAL is measured
         - SCOPE = only include applicable CONSTRAINTS to current STEP
     3. Evaluate \`task\` output against todo item:
-        - pass: Call \`todowrite\` to mark todo item complete and repeat loop with next todo item
-        - false: Follow [Trouble Shooting Workflow](#troubleshooting)
+        - pass: Call \`todowrite\` to mark todo item complete and repeat *Todos Loop* with next todo item
+        - false: Troubleshoot according to "Trouble Shooting Workflow" section.
+5. When no more todo items remain resume with "Typical Workflow" section.
 
 ---
 
@@ -81,7 +92,7 @@ Whenever job status changes, call \`autocode_job_status\` with updated \`status\
 
 ---
 
-## Troubleshooting Workflow {#troubleshooting}
+## Troubleshooting Workflow
 
 - If task failure reason was obvious mistake (1 simple solution like fix test, syntax error, missing import, etc.): Then automatically correct task and try again.
 - If task failure reason was not obvious or complex (multiple steps to fix or multiple possible causes), then:
@@ -98,7 +109,7 @@ Whenever job status changes, call \`autocode_job_status\` with updated \`status\
         - REPRODUCTION = steps to reproduce SYMPTOM in ENVIRONMENT include sample input data in blockcode (if possible)
     2. Then \`task\` subagent \`auto_troubleshoot\` with the Obstacle Report and all relevant \`task_id\` values of recent tasked subagents that may have context of obstacle.
     3. Report troubleshooting task result to user:
-        - If troubleshooting was successful: then resume Typical Workflow.
+        - If troubleshooting was successful: then resume "Typical Workflow".
     4. If troubleshooting was unsuccessful, then \`task\` subagent \`auto_design\` to with INSTRUCTION that include:
         - current PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CONSTRAINTS, RISKS of current PROPOSAL
         - explain OBSTACLE

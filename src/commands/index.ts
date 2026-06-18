@@ -1,4 +1,5 @@
 import type { Config } from "@opencode-ai/sdk/v2"
+import packageJson from "../../package.json"
 import { authorArticleCommandTemplate } from "./author_article"
 import { documentCodeCommandTemplate } from "./document_code"
 import { documentConventionsCommandTemplate } from "./document_conventions"
@@ -114,6 +115,20 @@ export const commands: CommandMap = {
 
     // Ad-hoc commands
 
+    "autocode-install": installCommand,
+
+    "autocode-version": {
+        agent: "temp_output",
+        description: "Output AutoCode plugin version.",
+        subtask: false,
+        template: `
+Report to user:
+
+* Opencode version: !\`opencode --version\`
+* Autocode version: !\`echo ${packageJson.version}\`
+`,
+    },
+
     "author-article": {
         agent: "execute_author",
         description: "Author a professional article/report.",
@@ -171,8 +186,6 @@ export const commands: CommandMap = {
     },
 
     "install": installCommand,
-
-    "autocode-install": installCommand,
 
     "init": {
         agent: "execute_document",

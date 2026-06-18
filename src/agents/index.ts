@@ -1331,6 +1331,19 @@ const baseAgents: AgentMap = {
         tier: "fast",
     },
 
+    temp_output: {
+        color: colorReadOnlyWorker,
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            autocode_agent_previous: "allow",
+        },
+        prompt: "---",
+        temperature: 0,
+        tier: "fast",
+    },
+
     temp_report: {
         color: colorReadOnlyWorker,
         hidden: true,
