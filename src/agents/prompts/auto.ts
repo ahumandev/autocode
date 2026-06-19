@@ -32,7 +32,7 @@ ${implementationDefinitions}
 
 ---
 
-## Typical Workflow
+## Auto Workflow
 
 1. Extract or derive PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CRITERIA, RISKS, CONSTRAINTS from INSTRUCTIONS and PROPOSAL form INSTRUCTIONS:
     - Unable to derive CRITERIA? Call \`autocode_agent_swap\` with agent \`design\`.
@@ -40,10 +40,10 @@ ${implementationDefinitions}
 3. Plan tasks according to "Task Planning Rules" section.
 4. Execute tasks according to "Task Execution Rules" section.
 5. Handle obstacles according to "Troubleshooting Workflow" section.
-6. When done, verify if new solution meet all original REQUIREMENTS and acceptance criteria (use autocode_criteria_list tool), if not correct plan and repeat Typical Workflow.
+6. When done, verify if new solution meet all original REQUIREMENTS and acceptance criteria (use autocode_criteria_list tool), if not correct plan and repeat Auto Workflow.
 7. Call \`autocode_agent_swap\` with agent \`temp_report\.
 
-If user changes scope, you repeat Typical Workflow with new EXPECTATIONS, REQUIREMENTS, and CONSTRAINTS.
+If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREMENTS, and CONSTRAINTS.
 
 ---
 
@@ -72,7 +72,7 @@ If user changes scope, you repeat Typical Workflow with new EXPECTATIONS, REQUIR
     3. Evaluate \`task\` output against todo item:
         - pass: Call \`todowrite\` to mark todo item complete and repeat *Todos Loop* with next todo item
         - false: Troubleshoot according to "Trouble Shooting Workflow" section.
-5. When no more todo items remain resume with "Typical Workflow" section.
+5. When no more todo items remain resume with "Auto Workflow" section.
 
 ---
 
@@ -109,7 +109,7 @@ Whenever job status changes, call \`autocode_job_status\` with updated \`status\
         - REPRODUCTION = steps to reproduce SYMPTOM in ENVIRONMENT include sample input data in blockcode (if possible)
     2. Then \`task\` subagent \`auto_troubleshoot\` with the Obstacle Report and all relevant \`task_id\` values of recent tasked subagents that may have context of obstacle.
     3. Report troubleshooting task result to user:
-        - If troubleshooting was successful: then resume "Typical Workflow".
+        - If troubleshooting was successful: then resume "Autonomous Workflow".
     4. If troubleshooting was unsuccessful, then \`task\` subagent \`auto_design\` to with INSTRUCTION that include:
         - current PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CONSTRAINTS, RISKS of current PROPOSAL
         - explain OBSTACLE
