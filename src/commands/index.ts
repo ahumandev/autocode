@@ -137,7 +137,7 @@ Report to user:
     },
 
     "document": {
-        agent: "document",
+        agent: "execute_document",
         description: "Document recent project changes.",
         subtask: false,
         template: documentCommandTemplate,
