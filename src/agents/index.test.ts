@@ -94,7 +94,7 @@ describe("agent policies", () => {
                     "autocode_sandbox_*": "allow",
                 },
             },
-        }, { platform: "linux", bwrapUsable: true })
+        }, { platform: "linux", env: {}, bwrapUsable: true })
 
         expect(agents.execute_sandbox?.disable).toBeUndefined()
         expect(permissionRule(agents.execute_sandbox?.permission, "autocode_sandbox_cli")).toBe("allow")
@@ -102,7 +102,7 @@ describe("agent policies", () => {
     })
 
     test("execute_sandbox allows native sandbox file tools", () => {
-        const agents = buildAgents({}, { platform: "linux", bwrapUsable: true })
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
 
         for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
             expect(permissionRule(agents.execute_sandbox?.permission, toolName)).toBe("allow")
@@ -113,7 +113,7 @@ describe("agent policies", () => {
     test("buildAgents returns policy-applied definitions with current internal tier metadata", () => {
         const agents = buildAgents({
             "/configured/*": "allow",
-        }, { platform: "linux", bwrapUsable: true })
+        }, { platform: "linux", env: {}, bwrapUsable: true })
 
         expect(agents.assist?.mode).toBe("primary")
         expect(agents.auto?.mode).toBe("primary")
@@ -134,7 +134,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents exposes execute_rest as REST-only worker and allows supported orchestration tasks to call it", () => {
-        const agents = buildAgents({}, { platform: "linux", bwrapUsable: true })
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
 
         expect(agents.execute_rest?.mode).toBe("subagent")
         expect(agents.execute_rest?.hidden).toBe(true)
@@ -163,7 +163,7 @@ describe("agent policies", () => {
     })
 
     test("execute_rest prompt examples use strict JSON object text", () => {
-        const agents = buildAgents({}, { platform: "linux", bwrapUsable: true })
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
         const prompt = String(agents.execute_rest?.prompt ?? "")
         const examplesMatch: RegExpMatchArray | null = prompt.match(/### Examples([\s\S]+?)## Follow-up tools for saved responses/)
         const examplesSection = examplesMatch?.[1] ?? ""

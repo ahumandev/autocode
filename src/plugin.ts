@@ -6,8 +6,12 @@ import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { commands } from "./commands"
 import { ensureGeneratedSkills, injectGeneratedSkillsPath } from "./skills"
 import { createTools } from "./tools"
+import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 type PluginAgentConfig = AutocodeAgentConfig
+type PluginInputWithSandboxSupportOverride = PluginInput & {
+    sandboxSupportOverride?: SandboxPlatformSupportOptions
+}
 
 function mergePluginAgentConfig(
     agentDef: PluginAgentConfig,
@@ -27,16 +31,17 @@ function stripRuntimeAgentTier(agent: PluginAgentConfig): Omit<PluginAgentConfig
 function preparePluginAgentsAfterOverrides(
     agents: Record<string, PluginAgentConfig>,
     externalDirectories: ExternalDirectoryRules,
+    sandboxSupportOverride?: SandboxPlatformSupportOptions,
 ): Record<string, Omit<PluginAgentConfig, "tier">> {
     const externalDirectoryFinalizedAgents = applyExternalDirectoryPolicy(agents, externalDirectories)
-    const sandboxFinalizedAgents = applySandboxPlatformPolicy(externalDirectoryFinalizedAgents)
+    const sandboxFinalizedAgents = applySandboxPlatformPolicy(externalDirectoryFinalizedAgents, sandboxSupportOverride ?? {})
     return Object.fromEntries(Object.entries(sandboxFinalizedAgents).map(([name, agent]) => [
         name,
         stripRuntimeAgentTier(agent),
     ]))
 }
 
-async function mergeConfig(cfg: Config, input: PluginInput): Promise<void> {
+async function mergeConfig(cfg: Config, input: PluginInputWithSandboxSupportOverride): Promise<void> {
     const generatedSkillsPath = await ensureGeneratedSkills()
 
     cfg.skills = cfg.skills ?? {}
@@ -55,13 +60,17 @@ async function mergeConfig(cfg: Config, input: PluginInput): Promise<void> {
     }
 
     cfg.agent = cfg.agent ?? {}
-    const agents = buildAgents(agentExternalDirectories)
+    const agents = buildAgents(agentExternalDirectories, input.sandboxSupportOverride)
     const mergedAgents: Record<string, PluginAgentConfig> = {}
     for (const [name, agentDef] of Object.entries(agents)) {
         const userOverride = cfg.agent[name]
         mergedAgents[name] = mergePluginAgentConfig(agentDef, tiers, userOverride)
     }
-    for (const [name, agent] of Object.entries(preparePluginAgentsAfterOverrides(mergedAgents, agentExternalDirectories))) {
+    for (const [name, agent] of Object.entries(preparePluginAgentsAfterOverrides(
+        mergedAgents,
+        agentExternalDirectories,
+        input.sandboxSupportOverride,
+    ))) {
         ;(cfg.agent as Record<string, unknown>)[name] = agent
     }
 
@@ -75,6 +84,7 @@ async function mergeConfig(cfg: Config, input: PluginInput): Promise<void> {
 }
 
 const autocode: Plugin = async (input: PluginInput): Promise<Hooks> => {
+    const pluginInput = input as PluginInputWithSandboxSupportOverride
     const home = process.env.HOME ?? ""
     const bunBin = `${home}/.bun/bin`
     process.env.BUN_INSTALL = `${home}/.bun`
@@ -83,7 +93,7 @@ const autocode: Plugin = async (input: PluginInput): Promise<Hooks> => {
 
     return {
         async config(cfg: Config) {
-            await mergeConfig(cfg, input)
+            await mergeConfig(cfg, pluginInput)
         },
 
         tool: createTools(input.client, sandbox),

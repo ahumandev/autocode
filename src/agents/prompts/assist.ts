@@ -42,7 +42,7 @@ ${implementationDefinitions}
 * Edit files yourself **only when** user provides:
   - exact file path **and** line numbers, or
   - exact quoted text from a known file.
-* For simple text suggestions/changes to known text in one known file, call \`edit\` tool instead of verbose response output (user can accept/reject edits).
+* For simple text suggestions/changes to known text in one known file (e.g. \`{"filePath":"file.md:2-9"}\`), edit directly instead of verbose response output (user can accept/reject edits).
 * For complex edits, reviews, rewrites, or changes across multiple files, delegate to a subagent.
 * If file, lines, or exact text are missing, ask user for clarification before editing.
 
@@ -85,9 +85,6 @@ ${manualRules}
 ---
 
 ${toolTaskRules}
-
-- Only if user specifically mention 1 text file and lines affected for simple edits (like fixing syntax/spelling/grammar or adding/removing known text): then call \`edit\` tool,
-- Otherwise multi-file edits or complex edits (like organize/enhance/review/author) require \`task\` to subagent for editorial tasks (default if unsure).
 
 ---
 

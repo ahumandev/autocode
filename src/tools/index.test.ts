@@ -20,6 +20,7 @@ import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { applySandboxPlatformPolicy } from "@/agents"
 import { createTools } from "./index"
 import { createToolContext } from "./test_context"
+import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 const PROMPT_TASK_RESUME = "You have been interrupted, therefore you MUST:\n1. Use `task_resume` tool to resume previous interrupted task sessions\n2. Then resume your own work"
 const PROMPT_WORK_RESUME = "Resume"
@@ -41,6 +42,9 @@ type ConfigWithRuntimeSections = Omit<PluginConfig, "agent" | "command" | "permi
     agent: Record<string, RuntimeAgentConfig>
     command: NonNullable<PluginConfig["command"]>
     permission?: RuntimeConfigPermission
+}
+type PluginInputWithSandboxSupportOverride = PluginInput & {
+    sandboxSupportOverride?: SandboxPlatformSupportOptions
 }
 
 function getPermissionRule(permission: RuntimePermission, key: string): unknown {
@@ -89,7 +93,12 @@ function createMissingFileError(): NodeJS.ErrnoException {
     return error
 }
 
-function createPluginInput(client: OpencodeClient, worktree = "/workspace", directory?: string): PluginInput {
+function createPluginInput(
+    client: OpencodeClient,
+    worktree = "/workspace",
+    directory?: string,
+    sandboxSupportOverride: SandboxPlatformSupportOptions = { platform: "linux", env: {}, bwrapUsable: true },
+): PluginInputWithSandboxSupportOverride {
     const dir = directory ?? worktree
     return {
         client,
@@ -105,6 +114,7 @@ function createPluginInput(client: OpencodeClient, worktree = "/workspace", dire
             },
         },
         serverUrl: new URL("http://localhost:4096"),
+        sandboxSupportOverride,
         $: {} as PluginInput["$"],
     }
 }

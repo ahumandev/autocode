@@ -5,10 +5,14 @@ import { tmpdir } from "os"
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
 import autocode from "./plugin"
+import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 const tempRoots: string[] = []
 
 type PluginConfigHook = { config?: (input: PluginConfig) => Promise<void> }
+type PluginInputWithSandboxSupportOverride = PluginInput & {
+    sandboxSupportOverride?: SandboxPlatformSupportOptions
+}
 
 async function createTempRoot(): Promise<string> {
     const root = await mkdtemp(join(tmpdir(), "autocode-plugin-test-"))
@@ -35,12 +39,16 @@ async function withEnv(entries: Record<string, string | undefined>, run: () => P
     }
 }
 
-function createInput(worktree: string): PluginInput {
+function createInput(
+    worktree: string,
+    sandboxSupportOverride: SandboxPlatformSupportOptions = { platform: "linux", env: {}, bwrapUsable: true },
+): PluginInputWithSandboxSupportOverride {
     return {
         worktree,
         directory: worktree,
         client: {},
-    } as unknown as PluginInput
+        sandboxSupportOverride,
+    } as PluginInputWithSandboxSupportOverride
 }
 
 afterEach(async () => {
