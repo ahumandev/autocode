@@ -807,32 +807,48 @@ const optionalMcpDefinitions: readonly OptionalDependencyDefinition[] = [
         docsUrl: "https://www.npmjs.com/package/excel-mcp-server",
         guidance: "Install or use `excel-mcp-server` for Excel MCP.",
     },
-    {
-        key: "git_mcp",
-        packageName: "mcp-server-git",
-        bins: ["mcp-server-git"],
-        aliases: ["mcp-server-git", "server-git", "git-mcp", "@modelcontextprotocol/server-git"],
-        installCommand: "pipx install mcp-server-git or use `uvx mcp-server-git`",
-        docsUrl: "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
-        guidance: "Install or use `mcp-server-git` for Git MCP.",
-    },
 ]
 
-async function inspectGitMcp(deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter): Promise<DependencyReport> {
-    const mcp = await inspectOptionalMcp(optionalMcpDefinitions[3], deps, context, emitDebug)
-    const git = await inspectFirstAvailableCommand(["git"], deps, "git_mcp", emitDebug)
-    return {
-        ...mcp,
-        git_cli: git === undefined ? { ok: false, status: "missing" } : { ok: true, status: "ok", command: git.command, path: git.path, version: git.version },
+async function inspectGitCli(deps: SandboxDependencies, emitDebug: DebugEmitter): Promise<DependencyReport> {
+    const git = await inspectFirstAvailableCommand(["git"], deps, "git_cli", emitDebug)
+    const installCommand = "Install git using your system package manager."
+    if (git) {
+        const result: DependencyReport = {
+            ok: true,
+            optional: true,
+            status: "ok",
+            package: "git",
+            bin: git.command,
+            command: git.command,
+            path: git.path,
+            version: git.version,
+            install_command: installCommand,
+            guidance: "System git CLI is available for built-in Git tools.",
+        }
+        emitDebug({ dependency: "git_cli", stage: "final", status: "ok", reason: "Detected system git CLI from PATH.", command: git.command, path: git.path, version: git.version })
+        return result
     }
+
+    const result: DependencyReport = {
+        ok: false,
+        optional: true,
+        status: "missing",
+        package: "git",
+        bin: "git",
+        command: "git",
+        install_command: installCommand,
+        guidance: "Install system git CLI for built-in Git tools.",
+    }
+    emitDebug({ dependency: "git_cli", stage: "final", status: "missing", reason: "System git CLI not found in PATH.", command: "git" })
+    return result
 }
 
 async function inspectOptionalDependencies(deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter): Promise<Record<string, DependencyReport>> {
-    const [chromeDevtoolsMcp, context7Mcp, excelMcp, gitMcp, browser] = await Promise.all([
+    const [chromeDevtoolsMcp, context7Mcp, excelMcp, gitCli, browser] = await Promise.all([
         safeInspectOptional("chrome-devtools MCP", "chrome_devtools_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[0], deps, context, emitDebug), emitDebug),
         safeInspectOptional("Context7 MCP", "context7_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[1], deps, context, emitDebug), emitDebug),
         safeInspectOptional("Excel MCP", "excel_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[2], deps, context, emitDebug), emitDebug),
-        safeInspectOptional("Git MCP", "git_mcp", () => inspectGitMcp(deps, context, emitDebug), emitDebug),
+        safeInspectOptional("system git CLI", "git_cli", () => inspectGitCli(deps, emitDebug), emitDebug),
         safeInspectOptional("browser availability", "browser", () => inspectBrowserAvailability(deps, emitDebug), emitDebug),
     ])
 
@@ -840,7 +856,7 @@ async function inspectOptionalDependencies(deps: SandboxDependencies, context: D
         chrome_devtools_mcp: chromeDevtoolsMcp,
         context7_mcp: context7Mcp,
         excel_mcp: excelMcp,
-        git_mcp: gitMcp,
+        git_cli: gitCli,
         browser,
     }
 }

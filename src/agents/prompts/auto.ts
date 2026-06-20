@@ -40,8 +40,11 @@ ${implementationDefinitions}
 3. Plan tasks according to "Task Planning Rules" section.
 4. Execute tasks according to "Task Execution Rules" section.
 5. Handle obstacles according to "Troubleshooting Workflow" section.
-6. When done, verify if new solution meet all original REQUIREMENTS and acceptance criteria (use autocode_criteria_list tool), if not correct plan and repeat Auto Workflow.
-7. Call \`autocode_agent_swap\` with agent \`temp_report\.
+6. When done:
+    1. verify all todos items are complete
+    2. verify if SOLUTION meet all CRITERIA by reviewing previous tool outputs, \`task\` previous subagents for more info if unsure.
+7. Use SOLUTION according to EXPECTATIONS; if incorrect, plan and repeat Auto Workflow.
+8. Call \`autocode_agent_swap\` with agent \`temp_report\`.
 
 If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREMENTS, and CONSTRAINTS.
 

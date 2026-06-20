@@ -5,7 +5,6 @@ const statusEventPattern = /^# (\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - Update St
 
 export enum SolutionLogEvent {
     UpdateStatus = "update_status",
-    AcceptedCriteria = "accepted_criteria",
 }
 
 type SolutionFileSystem = {
@@ -38,7 +37,7 @@ function formatTimestamp(date: Date): string {
 
 function createEventTitle(event: SolutionLogEvent, name: string): string {
     if (event === SolutionLogEvent.UpdateStatus) return `Update Status To ${name}`
-    return `Accepted Criteria ${name}`
+    return name
 }
 
 function normalizeBulletList(actions: string): string {

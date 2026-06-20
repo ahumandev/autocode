@@ -15,7 +15,6 @@ import { createTaskResumeTool } from "./task_resume"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
 import { composePlanMarkdown, createAutocodePlanSaveTool } from "./autocode_plan_save"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
-import { createAutocodeCriteriaAcceptTool, createAutocodeCriteriaListTool, createAutocodeCriteriaRemoveTool, createAutocodeCriteriaSetTool } from "./autocode_criteria"
 import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { applySandboxPlatformPolicy } from "@/agents"
 import { createTools } from "./index"
@@ -454,7 +453,7 @@ describe("auto resume wiring", () => {
         const sandboxRead = tools.autocode_sandbox_read as unknown as { description: string, args: Record<string, unknown> }
         const sandboxCopy = tools.autocode_sandbox_copy as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_rest", "autocode_rest_response_read", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_rest", "autocode_rest_response_read", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
         expect(sandboxCreate.description).toContain("Create")
@@ -515,7 +514,7 @@ describe("auto resume wiring", () => {
     test("unsupported sandbox policy denies wildcard and top-level string sandbox access without narrowing wildcards", () => {
         const agents = applySandboxPlatformPolicy({
             wildcard: { permission: { "*": "allow", read: "allow" } },
-            sandboxWildcard: { permission: { "autocode_sandbox_*": "allow", "autocode_criteria_*": "allow" } },
+            sandboxWildcard: { permission: { "autocode_sandbox_*": "allow", autocode_dependencies: "allow" } },
             stringPermission: { permission: "ask" },
         }, { platform: "linux", bwrapUsable: false })
 
@@ -525,7 +524,7 @@ describe("auto resume wiring", () => {
             expect(getPermissionRule(agents.wildcard?.permission as RuntimePermission, toolName)).toBe("deny")
         }
         expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, "autocode_sandbox_*")).toBe("allow")
-        expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, "autocode_criteria_*")).toBe("allow")
+        expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, "autocode_dependencies")).toBe("allow")
         for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]) {
             expect(getPermissionRule(agents.sandboxWildcard?.permission as RuntimePermission, toolName)).toBe("deny")
         }
@@ -558,9 +557,6 @@ describe("auto resume wiring", () => {
             /(^|[^A-Za-z0-9_])autocode_act(?![A-Za-z0-9_])/,
             /(^|[^A-Za-z0-9_])autocode_plan_start(?![A-Za-z0-9_])/,
             /(^|[^A-Za-z0-9_])autocode_revise_job(?![A-Za-z0-9_])/,
-            /(^|[^A-Za-z0-9_])autocode_execute_criteria_/,
-            /(^|[^A-Za-z0-9_])autocode_criteria_get(?![A-Za-z0-9_])/,
-            /(^|[^A-Za-z0-9_])autocode_criteria_verify(?![A-Za-z0-9_])/,
             /(^|[^A-Za-z0-9_])autocode_feedback(?![A-Za-z0-9_])/,
             /(^|[^A-Za-z0-9_])autocode_review(?![A-Za-z0-9_])/,
             /(^|[^A-Za-z0-9_])autocode_archive(?![A-Za-z0-9_])/,
@@ -1171,7 +1167,6 @@ describe("autocode_plan_save tool", () => {
             "autocode_concept_read",
             "autocode_plan_read",
             "autocode_plan_save",
-            "autocode_criteria_accept",
             "autocode_db_table",
             "autocode_db_table_read",
             "autocode_db_tables",
@@ -1180,9 +1175,6 @@ describe("autocode_plan_save tool", () => {
             "autocode_job_shelve",
             "autocode_job_status",
             "autocode_logo_find",
-            "autocode_criteria_list",
-            "autocode_criteria_remove",
-            "autocode_criteria_set",
             "autocode_db_schemas",
             "autocode_dependencies",
             "autocode_rest",
@@ -1198,6 +1190,18 @@ describe("autocode_plan_save tool", () => {
             "autocode_sandbox_grep",
             "autocode_sandbox_read",
             "autocode_session_create",
+            "git_add",
+            "git_branch",
+            "git_checkout",
+            "git_commit",
+            "git_create_branch",
+            "git_diff",
+            "git_diff_staged",
+            "git_diff_unstaged",
+            "git_log",
+            "git_reset",
+            "git_show",
+            "git_status",
             "task_external",
             "task_resume",
         ].sort())
@@ -1260,33 +1264,6 @@ describe("autocode_plan_save tool", () => {
         expect(plugin.tool?.autocode_rest_response_eval).toBeDefined()
         expect(toolSurfaceText(plugin.tool?.autocode_dependencies)).toContain("Detect Autocode runtime dependencies")
         expect(plugin.tool?.autocode_revise_job).toBeUndefined()
-        expect(plugin.tool?.autocode_criteria_set).toBeDefined()
-        expect(plugin.tool?.autocode_criteria_accept).toBeDefined()
-        expect(plugin.tool?.autocode_criteria_get).toBeUndefined()
-        expect(plugin.tool?.autocode_criteria_remove).toBeDefined()
-        expect(plugin.tool?.autocode_criteria_list).toBeDefined()
-        expect(plugin.tool?.autocode_criteria_verify).toBeUndefined()
-        expect(plugin.tool?.autocode_execute_criteria_set).toBeUndefined()
-        expect(plugin.tool?.autocode_execute_criteria_get).toBeUndefined()
-        expect(plugin.tool?.autocode_execute_criteria_remove).toBeUndefined()
-        expect(plugin.tool?.autocode_execute_criteria_list).toBeUndefined()
-        expect(plugin.tool?.autocode_execute_criteria_verify).toBeUndefined()
-        const criteriaSetToolText = toolSurfaceText(plugin.tool?.autocode_criteria_set)
-        const criteriaOtherToolText = [
-            plugin.tool?.autocode_criteria_accept,
-            plugin.tool?.autocode_criteria_remove,
-            plugin.tool?.autocode_criteria_list,
-        ].map(toolSurfaceText).join("\n")
-        const criteriaToolText = `${criteriaSetToolText}\n${criteriaOtherToolText}`
-        expect(criteriaSetToolText).toContain("Add/update acceptance criteria.")
-        expect(criteriaSetToolText).not.toContain("Optional planned job_name override.")
-        expect(criteriaSetToolText).not.toContain("proof")
-        expect(criteriaOtherToolText).toContain("solution.md")
-        expect(criteriaOtherToolText).toContain("Do not restate proof/reason here.")
-        expect(criteriaOtherToolText).toContain("not a restatement of actions")
-        expect(criteriaOtherToolText).not.toContain("Optional planned job_name override.")
-        expect(criteriaOtherToolText).toContain("current session context")
-        expect(criteriaToolText).not.toContain("risk_ids")
         expect(plugin.tool?.autocode_feedback).toBeUndefined()
         expect(plugin.tool?.autocode_review).toBeUndefined()
         expect(plugin.tool?.autocode_archive).toBeUndefined()
@@ -1326,13 +1303,10 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_create")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_feedback")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_review")).toBeUndefined()
-        expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_criteria_*")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_execute_criteria_*")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_job_list")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_read")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_save")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_draft_job_create")).toBeUndefined()
-        expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_criteria_*")).toBe("allow")
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_agent_previous")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_agent_swap")).toBe("allow")
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_create")).toBeUndefined()
@@ -2035,206 +2009,6 @@ describe("autocode_plan tools", () => {
         expect(planWrites[0]).toEqual(["/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("### First Requirement\n- list item\n> quote\n```json\n{ \"key\": \"value\" }\n```\n### Second Requirement\nAcceptance detail")])
         expect(planWrites[1]).toEqual(["/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("### First Constraint\n```yaml\ncache: true\n```")])
         expect(planWrites[2]).toEqual(["/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("### Existing Risk\nMitigation details")])
-    })
-})
-
-describe("autocode_criteria behaviour", () => {
-    const structuredTrack = "C1: implement feature\nC2: delegated tests\nC3: completed\n"
-
-    function createCriteriaClient(title = "My Feature"): OpencodeClient {
-        return {
-            session: {
-                get: mock(async (args: { path: { id: string }, query: { directory: string } }) => ({
-                    data: { id: args.path.id, title },
-                })),
-            },
-        } as unknown as OpencodeClient
-    }
-
-    function createMockFs(content = structuredTrack) {
-        let solutionContent = "Existing log\n"
-        return {
-            readFile: mock(async (path: string, _encoding: "utf8") => {
-                if (path === "/workspace/.agents/jobs/executing/my_feature/solution.md") return solutionContent
-                if (path === "/workspace/.agents/jobs/executing/my_feature/criteria.yml") return content
-                const error = new Error("missing") as NodeJS.ErrnoException
-                error.code = "ENOENT"
-                throw error
-            }),
-            readdir: mock(async (dirPath: string, _opts?: { withFileTypes?: boolean }) => dirPath === "/workspace/.agents/jobs/executing" ? ["my_feature"] : [] as string[]),
-            mkdir: mock(async (_path: string, _opts?: { recursive?: boolean }) => undefined as string | undefined),
-            unlink: mock(async (_path: string) => { }),
-            writeFile: mock(async (_path: string, _content: string) => { }),
-            appendFile: mock(async (_path: string, appended: string) => {
-                solutionContent += appended
-            }),
-            get solutionContent() {
-                return solutionContent
-            },
-        }
-    }
-
-    test("sets and serializes flat criteria yaml", async () => {
-        const fs = createMockFs()
-        const tool = createAutocodeCriteriaSetTool(createCriteriaClient(), fs) as any
-
-        const parsed = parseToolResult(await tool.execute({ id: "C1", metric: "implementation delegated" }, createToolContext()))
-
-        expect(parsed.criteria[0]).toEqual({ id: "C1", metric: "implementation delegated" })
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/my_feature/criteria.yml", "C1: implementation delegated\nC2: delegated tests\nC3: completed\n")
-    })
-
-    test("serializes yaml-sensitive criteria safely", async () => {
-        const fs = createMockFs("")
-        const tool = createAutocodeCriteriaSetTool(createCriteriaClient(), fs) as any
-
-        const parsed = parseToolResult(await tool.execute({ id: "C10", metric: " true # [value]:\n next " }, createToolContext()))
-
-        expect(parsed.criteria).toEqual([{ id: "C10", metric: " true # [value]:\n next " }])
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/my_feature/criteria.yml", "C10: \" true # [value]:\\n next \"\n")
-        const listTool = createAutocodeCriteriaListTool(createCriteriaClient(), createMockFs(parsed.track)) as any
-        expect(parseToolResult(await listTool.execute({}, createToolContext())).criteria).toEqual(parsed.criteria)
-    })
-
-    test("skips noncanonical ids when parsing criteria", async () => {
-        const content = "C1: implement feature\nABC: invalid\n\"C:1\": invalid\nC2: delegated tests\ncriteria:\n  - id: C3\n    metric: current format\n    proof: \"\"\n  - id: ABC\n    metric: invalid current format\n    proof: \"\"\n"
-        const tool = createAutocodeCriteriaListTool(createCriteriaClient(), createMockFs(content)) as any
-
-        const parsed = parseToolResult(await tool.execute({}, createToolContext()))
-
-        expect(parsed.criteria).toEqual([
-            { id: "C1", metric: "implement feature" },
-            { id: "C2", metric: "delegated tests" },
-            { id: "C3", metric: "current format" },
-        ])
-    })
-
-    test("updates existing criteria and adds unique ids", async () => {
-        const fs = createMockFs()
-        const tool = createAutocodeCriteriaSetTool(createCriteriaClient(), fs) as any
-
-        const updated = parseToolResult(await tool.execute({ id: "C2", metric: "new criterion" }, createToolContext()))
-        const added = parseToolResult(await tool.execute({ id: "C4", metric: "new criterion" }, createToolContext()))
-
-        expect(updated.criteria.filter((criterion: any) => criterion.id === "C2")).toEqual([{ id: "C2", metric: "new criterion" }])
-        expect(added.criteria.map((criterion: any) => criterion.id)).toEqual(["C1", "C2", "C3", "C4"])
-    })
-
-    test("lists active criteria", async () => {
-        const listTool = createAutocodeCriteriaListTool(createCriteriaClient(), createMockFs()) as any
-
-        const listResult = parseToolResult(await listTool.execute({}, createToolContext()))
-
-        expect(listResult.empty).toBe(false)
-        expect(listResult.criteria).toEqual([
-            { id: "C1", metric: "implement feature" },
-            { id: "C2", metric: "delegated tests" },
-            { id: "C3", metric: "completed" },
-        ])
-    })
-
-    test("list is empty when criteria file is empty", async () => {
-        const fs = createMockFs("")
-        const tool = createAutocodeCriteriaListTool(createCriteriaClient(), fs) as any
-
-        const parsed = parseToolResult(await tool.execute({}, createToolContext()))
-
-        expect(parsed.empty).toBe(true)
-        expect(parsed.criteria).toEqual([])
-    })
-
-    test("list is empty when criteria file is missing", async () => {
-        const fs = createMockFs()
-        fs.readFile.mockImplementation(async () => {
-            const error = new Error("missing") as NodeJS.ErrnoException
-            error.code = "ENOENT"
-            throw error
-        })
-        const tool = createAutocodeCriteriaListTool(createCriteriaClient(), fs) as any
-
-        const parsed = parseToolResult(await tool.execute({}, createToolContext()))
-
-        expect(parsed.empty).toBe(true)
-        expect(parsed.criteria).toEqual([])
-    })
-
-    test("removes one criterion by id", async () => {
-        const fs = createMockFs()
-        const tool = createAutocodeCriteriaRemoveTool(createCriteriaClient(), fs) as any
-
-        const parsed = parseToolResult(await tool.execute({ id: "C1" }, createToolContext()))
-
-        expect(parsed.removed).toBe("C1")
-        expect(parsed.criteria.map((criterion: any) => criterion.id)).toEqual(["C2", "C3"])
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/my_feature/criteria.yml", "C2: delegated tests\nC3: completed\n")
-    })
-
-    test("rejects missing set fields", async () => {
-        const fs = createMockFs()
-        const setTool = createAutocodeCriteriaSetTool(createCriteriaClient(), fs) as any
-
-        expect(parseToolResult(await setTool.execute({ id: "", metric: "implement" }, createToolContext())).error).toBe("Missing required field: id")
-        expect(parseToolResult(await setTool.execute({ id: "C:1", metric: "implement" }, createToolContext())).error).toBe("Invalid criterion id: C:1")
-        expect(parseToolResult(await setTool.execute({ id: "ABC", metric: "implement" }, createToolContext())).error).toBe("Invalid criterion id: ABC")
-        expect(parseToolResult(await setTool.execute({ id: "C1", metric: "   " }, createToolContext())).error).toBe("Missing required field: metric for C1")
-    })
-
-    test("rejects invalid ids when removing criteria", async () => {
-        const fs = createMockFs()
-        const tool = createAutocodeCriteriaRemoveTool(createCriteriaClient(), fs) as any
-
-        expect(parseToolResult(await tool.execute({ id: "C:1" }, createToolContext())).error).toBe("Invalid criterion id: C:1")
-        expect(parseToolResult(await tool.execute({ id: "ABC" }, createToolContext())).error).toBe("Invalid criterion id: ABC")
-        expect(parseToolResult(await tool.execute({ id: "" }, createToolContext())).error).toBe("Missing required field: id")
-        expect(fs.writeFile).not.toHaveBeenCalled()
-    })
-
-    test("accept appends completion log and removes active criterion", async () => {
-        const fs = createMockFs()
-        const tool = createAutocodeCriteriaAcceptTool(createCriteriaClient(), fs) as any
-
-        const parsed = parseToolResult(await tool.execute({
-            id: "C1",
-            actions: ["changed files"],
-            proof: "observed changed behavior",
-        }, createToolContext()))
-
-        expect(parsed.completed).toBe(true)
-        expect(parsed.criteria.map((criterion: any) => criterion.id)).toEqual(["C2", "C3"])
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/my_feature/criteria.yml", "C2: delegated tests\nC3: completed\n")
-        expect(fs.appendFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/my_feature/solution.md", expect.stringContaining("Accepted Criteria C1"))
-        expect(fs.solutionContent.startsWith("Existing log\n")).toBe(true)
-        expect(fs.solutionContent).toContain("---")
-        expect(fs.solutionContent).toContain("## Actions\n\n- changed files")
-        expect(fs.solutionContent).toContain("## Reason\n\nobserved changed behavior")
-        expect(fs.solutionContent).toMatch(/^# \d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - Accepted Criteria C1/m)
-        expect(fs.solutionContent).toMatch(/\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
-    })
-
-    test("accept strips empty and markdown-header lines before completion logging", async () => {
-        const fs = createMockFs()
-        const tool = createAutocodeCriteriaAcceptTool(createCriteriaClient(), fs) as any
-
-        const parsed = parseToolResult(await tool.execute({
-            id: "C1",
-            actions: ["\n# heading\nchanged files\n\nkept note\n"],
-            proof: "\n# heading\nobserved changed behavior\n\nextra proof\n",
-        }, createToolContext()))
-
-        expect(parsed.completed).toBe(true)
-        expect(fs.solutionContent).toContain("## Actions\n\n- changed files\n- kept note")
-        expect(fs.solutionContent).toContain("## Reason\n\nobserved changed behavior\nextra proof")
-        expect(fs.solutionContent).not.toContain("# heading")
-    })
-
-    test("accept rejects absent criterion ids", async () => {
-        const fs = createMockFs()
-        const tool = createAutocodeCriteriaAcceptTool(createCriteriaClient(), fs) as any
-
-        const parsed = parseToolResult(await tool.execute({ id: "C9", actions: ["changed files"], proof: "observed changed behavior" }, createToolContext()))
-
-        expect(parsed.error).toBe("Criterion not found: C9")
-        expect(fs.solutionContent).toBe("Existing log\n")
     })
 })
 

@@ -164,8 +164,8 @@ describe("autocode_dependencies", () => {
         const result = parseResult(await createAutocodeDependenciesTool(createDeps()).execute({}, createToolContext()) as string)
         const optionalDependencies = result.optional_dependencies ?? {}
 
-        expect(Object.keys(optionalDependencies)).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_mcp", "browser"])
-        for (const key of ["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_mcp", "browser"]) {
+        expect(Object.keys(optionalDependencies)).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"])
+        for (const key of ["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"]) {
             expect(result.dependencies?.[key]).toEqual(optionalDependencies[key])
         }
         expect(result.required_ok).toBe(true)
@@ -174,8 +174,10 @@ describe("autocode_dependencies", () => {
         expect(result.next_actions).toContain("Install or use `chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
         expect(result.next_actions).toContain("Install or use `@upstash/context7-mcp` for Context7 MCP.")
         expect(result.next_actions).toContain("Install or use `excel-mcp-server` for Excel MCP.")
-        expect(result.next_actions).toContain("Install or use `mcp-server-git` for Git MCP.")
+        expect(result.next_actions).toContain("Install system git CLI for built-in Git tools.")
         expect(result.next_actions).toContain("Install Google Chrome / Chrome for Testing for official Chrome DevTools MCP support. Chromium may work but is not guaranteed.")
+        expect(JSON.stringify(result)).not.toContain("mcp-server-git")
+        expect(JSON.stringify(result)).not.toContain("git_mcp")
         expect(optionalDependencies.chrome_devtools_mcp.package).toBe("chrome-devtools-mcp")
         expect(optionalDependencies.chrome_devtools_mcp.install_command).toBe("npm install -g chrome-devtools-mcp@latest or use `npx chrome-devtools-mcp@latest`")
         expect(optionalDependencies.chrome_devtools_mcp.docs_url).toBe("https://developer.chrome.com/docs/chrome-devtools/mcp")
@@ -185,9 +187,9 @@ describe("autocode_dependencies", () => {
         expect(optionalDependencies.excel_mcp.package).toBe("excel-mcp-server")
         expect(optionalDependencies.excel_mcp.install_command).toBe("npm install -g excel-mcp-server or use `npx excel-mcp-server`")
         expect(optionalDependencies.excel_mcp.docs_url).toBe("https://www.npmjs.com/package/excel-mcp-server")
-        expect(optionalDependencies.git_mcp.package).toBe("mcp-server-git")
-        expect(optionalDependencies.git_mcp.install_command).toBe("pipx install mcp-server-git or use `uvx mcp-server-git`")
-        expect(optionalDependencies.git_mcp.docs_url).toBe("https://github.com/modelcontextprotocol/servers/tree/main/src/git")
+        expect(optionalDependencies.git_cli.package).toBe("git")
+        expect(optionalDependencies.git_cli.install_command).toBe("Install git using your system package manager.")
+        expect(optionalDependencies.git_cli.guidance).toBe("Install system git CLI for built-in Git tools.")
         expect(optionalDependencies.browser.install_command).toContain("Google Chrome / Chrome for Testing")
         expect(optionalDependencies.browser.install_command).toContain("https://developer.chrome.com/docs/chrome-devtools/mcp")
         expect(optionalDependencies.browser.install_command).not.toContain("chromium")
@@ -231,14 +233,13 @@ describe("autocode_dependencies", () => {
         expect(result.optional_dependencies?.excel_mcp?.config_path).toBe(worktreeConfig)
     })
 
-    test("detects launcher and path forms from ancestor config without PATH bin", async () => {
+    test("detects MCP launcher config and system git independently", async () => {
         const ancestorConfig = "/repo/packages/.opencode/opencode.jsonc"
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
             fileMap: {
                 [ancestorConfig]: JSON.stringify({
                     mcp: {
                         servers: {
-                            git: { command: "uvx", args: ["mcp-server-git"] },
                             chrome: { command: "node", args: ["/opt/tools/chrome-devtools-mcp/dist/index.js"] },
                         },
                     },
@@ -247,11 +248,12 @@ describe("autocode_dependencies", () => {
             commandMap: { git: true },
         })).execute({}, createToolContext({ directory: "/repo/packages/app", worktree: "/repo" })) as string)
 
-        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
-        expect(result.optional_dependencies?.git_mcp?.detection_source).toBe("launcher_command")
-        expect(result.optional_dependencies?.git_mcp?.configured_command).toBe("uvx mcp-server-git")
+        expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_cli?.command).toBe("git")
+        expect(result.optional_dependencies?.git_cli?.configured_command).toBeUndefined()
         expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.chrome_devtools_mcp?.configured_command).toBe("node /opt/tools/chrome-devtools-mcp/dist/index.js")
+        expect(JSON.stringify(result.optional_dependencies?.git_cli)).not.toContain("mcp-server-git")
     })
 
     test("detects windows cmd wrappers from config", async () => {
@@ -282,7 +284,6 @@ describe("autocode_dependencies", () => {
                         chrome: { command: ["node", "/opt/tools/chrome-devtools-mcp.js"] },
                         context7: { command: ["npx", "-y", "@upstash/context7-mcp"] },
                         excel: { command: ["excel-mcp-server"] },
-                        git: { command: ["/opt/mcp/.venv/bin/mcp-server-git", 123, null] },
                     },
                 }),
             },
@@ -294,8 +295,8 @@ describe("autocode_dependencies", () => {
         expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp")
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
-        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
-        expect(result.optional_dependencies?.git_mcp?.configured_command).toBe("/opt/mcp/.venv/bin/mcp-server-git")
+        expect(result.optional_dependencies?.git_cli?.status).toBe("missing")
+        expect(result.optional_dependencies?.git_cli?.configured_command).toBeUndefined()
     })
 
     test("unwraps windows command arrays from config", async () => {
@@ -358,7 +359,7 @@ describe("autocode_dependencies", () => {
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.excel_mcp?.config_path).toBe(supplementalConfig)
         expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
-        expect(result.optional_dependencies?.git_mcp?.status).toBe("missing")
+        expect(result.optional_dependencies?.git_cli?.status).toBe("missing")
     })
 
     test("resolves relative OPENCODE_CONFIG from context directory first", async () => {
@@ -367,19 +368,15 @@ describe("autocode_dependencies", () => {
             env: { OPENCODE_CONFIG: "config/opencode.jsonc" },
             fileMap: {
                 [configPath]: JSON.stringify({
-                    mcp: {
-                        servers: {
-                            git: { command: "uvx", args: ["mcp-server-git"] },
-                        },
-                    },
+                    mcp: { servers: {} },
                 }),
             },
             commandMap: { git: true },
         })).execute({}, createToolContext({ directory: "/repo/app", worktree: "/repo" })) as string)
 
-        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
-        expect(result.optional_dependencies?.git_mcp?.config_path).toBe(configPath)
-        expect(result.optional_dependencies?.git_mcp?.configured_command).toBe("uvx mcp-server-git")
+        expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_cli?.config_path).toBeUndefined()
+        expect(result.optional_dependencies?.git_cli?.configured_command).toBeUndefined()
     })
 
     test("isolates optional dependency inspection errors", async () => {
@@ -388,7 +385,6 @@ describe("autocode_dependencies", () => {
             commandMap: {
                 "context7-mcp": true,
                 "excel-mcp-server": true,
-                "mcp-server-git": true,
                 git: true,
                 "google-chrome": true,
             },
@@ -399,7 +395,7 @@ describe("autocode_dependencies", () => {
         expect(result.optional_dependencies?.chrome_devtools_mcp?.guidance).toContain("Inspect chrome-devtools MCP manually.")
         expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
-        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
         expect(result.optional_dependencies?.browser?.status).toBe("ok")
         expect(result.optional_dependencies?.browser?.guidance).toContain("Chrome DevTools MCP")
     })
@@ -428,7 +424,7 @@ describe("autocode_dependencies", () => {
 
         expect(result.detect_only).toBe(true)
         expect(result.required_ok).toBe(true)
-        expect(result.optional_dependencies?.git_mcp?.status).toBe("missing")
+        expect(result.optional_dependencies?.git_cli?.status).toBe("missing")
         expect(result.dependencies?.opencode).toEqual(result.opencode)
         expect(result.dependencies?.bwrap).toEqual(result.bwrap)
     })
@@ -490,7 +486,6 @@ describe("autocode_dependencies", () => {
                     mcp: {
                         servers: [
                             { name: "excel-mcp-server", command: ["excel-mcp-server"] },
-                            { id: "git", command: "uvx", args: ["mcp-server-git"] },
                         ],
                     },
                 }),
@@ -500,7 +495,7 @@ describe("autocode_dependencies", () => {
 
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
-        expect(result.optional_dependencies?.git_mcp?.status).toBe("ok")
-        expect(result.optional_dependencies?.git_mcp?.configured_command).toBe("uvx mcp-server-git")
+        expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_cli?.configured_command).toBeUndefined()
     })
 })

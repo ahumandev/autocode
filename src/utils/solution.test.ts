@@ -29,12 +29,12 @@ describe("solution utils", () => {
             getDirectory: async () => "executing",
             now: () => new Date("2026-05-27T10:11:12Z"),
         })
-        const logged = await solution.log("my_feature", SolutionLogEvent.AcceptedCriteria, "C1", "changed files\nverified output", "criterion text\n\nproof text")
+        const logged = await solution.log("my_feature", SolutionLogEvent.UpdateStatus, "facilitate", "changed files\nverified output", "status reason")
 
         expect(logged.relativeSolutionPath).toBe(".agents/jobs/executing/my_feature/solution.md")
-        expect(solutionContent).toContain("# 26-05-27 10:11:12 - Accepted Criteria C1")
+        expect(solutionContent).toContain("# 26-05-27 10:11:12 - Update Status To facilitate")
         expect(solutionContent).toContain("## Actions\n\n- changed files\n- verified output")
-        expect(solutionContent).toContain("## Reason\n\ncriterion text\n\nproof text")
+        expect(solutionContent).toContain("## Reason\n\nstatus reason")
         expect(solutionContent).toContain("---")
     })
 
@@ -52,7 +52,7 @@ describe("solution utils", () => {
             "",
             "---",
             "",
-            "# 26-05-27 11:11:12 - Accepted Criteria C1",
+            "# 26-05-27 11:11:12 - Note",
             "",
             "## Actions",
             "",

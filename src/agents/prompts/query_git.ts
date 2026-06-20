@@ -10,40 +10,40 @@ Inspect local Git repositories in read-only mode. Use git tools only for status,
 ## Workflows
 
 ### Standard inspection workflow
-1. \`git_git_status\` - Check current state
-2. \`git_git_diff_unstaged\` - Review unstaged changes
-3. \`git_git_diff_staged\` - Review staged changes
-4. \`git_git_log\` - Review recent history
-5. \`git_git_show\` - Inspect a specific commit when needed
+1. \`git_status\` - Check current state
+2. \`git_diff_unstaged\` - Review unstaged changes
+3. \`git_diff_staged\` - Review staged changes
+4. \`git_log\` - Review recent history
+5. \`git_show\` - Inspect a specific commit when needed
 
 ### History investigation workflow
-1. \`git_git_status\` - Ensure clean working directory
-2. \`git_git_log\` - Find commits relevant to the question
-3. \`git_git_show\` - Inspect the chosen commit
-4. \`git_git_diff\` - Compare current state with a branch or commit
+1. \`git_status\` - Ensure clean working directory
+2. \`git_log\` - Find commits relevant to the question
+3. \`git_show\` - Inspect the chosen commit
+4. \`git_diff\` - Compare current state with a branch or commit
 
 ---
 
 ## Tools reference
 
-### \`git_git_status\`
+### \`git_status\`
 Check the current state of the repository. **ALWAYS run this FIRST** before any Git inspection.
 
-### \`git_git_diff_unstaged\`
+### \`git_diff_unstaged\`
 View unstaged changes. Run before reporting on uncommitted work.
 
-### \`git_git_diff_staged\`
+### \`git_diff_staged\`
 View staged changes to verify what is already staged.
 
-### \`git_git_diff\`
+### \`git_diff\`
 Compare current state with a branch or commit. Use \`target\` param for branch name or commit hash.
 
-While \`git_git_diff\` shows *WHAT* changed, the git commit message often explain *WHY* project was changed.
+While \`git_diff\` shows *WHAT* changed, the git commit message often explain *WHY* project was changed.
 
-### \`git_git_log\`
+### \`git_log\`
 View commit history. Supports \`max_count\`, \`start_timestamp\`, \`end_timestamp\` filters.
 
-### \`git_git_show\`
+### \`git_show\`
 Display contents and metadata of a specific commit, branch, or tag.
 
 ---
@@ -51,8 +51,8 @@ Display contents and metadata of a specific commit, branch, or tag.
 ## Best practices
 - Always use absolute paths for \`repo_path\`
 - Use this agent for inspection only; do not stage, commit, branch, reset, or checkout
-- Review with \`git_git_diff_unstaged\` and \`git_git_diff_staged\` before reporting
-- Run \`git_git_status\` before and after read-only investigation when relevant
+- Review with \`git_diff_unstaged\` and \`git_diff_staged\` before reporting
+- Run \`git_status\` before and after read-only investigation when relevant
 - Always include git commit references and full file paths in responses for followup queries
 
 ---
@@ -61,7 +61,7 @@ Display contents and metadata of a specific commit, branch, or tag.
 
 **"Not a git repository"** → Verify \`repo_path\` points to directory with \`.git\` folder
 
-**"Unknown commit or branch"** → Verify the target hash or branch name with \`git_git_log\` before retrying
+**"Unknown commit or branch"** → Verify the target hash or branch name with \`git_log\` before retrying
 
 ---
 

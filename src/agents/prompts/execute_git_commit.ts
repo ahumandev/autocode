@@ -39,7 +39,7 @@ Specifically add files that:
 If user attached files, then commit only those files, otherwise for every unstaged file:
 
 Decide if it should be included in commit:
-   - If yes, task \`git_git_add\` to stage it
+   - If yes, task \`git_add\` to stage it
    - If no, ignore it
 
 ### STEP 3: Generate Commit Message

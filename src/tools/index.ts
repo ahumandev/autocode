@@ -6,9 +6,9 @@ import { createAutocodeAgentSwapTool } from "./autocode_agent_swap"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptReadTool } from "./autocode_concept_read"
-import { createAutocodeCriteriaAcceptTool, createAutocodeCriteriaListTool, createAutocodeCriteriaRemoveTool, createAutocodeCriteriaSetTool } from "./autocode_criteria"
 import { createAutocodeDbSchemasTool, createAutocodeDbTableReadTool, createAutocodeDbTableTool, createAutocodeDbTablesTool } from "./autocode_db"
 import { createAutocodeDependenciesTool } from "./autocode_dependencies"
+import { createGitTools } from "./autocode_git"
 import { createAutocodeJobExecuteTool } from "./autocode_job_execute"
 import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createAutocodeJobShelveTool } from "./autocode_job_shelve"
@@ -33,10 +33,6 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_concept_create: createAutocodeConceptCreateTool(client),
         autocode_concept_list: createAutocodeConceptListTool(),
         autocode_concept_read: createAutocodeConceptReadTool(client),
-        autocode_criteria_accept: createAutocodeCriteriaAcceptTool(client),
-        autocode_criteria_list: createAutocodeCriteriaListTool(client),
-        autocode_criteria_remove: createAutocodeCriteriaRemoveTool(client),
-        autocode_criteria_set: createAutocodeCriteriaSetTool(client),
         autocode_db_schemas: createAutocodeDbSchemasTool(),
         autocode_db_table_read: createAutocodeDbTableReadTool(),
         autocode_db_table: createAutocodeDbTableTool(),
@@ -62,6 +58,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_sandbox_grep: createAutocodeSandboxGrepTool(client),
         autocode_sandbox_read: createAutocodeSandboxReadTool(client),
         autocode_session_create: createAutocodeSessionCreateTool(client),
+        ...createGitTools(),
         task_external: createTaskExternalTool(),
         task_resume: createTaskResumeTool(client),
     }
