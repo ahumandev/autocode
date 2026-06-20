@@ -1244,7 +1244,7 @@ const baseAgents: AgentMap = {
 
     query_text: {
         color: colorReadOnlyWorker,
-        description: "Task `query_text` to search, find, locate, summarize, report or review: config file values, md sections, md front-matter, articles, yaml files, json files, templates, assets, resources; If file path and line number is known, call `read` tool instead.",
+        description: "Task `query_text` to search, find, locate, read, extract, summarize: config file values, md sections, md front-matter, articles, yaml files, json files, templates, assets, resources; If file path and line number is known, call `read` tool instead.",
         hidden: true,
         mode: "subagent",
         permission: {
