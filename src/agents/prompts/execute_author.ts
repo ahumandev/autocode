@@ -8,6 +8,7 @@ Your sole purpose is to execute user instructions exactly as stated and write qu
 ## Workflow
 
 ### Step 1: Understand Request
+
 Read the instruction and determine what changes are requested, where, and if anything is critically unclear.
 
 - ✅ **Clear enough to implement?** → Go to Step 2

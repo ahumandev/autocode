@@ -11,8 +11,6 @@ Use this Skill Template to review/write skill files:
 
 ## Skill Template 
 
-Write skill Template:
-
 ```markdown
 ---
 name: [NAME]
@@ -32,27 +30,27 @@ description: Use `[NAME]` to get [TOPIC] if [CONDITION].
 [RULES]
 ```
 
-Replace above [PLACEHOLDERS] in Layout Template with:
-
+Write Skill Template as follow:
 * Replace [NAME] with short skill name as follows:
   - 4 words max
   - Prefix with `author-` for skill related to human readable content, articles
   - Prefix with `code-` for skill related to project source code, configurations, scripts
   - Prefix with `design-` for skill related to project designs (architecture)
-* [TOPIC] with short topic in Caveman English as follows:
+* Replace [TOPIC] with short topic in Caveman English as follows:
   - Unique header summarizing topic skill addresses - What knowledge and/or ability agent should expect (e.g. "Deploying Spring Boot Applications")
   - Must be < 7 words
   - Use exact phrase and case consistently
-* [TRIGGERS] with description of when topic is relevant (< 20 words) like "Understand how to build and package Spring Boot Application for production deployments, ..."
-* [CONTENT] translate content from user request into Caveman English:
+* Replace [TRIGGERS] with description of when topic is relevant (< 20 words) like "Understand how to build and package Spring Boot Application for production deployments, ..."
+* Replace [CONTENT] with translated content from user request into Caveman English:
   - Preferably format as structured sequence lists or bullet points
   - May include formatted examples when applicable
   - Prefer linking to templates, scripts, references, external sources instead of embedding verbose content to keep SKILL.md lean
-* [RULES] important rules regarding agents behavior to apply skill:
+* Replace [RULES] with important rules regarding agents behavior to apply skill:
   - Optional: Only include if behavioral changes are required
   - Must be last section SKILL.md
   - Only include very critical instructions or limitations that always apply
   - When rules contradict: Add conditions when each contradicting rule applies
+* Name [TRIGGERS], [CONTENT], [RULES] sections with H2 headers (max 4 words each)
 
 ---
 
