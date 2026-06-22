@@ -3,6 +3,11 @@ import type { OpencodeClient } from "@opencode-ai/sdk"
 import { createAutocodeAgentPreviousSkippedResponse, createAutocodeAgentSwapSuccessResponse, findPreviousPrimaryAutocodeAgent, resolveAutocodeAgentSessionSettings, swapCurrentAutocodeSession } from "@/utils/agent_swap"
 import { createAbortResponse } from "@/utils/tools"
 
+function isSessionMessagesLookupError(error: string): boolean {
+    return error === "Unable to inspect current session history: session.messages is unavailable"
+        || error.startsWith("Autocode session API failed (stage=session_messages,")
+}
+
 export function createAutocodeAgentPreviousTool(client?: OpencodeClient): ReturnType<typeof tool> {
     return tool({
         description: "Swap agent back to previous primary agent.",
@@ -16,6 +21,10 @@ export function createAutocodeAgentPreviousTool(client?: OpencodeClient): Return
                 const currentAgent = (context as { agent?: string }).agent
                 const previousPrimary = await findPreviousPrimaryAutocodeAgent(client, context.directory, context.sessionID, currentAgent)
                 if ("error" in previousPrimary) {
+                    if (isSessionMessagesLookupError(previousPrimary.error)) {
+                        return createAutocodeAgentPreviousSkippedResponse(context.sessionID, previousPrimary.error)
+                    }
+
                     return createAbortResponse("autocode_agent_previous", previousPrimary.error)
                 }
                 if (previousPrimary.skipped || !previousPrimary.agent) {

@@ -146,6 +146,66 @@ describe("autocode_agent_previous tool", () => {
         expect(client.session.promptAsync).not.toHaveBeenCalled()
     })
 
+    test("returns successful skipped response when session messages API is unavailable", async () => {
+        const promptAsync = mock(async () => ({}))
+        const client = {
+            session: { promptAsync },
+        } as unknown as OpencodeClient & { session: { promptAsync: ReturnType<typeof mock> } }
+        const tool = createAutocodeAgentPreviousTool(client)
+
+        const parsed = parseToolResult(await tool.execute({}, createToolContext({
+            sessionID: "current-session",
+            agent: "temp_report",
+        })))
+
+        expect(parsed).toEqual({
+            session_id: "current-session",
+            skipped: true,
+            reason: "Unable to inspect current session history: session.messages is unavailable",
+            message: "Skipped previous-primary handoff for current session (current-session): Unable to inspect current session history: session.messages is unavailable",
+        })
+        expect(parsed.failedAction).toBeUndefined()
+        expect(parsed.instruction).toBeUndefined()
+        expect(client.session.promptAsync).not.toHaveBeenCalled()
+    })
+
+    test("returns successful skipped response when session messages API throws", async () => {
+        const client = {
+            session: {
+                messages: mock(async () => {
+                    throw new Error("tcp_error")
+                }),
+                promptAsync: mock(async () => ({})),
+            },
+        } as unknown as OpencodeClient & {
+            session: {
+                messages: ReturnType<typeof mock>
+                promptAsync: ReturnType<typeof mock>
+            }
+        }
+        const tool = createAutocodeAgentPreviousTool(client)
+
+        const parsed = parseToolResult(await tool.execute({}, createToolContext({
+            sessionID: "current-session",
+            directory: "/workspace",
+            agent: "temp_report",
+        })))
+
+        expect(client.session.messages).toHaveBeenCalledWith({
+            path: { id: "current-session" },
+            query: { directory: "/workspace", limit: 200 },
+        })
+        expect(parsed).toEqual({
+            session_id: "current-session",
+            skipped: true,
+            reason: "Autocode session API failed (stage=session_messages, directory=/workspace, session/title=current-session, agent=temp_report): tcp_error",
+            message: "Skipped previous-primary handoff for current session (current-session): Autocode session API failed (stage=session_messages, directory=/workspace, session/title=current-session, agent=temp_report): tcp_error",
+        })
+        expect(parsed.failedAction).toBeUndefined()
+        expect(parsed.instruction).toBeUndefined()
+        expect(client.session.promptAsync).not.toHaveBeenCalled()
+    })
+
     test("returns successful skipped response when only current primary agent exists in history", async () => {
         const client = createMockClient([
             createSessionMessage("design", 120),
