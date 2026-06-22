@@ -1,4 +1,4 @@
-export function buildJobExecutionCommandTemplate(agent: "assist" | "auto"): string {
+export function jobExecutionCommandTemplate(agent: "assist" | "auto"): string {
     return `
 Call \`autocode_job_execute\` with \`agent\` = \`${agent}\`, then evaluate tool output:
     - If output includes \`failedAction\`, follow returned \`instruction\` exactly and stop.

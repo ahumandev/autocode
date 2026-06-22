@@ -1335,6 +1335,7 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_agent_previous: "allow",
+            autocode_session_context: "allow",
         },
         prompt: "---",
         temperature: 0,
@@ -1362,6 +1363,20 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_agent_previous: "allow",
             autocode_session_create: "allow",
+        },
+        prompt: "---",
+        temperature: 0.5,
+        tier: "fast",
+    },
+
+    temp_review_reject: {
+        color: colorWritableWorker,
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            autocode_job_shelve: "allow",
+            git_reset: "allow",
         },
         prompt: "---",
         temperature: 0.5,

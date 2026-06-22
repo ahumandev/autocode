@@ -1,6 +1,6 @@
-import { buildNewSessionCommandTemplate } from "./new_session_template"
+import { newSessionCommandTemplate } from "./new-session"
 
-export const newDesignCommandTemplate = buildNewSessionCommandTemplate("design", `with instructions to design solution plan according based on:
+export const newDesignCommandTemplate = newSessionCommandTemplate("design", `with instructions to design solution plan according based on:
     - how: suggested cause of action
     - what: expectation of new session
     - why: brief background context

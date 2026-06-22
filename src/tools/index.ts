@@ -21,6 +21,7 @@ import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
+import { createAutocodeSessionContextTool } from "./autocode_session_context"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
 import { createTaskResumeTool } from "./task_resume"
@@ -57,6 +58,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_sandbox_glob: createAutocodeSandboxGlobTool(client),
         autocode_sandbox_grep: createAutocodeSandboxGrepTool(client),
         autocode_sandbox_read: createAutocodeSandboxReadTool(client),
+        autocode_session_context: createAutocodeSessionContextTool(client),
         autocode_session_create: createAutocodeSessionCreateTool(client),
         ...createGitTools(),
         task_external: createTaskExternalTool(),

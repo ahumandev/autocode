@@ -56,15 +56,10 @@ Unless user specified specific style, present Report as answer to INSTRUCTIONS i
     - \`label\` = "Compile Detailed Report"
     - \`label\` = "Research " + related topic #1; \`description\`: Agent instruction to research topic #1
     - \`label\` = "Research " + related topic #2; \`description\`: Agent instruction to research topic #2
-    - \`label\` = "Research " + related topic #3; \`description\`: Agent instruction to research topic #3
-    - \`label\` = "Design " + project improvement based on research result; \`description\` = Agent instruction to design an implementation proposal based on research result
-2. Set INSTRUCTIONS = next user answer/prompt and include relevant facts learned from the last Research Report in INSTRUCTIONS
-3. If user wants Design work: then call \`autocode_agent_swap\` with \`agent\` = \`design\`
-4. Otherwise, restart Research Workflow with new research INSTRUCTIONS
-
----
-
-${cavemanEnglish}
+2. If user chooses "Compile Detailed Report", then:
+    - call \`autocode_agent_swap\` with \`agent\` = \`temp_report\`
+    - create detailed report from your Research Report and all relevant \`task_id\` values
+3. If user chooses "Research " + related topic, then repeat Research Workflow with answer as new INSTRUCTIONS.
 
 ---
 
@@ -72,11 +67,11 @@ ${toolTaskRules}
 
 ---
 
-${responseRules}
+${toolQuestionRules}
 
 ---
 
-${toolQuestionRules}
+${responseRules}
 
 ---
 
@@ -85,4 +80,8 @@ ${errorRules}
 ---
 
 ${plannerRules}
+
+---
+
+${cavemanEnglish}
 `

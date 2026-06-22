@@ -1,6 +1,6 @@
-import { buildNewSessionCommandTemplate } from "./new_session_template"
+import { newSessionCommandTemplate } from "./new-session"
 
-export const newTroubleshootCommandTemplate = buildNewSessionCommandTemplate("assist_troubleshoot", `with instructions that include:
+export const newTroubleshootCommandTemplate = newSessionCommandTemplate("assist_troubleshoot", `with instructions that include:
     - SYMPTOMS = recently observed unexpected/wrong behavior 
     - ENVIRONMENT = environment context where SYMPTOM occurs (like OS, runtime version, profile, config)
     - BACKGROUND = why assignment is needed (if known)

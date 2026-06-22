@@ -19,7 +19,6 @@ No special UI required. AutoCode runs in OpenCode, keeps progress in version-con
 - 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
 - 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
 - ⚠️ **Safe hand-offs** — stop risky or blocked work and move it to facilitation instead of silently continuing with unsafe assumptions.
-- ✅ **Acceptance criteria** — record measurable criteria and require unresolved criteria to be cleared before job acceptance.
 - ⚡ **Token-optimized workflows** — smart orchestrators delegate to faster specialists to improve performance and reduce token use.
 - 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
 - 🧪 **Sandboxed execution** — run supported risky commands in Linux bubblewrap sandboxes when the host supports user namespaces.
@@ -166,12 +165,11 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 
 | Command                 | Purpose                                                                |
 | ----------------------- | ---------------------------------------------------------------------- |
-| `/document`             | Document all recent changes.                                           |
-| `/document-code`        | Documents recent technical architecture and code design decisions.     |
-| `/document-conventions` | Documents recent naming conventions and project terminology.           |
-| `/document-install`     | Document recent project installation steps changes.                    |
-| `/document-prd`         | Documents recently updated product requirements and user roles.        |
-| `/document-ux`          | Documents recently updated UX flows, navigation, and styling patterns. |
+| `/docs`                | Document all recent changes.                                           |
+| `/docs-code`           | Documents recent technical architecture and code design decisions.     |
+| `/docs-conventions`    | Documents recent naming conventions and project terminology.           |
+| `/docs-prd`            | Documents recently updated product requirements and user roles.        |
+| `/docs-ux`             | Documents recently updated UX flows, navigation, and styling patterns. |
 | `/init`                 | Documents the entire project.                                          |
 
 ### Utility commands
@@ -180,14 +178,20 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | ------------------- | ------------------------------------------------------------------------------------ |
 | `/autocode-version` | Prints currently installed versions of OpenCode and AutoCode.                        |
 | `/author-article`   | Authors a professional article or report from the supplied context.                  |
+| `/context`          | Report current session context.                                                      |
+| `/explain`          | Explain code or project context.                                                     |
+| `/fix`              | Fix errors or requested issues.                                                      |
 | `/git-commit`       | Creates a commit message and commits staged changes through the git commit subagent. |
 | `/git-conflict`     | Handles git merge conflict work through the git conflict subagent.                   |
+| `/plan`             | Summarize and revise current plan.                                                   |
 | `/repeat-as-md`     | Repeats the last response inside a fenced Markdown code block.                       |
 | `/repeat-as-wiki`   | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting.           |
+| `/refactor`         | Safely refactor focused code.                                                        |
 | `/report-session`   | Reports on the entire current session.                                               |
 | `/report-last`      | Reports on only the most recent user-requested assignment.                           |
 | `/resume`           | Resumes an interrupted session by calling the resume tool.                           |
 | `/shelve`           | Clean up sandbox files (if any). Alias for `/job-shelve`.                            |
+| `/tests`            | Generate or improve tests.                                                           |
 
 ### Job files
 

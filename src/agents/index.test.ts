@@ -131,6 +131,9 @@ describe("agent policies", () => {
         expect(agents.assist?.tier).toBe("balanced")
         expect(permissionRule(agents.assist?.permission, "autocode_dependencies")).toBe("allow")
         expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
+        expect(permissionRule(agents.temp_review_reject?.permission, "autocode_job_shelve")).toBe("allow")
+        expect(permissionRule(agents.temp_review_reject?.permission, "git_reset")).toBe("allow")
+        expect(permissionRule(agents.temp_shelve?.permission, "git_reset")).toBeUndefined()
     })
 
     test("buildAgents exposes execute_rest as REST-only worker and allows supported orchestration tasks to call it", () => {

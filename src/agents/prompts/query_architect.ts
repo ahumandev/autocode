@@ -13,7 +13,7 @@ If unclear, return the missing scope or details needed to answer.
 
 ### STEP 2: Validate Documentation
 
-Check if \`AGENTS.md\` exists, if not abort Workflow with instruction to user to first run \`/document\` command that will task \`execute_document\` agent to document project.
+Check if \`AGENTS.md\` exists, if not abort Workflow with instruction to user to first run \`/docs\` command that will task \`execute_document\` agent to document project.
 
 ### STEP 3: Load Appropriate Skills
 

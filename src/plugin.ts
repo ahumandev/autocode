@@ -75,11 +75,17 @@ async function mergeConfig(cfg: Config, input: PluginInputWithSandboxSupportOver
     }
 
     cfg.command = cfg.command ?? {}
+    const mergedCommandCache = new WeakMap<object, NonNullable<Config["command"]>[string]>()
     for (const [name, commandDef] of Object.entries(commands)) {
-        cfg.command[name] = {
-            ...commandDef,
-            ...cfg.command[name],
+        const userOverride = cfg.command[name]
+        if (userOverride === undefined) {
+            const cachedCommand = mergedCommandCache.get(commandDef)
+            const mergedCommand = cachedCommand ?? { ...commandDef }
+            mergedCommandCache.set(commandDef, mergedCommand)
+            cfg.command[name] = mergedCommand
+            continue
         }
+        cfg.command[name] = { ...commandDef, ...userOverride }
     }
 }
 

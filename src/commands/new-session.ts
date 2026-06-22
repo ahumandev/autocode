@@ -1,4 +1,4 @@
-export function buildNewSessionCommandTemplate(agent: string, promptInstructions: string, responsePrefix: string): string {
+export function newSessionCommandTemplate(agent: string, promptInstructions: string, responsePrefix: string): string {
     return `
 $ARGUMENTS
 

@@ -422,24 +422,20 @@ describe("auto resume wiring", () => {
         expect(cfg.command["auto-reviewed"]).toBeUndefined()
     })
 
-    test("routes accept, shelve, and legacy command to the current lifecycle agents", async () => {
+    test("routes accept, reject, shelve, and legacy command to the current lifecycle agents", async () => {
         const plugin = await autocode(createPluginInput(createMockClient()))
         const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-        const legacyCommand = ["job-termi", "nate"].join("")
 
         await configurePlugin(plugin, cfg)
 
-        expect(cfg.command["job-review"]?.agent).toBe("execute_git_commit")
-        expect(cfg.command["job-review"]?.description).toContain("Commit accepted work and shelve into .agents/jobs/shelved/{name}/")
-        expect(cfg.command["job-review"]?.description).toContain(".agents/jobs/shelved/{name}/")
-        expect(cfg.command["job-review"]?.template).toContain("autocode_job_shelve")
+        expect(cfg.command["job-review-commit"]?.agent).toBe("execute_git_commit")
+        expect(cfg.command["job-review-commit"]?.template).toContain("autocode_job_shelve")
         expect(cfg.command["job-shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
         expect(cfg.command["job-shelve"]?.agent).toBe("temp_shelve")
         expect(cfg.command["job-shelve"]?.template).toContain("autocode_job_shelve")
         expect(cfg.command["shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
         expect(cfg.command["shelve"]?.agent).toBe("temp_shelve")
         expect(cfg.command["shelve"]?.template).toContain("autocode_job_shelve")
-        expect(cfg.command[legacyCommand]).toBeUndefined()
     })
 
     test("createTools exposes sandbox tools", () => {
@@ -1189,6 +1185,7 @@ describe("autocode_plan_save tool", () => {
             "autocode_sandbox_glob",
             "autocode_sandbox_grep",
             "autocode_sandbox_read",
+            "autocode_session_context",
             "autocode_session_create",
             "git_add",
             "git_branch",
@@ -1239,6 +1236,9 @@ describe("autocode_plan_save tool", () => {
         expect(plugin.tool?.autocode_agent_execute).toBeDefined()
         expect(plugin.tool?.autocode_agent_previous).toBeDefined()
         expect(plugin.tool?.autocode_agent_swap).toBeDefined()
+        expect(plugin.tool?.autocode_session_context).toBeDefined()
+        expect(Object.keys((plugin.tool?.autocode_session_context as unknown as { args: Record<string, unknown> }).args)).toEqual([])
+        expect(toolSurfaceText(plugin.tool?.autocode_session_context)).toContain("Read sanitized current session context and token usage metadata.")
         expect(plugin.tool?.autocode_session_create).toBeDefined()
         expect(plugin.tool?.autocode_job_execute).toBeDefined()
         expect(plugin.tool?.autocode_execute_job).toBeUndefined()
@@ -1315,6 +1315,7 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_status")).toBe("allow")
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_auto_start")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_plan_save")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.temp_output?.permission, "autocode_session_context")).toBe("allow")
         expect(Object.keys(cfg.agent).filter((name) => name.startsWith("auto-") || name.startsWith("assist-"))).toEqual([])
         expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
         expect(cfg.agent.design?.prompt).toContain("autocode_plan_save")

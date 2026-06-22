@@ -1,31 +1,32 @@
 import type { Config } from "@opencode-ai/sdk/v2"
 import packageJson from "../../package.json"
-import { authorArticleCommandTemplate } from "./author_article"
-import { documentCodeCommandTemplate } from "./document_code"
-import { documentConventionsCommandTemplate } from "./document_conventions"
-import { documentPrdCommandTemplate } from "./document_prd"
-import { documentCommandTemplate } from "./document"
-import { documentUxCommandTemplate } from "./document_ux"
-import { gitCommitCommandTemplate } from "./git_commit"
-import { gitConflictCommandTemplate } from "./git_conflict"
-import { initCommandTemplate } from "./init"
+import { authorArticleCommandTemplate } from "./author-article"
+import { documentCommandTemplate as docsCommandTemplate } from "./docs"
+import { docsSubagentCommandTemplate } from "./docs-subagent"
+import { explainCommandTemplate } from "./explain"
+import { fixCommandTemplate } from "./fix"
+import { gitCommitCommandTemplate } from "./git-commit"
+import { gitConflictCommandTemplate } from "./git-conflict"
 import { installCommand } from "./install"
-import { jobConceptsCommandTemplate } from "./job_concepts"
-import { jobDesignCommandTemplate } from "./job_design"
-import { jobDraftCommandTemplate } from "./job_draft"
-import { jobExecuteCommandTemplate } from "./job_execute"
-import { jobExecuteAssistCommandTemplate } from "./job_execute_assist"
-import { jobExecuteAutoCommandTemplate } from "./job_execute_auto"
-import { jobReviewCommandTemplate } from "./job_review"
-import { newAssistCommandTemplate } from "./new_assist"
-import { newAutoCommandTemplate } from "./new_auto"
-import { newDesignCommandTemplate } from "./new_design"
-import { newResearchCommandTemplate } from "./new_research"
-import { newTroubleshootCommandTemplate } from "./new_troubleshoot"
-import { repeatAsMdCommandTemplate } from "./repeat_as_md"
-import { repeatAsWikiCommandTemplate } from "./repeat_as_wiki"
-import { reportLastCommandTemplate } from "./report_last"
-import { reportSessionCommandTemplate } from "./report_session"
+import { jobConceptsCommandTemplate } from "./job-concepts"
+import { jobDesignCommandTemplate } from "./job-design"
+import { jobDraftCommandTemplate } from "./job-draft"
+import { jobExecuteCommandTemplate } from "./job-execute"
+import { jobExecuteAssistCommandTemplate } from "./job-execute_assist"
+import { jobExecuteAutoCommandTemplate } from "./job-execute_auto"
+import { jobReviewCommitCommandTemplate } from "./job-review-commit"
+import { newAssistCommandTemplate } from "./new-assist"
+import { newAutoCommandTemplate } from "./new-auto"
+import { newDesignCommandTemplate } from "./new-design"
+import { newResearchCommandTemplate } from "./new-research"
+import { newTroubleshootCommandTemplate } from "./new-troubleshoot"
+import { planCommandTemplate } from "./plan"
+import { refactorCommandTemplate } from "./refactor"
+import { repeatAsMdCommandTemplate } from "./repeat-as-md"
+import { repeatAsWikiCommandTemplate } from "./repeat-as-wiki"
+import { reportLastCommandTemplate } from "./report-last"
+import { reportSessionCommandTemplate } from "./report-session"
+import { testsCommandTemplate } from "./tests"
 
 /**
  * Command definitions for the Autocode plugin.
@@ -92,11 +93,11 @@ export const commands: CommandMap = {
         template: jobExecuteCommandTemplate,
     },
 
-    "job-review": {
+    "job-review-commit": {
         agent: "execute_git_commit",
-        description: "Commit accepted work and shelve into .agents/jobs/shelved/{name}/",
+        description: "Commit and shelve reviewed job from .agents/jobs/review/{name}/",
         subtask: false,
-        template: jobReviewCommandTemplate,
+        template: jobReviewCommitCommandTemplate,
     },
 
     "job-shelve": {
@@ -135,40 +136,54 @@ Report to user:
         subtask: false,
         template: authorArticleCommandTemplate,
     },
-
-    "document": {
+   
+    "docs": {
         agent: "execute_document",
         description: "Document recent project changes.",
         subtask: false,
-        template: documentCommandTemplate,
+        template: docsCommandTemplate,
     },
 
-    "document-conventions": {
+    "docs-conventions": {
         agent: "document_conventions",
         description: "Document recently updated naming conventions and terminology.",
         subtask: false,
-        template: documentConventionsCommandTemplate,
+        template: docsSubagentCommandTemplate,
     },
 
-    "document-code": {
+    "docs-code": {
         agent: "document_code",
         description: "Document recently updated technical architecture and design decisions.",
         subtask: false,
-        template: documentCodeCommandTemplate,
+        template: docsSubagentCommandTemplate,
     },
 
-    "document-prd": {
+    "docs-prd": {
         agent: "document_prd",
         description: "Document recently updated product requirements and user roles.",
         subtask: false,
-        template: documentPrdCommandTemplate,
+        template: docsSubagentCommandTemplate,
     },
 
-    "document-ux": {
+    "docs-ux": {
         agent: "document_ux",
         description: "Document recently updated UX flows, navigation, and styling patterns.",
         subtask: false,
-        template: documentUxCommandTemplate,
+        template: docsSubagentCommandTemplate,
+    },
+
+    "explain": {
+        agent: "query_code",
+        description: "Explain code or project context",
+        subtask: false,
+        template: explainCommandTemplate,
+    },
+
+    "fix": {
+        agent: "auto_troubleshoot",
+        description: "Fix errors or requested issues",
+        subtask: false,
+        template: fixCommandTemplate,
     },
 
     "git-commit": {
@@ -185,14 +200,14 @@ Report to user:
         template: gitConflictCommandTemplate,
     },
 
-    "install": installCommand,
-
     "init": {
         agent: "execute_document",
         description: "Document the entire project.",
         subtask: true,
-        template: initCommandTemplate,
+        template: docsCommandTemplate,
     },
+
+    "install": installCommand,
 
     "new-assist": {
         agent: "temp_session",
@@ -229,6 +244,20 @@ Report to user:
         template: newTroubleshootCommandTemplate,
     },
 
+    "plan": {
+        agent: "assist",
+        description: "Summarize and revise current plan",
+        subtask: false,
+        template: planCommandTemplate,
+    },
+
+    "refactor": {
+        agent: "auto_refactor",
+        description: "Safely refactor focused code",
+        subtask: false,
+        template: refactorCommandTemplate,
+    },
+
     "repeat-as-md": {
         description: "Repeat the last response inside a fenced Markdown code block.",
         subtask: false,
@@ -261,4 +290,10 @@ Report to user:
         template: "You were interrupted. Call `task_resume` tool, then resume your own work.",
     },
 
+    "tests": {
+        agent: "auto_test",
+        description: "Generate or improve tests",
+        subtask: false,
+        template: testsCommandTemplate,
+    },
 }

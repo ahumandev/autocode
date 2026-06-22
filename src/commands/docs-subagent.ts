@@ -1,6 +1,6 @@
 import { swap2previousRule } from "@/agents/rules/swap2previous"
 
-export const documentUxCommandTemplate = `$ARGUMENTS
+export const docsSubagentCommandTemplate = `$ARGUMENTS
 
 ${swap2previousRule}
 `

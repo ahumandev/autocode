@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
+import { documentCommandTemplate } from "./docs"
+import { docsSubagentCommandTemplate } from "./docs-subagent"
+import { explainCommandTemplate } from "./explain"
+import { fixCommandTemplate } from "./fix"
 import { commands } from "./index"
+import { planCommandTemplate } from "./plan"
+import { refactorCommandTemplate } from "./refactor"
+import { testsCommandTemplate } from "./tests"
 
 describe("commands", () => {
     test("keeps current command keys and command object shape", () => {
@@ -10,31 +17,36 @@ describe("commands", () => {
             "job-execute-assist",
             "job-execute-auto",
             "job-execute",
-            "job-review",
+            "job-review-commit",
             "job-shelve",
             "shelve",
             "autocode-install",
             "autocode-version",
             "author-article",
-            "document",
-            "document-conventions",
-            "document-code",
-            "document-prd",
-            "document-ux",
+            "docs",
+            "docs-conventions",
+            "docs-code",
+            "docs-prd",
+            "docs-ux",
+            "explain",
+            "fix",
             "git-commit",
             "git-conflict",
-            "install",
             "init",
+            "install",
             "new-assist",
             "new-auto",
             "new-design",
             "new-research",
             "new-troubleshoot",
+            "plan",
+            "refactor",
             "repeat-as-md",
             "repeat-as-wiki",
             "report-last",
             "report-session",
             "resume",
+            "tests",
         ])
 
         for (const [commandName, command] of Object.entries(commands)) {
@@ -47,6 +59,80 @@ describe("commands", () => {
             if ("agent" in command) expect(command.agent).toEqual(expect.any(String))
             if ("model" in command) expect(command.model).toEqual(expect.any(String))
         }
+
+        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "help", "rename", "review"] as const) {
+            expect(commands[commandName]).toBeUndefined()
+        }
+    })
+
+    test("keeps standard command registrations stable", () => {
+        expect(commands.plan).toEqual({
+            agent: "assist",
+            description: "Summarize and revise current plan",
+            subtask: false,
+            template: planCommandTemplate,
+        })
+        expect(commands.explain).toEqual({
+            agent: "query_code",
+            description: "Explain code or project context",
+            subtask: false,
+            template: explainCommandTemplate,
+        })
+        expect(commands.fix).toEqual({
+            agent: "auto_troubleshoot",
+            description: "Fix errors or requested issues",
+            subtask: false,
+            template: fixCommandTemplate,
+        })
+        expect(commands.refactor).toEqual({
+            agent: "auto_refactor",
+            description: "Safely refactor focused code",
+            subtask: false,
+            template: refactorCommandTemplate,
+        })
+        expect(commands.tests).toEqual({
+            agent: "auto_test",
+            description: "Generate or improve tests",
+            subtask: false,
+            template: testsCommandTemplate,
+        })
+
+        for (const commandName of ["context", "plan", "explain", "fix", "refactor", "tests"] as const) {
+            expect(commands[commandName]?.description).not.toBe("")
+        }
+    })
+
+    test("keeps renamed docs command objects stable", () => {
+        expect(commands.docs).toEqual({
+            agent: "execute_document",
+            description: "Document recent project changes.",
+            subtask: false,
+            template: documentCommandTemplate,
+        })
+        expect(commands["docs-conventions"]).toEqual({
+            agent: "document_conventions",
+            description: "Document recently updated naming conventions and terminology.",
+            subtask: false,
+            template: docsSubagentCommandTemplate,
+        })
+        expect(commands["docs-code"]).toEqual({
+            agent: "document_code",
+            description: "Document recently updated technical architecture and design decisions.",
+            subtask: false,
+            template: docsSubagentCommandTemplate,
+        })
+        expect(commands["docs-prd"]).toEqual({
+            agent: "document_prd",
+            description: "Document recently updated product requirements and user roles.",
+            subtask: false,
+            template: docsSubagentCommandTemplate,
+        })
+        expect(commands["docs-ux"]).toEqual({
+            agent: "document_ux",
+            description: "Document recently updated UX flows, navigation, and styling patterns.",
+            subtask: false,
+            template: docsSubagentCommandTemplate,
+        })
     })
 
     test("keeps duplicated job execution command template intent", () => {
@@ -63,31 +149,27 @@ describe("commands", () => {
     })
 
     test("keeps key command template substrings stable without legacy command", () => {
-        const legacyCommand = ["job-termi", "nate"].join("")
-
         expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
         expect(commands["job-draft"]?.template).toContain("Call `autocode_plan_save` tool with planned sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, RISKS, CONSTRAINTS, and user chosen PROPOSAL.")
         expect(commands["job-draft"]?.template).not.toContain("OBSERVATION")
         expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_execute` once with selected `job_name` and selected `agent`, then evaluate tool output:")
         expect(commands["job-execute"]?.template).toContain('output includes `current_status`')
         expect(commands["job-execute"]?.template).toContain('Continue job in [agent] session.')
-        expect(commands["job-review"]?.template).toContain("`task` subagent `execute_git_commit`")
-        expect(commands["job-review"]?.template).toContain("autocode_job_shelve")
+        expect(commands["job-review-commit"]?.template).toContain("`task` subagent `execute_git_commit`")
+        expect(commands["job-review-commit"]?.template).toContain("autocode_job_shelve")
         expect(commands["job-shelve"]?.template).toContain("Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
         expect(commands["shelve"]?.template).toContain("Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
-        expect(commands[legacyCommand]).toBeUndefined()
-        expect(commands["init"]?.template).toContain("Task subagents in parallel: `document_conventions`, `document_code`, `document_install`, `document_prd`")
         expect(commands["resume"]?.template).toContain("Call `task_resume` tool")
     })
 
     test("keeps shared return-to-previous-primary rule on command templates", () => {
         const commandNames = [
             "author-article",
-            "document",
-            "document-conventions",
-            "document-code",
-            "document-prd",
-            "document-ux",
+            "docs",
+            "docs-conventions",
+            "docs-code",
+            "docs-prd",
+            "docs-ux",
             "git-commit",
             "git-conflict",
             "init",
@@ -107,8 +189,6 @@ describe("commands", () => {
         const template = commands.init?.template ?? ""
 
         expect(commands.init?.agent).toBe("execute_document")
-        expect(template).toContain("Task subagents in parallel: `document_conventions`, `document_code`, `document_install`, `document_prd`")
-        expect(template).toContain("Use `author-readme` skill to update `README.md` using collected reports")
         expect(template).toContain("Only task `document_agents` *AFTER*")
         expect(template).not.toContain("autocode_dependencies")
         expect(template).not.toContain("preflight")

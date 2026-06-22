@@ -64,7 +64,7 @@ Unless user asked, NEVER:
 
 For example:
 \`\`\`
-- Created validateEmail() at utils/validation.js:67 - Ensure client entered valid email address 
+- Created validateEmail() at utils/validation.js:67 - Ensure client entered valid email address
 - Updated UserService.login() at src/services/user.ts:34 - Need to use async/await to improve performance
 \`\`\`
 
@@ -79,6 +79,7 @@ For example:
 - Keep diff small; format only lines changed for functional reasons.
 - Add/remove imports as needed.
 - Prefer simple readable code over abstractions.
+- Prefer keeping field types and names consistent across files.
 - Do not add boilerplate, speculative config, factories, or one-off interfaces.
 - Add error handling only when requested or matching nearby pattern.
 - Do not add debug code, console logs, TODOs, or security vulnerabilities.
