@@ -232,17 +232,15 @@ async function readExistingSkill(fileSystem: FileSystem, filePath: string): Prom
 }
 
 const skillLearnDescriptions = {
-    corrections: "call when mistake was corrected: `subject` = correction, `content` = summarize mistake + correction steps or lessons learned",
-    env: "call when limitation found in local dev environment: `subject` = environment, `content` = non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.",
-    permissions: "call when user says manual task was safe or warn about unsafe task: `subject` = permissions, `content` = which actions are safe and which are dangerous, including safe passwords",
-    preferences: "call when ASSIGNMENT/job is complete but reviewer complaint about implementation/report: `subject` = preferences, `content` = reviewer preferences like programming patterns, file organization, naming conventions, etc.",
+    corrections: "mistake was corrected: `subject` = correction, `content` = summarize mistake + correction steps or lessons learned",
+    env: "limitation found in local dev environment: `subject` = environment, `content` = non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.",
+    permissions: "user says manual task was safe or warn about unsafe task: `subject` = permissions, `content` = which actions are safe and which are dangerous, including safe passwords",
+    preferences: "ASSIGNMENT/job is complete but reviewer complaint about implementation/report: `subject` = preferences, `content` = reviewer preferences like programming patterns, file organization, naming conventions, etc.",
 } satisfies Record<LearnedSkillSubject, string>
 
 function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fileSystem: FileSystem = defaultFileSystem, shared = false): ReturnType<typeof tool> {
     return tool({
-        description: `Call \`${toolName}\` to learn new skills when:
-${skillLearnDescriptions[subject]}
-`,
+        description: `Call \`${toolName}\` to remember when ${skillLearnDescriptions[subject]}`,
         args: {
             title: tool.schema.string().describe("Short markdown heading for content."),
             content: tool.schema.string().describe("Summary of what was learned in Caveman English."),
