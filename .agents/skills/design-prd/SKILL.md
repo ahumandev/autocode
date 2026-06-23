@@ -31,7 +31,7 @@ AutoCode turns rough ideas into traceable jobs in OpenCode. It keeps concept, pl
 - Jobs live in version-controlled text files.
 - Valid statuses are `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `shelved`.
 - `/job-execute` only selects from active jobs in `drafts`, `assist`, or `executing`.
-- `/job-review` must stop if any acceptance criteria remain unmet.
+- `/job-review-commit` must stop if any acceptance criteria remain unmet.
 - `review` re-run through `autocode_job_status` becomes `shelved`.
 - `autocode_job_status` needs current assistant text before status update.
 - `autocode_job_status` archives sandboxes on shelving.

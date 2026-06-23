@@ -26,7 +26,7 @@ OpenCode plugin that injects agents, commands, tools, and generated skills. Runt
 - `/job-draft` (`src/commands/index.ts`): Save plan to draft folder.
 - `/job-execute-assist` (`src/commands/index.ts`): Start assisted execution session.
 - `/job-execute-auto` (`src/commands/index.ts`): Start autonomous execution session.
-- `/job-review` (`src/commands/index.ts`): Check criteria, shelve accepted work.
+- `/job-review-commit` (`src/commands/index.ts`): Check criteria, shelve accepted work.
 - `/job-shelve` (`src/commands/index.ts`): Close job without acceptance.
 
 ## Error Handling

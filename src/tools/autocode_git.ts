@@ -37,7 +37,6 @@ type GitNormalResponse = {
         executable: "git"
         args: string[]
         repo_path: string
-        tool: GitToolName
     }
 }
 
@@ -209,13 +208,13 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
     const repoOnlyKeys = ["repo_path"] as const
     return {
         git_status: {
-            description: "Run safe git status --short --branch for a local repository.",
+            description: "Run git status --short --branch for a local repository.",
             args: { repo_path: tool.schema.string().describe("Absolute path inside the git repository.") },
             keys: repoOnlyKeys,
             buildArgs: () => ({ ok: true, value: ["status", "--short", "--branch"] }),
         },
         git_diff_unstaged: {
-            description: "Run safe unstaged git diff for a local repository.",
+            description: "Run unstaged git diff for a local repository.",
             args: { repo_path: tool.schema.string(), paths: tool.schema.array(tool.schema.string()).optional() },
             keys: ["repo_path", "paths"],
             buildArgs: (args) => {
@@ -224,7 +223,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_diff_staged: {
-            description: "Run safe staged git diff for a local repository.",
+            description: "Run staged git diff for a local repository.",
             args: { repo_path: tool.schema.string(), paths: tool.schema.array(tool.schema.string()).optional() },
             keys: ["repo_path", "paths"],
             buildArgs: (args) => {
@@ -233,13 +232,13 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_diff: {
-            description: "Run safe git diff for optional revisions and paths.",
+            description: "Run git diff for optional revisions and paths.",
             args: { repo_path: tool.schema.string(), base: tool.schema.string().optional(), target: tool.schema.string().optional(), paths: tool.schema.array(tool.schema.string()).optional() },
             keys: ["repo_path", "base", "target", "paths"],
             buildArgs: buildDiffArgs,
         },
         git_log: {
-            description: "Run safe git log --oneline --decorate.",
+            description: "Run git log --oneline --decorate.",
             args: { repo_path: tool.schema.string(), max_count: tool.schema.number().int().min(1).max(100).optional(), revision: tool.schema.string().optional() },
             keys: ["repo_path", "max_count", "revision"],
             buildArgs: (args) => {
@@ -251,7 +250,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_show: {
-            description: "Run safe git show --stat --patch for a revision.",
+            description: "Run git show --stat --patch for a revision.",
             args: { repo_path: tool.schema.string(), revision: tool.schema.string() },
             keys: ["repo_path", "revision"],
             buildArgs: (args) => {
@@ -260,7 +259,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_add: {
-            description: "Run safe git add for explicit relative files.",
+            description: "Run git add for explicit relative files.",
             args: { repo_path: tool.schema.string(), files: tool.schema.array(tool.schema.string()) },
             keys: ["repo_path", "files"],
             buildArgs: (args) => {
@@ -269,7 +268,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_commit: {
-            description: "Run safe git commit with a message.",
+            description: "Run git commit with a message.",
             args: { repo_path: tool.schema.string(), message: tool.schema.string() },
             keys: ["repo_path", "message"],
             buildArgs: (args) => {
@@ -278,7 +277,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_reset: {
-            description: "Run safe git reset without dangerous modes.",
+            description: "Run git mixed reset (index-only).",
             args: { repo_path: tool.schema.string(), paths: tool.schema.array(tool.schema.string()).optional() },
             keys: ["repo_path", "paths"],
             buildArgs: (args) => {
@@ -288,7 +287,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_create_branch: {
-            description: "Run safe git branch creation.",
+            description: "Run git branch creation.",
             args: { repo_path: tool.schema.string(), branch_name: tool.schema.string(), start_point: tool.schema.string().optional() },
             keys: ["repo_path", "branch_name", "start_point"],
             buildArgs: (args) => {
@@ -300,7 +299,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_checkout: {
-            description: "Run safe git checkout for a branch name.",
+            description: "Run git checkout for a branch name.",
             args: { repo_path: tool.schema.string(), branch_name: tool.schema.string() },
             keys: ["repo_path", "branch_name"],
             buildArgs: (args) => {
@@ -309,7 +308,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_branch: {
-            description: "Run safe git branch list.",
+            description: "Run git branch list.",
             args: { repo_path: tool.schema.string().describe("Absolute path inside the git repository.") },
             keys: repoOnlyKeys,
             buildArgs: () => ({ ok: true, value: ["branch", "--list", "--verbose", "--no-abbrev"] }),
@@ -344,8 +343,7 @@ export async function runGitTool(toolName: GitToolName, rawArgs: unknown, deps: 
             command: {
                 executable: "git",
                 args: commandArgs,
-                repo_path: repoPath.value,
-                tool: toolName,
+                repo_path: repoPath.value
             },
         }
 

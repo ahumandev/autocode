@@ -11,6 +11,7 @@ import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 type PluginAgentConfig = AutocodeAgentConfig
 type PluginInputWithSandboxSupportOverride = PluginInput & {
     sandboxSupportOverride?: SandboxPlatformSupportOptions
+    serverUrl?: URL
 }
 
 function mergePluginAgentConfig(
@@ -102,7 +103,7 @@ const autocode: Plugin = async (input: PluginInput): Promise<Hooks> => {
             await mergeConfig(cfg, pluginInput)
         },
 
-        tool: createTools(input.client, sandbox),
+        tool: createTools(input.client, sandbox, { serverUrl: pluginInput.serverUrl }),
     }
 }
 

@@ -21,7 +21,6 @@ type ParsedGitResponse = {
         executable: "git"
         args: string[]
         repo_path: string
-        tool: GitToolName
     }
 }
 
@@ -117,7 +116,7 @@ describe("autocode git tools", () => {
             exit_code: 0,
             stdout: finalResult.stdout,
             stderr: finalResult.stderr,
-            command: { executable: "git", args: ["-C", realRepo, "status", "--short", "--branch"], repo_path: realRepo, tool: "git_status" },
+            command: { executable: "git", args: ["-C", realRepo, "status", "--short", "--branch"], repo_path: realRepo },
         })
     })
 
@@ -155,7 +154,7 @@ describe("autocode git tools", () => {
             exit_code: 2,
             stdout: finalResult.stdout,
             stderr: finalResult.stderr,
-            command: { executable: "git", args: ["-C", realRepo, "status", "--short", "--branch"], repo_path: realRepo, tool: "git_status" },
+            command: { executable: "git", args: ["-C", realRepo, "status", "--short", "--branch"], repo_path: realRepo },
         })
     })
 

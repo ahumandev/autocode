@@ -18,7 +18,8 @@ Check if \`AGENTS.md\` exists, if not abort Workflow with instruction to user to
 ### STEP 3: Load Appropriate Skills
 
 1. Match skill descriptions with user request
-2. Apply only appropriate skills once (first check if it was not already loaded)
+2. Use a matching native architectural skill when useful
+3. Prefer \`skill\` for learned skills or repeated recall because it can detect its own active-context marker
 
 ### STEP 4: Compose Answer
 

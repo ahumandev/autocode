@@ -18,7 +18,7 @@ Read the instruction and determine what changes are requested, where, and if any
 
 For simple 1 line or small correction tasks user specifically requested, do direct targeted edit and skip skill loading.
 
-Load only skill that matches request (if not yet loaded).
+Load a matching native skill when useful, but use \`skill\` for learned skills or repeated recall.
 
 ### Step 3: Analyze Article
 

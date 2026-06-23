@@ -122,7 +122,7 @@ ALL public classes and methods REQUIRE Javadoc with complete tags:
  * Authenticates user with credentials.
  * Validates username/password against auth service.
  * Generates and stores session token on success.
- * 
+ *
  * @param username login name (non-null, non-empty)
  * @param password password (non-null, non-empty)
  * @return true if auth successful, false if invalid

@@ -23,10 +23,16 @@ import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 import { createAutocodeSessionContextTool } from "./autocode_session_context"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
+import { createSkillLearnCorrectionTool, createSkillLearnEnvTool, createSkillLearnPermissionTool, createSkillLearnPreferenceTool } from "./skill_learn"
+import { createSkillTool } from "./skill"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
 import { createTaskResumeTool } from "./task_resume"
 
-export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandboxConfig = {}) {
+type ToolRuntime = {
+    serverUrl?: string | URL
+}
+
+export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandboxConfig = {}, runtime?: ToolRuntime) {
     return {
         autocode_agent_execute: createAutocodeAgentExecuteTool(client),
         autocode_agent_previous: createAutocodeAgentPreviousTool(client),
@@ -60,6 +66,11 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_sandbox_read: createAutocodeSandboxReadTool(client),
         autocode_session_context: createAutocodeSessionContextTool(client),
         autocode_session_create: createAutocodeSessionCreateTool(client),
+        skill_learn_correction: createSkillLearnCorrectionTool(),
+        skill_learn_env: createSkillLearnEnvTool(),
+        skill_learn_permission: createSkillLearnPermissionTool(),
+        skill_learn_preference: createSkillLearnPreferenceTool(),
+        skill: createSkillTool(client, undefined, runtime),
         ...createGitTools(),
         task_external: createTaskExternalTool(),
         task_resume: createTaskResumeTool(client),

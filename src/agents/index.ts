@@ -268,6 +268,7 @@ const baseAgents: AgentMap = {
             edit: "allow",
             question: "allow",
             read: "allow",
+            "skill_learn_*": "allow",
             task: {
                 "*": "allow",
                 assist: "deny",
@@ -295,10 +296,12 @@ const baseAgents: AgentMap = {
             autocode_job_status: "allow",
             doom_loop: "ask",
             read: "allow",
+            "skill_learn_*": "allow",
             task: {
                 "*": "deny",
                 "auto*": "allow",
                 general: "allow",
+                query_skills: "allow"
             },
             task_resume: "allow",
             "todo*": "allow",
@@ -325,6 +328,7 @@ const baseAgents: AgentMap = {
             external_directory: "ask",
             read: "allow",
             question: "allow",
+            "skill_learn_*": "allow",
             task: {
                 "*": "deny",
                 "query*": "allow",
@@ -423,7 +427,11 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "ask",
                 "execute*": "allow",
+                "learned_corrections/*_troubleshoot": "allow",
+                "learned_env": "allow",
             },
+            skill_learn_correction: "allow",
+            skill_learn_env: "allow",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -481,6 +489,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "execute*": "allow",
+                "learned_preferences": "allow"
             },
             task: {
                 "*": "deny",
@@ -545,6 +554,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "execute*": "allow",
+                "learned_preferences": "allow"
             },
             task: {
                 "*": "deny",
@@ -656,8 +666,10 @@ const baseAgents: AgentMap = {
             edit: "allow",
             skill: {
                 "*": "deny",
-                "test*": "allow"
+                "test*": "allow",
+                "learned_corrections/auto_test": "allow"
             },
+            skill_learn_correction: "allow",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -685,6 +697,13 @@ const baseAgents: AgentMap = {
             autocode_sandbox_delete: "allow",
             "context7*": "allow",
             doom_loop: "deny",
+            skill: {
+                "*": "deny",
+                "learned_corrections/*_troubleshoot": "allow",
+                "learned_env": "allow",
+            },
+            skill_learn_correction: "allow",
+            skill_learn_env: "allow",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -891,6 +910,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "design*": "allow",
+                "learned_preferences": "allow"
             },
             "todo*": "allow"
         },
@@ -980,6 +1000,7 @@ const baseAgents: AgentMap = {
             git_add: "allow",
             git_commit: "allow",
             git_log: "allow",
+            git_reset: "allow",
             git_status: "allow",
             task: {
                 "*": "deny",
@@ -1014,7 +1035,12 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
+                "learned_corrections/execute_os": "allow",
+                "learned_env": "allow",
+                "learned_permissions": "allow"
             },
+            skill_learn_correction: "allow",
+            skill_learn_env: "allow",
             "todo*": "allow",
         },
         prompt: executeOsPrompt,
@@ -1034,10 +1060,16 @@ const baseAgents: AgentMap = {
             autocode_rest_response_eval: "allow",
             autocode_rest_response_read: "allow",
             doom_loop: "deny",
+            skill: {
+                "*": "deny",
+                "learned_corrections/execute_rest": "allow",
+                "learned_env": "allow",
+            },
+            skill_learn_correction: "allow"
         },
         prompt: executeRestPrompt,
         temperature: 0.1,
-        tier: "fast",
+        tier: "balanced",
     },
 
     execute_sandbox: {
@@ -1055,9 +1087,12 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
+                "learned_corrections/execute_sandbox": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
+                "learned_env": "allow",
             },
+            skill_learn_correction: "allow",
             "todo*": "allow",
         },
         prompt: executeOsPrompt,
@@ -1088,9 +1123,14 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
+                "learned_corrections/execute_script": "allow",
+                "learned_env": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
+                "learned_permissions": "allow"
             },
+            skill_learn_correction: "allow",
+            skill_learn_env: "allow",
             "todo*": "allow",
             webfetch: "allow",
         },
@@ -1100,24 +1140,6 @@ const baseAgents: AgentMap = {
     },
 
     // Query workers
-
-    query_architect: {
-        color: colorReadOnlyWorker,
-        description: "Task `query_architect` to ask 1 question about current project architecture/design/PRD/conventions/technologies/documentation.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            '*': "deny",
-            skill: {
-                "*": "deny",
-                "design*": "allow",
-                "execute*": "allow"
-            },
-            "todo*": "allow"
-        },
-        prompt: queryArchitectPrompt,
-        tier: "fast",
-    },
 
     query_browser: {
         color: colorReadOnlyWorker,
@@ -1159,7 +1181,7 @@ const baseAgents: AgentMap = {
         },
         prompt: queryCodePrompt,
         temperature: 0.3,
-        tier: "balanced",
+        tier: "fast",
     },
 
     query_db: {
@@ -1233,9 +1255,36 @@ const baseAgents: AgentMap = {
             grep: "allow",
             lsp: "allow",
             read: "allow",
+            skill: {
+                "*": "deny",
+                learned_env: "allow",
+                learned_permissions: "allow"
+            }
         },
         prompt: queryOsPrompt,
         temperature: 0.1,
+        tier: "fast",
+    },
+
+    query_skills: {
+        color: colorReadOnlyWorker,
+            description: "Task `query_skills` to ask with question about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
+            hidden: true,
+            mode: "subagent",
+        permission: {
+            '*': "deny",
+            skill: {
+                "*": "deny",
+                "design*": "allow",
+                "execute*": "allow",
+                "learned_corrections/primary": "allow",
+                learned_env: "allow",
+                learned_permissions: "allow",
+                learned_preferences: "allow"
+            },
+            "todo*": "allow"
+        },
+        prompt: queryArchitectPrompt,
         tier: "fast",
     },
 
@@ -1251,11 +1300,7 @@ const baseAgents: AgentMap = {
             glob: "allow",
             grep: "allow",
             lsp: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "execute-install": "allow",
-            },
+            read: "allow"
         },
         prompt: queryTextPrompt,
         temperature: 0.1,
@@ -1322,6 +1367,9 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_agent_previous: "allow",
+            skill: {
+                learned_permissions: "allow"
+            }
         },
         prompt: tempManualPrompt,
         temperature: 0.3,

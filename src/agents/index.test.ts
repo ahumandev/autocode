@@ -141,7 +141,7 @@ describe("agent policies", () => {
 
         expect(agents.execute_rest?.mode).toBe("subagent")
         expect(agents.execute_rest?.hidden).toBe(true)
-        expect(agents.execute_rest?.tier).toBe("fast")
+        expect(agents.execute_rest?.tier).toBe("balanced")
         expect(agents.execute_rest?.temperature).toBe(0.1)
         expect(permissionRule(agents.execute_rest?.permission, "*")).toBe("deny")
         for (const toolName of executeRestToolNames) {
@@ -186,5 +186,20 @@ describe("agent policies", () => {
         })
 
         expect(parsedMethods).toEqual(["GET", "POST", "PUT", "PATCH", "DELETE"])
+    })
+
+    test("execute_author and query_skills prompt learned skill loading guidance is current", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const prompts = [String(agents.execute_author?.prompt ?? ""), String(agents.query_skills?.prompt ?? "")]
+
+        for (const prompt of prompts) {
+            expect(prompt).toContain("skill")
+            expect(prompt).toContain("learned skills")
+            expect(prompt).toContain("repeated recall")
+            expect(prompt).not.toContain("native OpenCode")
+            expect(prompt).not.toContain("duplicate-load")
+            expect(prompt).not.toContain("already tracks")
+            expect(prompt).not.toContain("tracks duplicate")
+        }
     })
 })

@@ -15,6 +15,7 @@ import { createTaskResumeTool } from "./task_resume"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
 import { composePlanMarkdown, createAutocodePlanSaveTool } from "./autocode_plan_save"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
+import { learnedSkillSubjects } from "./skill_learn"
 import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { applySandboxPlatformPolicy } from "@/agents"
 import { createTools } from "./index"
@@ -448,8 +449,15 @@ describe("auto resume wiring", () => {
         const sandboxGrep = tools.autocode_sandbox_grep as unknown as { description: string, args: Record<string, unknown> }
         const sandboxRead = tools.autocode_sandbox_read as unknown as { description: string, args: Record<string, unknown> }
         const sandboxCopy = tools.autocode_sandbox_copy as unknown as { description: string, args: Record<string, unknown> }
+        const skillLearnCorrection = tools.skill_learn_correction as unknown as { description: string, args: Record<string, unknown> }
+        const skillLearnEnv = tools.skill_learn_env as unknown as { description: string, args: Record<string, unknown> }
+        const skillLearnPermission = tools.skill_learn_permission as unknown as { description: string, args: Record<string, unknown> }
+        const skillLearnPreference = tools.skill_learn_preference as unknown as { description: string, args: Record<string, unknown> }
+        const skill = tools.skill as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_rest", "autocode_rest_response_read", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_rest", "autocode_rest_response_read", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn_correction", "skill_learn_env", "skill_learn_permission", "skill_learn_preference", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(tools.skill).toBeDefined()
+        expect(Object.keys(tools)).not.toContain("skill_learn")
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
         expect(sandboxCreate.description).toContain("Create")
@@ -474,6 +482,17 @@ describe("auto resume wiring", () => {
         expect(sandboxGrep.description).toContain("Search")
         expect(sandboxRead.description).toContain("Read")
         expect(sandboxCopy.description).toContain("Copy")
+        expect(Object.keys(skillLearnCorrection.args)).toEqual(["title", "content"])
+        expect(Object.keys(skillLearnEnv.args)).toEqual(["title", "content"])
+        expect(Object.keys(skillLearnPermission.args)).toEqual(["title", "content"])
+        expect(Object.keys(skillLearnPreference.args)).toEqual(["title", "content"])
+        expect(skillLearnCorrection.description).toContain("mistake was corrected")
+        expect(skillLearnEnv.description).toContain("local dev environment")
+        expect(skillLearnPreference.description).toContain("reviewer complaint")
+        expect(skill.description).toContain("skill")
+        expect(Object.keys(skill.args)).toEqual(["name"])
+        expect(Object.keys(skill.args)).not.toContain("subjects")
+        expect(learnedSkillSubjects).toEqual(["learned_corrections", "learned_env", "learned_permissions", "learned_preferences"])
     })
 
     test("unsupported sandbox policy disables execute_sandbox and denies explicit sandbox permissions", () => {
@@ -1187,6 +1206,10 @@ describe("autocode_plan_save tool", () => {
             "autocode_sandbox_read",
             "autocode_session_context",
             "autocode_session_create",
+            "skill_learn_correction",
+            "skill_learn_env",
+            "skill_learn_permission",
+            "skill_learn_preference",
             "git_add",
             "git_branch",
             "git_checkout",
@@ -1199,6 +1222,7 @@ describe("autocode_plan_save tool", () => {
             "git_reset",
             "git_show",
             "git_status",
+            "skill",
             "task_external",
             "task_resume",
         ].sort())
@@ -1240,6 +1264,18 @@ describe("autocode_plan_save tool", () => {
         expect(Object.keys((plugin.tool?.autocode_session_context as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(toolSurfaceText(plugin.tool?.autocode_session_context)).toContain("Read sanitized current session context and token usage metadata.")
         expect(plugin.tool?.autocode_session_create).toBeDefined()
+        expect(plugin.tool?.skill_learn).toBeUndefined()
+        expect(plugin.tool?.skill_learn_correction).toBeDefined()
+        expect(plugin.tool?.skill_learn_env).toBeDefined()
+        expect(plugin.tool?.skill_learn_permission).toBeDefined()
+        expect(plugin.tool?.skill_learn_preference).toBeDefined()
+        expect(Object.keys((plugin.tool?.skill_learn_correction as unknown as { args: Record<string, unknown> }).args)).toEqual(["title", "content"])
+        expect(Object.keys((plugin.tool?.skill_learn_env as unknown as { args: Record<string, unknown> }).args)).toEqual(["title", "content"])
+        expect(Object.keys((plugin.tool?.skill_learn_permission as unknown as { args: Record<string, unknown> }).args)).toEqual(["title", "content"])
+        expect(Object.keys((plugin.tool?.skill_learn_preference as unknown as { args: Record<string, unknown> }).args)).toEqual(["title", "content"])
+        expect(plugin.tool?.skill).toBeDefined()
+        expect(Object.keys((plugin.tool?.skill as unknown as { args: Record<string, unknown> }).args)).toEqual(["name"])
+        expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
         expect(plugin.tool?.autocode_job_execute).toBeDefined()
         expect(plugin.tool?.autocode_execute_job).toBeUndefined()
         expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Move selected job to execution status")
