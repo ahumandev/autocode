@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFile, readdir } from "fs/promises"
 import { createAbortResponse, createRetryResponse } from "../utils/tools"
-import { formatPlannedJobCollisions, listPlannedJobs, listedActiveJobStatuses, normalizeJobStatusInput, resolveAgentsStorageRoot, type JobStatus } from "@/utils/jobs"
+import { listPlannedJobs, listedActiveJobStatuses, normalizeJobStatusInput, resolveAgentsStorageRoot, type JobStatus } from "@/utils/jobs"
 
 type FileSystem = {
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
@@ -20,14 +20,6 @@ const defaultFileSystem: FileSystem = {
 export async function executePlannedJobList(fileSystem: FileSystem, worktree: string, options: { resultKey: string, failedAction: string, filter?: JobStatus }): Promise<string> {
     try {
         const listed = await listPlannedJobs(fileSystem, worktree, { filter: options.filter })
-        if (listed.collisions.length > 0) {
-            return createRetryResponse(
-                options.failedAction,
-                `Active lifecycle collisions detected: ${formatPlannedJobCollisions(listed.collisions)}`,
-                "Resolve the duplicate active lifecycle directories for the named job(s) before retrying."
-            )
-        }
-
         return JSON.stringify({
             [options.resultKey]: listed.jobs,
         })

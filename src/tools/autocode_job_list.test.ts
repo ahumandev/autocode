@@ -161,7 +161,7 @@ describe("autocode_job_list tool", () => {
         expect(fs.readdir).not.toHaveBeenCalled()
     })
 
-    test("returns retry response when active lifecycle collisions are detected", async () => {
+    test("keeps first job when active lifecycle collisions are detected", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string) => {
             if (dirPath === "/workspace/.agents/jobs/drafts") return ["same-job"]
@@ -172,11 +172,11 @@ describe("autocode_job_list tool", () => {
         const tool = createAutocodeJobListTool(fs)
         const result = await tool.execute({}, createToolContext())
 
-        expect(result).toBe(createRetryResponse(
-            "list jobs",
-            "Active lifecycle collisions detected: same-job (.agents/jobs/drafts/same-job/, .agents/jobs/executing/same-job/)",
-            "Resolve the duplicate active lifecycle directories for the named job(s) before retrying."
-        ))
+        expect(result).toBe(JSON.stringify({
+            jobs: [
+                { label: "same-job", job_name: "same-job", status: "drafts", job_path: ".agents/jobs/drafts/same-job/", description: "" },
+            ],
+        }))
     })
 
     test("returns empty jobs if lifecycle directories do not exist", async () => {
