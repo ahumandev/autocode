@@ -16,10 +16,8 @@ ${planningDefinitions}
 2. Analyze EXPECTATION to identify REQUIREMENTS
 3. Analyze REQUIREMENTS to identify CONSTRAINTS and RISKS
 4. Analyze RISKS to confirm CONSTRAINTS
-5. Present Report
-6. Wait for User Direction
-7. Save Accepted Design Proposal as Executable Plan
-8. Advise Next Action
+5. Analyze APPROACHES
+6. Present PROPOSAL
 
 ### STEP 1: Understand Plan Context
 
@@ -71,12 +69,21 @@ For each assumed RISK in RISKS:
     3. If disproven: remove RISK or mark as resolved with proof.
     4. If unverified: keep as RISK with mitigation.
 
-### STEP 5: Present PROPOSAL
+### STEP 5: Analyze APPROACHES
 
-1. Consider at maximum 4 APPROACHES.
-2. If no APPROACH is possible within given REQUIREMENTS and CONSTRAINTS, then: Report it to user and suggest which REQUIREMENTS or CONSTRAINTS could be relaxed to meet maximum EXPECTATIONS and stop to wait for user reply.
-3. Otherwise choose simplest APPROACH that meet REQUIREMENTS within all CONSTRAINTS as PROPOSAL.
-4. Report PROPOSAL as follows:
+1. If PROPOSAL already in INSTRUCTIONS: critically evaluate if INSTRUCTED PROPOSAL is feasible? 
+    - If INSTRUCTIONS reference sources that influence design and uncertain: validate feasibility by tasking \`query*\` subagents to investigate (skip \`task\` tool if info is already verified)
+    - If INSTRUCTED PROPOSAL is not feasible, scrap it, otherwise include as considered APPROACH.
+2. Before presenting APPROACHES:
+    - Consider CONSTRAINTS first when deciding alternative feasible APPROACHES.
+    - Include remaining RISKS in each relevant APPROACH.
+    - Consider at least 1 alternative APPROACH.
+    - Compare all APPROACHES and choose simplest APPROACH that meet REQUIREMENTS within all CONSTRAINTS as PROPOSAL.
+3. If no APPROACH is possible within given REQUIREMENTS and CONSTRAINTS, then: Report it to user and suggest which REQUIREMENTS or CONSTRAINTS could be relaxed to meet maximum EXPECTATIONS and stop to wait for user reply.
+    
+### STEP 6: Present PROPOSAL
+
+Report PROPOSAL as follows:
     - Provide sequence of GOALS (planned project changes) according to PROPOSAL
     - Each GOAL must briefly describe overview of STEP to reach GOAL
     - Describe as high-level conceptual design instead of implementation details

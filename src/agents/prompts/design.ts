@@ -18,10 +18,11 @@ ${planningDefinitions}
 2. Analyze EXPECTATION to identify REQUIREMENTS
 3. Analyze REQUIREMENTS to identify CONSTRAINTS and RISKS
 4. Analyze RISKS to confirm CONSTRAINTS
-5. Present Report
-6. Wait for User Direction
-7. Save Accepted Design Proposal as Executable Plan
-8. Advise Next Action
+5. Analyze APPROACHES
+6. Present Report
+7. Wait for User Direction
+8. Save Accepted Design Proposal as Executable Plan
+9. Advise Next Action
 
 ### STEP 1: Understand Plan Context
 
@@ -73,13 +74,21 @@ For each assumed RISK in RISKS:
     3. If disproven: remove RISK or mark as resolved with proof.
     4. If unverified: keep as RISK with mitigation.
 
-Before presenting PROPOSALS:
-    - Consider CONSTRAINTS first when deciding feasible approaches and approach ordering.
-    - Include remaining RISKS in each relevant PROPOSAL.
+### STEP 5: Analyze APPROACHES
 
-### STEP 5: Present Report
+1. If PROPOSAL already in INSTRUCTIONS: critically evaluate if INSTRUCTED PROPOSAL is feasible? 
+    - If INSTRUCTIONS reference sources that influence design and uncertain: validate feasibility by tasking \`query*\` subagents to investigate (skip \`task\` tool if info is already verified)
+    - Then, for every design flaw or improvement opportunity in INSTRUCTED PROPOSAL:
+        1. Name potential flow improvement opportunity with formatted examples / mermaid diagram (if applicable) and why it is better than user APPROACH with comparison table (if applicable)
+        2. After responding with improvement suggestion, call \`question\` tool with 2-4 alternative options: labels=describe alternatives, descriptions=influence on plan if option is chosen; last option = original user APPROACH
+        3. User answer is *TOP APPROACH* for now
+        4. Base alternative APPROACHES as variants on user answer
+2. Before presenting APPROACHES:
+    - Consider CONSTRAINTS first when deciding alternative feasible APPROACHES.
+    - Include remaining RISKS in each relevant APPROACH.
+    - Consider at least 3 alternative APPROACHES that meet REQUIREMENTS within all CONSTRAINTS
 
-*TOP APPROACH* = simplest APPROACH within all CONSTRAINTS
+### STEP 6: Present Report
 
 Present text report in Concise English with template:
 
@@ -105,7 +114,7 @@ Replace [PLACEHOLDERS] in template with:
     - risks
     - formatted input/output/code/config examples (if applicable)
 
-### STEP 6: Wait for User Direction
+### STEP 7: Wait for User Direction
 
 Call \`question\` tool to get user feedback about already presented PROPOSALS (from STEP 5):
     1. List PROPOSALS in same order as options:
@@ -115,12 +124,12 @@ Call \`question\` tool to get user feedback about already presented PROPOSALS (f
     3. If user alter PROBLEMS/IMPACT/EXPECTATION/REQUIREMENTS/CONSTRAINTS/RISKS: alter INSTRUCTIONS accordingly and repeat Design Workflow.
     4. If user suggests alternative solution (PROPOSAL): alter INSTRUCTIONS accordingly, but validate if user solution is feasible and advise alternative solutions based on user solution if blocking CONSTRAINTS were discovered.
 
-### STEP 7: Save Accepted Design Proposal as Executable Plan
+### STEP 8: Save Accepted Design Proposal as Executable Plan
 
 1. Call \`autocode_plan_save\` tool with accepted PROPOSAL details to save plan for execution.
 2. Tell user \`job_path\` of saved PROPOSAL from \`autocode_plan_save\` output and ask user to review it.
 
-### STEP 8: Advise Next Action
+### STEP 9: Advise Next Action
 
 1. Call \`question\` tool to ask for next action with these options:
     - \`label\` = "Execute Autonomously"; \`description\` = "Robot Guidance: Start autonomous execution of reviewed plan with minimal user intervention."
