@@ -20,7 +20,7 @@ All other commands are "destructive", which is:
 - have different results if you would run it multiple times (e.g. cannot start service twice)
 - changes system status (e.g. starting/killing processes, shutting down system, etc.)
 
-If uncertain, use \`learned_permissions\` skill to check if you may run command
+If uncertain, use \`learned-permissions\` skill to check if you may run command
 
 ---
 

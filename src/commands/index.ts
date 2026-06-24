@@ -60,14 +60,14 @@ export const commands: CommandMap = {
 
     "job-design": {
         agent: "design",
-        description: "Design a solution plan from a concept in .agents/jobs/concepts/",
+        description: "Design job plan from a concept in .agents/jobs/concepts/",
         subtask: false,
         template: jobDesignCommandTemplate,
     },
 
     "job-draft": {
         agent: "design",
-        description: "Save drafted solution plan in .agents/jobs/drafts/{name}/plan.md",
+        description: "Draft proposed plan in .agents/jobs/drafts/{name}/plan.md",
         subtask: false,
         template: jobDraftCommandTemplate,
     },
@@ -154,6 +154,13 @@ Report to user:
     "docs-code": {
         agent: "document_code",
         description: "Document recently updated technical architecture and design decisions.",
+        subtask: false,
+        template: docsSubagentCommandTemplate,
+    },
+
+    "docs-env": {
+        agent: "document_env",
+        description: "Document external integrations in local development environment.",
         subtask: false,
         template: docsSubagentCommandTemplate,
     },

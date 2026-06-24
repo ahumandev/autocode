@@ -43,6 +43,7 @@ import { researchPrompt } from "./prompts/research";
 import { tempConceptPrompt } from "./prompts/temp_concept";
 import { tempManualPrompt } from "./prompts/temp_manual";
 import { tempReportPrompt } from "@/agents/prompts/temp_report";
+import { documentEnvPrompt } from "./prompts/document_env";
 
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules
@@ -427,8 +428,8 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "ask",
                 "execute*": "allow",
-                "learned_corrections/*_troubleshoot": "allow",
-                "learned_env": "allow",
+                "learned-corrections/*_troubleshoot": "allow",
+                "learned-env": "allow",
             },
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
@@ -489,7 +490,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "execute*": "allow",
-                "learned_preferences": "allow"
+                "learned-preferences": "allow"
             },
             task: {
                 "*": "deny",
@@ -554,7 +555,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "execute*": "allow",
-                "learned_preferences": "allow"
+                "learned-preferences": "allow"
             },
             task: {
                 "*": "deny",
@@ -667,7 +668,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "test*": "allow",
-                "learned_corrections/auto_test": "allow"
+                "learned-corrections/auto_test": "allow"
             },
             skill_learn_correction: "allow",
             task: {
@@ -699,8 +700,8 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "learned_corrections/*_troubleshoot": "allow",
-                "learned_env": "allow",
+                "learned-corrections/*_troubleshoot": "allow",
+                "learned-env": "allow",
             },
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
@@ -795,9 +796,33 @@ const baseAgents: AgentMap = {
         tier: "fast",
     },
 
+    document_env: {
+        color: colorDocumentWorker,
+        description: "Task `document_env` to document related project to current project.",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            autocode_agent_previous: "allow",
+            doom_loop: "deny",
+            skill: {
+                "*": "deny",
+                "learned-env": "allow"
+            },
+            skill_learn_env: "allow",
+            task: {
+                "*": "deny",
+                query_os: "allow"
+            }
+        },
+        prompt: documentEnvPrompt,
+        temperature: 0.3,
+        tier: "fast",
+    },
+
     document_install: {
         color: colorDocumentWorker,
-        description: "Task document_install to document project installation and usage guide.",
+        description: "Task `document_install` to document project installation and usage guide.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -910,7 +935,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "design*": "allow",
-                "learned_preferences": "allow"
+                "learned-preferences": "allow"
             },
             "todo*": "allow"
         },
@@ -1035,9 +1060,9 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
-                "learned_corrections/execute_os": "allow",
-                "learned_env": "allow",
-                "learned_permissions": "allow"
+                "learned-corrections/execute_os": "allow",
+                "learned-env": "allow",
+                "learned-permissions": "allow"
             },
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
@@ -1062,8 +1087,8 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "learned_corrections/execute_rest": "allow",
-                "learned_env": "allow",
+                "learned-corrections/execute_rest": "allow",
+                "learned-env": "allow",
             },
             skill_learn_correction: "allow"
         },
@@ -1087,10 +1112,10 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "learned_corrections/execute_sandbox": "allow",
+                "learned-corrections/execute_sandbox": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
-                "learned_env": "allow",
+                "learned-env": "allow",
             },
             skill_learn_correction: "allow",
             "todo*": "allow",
@@ -1123,11 +1148,11 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "learned_corrections/execute_script": "allow",
-                "learned_env": "allow",
+                "learned-corrections/execute_script": "allow",
+                "learned-env": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
-                "learned_permissions": "allow"
+                "learned-permissions": "allow"
             },
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
@@ -1257,9 +1282,10 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                learned_env: "allow",
-                learned_permissions: "allow"
-            }
+                "learned-env": "allow",
+                "learned-permissions": "allow"
+            },
+            skill_learn_env: "allow"
         },
         prompt: queryOsPrompt,
         temperature: 0.1,
@@ -1277,10 +1303,10 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "design*": "allow",
                 "execute*": "allow",
-                "learned_corrections/primary": "allow",
-                learned_env: "allow",
-                learned_permissions: "allow",
-                learned_preferences: "allow"
+                "learned-corrections/primary": "allow",
+                "learned-env": "allow",
+                "learned-permissions": "allow",
+                "learned-preferences": "allow"
             },
             "todo*": "allow"
         },
@@ -1368,7 +1394,7 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_agent_previous: "allow",
             skill: {
-                learned_permissions: "allow"
+                "learned-permissions": "allow"
             }
         },
         prompt: tempManualPrompt,

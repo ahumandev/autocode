@@ -133,7 +133,7 @@ function writeProjectSkill(worktree: string, name = "a", content = "Project skil
     return dir
 }
 
-function writeLearnedSkill(worktree: string, subject = "learned_corrections", agent = "pair", content = "Learned skill content."): string {
+function writeLearnedSkill(worktree: string, subject = "learned-corrections", agent = "pair", content = "Learned skill content."): string {
     const dir = join(worktree, ".agents", "skills", subject, agent)
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, "SKILL.md"), `---\ndescription: Use ${subject}/${agent} skill to recall ${subject} of previous sessions.\n---\n\n${content}`)
@@ -246,11 +246,11 @@ describe("skill tool", () => {
 
     test("loads learned skill from subject agent path", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            const directory = writeLearnedSkill(worktree, "learned_corrections", "pair", "Learned correction guidance.")
+            const directory = writeLearnedSkill(worktree, "learned-corrections", "pair", "Learned correction guidance.")
 
-            const result = await executeSkillAlias(worktree, undefined, { name: "learned_corrections/pair" })
+            const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections/pair" })
 
-            expectLoadedResultShape(result, "learned_corrections/pair", directory)
+            expectLoadedResultShape(result, "learned-corrections/pair", directory)
             expect(result.output).toContain("Learned correction guidance.")
             expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
         })

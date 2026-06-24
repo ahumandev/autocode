@@ -26,6 +26,7 @@ describe("commands", () => {
             "docs",
             "docs-conventions",
             "docs-code",
+            "docs-env",
             "docs-prd",
             "docs-ux",
             "explain",

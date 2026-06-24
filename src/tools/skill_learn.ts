@@ -5,7 +5,6 @@ import { isMissingFile, resolveAgentsStorageRoot } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 const learnedSkillBaseSubjects = ["corrections", "env", "permissions", "preferences"] as const
-export const learnedSkillSubjects = ["learned_corrections", "learned_env", "learned_permissions", "learned_preferences"] as const
 
 export type LearnedSkillSubject = typeof learnedSkillBaseSubjects[number]
 
@@ -51,19 +50,31 @@ function hasControlCharacter(value: string): boolean {
     return /[\u0000-\u001f\u007f]/.test(value)
 }
 
-function buildSkillReference(subject: LearnedSkillSubject, agentName?: string): string {
+function buildSkillName(subject: LearnedSkillSubject, agentName?: string): string {
     const skillDirectory = learnedSkillDirectory(subject)
     return agentName === undefined ? skillDirectory : `${skillDirectory}/${agentName}`
 }
 
+function buildSkillDescription(subject: LearnedSkillSubject): string {
+    const descriptions = {
+        corrections: "Use `learned-corrections` skill to avoid OBSTACLES, troubleshooting mistakes, recall lessons learned in previous sessions.",
+        env:         "Use `learned-env` skill to find related external projects locally or recall local dev environment limitations/setup.",
+        permissions: "Use `learned-permissions` skill to check if task is safe or DANGEROUS OPERATION.",
+        preferences: "Use `learned-preferences` skill to avoid user complaints, design better APPROACHES and improve reports.",
+    } satisfies Record<LearnedSkillSubject, string>
+
+    return descriptions[subject]
+}
+
 function learnedSkillDirectory(subject: LearnedSkillSubject): string {
-    return `learned_${subject}`
+    return `learned-${subject}`
 }
 
 function buildFrontmatter(subject: LearnedSkillSubject, agentName?: string): string {
     return [
         "---",
-        `description: Use ${buildSkillReference(subject, agentName)} skill to recall ${subject} of previous sessions.`,
+        `name: ${buildSkillName(subject, agentName)}`,
+        `description: ${buildSkillDescription(subject)}`,
         "---",
     ].join("\n")
 }
@@ -212,7 +223,7 @@ function resolveSkillFilePath(context: SkillLearnContext, subject: LearnedSkillS
     const relativePath = path.relative(skillsRoot, filePath)
 
     if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-        throw new Error(`Invalid learned skill path for ${buildSkillReference(subject, agentName)}`)
+        throw new Error(`Invalid learned skill path for ${buildSkillName(subject, agentName)}`)
     }
 
     return { filePath, skillsRoot }

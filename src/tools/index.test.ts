@@ -15,7 +15,6 @@ import { createTaskResumeTool } from "./task_resume"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
 import { composePlanMarkdown, createAutocodePlanSaveTool } from "./autocode_plan_save"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
-import { learnedSkillSubjects } from "./skill_learn"
 import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { applySandboxPlatformPolicy } from "@/agents"
 import { createTools } from "./index"
@@ -492,7 +491,6 @@ describe("auto resume wiring", () => {
         expect(skill.description).toContain("skill")
         expect(Object.keys(skill.args)).toEqual(["name"])
         expect(Object.keys(skill.args)).not.toContain("subjects")
-        expect(learnedSkillSubjects).toEqual(["learned_corrections", "learned_env", "learned_permissions", "learned_preferences"])
     })
 
     test("unsupported sandbox policy disables execute_sandbox and denies explicit sandbox permissions", () => {
