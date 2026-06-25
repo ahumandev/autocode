@@ -203,6 +203,30 @@ describe("autocode_ssh tools", () => {
         expect(client.commands).toEqual(["uptime"])
     })
 
+    test("command uses env port override", async () => {
+        const client = new FakeClient(new FakeSftp())
+        const { configs, pool } = createFakePool(client)
+        const tool = createAutocodeSshCommandTool({
+            env: { ...envWithPassword, AUTOCODE_SSH_DEV_HOST: "ssh.example", AUTOCODE_SSH_DEV_PORT: "49596" },
+            pool,
+        })
+
+        const payload = parseToolResult(await tool.execute({ ssh_key: "dev", command: "uptime" }, createToolContext()))
+
+        expect(payload.port).toBe(49596)
+        expect(configs[0].port).toBe(49596)
+        expect(configs[0].connectConfig.port).toBe(49596)
+    })
+
+    test("command rejects invalid env port", async () => {
+        const tool = createAutocodeSshCommandTool({ env: { ...envWithPassword, AUTOCODE_SSH_DEV_PORT: "65536" } })
+
+        const payload = parseToolResult(await tool.execute({ ssh_key: "dev", command: "uptime" }, createToolContext()))
+
+        expect(payload.failedAction).toBe("resolve SSH config")
+        expect(payload.error).toContain("SSH port must be between 1 and 65535")
+    })
+
     test("command truncates by max_characters", async () => {
         const client = new FakeClient(new FakeSftp(), () => ({ stdout: "line1\nline2\nline3" }))
         const { pool } = createFakePool(client)
@@ -214,7 +238,7 @@ describe("autocode_ssh tools", () => {
         expect(payload.output_truncated).toBe(true)
     })
 
-    test("command prefers readable keyfile over password", async () => {
+    test("command uses keypass as passphrase for readable keyfile", async () => {
         const directory = await mkdtemp(join(tmpdir(), "autocode-ssh-"))
         const keyPath = join(directory, "id_ed25519")
         await writeFile(keyPath, "real-key")
@@ -222,7 +246,7 @@ describe("autocode_ssh tools", () => {
         const client = new FakeClient(new FakeSftp())
         const { configs, pool } = createFakePool(client)
         const tool = createAutocodeSshCommandTool({
-            env: { ...envWithPassword, AUTOCODE_SSH_DEV_KEYFILE: keyPath },
+            env: { ...envWithPassword, AUTOCODE_SSH_DEV_KEYFILE: keyPath, AUTOCODE_SSH_DEV_KEYPASS: "key-secret" },
             fs: {
                 readFile(path: string): string {
                     readPaths.push(path)
@@ -237,6 +261,78 @@ describe("autocode_ssh tools", () => {
         expect(readPaths).toEqual([keyPath])
         expect(configs[0].auth.method).toBe("privateKey")
         expect(configs[0].connectConfig.privateKey).toBe("fake-key")
+        expect(configs[0].connectConfig.passphrase).toBe("key-secret")
+        expect(configs[0].connectConfig.password).toBe("secret")
+    })
+
+    test("command uses readable keyfile without passphrase when password is missing", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "autocode-ssh-"))
+        const keyPath = join(directory, "id_ed25519")
+        await writeFile(keyPath, "real-key")
+        const client = new FakeClient(new FakeSftp())
+        const { configs, pool } = createFakePool(client)
+        const tool = createAutocodeSshCommandTool({
+            env: { AUTOCODE_SSH_DEV_HOST: "ssh.example", AUTOCODE_SSH_DEV_KEYFILE: keyPath },
+            fs: {
+                readFile(): string {
+                    return "fake-key"
+                },
+            },
+            pool,
+        })
+
+        await tool.execute({ ssh_key: "dev", command: "whoami" }, createToolContext())
+
+        expect(configs[0].auth.method).toBe("privateKey")
+        expect(configs[0].connectConfig.privateKey).toBe("fake-key")
+        expect(configs[0].connectConfig.passphrase).toBeUndefined()
+        expect(configs[0].connectConfig.password).toBeUndefined()
+    })
+
+    test("command does not use password as passphrase for readable keyfile", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "autocode-ssh-"))
+        const keyPath = join(directory, "id_ed25519")
+        await writeFile(keyPath, "real-key")
+        const client = new FakeClient(new FakeSftp())
+        const { configs, pool } = createFakePool(client)
+        const tool = createAutocodeSshCommandTool({
+            env: { ...envWithPassword, AUTOCODE_SSH_DEV_KEYFILE: keyPath },
+            fs: {
+                readFile(): string {
+                    return "fake-key"
+                },
+            },
+            pool,
+        })
+
+        await tool.execute({ ssh_key: "dev", command: "whoami" }, createToolContext())
+
+        expect(configs[0].auth.method).toBe("privateKey")
+        expect(configs[0].connectConfig.privateKey).toBe("fake-key")
+        expect(configs[0].connectConfig.passphrase).toBeUndefined()
+        expect(configs[0].connectConfig.password).toBe("secret")
+    })
+
+    test("command ignores blank keypass for readable keyfile", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "autocode-ssh-"))
+        const keyPath = join(directory, "id_ed25519")
+        await writeFile(keyPath, "real-key")
+        const client = new FakeClient(new FakeSftp())
+        const { configs, pool } = createFakePool(client)
+        const tool = createAutocodeSshCommandTool({
+            env: { AUTOCODE_SSH_DEV_HOST: "ssh.example", AUTOCODE_SSH_DEV_KEYFILE: keyPath, AUTOCODE_SSH_DEV_KEYPASS: "" },
+            fs: {
+                readFile(): string {
+                    return "fake-key"
+                },
+            },
+            pool,
+        })
+
+        await tool.execute({ ssh_key: "dev", command: "whoami" }, createToolContext())
+
+        expect(configs[0].auth.method).toBe("privateKey")
+        expect(configs[0].connectConfig.passphrase).toBeUndefined()
         expect(configs[0].connectConfig.password).toBeUndefined()
     })
 
@@ -252,6 +348,21 @@ describe("autocode_ssh tools", () => {
 
         expect(configs[0].auth.method).toBe("password")
         expect(configs[0].connectConfig.password).toBe("secret")
+    })
+
+    test("command defaults username to root and allows no explicit auth", async () => {
+        const client = new FakeClient(new FakeSftp())
+        const { configs, pool } = createFakePool(client)
+        const tool = createAutocodeSshCommandTool({ env: { AUTOCODE_SSH_MAIL26_HOST: "mail26.example", AUTOCODE_SSH_MAIL26_KEYFILE: "/missing/autocode-key" }, pool })
+
+        await tool.execute({ ssh_key: "MAIL26", command: "whoami" }, createToolContext())
+
+        expect(configs[0].username).toBe("root")
+        expect(configs[0].auth).toEqual({ method: "none" })
+        expect(configs[0].connectConfig).toMatchObject({ host: "mail26.example", username: "root" })
+        expect(configs[0].connectConfig.password).toBeUndefined()
+        expect(configs[0].connectConfig.privateKey).toBeUndefined()
+        expect(configs[0].connectConfig.agent).toBeUndefined()
     })
 
     test("list applies name, extension, and max filters with exact fields", async () => {
@@ -336,15 +447,14 @@ describe("autocode_ssh tools", () => {
         expect(payload.content_truncated).toBe(true)
     })
 
-    test("invalid bounds and missing config/auth return shared error keys", async () => {
+    test("invalid bounds and missing config return shared error keys", async () => {
         const readFileTool = createAutocodeSshReadFileTool({ env: envWithPassword })
         const invalidBounds = parseToolResult(await readFileTool.execute({ ssh_key: "dev", path: "/tmp/file", first_line: 3, last_line: 2 }, createToolContext()))
         const missingConfig = parseToolResult(await createAutocodeSshCommandTool({ env: {} }).execute({ ssh_key: "dev", command: "ls" }, createToolContext()))
-        const missingAuth = parseToolResult(await createAutocodeSshCommandTool({ env: { AUTOCODE_SSH_DEV_HOST: "ssh.example", AUTOCODE_SSH_DEV_USERNAME: "devuser" } }).execute({ ssh_key: "dev", command: "ls" }, createToolContext()))
 
         expect(Object.keys(invalidBounds)).toEqual(["failedAction", "error", "instruction"])
         expect(Object.keys(missingConfig)).toEqual(["failedAction", "error", "instruction"])
-        expect(Object.keys(missingAuth)).toEqual(["failedAction", "error", "instruction"])
+        expect(missingConfig.error).toContain("Wrong ssh_key or missing AUTOCODE_SSH_DEV_HOST var")
     })
 
     test("write_file rejects bad paths, writes content, creates directories, and reports write failures", async () => {

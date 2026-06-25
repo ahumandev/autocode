@@ -8,12 +8,12 @@ export const DEFAULT_SSH_IDLE_TIMEOUT_MS = 5 * 60 * 1000
 export const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 30000
 export const DEFAULT_SSH_MAX_OUTPUT_BYTES = 65536
 
-export type SshAuthMethod = "password" | "privateKey" | "agent"
+export type SshAuthMethod = "password" | "privateKey" | "agent" | "none"
 
 export interface SshConfigInput {
     host: string
     port?: number
-    username: string
+    username?: string
     auth?: SshAuthMethod
     password?: string
     privateKey?: string
@@ -150,14 +150,19 @@ export function parseSshHostPort(value: string, defaultPort = DEFAULT_SSH_PORT):
 }
 
 export async function selectSshAuth(config: SshConfigInput, deps?: Pick<SshDeps, "fs">): Promise<SshAuthChoice> {
-    if (!config.username.trim()) {
-        throw new Error("SSH username is required")
-    }
-
     const method = config.auth ?? inferSshAuthMethod(config)
 
     if (method === "privateKey") {
-        return selectPrivateKeyAuth(config, deps)
+        const auth = await selectPrivateKeyAuth(config, deps)
+        if (auth) {
+            return auth
+        }
+
+        if (config.password) {
+            return { method: "password", password: config.password }
+        }
+
+        return config.agent ? { method: "agent", agent: config.agent } : { method: "none" }
     }
 
     if (method === "password") {
@@ -168,11 +173,15 @@ export async function selectSshAuth(config: SshConfigInput, deps?: Pick<SshDeps,
         return { method, password: config.password }
     }
 
-    if (!config.agent) {
-        throw new Error("SSH agent auth requires agent")
+    if (method === "agent") {
+        if (!config.agent && config.auth === "agent") {
+            throw new Error("SSH agent auth requires agent")
+        }
+
+        return config.agent ? { method, agent: config.agent } : { method }
     }
 
-    return { method, agent: config.agent }
+    return { method: "none" }
 }
 
 export async function resolveSshConfig(configs: SshConfigMap, key: string, deps?: SshDeps): Promise<SshResolvedConfig> {
@@ -186,11 +195,12 @@ export async function resolveSshConfig(configs: SshConfigMap, key: string, deps?
     const port = config.port ?? parsed.port
     validateSshPort(port)
 
+    const username = config.username?.trim() || "root"
     const auth = await selectSshAuth(config, deps)
     const connectConfig: ConnectConfig = {
         host: parsed.host,
         port,
-        username: config.username,
+        username,
     }
 
     applyAuth(connectConfig, auth)
@@ -203,7 +213,7 @@ export async function resolveSshConfig(configs: SshConfigMap, key: string, deps?
         connectConfig.keepaliveInterval = config.keepaliveIntervalMs
     }
 
-    return { key, host: parsed.host, port, username: config.username, auth, connectConfig }
+    return { key, host: parsed.host, port, username, auth, connectConfig }
 }
 
 export class SshConnectionPool {
@@ -536,17 +546,21 @@ function inferSshAuthMethod(config: SshConfigInput): SshAuthMethod {
         return "agent"
     }
 
-    throw new Error("SSH auth requires password, private key, private key path, or agent")
+    return "none"
 }
 
-async function selectPrivateKeyAuth(config: SshConfigInput, deps?: Pick<SshDeps, "fs">): Promise<SshAuthChoice> {
-    const privateKey = config.privateKey ?? (await readPrivateKey(config, deps))
+async function selectPrivateKeyAuth(config: SshConfigInput, deps?: Pick<SshDeps, "fs">): Promise<SshAuthChoice | undefined> {
+    const privateKey = config.privateKey ?? (await readPrivateKey(config, deps).catch(() => undefined))
 
     if (!privateKey) {
-        throw new Error("SSH private key auth requires privateKey or privateKeyPath")
+        if (config.auth === "privateKey") {
+            throw new Error("SSH private key auth requires privateKey or privateKeyPath")
+        }
+
+        return undefined
     }
 
-    return { method: "privateKey", privateKey, passphrase: config.passphrase }
+    return { method: "privateKey", privateKey, passphrase: config.passphrase, password: config.password }
 }
 
 async function readPrivateKey(config: SshConfigInput, deps?: Pick<SshDeps, "fs">): Promise<string | undefined> {
@@ -573,6 +587,7 @@ function applyAuth(connectConfig: ConnectConfig, auth: SshAuthChoice): void {
     if (auth.method === "privateKey") {
         connectConfig.privateKey = auth.privateKey
         connectConfig.passphrase = auth.passphrase
+        connectConfig.password = auth.password
         return
     }
 
@@ -581,7 +596,9 @@ function applyAuth(connectConfig: ConnectConfig, auth: SshAuthChoice): void {
         return
     }
 
-    connectConfig.agent = auth.agent
+    if (auth.method === "agent") {
+        connectConfig.agent = auth.agent
+    }
 }
 
 function createDefaultSshClient(): SshClientLike {

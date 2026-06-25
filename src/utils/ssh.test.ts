@@ -152,9 +152,13 @@ describe("ssh utils", () => {
         }
     })
 
-    test("selectSshAuth chooses private keys, respects explicit auth, and rejects missing sources", async () => {
-        expect(await selectSshAuth({ host: "host", username: "user", password: "pw", privateKey: "key" })).toEqual({ method: "privateKey", privateKey: "key", passphrase: undefined })
+    test("selectSshAuth chooses auth sources, supports no credentials, and rejects explicit missing sources", async () => {
+        expect(await selectSshAuth({ host: "host", username: "user", password: "pw", passphrase: "key-pass", privateKey: "key" })).toEqual({ method: "privateKey", privateKey: "key", passphrase: "key-pass", password: "pw" })
         expect(await selectSshAuth({ host: "host", username: "user", privateKeyPath: "/key" }, { fs: { readFile: async () => "key-file" } })).toEqual({ method: "privateKey", privateKey: "key-file", passphrase: undefined })
+        expect(await selectSshAuth({ host: "host", username: "user", privateKeyPath: "/key", password: "pw" }, { fs: { readFile: async () => "key-file" } })).toEqual({ method: "privateKey", privateKey: "key-file", passphrase: undefined, password: "pw" })
+        expect(await selectSshAuth({ host: "host", username: "user", privateKeyPath: "/missing", password: "pw" }, { fs: { readFile: async () => { throw new Error("missing") } } })).toEqual({ method: "password", password: "pw" })
+        expect(await selectSshAuth({ host: "host", username: "user", privateKeyPath: "/missing", agent: "/agent" }, { fs: { readFile: async () => { throw new Error("missing") } } })).toEqual({ method: "agent", agent: "/agent" })
+        expect(await selectSshAuth({ host: "host", username: "user" })).toEqual({ method: "none" })
         expect(await selectSshAuth({ host: "host", username: "user", auth: "password", password: "pw", privateKey: "key" })).toEqual({ method: "password", password: "pw" })
         expect(await selectSshAuth({ host: "host", username: "user", auth: "agent", agent: "/agent", password: "pw" })).toEqual({ method: "agent", agent: "/agent" })
 
@@ -165,9 +169,12 @@ describe("ssh utils", () => {
 
     test("resolveSshConfig builds keyed ConnectConfig and pool keys omit secrets", async () => {
         const resolved = await resolveSshConfig({ prod: { host: "example.com:2200", port: 2222, username: "deploy", password: "pw", readyTimeoutMs: 10, keepaliveIntervalMs: 20 } }, "prod")
+        const defaultUser = await resolveSshConfig({ prod: { host: "example.com" } }, "prod")
 
         expect(resolved).toMatchObject({ key: "prod", host: "example.com", port: 2222, username: "deploy" })
         expect(resolved.connectConfig).toMatchObject({ host: "example.com", port: 2222, username: "deploy", password: "pw", readyTimeout: 10, keepaliveInterval: 20 })
+        expect(defaultUser.connectConfig).toMatchObject({ host: "example.com", port: 22, username: "root" })
+        expect(defaultUser.auth).toEqual({ method: "none" })
         await expect(resolveSshConfig({}, "missing")).rejects.toThrow("missing")
 
         let now = 0

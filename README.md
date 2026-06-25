@@ -298,16 +298,21 @@ Replace `{db_key}` with letters, digits, or underscores. Environment lookup is c
 
 Configure each SSH target with `{ssh_key}` environment variables:
 
-| Variable pattern                  | Description                                  | Default |
-| --------------------------------- | -------------------------------------------- | ------- |
-| `AUTOCODE_SSH_{ssh_key}_HOST`     | Required SSH host for one configured target. | None.   |
-| `AUTOCODE_SSH_{ssh_key}_KEYFILE`  | Optional private key file path.              | Unset.  |
-| `AUTOCODE_SSH_{ssh_key}_USERNAME` | Optional SSH username.                       | Unset.  |
-| `AUTOCODE_SSH_{ssh_key}_PASSWORD` | Optional SSH password.                       | Unset.  |
+| Variable pattern                  | Description                                              | Default |
+| --------------------------------- | -------------------------------------------------------- | ------- |
+| `AUTOCODE_SSH_{ssh_key}_HOST`     | Required SSH hostname or IP address for one target.      | None.   |
+| `AUTOCODE_SSH_{ssh_key}_PORT`     | Optional SSH port. Valid range is `1` to `65535`.        | `22`.   |
+| `AUTOCODE_SSH_{ssh_key}_KEYFILE`  | Optional private key file path.                          | Unset.  |
+| `AUTOCODE_SSH_{ssh_key}_KEYPASS`  | Optional private key passphrase.                         | Unset.  |
+| `AUTOCODE_SSH_{ssh_key}_USERNAME` | Optional SSH username.                                   | `root`. |
+| `AUTOCODE_SSH_{ssh_key}_PASSWORD` | Optional SSH password.                                   | Unset.  |
+| `AUTOCODE_SSH_{ssh_key}_AGENT`    | Optional SSH agent socket or path.                       | Unset.  |
+
+`AUTOCODE_SSH_{ssh_key}_HOST` must contain only a hostname or IP address. AutoCode does not parse `host:port` values from `HOST`; set `AUTOCODE_SSH_{ssh_key}_PORT` when a target uses a non-default port.
 
 SSH tools: `autocode_ssh_command`, `autocode_ssh_list`, `autocode_ssh_read_attributes`, `autocode_ssh_write_attributes`, `autocode_ssh_read_file`, `autocode_ssh_write_file`, `autocode_ssh_edit_file`, `autocode_ssh_patch_file`, `autocode_ssh_glob`, `autocode_ssh_grep_file`.
 
-Keyfile auth has precedence, but a nonexistent or unreadable keyfile falls back to password, then agent if configured. Idle SSH connections can be reused for 5 minutes. Remote glob/grep/patch/edit/write mirror local tool intent where practical, not exact parity.
+Keyfile auth has precedence. A nonexistent or unreadable keyfile falls back to password. `AUTOCODE_SSH_{ssh_key}_AGENT` is used only when there is no readable `AUTOCODE_SSH_{ssh_key}_KEYFILE` and no `AUTOCODE_SSH_{ssh_key}_PASSWORD`. Idle SSH connections can be reused for 5 minutes. Remote glob/grep/patch/edit/write mirror local tool intent where practical, not exact parity.
 
 ## Development
 

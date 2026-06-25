@@ -760,19 +760,23 @@ async function createEnvConfigMap(sshKey: string, deps: SshToolDeps): Promise<Ss
     const suffix = normalizeEnvSuffix(sshKey)
     const env = deps.env ?? process.env
     const host = env[`AUTOCODE_SSH_${suffix}_HOST`]
-    const username = env[`AUTOCODE_SSH_${suffix}_USERNAME`]
 
-    if (!host) throw new Error(`AUTOCODE_SSH_${suffix}_HOST is required`)
-    if (!username) throw new Error(`AUTOCODE_SSH_${suffix}_USERNAME is required`)
+    if (!host) throw new Error(`Wrong ssh_key or missing AUTOCODE_SSH_${suffix}_HOST var`)
 
+    const username = env[`AUTOCODE_SSH_${suffix}_USERNAME`] || "root"
     const keyfile = env[`AUTOCODE_SSH_${suffix}_KEYFILE`]
     const password = env[`AUTOCODE_SSH_${suffix}_PASSWORD`]
+    const keypass = env[`AUTOCODE_SSH_${suffix}_KEYPASS`]
     const agent = env[`AUTOCODE_SSH_${suffix}_AGENT`]
+    const port = parseEnvPort(env[`AUTOCODE_SSH_${suffix}_PORT`])
     const config: SshConfigInput = { host, username }
+
+    if (port !== undefined) config.port = port
 
     if (keyfile && await canReadFile(keyfile)) {
         config.privateKeyPath = keyfile
-        config.passphrase = env[`AUTOCODE_SSH_${suffix}_PASSPHRASE`]
+        if (keypass?.trim()) config.passphrase = keypass
+        if (password) config.password = password
     }
     else if (password) {
         config.password = password
@@ -782,6 +786,16 @@ async function createEnvConfigMap(sshKey: string, deps: SshToolDeps): Promise<Ss
     }
 
     return { [sshKey]: config }
+}
+
+function parseEnvPort(value: string | undefined): number | undefined {
+    if (value === undefined) return undefined
+    const trimmed = value.trim()
+    if (!/^\d+$/.test(trimmed)) throw new Error("SSH port must be an integer")
+
+    const port = Number(trimmed)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("SSH port must be between 1 and 65535")
+    return port
 }
 
 function normalizeEnvSuffix(sshKey: string): string {
