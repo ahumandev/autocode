@@ -18,12 +18,13 @@ No special UI required. AutoCode runs in OpenCode, keeps progress in version-con
 - 🧠 **Research-backed design** — use specialist agents to gather evidence, compare trade-offs, and prepare solution plans before implementation starts.
 - 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
 - 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
-- ⚠️ **Safe hand-offs** — stop risky or blocked work and move it to facilitation instead of silently continuing with unsafe assumptions.
+- ⚠️ **Safe hand-offs** — provide a thorough manual task tutorial when an operation is unsafe.
 - ⚡ **Token-optimized workflows** — smart orchestrators delegate to faster specialists to improve performance and reduce token use.
 - 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
 - 🧪 **Sandboxed execution** — run supported risky commands in Linux bubblewrap sandboxes when the host supports user namespaces.
 - 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in other directories after permission checks.
-- 🔌 **OpenCode-native packaging** — register agents, commands, tools, and generated skills from one TypeScript plugin.
+- 🔐 **SSH tool suite** — run remote commands and manage files through environment-keyed tools.
+- 🧹 **Agent cleanup** — Agents remove temporary files and stop stray processes they started after debugging.
 
 ## Installation
 
@@ -36,6 +37,7 @@ No special UI required. AutoCode runs in OpenCode, keeps progress in version-con
 
 - [Bubblewrap](https://github.com/containers/bubblewrap) is required only for Linux sandbox execution.
 - [Bun](https://bun.sh) is required only to build the plugin from source or run tests.
+- [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) is required only for Chrome DevTools MCP server support.
 
 ### Installation for LLM Agents
 
