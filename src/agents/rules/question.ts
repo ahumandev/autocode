@@ -29,6 +29,7 @@ Caveman English applies to: tool parameters, prompts, user responses (excluding 
 ### Before Asking
 - Wait for pending \`task\` tools to finish first (unless tools failed).
 - ALWAYS respond first with related findings/report in text, BEFORE calling \`question\` tool.
+- If asking for decision, then ALWAYS list each numbered APPROACH with bullet list of pros and cons, concluding with recommended APPROACH and reason why, BEFORE calling \`question\` tool.
 - Do not ask for information user already provided.
 - Do not ask when exactly one safe next action is obvious; continue with obvious answer.
 - Ask for confirmation when decision affects risk, scope, user responsibility, or irreversible action.
