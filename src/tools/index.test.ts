@@ -454,7 +454,7 @@ describe("auto resume wiring", () => {
         const skillLearnPreference = tools.skill_learn_preference as unknown as { description: string, args: Record<string, unknown> }
         const skill = tools.skill as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_rest", "autocode_rest_response_read", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn_correction", "skill_learn_env", "skill_learn_permission", "skill_learn_preference", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_kill", "autocode_rest", "autocode_rest_response_read", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn_correction", "skill_learn_env", "skill_learn_permission", "skill_learn_preference", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
         expect(tools.skill).toBeDefined()
         expect(Object.keys(tools)).not.toContain("skill_learn")
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
@@ -491,6 +491,23 @@ describe("auto resume wiring", () => {
         expect(skill.description).toContain("skill")
         expect(Object.keys(skill.args)).toEqual(["name"])
         expect(Object.keys(skill.args)).not.toContain("subjects")
+    })
+
+    test("createTools exposes remote SSH file suite tools", () => {
+        const tools = createTools(createMockClient())
+
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining([
+            "autocode_ssh_glob",
+            "autocode_ssh_grep_file",
+            "autocode_ssh_patch_file",
+            "autocode_ssh_edit_file",
+            "autocode_ssh_write_file",
+        ]))
+        expect(Object.keys((tools.autocode_ssh_glob as unknown as { args: Record<string, unknown> }).args)).toEqual(["ssh_key", "pattern", "path", "limit"])
+        expect(Object.keys((tools.autocode_ssh_grep_file as unknown as { args: Record<string, unknown> }).args)).toEqual(["ssh_key", "pattern", "path", "include", "limit"])
+        expect(Object.keys((tools.autocode_ssh_patch_file as unknown as { args: Record<string, unknown> }).args)).toEqual(["ssh_key", "path", "patch"])
+        expect(Object.keys((tools.autocode_ssh_edit_file as unknown as { args: Record<string, unknown> }).args)).toEqual(["ssh_key", "path", "oldString", "newString", "replaceAll"])
+        expect(Object.keys((tools.autocode_ssh_write_file as unknown as { args: Record<string, unknown> }).args)).toEqual(["ssh_key", "path", "content", "create_dirs"])
     })
 
     test("unsupported sandbox policy disables execute_sandbox and denies explicit sandbox permissions", () => {
@@ -1187,6 +1204,7 @@ describe("autocode_plan_save tool", () => {
             "autocode_job_list",
             "autocode_job_shelve",
             "autocode_job_status",
+            "autocode_kill",
             "autocode_logo_find",
             "autocode_db_schemas",
             "autocode_dependencies",
@@ -1204,6 +1222,16 @@ describe("autocode_plan_save tool", () => {
             "autocode_sandbox_read",
             "autocode_session_context",
             "autocode_session_create",
+            "autocode_ssh_command",
+            "autocode_ssh_edit_file",
+            "autocode_ssh_glob",
+            "autocode_ssh_grep_file",
+            "autocode_ssh_list",
+            "autocode_ssh_patch_file",
+            "autocode_ssh_read_attributes",
+            "autocode_ssh_read_file",
+            "autocode_ssh_write_attributes",
+            "autocode_ssh_write_file",
             "skill_learn_correction",
             "skill_learn_env",
             "skill_learn_permission",
@@ -1310,11 +1338,12 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_swap")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_execute")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_execute")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_job_list")).toBe("allow")
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_job_status")).toBe("allow")
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "question")).toBe("allow")
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_previous")).toBeUndefined()
-        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_swap")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_swap")).toBe("allow")
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_plan_read")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_plan_save")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")

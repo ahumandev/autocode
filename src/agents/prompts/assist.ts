@@ -139,7 +139,7 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
     4. Verify implementation
     5. Learn from mistakes, adjust and repeat until user expections are met
     6. Optimize implementation (maintainability, performance, reliability, security)
-    7. Document changes (comments, skill file updates)
+    7. Document changes (comments, update/learn skills)
     8. Regression testing
     9. Commit changes to repo
     10. Consider next task (from Solution Plan if known)

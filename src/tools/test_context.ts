@@ -1,17 +1,14 @@
-import { Effect } from "effect"
 import type { ToolContext } from "@opencode-ai/plugin"
 
 export function createNoopAsk(): ToolContext["ask"] {
-    return () => Effect.void
+    return async () => {
+    }
 }
 
 export function createAskEffect(run: (request: unknown) => void | Promise<void>): ToolContext["ask"] {
-    return (request) => Effect.tryPromise({
-        try: async () => {
-            await run(request)
-        },
-        catch: (error) => error,
-    }) as ReturnType<ToolContext["ask"]>
+    return async (request) => {
+        await run(request)
+    }
 }
 
 export function createToolContext(overrides: Partial<ToolContext> = {}): ToolContext {

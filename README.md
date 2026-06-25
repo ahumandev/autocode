@@ -163,14 +163,14 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 
 ### Documentation commands
 
-| Command                 | Purpose                                                                |
-| ----------------------- | ---------------------------------------------------------------------- |
-| `/docs`                | Document all recent changes.                                           |
-| `/docs-code`           | Documents recent technical architecture and code design decisions.     |
-| `/docs-conventions`    | Documents recent naming conventions and project terminology.           |
-| `/docs-prd`            | Documents recently updated product requirements and user roles.        |
-| `/docs-ux`             | Documents recently updated UX flows, navigation, and styling patterns. |
-| `/init`                 | Documents the entire project.                                          |
+| Command             | Purpose                                                                |
+| ------------------- | ---------------------------------------------------------------------- |
+| `/docs`             | Document all recent changes.                                           |
+| `/docs-code`        | Documents recent technical architecture and code design decisions.     |
+| `/docs-conventions` | Documents recent naming conventions and project terminology.           |
+| `/docs-prd`         | Documents recently updated product requirements and user roles.        |
+| `/docs-ux`          | Documents recently updated UX flows, navigation, and styling patterns. |
+| `/init`             | Documents the entire project.                                          |
 
 ### Utility commands
 
@@ -290,6 +290,21 @@ OpenCode applies a last-matching-rule-wins model to external-directory permissio
 | `AUTOCODE_DB_{db_key}_PASSWORD`   | Optional password supplied alongside the connection when needed.                                                      | Unset.  |
 
 Replace `{db_key}` with letters, digits, or underscores. Environment lookup is case-insensitive. Then instruct agent to use your chosen `{db_key}` to access your DB.
+
+### SSH tool suite
+
+Configure each SSH target with `{ssh_key}` environment variables:
+
+| Variable pattern                  | Description                                  | Default |
+| --------------------------------- | -------------------------------------------- | ------- |
+| `AUTOCODE_SSH_{ssh_key}_HOST`     | Required SSH host for one configured target. | None.   |
+| `AUTOCODE_SSH_{ssh_key}_KEYFILE`  | Optional private key file path.              | Unset.  |
+| `AUTOCODE_SSH_{ssh_key}_USERNAME` | Optional SSH username.                       | Unset.  |
+| `AUTOCODE_SSH_{ssh_key}_PASSWORD` | Optional SSH password.                       | Unset.  |
+
+SSH tools: `autocode_ssh_command`, `autocode_ssh_list`, `autocode_ssh_read_attributes`, `autocode_ssh_write_attributes`, `autocode_ssh_read_file`, `autocode_ssh_write_file`, `autocode_ssh_edit_file`, `autocode_ssh_patch_file`, `autocode_ssh_glob`, `autocode_ssh_grep_file`.
+
+Keyfile auth has precedence, but a nonexistent or unreadable keyfile falls back to password, then agent if configured. Idle SSH connections can be reused for 5 minutes. Remote glob/grep/patch/edit/write mirror local tool intent where practical, not exact parity.
 
 ## Development
 

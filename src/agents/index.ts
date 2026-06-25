@@ -1294,9 +1294,9 @@ const baseAgents: AgentMap = {
 
     query_skills: {
         color: colorReadOnlyWorker,
-            description: "Task `query_skills` to ask with question about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
-            hidden: true,
-            mode: "subagent",
+        description: "Task `query_skills` to ask with question about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
+        hidden: true,
+        mode: "subagent",
         permission: {
             '*': "deny",
             skill: {
@@ -1377,8 +1377,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_execute: "allow",
+            autocode_agent_swap: "allow",
             autocode_job_list: "allow",
+            autocode_job_status: "allow",
             question: "allow",
         },
         prompt: "---",

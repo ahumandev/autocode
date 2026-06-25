@@ -1228,11 +1228,18 @@ export async function moveResolvedPlannedJobToStatus(
                     if (isCollisionError(retryError)) {
                         return { type: "destination_collision", destinationDir }
                     }
+                    if (isMissingFile(retryError)) {
+                        return { type: "missing" }
+                    }
 
                     throw retryError
                 }
             }
             else {
+                if (isMissingFile(error)) {
+                    return { type: "missing" }
+                }
+
                 throw error
             }
         }

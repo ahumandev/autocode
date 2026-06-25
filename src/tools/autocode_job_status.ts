@@ -34,11 +34,8 @@ function normalizeJobStatusToolArgs(clientOrFileSystem?: OpencodeClient | JobToo
     return { client: candidate as OpencodeClient | undefined, fileSystem: defaultFileSystem, now: () => new Date() }
 }
 
-function createMissingJobRetryResponse(jobName: string): string {
-    return createLifecycleJobRequiredRetryResponse(
-        "update job status",
-        `job ${jobName}`
-    )
+function createNoopResponse(): string {
+    return JSON.stringify({})
 }
 
 function createCollisionRetryResponse(jobName: string, status: JobStatus): string {
@@ -86,13 +83,13 @@ function getRequestedStatus(args: Record<string, unknown>): { status?: JobStatus
     }
 }
 
-function getIdentityRetryResponse(identity: PlannedJobIdentityResolution, status: JobStatus): string {
+function getIdentityResponse(identity: PlannedJobIdentityResolution, status: JobStatus): string {
     if (identity.job_name) {
         if (identity.resolution === "collision") {
             return createCollisionRetryResponse(identity.job_name, status)
         }
         if (identity.resolution === "missing") {
-            return createMissingJobRetryResponse(identity.job_name)
+            return createNoopResponse()
         }
     }
 
@@ -113,7 +110,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
             }
 
             if (!client) {
-                return createMissingIdentityRetryResponse()
+                return createAbortResponse("update job status", "Opencode client is unavailable.")
             }
 
             try {
@@ -122,7 +119,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                 const status = requestedStatusResult.status!
                 const identity = await resolvePlannedJobIdentity(directoryFileSystem, client, context, { includeShelved: status === "shelved" })
                 if (identity.mode !== "planned" || !identity.job_name) {
-                    return getIdentityRetryResponse(identity, status)
+                    return getIdentityResponse(identity, status)
                 }
 
                 const jobName = identity.job_name
@@ -138,6 +135,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                     rename: directoryFileSystem.rename,
                 }
                 const effectiveStatus = getEffectiveJobStatus(status, resolvedJob.status)
+                const title = await updateCurrentSessionTitleToJobName(client, context, jobName, effectiveStatus)
 
                 const reportContentResult = await readLatestAssistantResponseText(client, context)
                 if (reportContentResult.error) {
@@ -157,7 +155,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                 if (effectiveStatus === "shelved") {
                     const shelved = await shelveResolvedPlannedJob({
                         storageRoot,
-                        client,
+                        client: undefined,
                         context,
                         fileSystem,
                         moveFileSystem,
@@ -166,7 +164,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                         assistantResponseText: reportContentResult.text,
                     })
                     if (shelved.type === "missing") {
-                        return createMissingJobRetryResponse(jobName)
+                        return createNoopResponse()
                     }
                     if (shelved.type === "collision") {
                         return createCollisionRetryResponse(jobName, effectiveStatus)
@@ -179,19 +177,13 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                     }
 
                     return JSON.stringify({
-                        job_name: shelved.moved.job.job_name,
-                        current_status: shelved.moved.job.status,
-                        job_path: shelved.moved.job.job_path,
-                        solution_path: shelved.solution.relativeSolutionPath,
-                        sandbox_archive: shelved.sandbox_archive,
-                        title_warning: shelved.title.warning,
                         next_action: createNextAction(shelved.moved.job.status),
                     })
                 }
 
                 const moved = await movePlannedJobToStatus(storageRoot, jobName, effectiveStatus, moveFileSystem)
                 if (moved.type === "missing") {
-                    return createMissingJobRetryResponse(jobName)
+                    return createNoopResponse()
                 }
                 if (moved.type === "collision") {
                     return createCollisionRetryResponse(jobName, effectiveStatus)
@@ -204,14 +196,9 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                     getDirectory: async () => moved.job.directory,
                     now,
                 })
-                const logged = await solution.log(jobName, SolutionLogEvent.UpdateStatus, moved.job.status, reportContentResult.text, reportContentResult.text)
-                await updateCurrentSessionTitleToJobName(client, context, moved.job.job_name, moved.job.status)
+                await solution.log(jobName, SolutionLogEvent.UpdateStatus, moved.job.status, reportContentResult.text, reportContentResult.text)
 
                 return JSON.stringify({
-                    job_name: moved.job.job_name,
-                    current_status: moved.job.status,
-                    job_path: moved.job.job_path,
-                    solution_path: logged.relativeSolutionPath,
                     next_action: createNextAction(moved.job.status),
                 })
             }

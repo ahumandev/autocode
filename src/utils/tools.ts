@@ -28,7 +28,7 @@ function sortValue(value: unknown, seen = new WeakSet<object>()): unknown {
     return value
 }
 
-export function flattenError(error: any): string {
+export function flattenError(error: unknown): string {
     if (error instanceof Error) {
         if (error.name && error.name !== "Error" && error.message) {
             return `${error.name}: ${error.message}`
@@ -56,7 +56,7 @@ export function flattenError(error: any): string {
     return String(error)
 }
 
-export function createErrorResponse(failedAction: string, error: any, instruction: string): string {
+export function createErrorResponse(failedAction: string, error: unknown, instruction: string): string {
     return JSON.stringify({
         failedAction,
         error: flattenError(error),
@@ -64,14 +64,14 @@ export function createErrorResponse(failedAction: string, error: any, instructio
     })
 }
 
-export function createAbortResponse(failedAction: string, error: any): string {
-    return createErrorResponse(failedAction, error, `
+export function createAbortResponse(failedAction: string, error: unknown, instruction = `
 Immediately ABORT your flow and advise user what failed as follow:
     - list prior actions as bullet points (80 words max per point)
     - mention exact error that caused this failure
     - use markdown code blocks where appropriate to format logs/output/config 
     - use emojis to make user attend to important info
-`)
+`): string {
+    return createErrorResponse(failedAction, error, instruction)
 }
 
 export function createRetryResponse(failedAction: string, error: any, correctiveAction: string): string {

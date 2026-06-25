@@ -136,7 +136,7 @@ Report to user:
         subtask: false,
         template: authorArticleCommandTemplate,
     },
-   
+
     "docs": {
         agent: "execute_document",
         description: "Document recent project changes.",

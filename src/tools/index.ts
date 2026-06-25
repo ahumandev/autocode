@@ -13,6 +13,7 @@ import { createAutocodeJobExecuteTool } from "./autocode_job_execute"
 import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createAutocodeJobShelveTool } from "./autocode_job_shelve"
 import { createAutocodeJobStatusTool } from "./autocode_job_status"
+import { createAutocodeKillTool } from "./autocode_kill"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
 import { createAutocodePlanSaveTool } from "./autocode_plan_save"
@@ -21,6 +22,7 @@ import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
+import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
 import { createAutocodeSessionContextTool } from "./autocode_session_context"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createSkillLearnCorrectionTool, createSkillLearnEnvTool, createSkillLearnPermissionTool, createSkillLearnPreferenceTool } from "./skill_learn"
@@ -49,6 +51,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_job_execute: createAutocodeJobExecuteTool(client),
         autocode_job_shelve: createAutocodeJobShelveTool(client),
         autocode_job_status: createAutocodeJobStatusTool(client),
+        autocode_kill: createAutocodeKillTool(),
         autocode_logo_find: createAutocodeLogoFindTool(),
         autocode_plan_read: createAutocodePlanReadTool(client),
         autocode_plan_save: createAutocodePlanSaveTool(client),
@@ -64,6 +67,16 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_sandbox_glob: createAutocodeSandboxGlobTool(client),
         autocode_sandbox_grep: createAutocodeSandboxGrepTool(client),
         autocode_sandbox_read: createAutocodeSandboxReadTool(client),
+        autocode_ssh_command: createAutocodeSshCommandTool(),
+        autocode_ssh_list: createAutocodeSshListTool(),
+        autocode_ssh_read_attributes: createAutocodeSshReadAttributesTool(),
+        autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool(),
+        autocode_ssh_read_file: createAutocodeSshReadFileTool(),
+        autocode_ssh_glob: createAutocodeSshGlobTool(),
+        autocode_ssh_grep_file: createAutocodeSshGrepFileTool(),
+        autocode_ssh_patch_file: createAutocodeSshPatchFileTool(),
+        autocode_ssh_edit_file: createAutocodeSshEditFileTool(),
+        autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
         autocode_session_context: createAutocodeSessionContextTool(client),
         autocode_session_create: createAutocodeSessionCreateTool(client),
         skill_learn_correction: createSkillLearnCorrectionTool(),

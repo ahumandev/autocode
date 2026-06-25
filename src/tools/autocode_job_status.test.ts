@@ -1,7 +1,7 @@
 import { describe, beforeEach, expect, mock, test } from "bun:test"
 import type { Dirent } from "fs"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createAbortResponse, createLifecycleJobRequiredRetryResponse, createRetryResponse, resetRetryCounts } from "@/utils/tools"
+import { createAbortResponse, createRetryResponse, resetRetryCounts } from "@/utils/tools"
 import { createToolContext } from "./test_context"
 import { createAutocodeJobStatusTool } from "./autocode_job_status"
 
@@ -154,7 +154,7 @@ describe("autocode_job_status tool", () => {
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(result).toBe(createLifecycleJobRequiredRetryResponse("update job status", "job missing_job"))
+        expect(JSON.parse(result as string)).toEqual({})
         expect(fs.rename).not.toHaveBeenCalled()
         expect(fs.writeFile).not.toHaveBeenCalled()
     })
@@ -297,7 +297,7 @@ describe("autocode_job_status tool", () => {
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(result).toBe(createLifecycleJobRequiredRetryResponse("update job status", "job missing_job"))
+        expect(JSON.parse(result as string)).toEqual({})
     })
 
     test("returns lifecycle-job retry response when the job disappears before lifecycle move", async () => {
@@ -314,7 +314,7 @@ describe("autocode_job_status tool", () => {
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(result).toBe(createLifecycleJobRequiredRetryResponse("update job status", "job my_feature"))
+        expect(result).toBe(JSON.stringify({}))
     })
 
     test("returns retry response when duplicate active lifecycle directories exist", async () => {
