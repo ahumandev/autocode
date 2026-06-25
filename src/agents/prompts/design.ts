@@ -73,6 +73,7 @@ For each assumed RISK in RISKS:
     2. If verified: convert RISK into CONSTRAINT with proof (source url, filenames, line numbers, commands, user answer, etc).
     3. If disproven: remove RISK or mark as resolved with proof.
     4. If unverified: keep as RISK with mitigation.
+    5. If corrected: not yet implemented design corrections (user requested deviations from original INSTRUCTIONS) are NOT RISKS -> remove them from RISK list.
 
 ### STEP 5: Analyze APPROACHES
 

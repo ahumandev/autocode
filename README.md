@@ -15,7 +15,8 @@ No special UI required. AutoCode runs in OpenCode, keeps progress in version-con
 ## Features
 
 - 🧭 **Structured lifecycle** — move researched work from concept to solution in phases: concept ➔ draft ➔ executing job ➔ review.
-- 🧠 **Research-backed design** — use specialist agents to gather evidence, compare trade-offs, and prepare solution plans before implementation starts.
+- 🔎 **Research** — safely gather read-only evidence on project or non-project topics without making changes.
+- 🧠 **Design** — brainstorm options, study feasibility, compare approaches, and report pros, cons, and risks before implementation starts.
 - 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
 - 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
 - ⚠️ **Safe hand-offs** — provide a thorough manual task tutorial when an operation is unsafe.
