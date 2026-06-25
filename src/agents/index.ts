@@ -44,6 +44,8 @@ import { tempConceptPrompt } from "./prompts/temp_concept";
 import { tempManualPrompt } from "./prompts/temp_manual";
 import { tempReportPrompt } from "@/agents/prompts/temp_report";
 import { documentEnvPrompt } from "./prompts/document_env";
+import { querySshPrompt } from "./prompts/query_ssh";
+import { executeSshPrompt } from "./prompts/execute_ssh";
 
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules
@@ -1164,6 +1166,30 @@ const baseAgents: AgentMap = {
         tier: "balanced",
     },
 
+    execute_ssh: {
+        color: colorWritableWorker,
+        description: "Task `execute_ssh` to access remote SSH/SFTP servers to execute remote commands or search/read/write remote files.",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "deny",
+            "autocode_ssh*": "allow",
+            skill: {
+                "*": "deny",
+                "execute-install": "allow",
+                "learned-corrections/execute_ssh": "allow",
+                "learned-env-*": "allow",
+                "learned-permissions": "allow"
+            },
+            skill_learn_correction: "allow",
+            skill_learn_env: "allow",
+            "todo*": "allow",
+        },
+        prompt: executeSshPrompt,
+        temperature: 0.1,
+        tier: "balanced",
+    },
+
     // Query workers
 
     query_browser: {
@@ -1268,7 +1294,7 @@ const baseAgents: AgentMap = {
 
     query_os: {
         color: colorReadOnlyWorker,
-        description: "Task `query_os` to find hardware, software, system, network, service, process, or OS-related information, versions, help-command info, status, or configurations",
+        description: "Task `query_os` to find local host hardware, software, system, network, service, process, or OS-related information, versions, help-command info, status, or configurations",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1304,13 +1330,38 @@ const baseAgents: AgentMap = {
                 "design*": "allow",
                 "execute*": "allow",
                 "learned-corrections/primary": "allow",
-                "learned-env": "allow",
+                "learned-env*": "allow",
                 "learned-permissions": "allow",
                 "learned-preferences": "allow"
             },
             "todo*": "allow"
         },
         prompt: queryArchitectPrompt,
+        tier: "fast",
+    },
+
+    query_ssh: {
+        color: colorReadOnlyWorker,
+        description: "Task `query_ssh` to find remote SSH/SFTP server files, hardware, software, system, network, service, process, or OS-related information, versions, help-command info, status, or configurations",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            autocode_ssh_command: "allow",
+            autocode_ssh_glob: "allow",
+            autocode_ssh_grep_file: "allow",
+            autocode_ssh_list: "allow",
+            "autocode_ssh_read_*": "allow",
+            doom_loop: "deny",
+            skill: {
+                "*": "deny",
+                "learned-env": "allow",
+                "learned-permissions": "allow"
+            },
+            skill_learn_env: "allow"
+        },
+        prompt: querySshPrompt,
+        temperature: 0.1,
         tier: "fast",
     },
 

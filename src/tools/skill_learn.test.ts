@@ -42,8 +42,8 @@ function skillFilePath(root: string, agent = "pair", subject = "learned-correcti
     return join(root, ".agents", "skills", subject, agent, "SKILL.md")
 }
 
-function envSkillFilePath(root: string): string {
-    return join(root, ".agents", "skills", "learned-env", "SKILL.md")
+function envSkillFilePath(root: string, skillName = "learned-env"): string {
+    return join(root, ".agents", "skills", skillName, "SKILL.md")
 }
 
 function permissionSkillFilePath(root: string): string {
@@ -197,6 +197,50 @@ describe("skill_learn tool", () => {
             expect(content).toContain("description: Use `learned-env` skill to find related external projects locally or recall local dev environment limitations/setup.")
             expect(content).toContain("## First")
             expect(content).toContain("## Second")
+        })
+    })
+
+    test("blank env ssh_key keeps local learned-env storage path", async () => {
+        await withTempDir(async (root) => {
+            const tool = createSkillLearnEnvTool()
+            const result = await tool.execute({
+                title: "Local",
+                content: "- Content.",
+                ssh_key: "   ",
+            } as never, createToolContext({
+                agent: "pair",
+                directory: root,
+                worktree: root,
+            }))
+            const content = readFileSync(envSkillFilePath(root), "utf8")
+
+            expect(parseToolResult(result)).toBe("OK")
+            expect(existsSync(envSkillFilePath(root))).toBe(true)
+            expect(existsSync(envSkillFilePath(root, "learned-env-prod_box"))).toBe(false)
+            expect(content).toContain("name: learned-env")
+            expect(content).toContain("description: Use `learned-env` skill to find related external projects locally or recall local dev environment limitations/setup.")
+        })
+    })
+
+    test("nonblank env ssh_key writes dedicated remote learned-env skill", async () => {
+        await withTempDir(async (root) => {
+            const tool = createSkillLearnEnvTool()
+            const result = await tool.execute({
+                title: "Remote",
+                content: "- Remote content.",
+                ssh_key: "Prod_Box",
+            } as never, createToolContext({
+                agent: "pair",
+                directory: root,
+                worktree: root,
+            }))
+            const content = readFileSync(envSkillFilePath(root, "learned-env-prod_box"), "utf8")
+
+            expect(parseToolResult(result)).toBe("OK")
+            expect(existsSync(envSkillFilePath(root))).toBe(false)
+            expect(content).toContain("name: learned-env-prod_box")
+            expect(content).toContain("description: Use `learned-env-prod_box` skill to find related external projects on remote SSH server intended for SSH key PROD_BOX or recall its limitations/setup.")
+            expect(content).toContain("## Remote")
         })
     })
 

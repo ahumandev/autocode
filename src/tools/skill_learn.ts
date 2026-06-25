@@ -17,11 +17,13 @@ type FileSystem = {
 type SkillLearnArgs = {
     title?: unknown
     content?: unknown
+    ssh_key?: unknown
 }
 
 type ValidatedSkillLearnArgs = {
     title: string
     content: string
+    sshKey?: string
 }
 
 type SkillLearnContext = {
@@ -50,15 +52,19 @@ function hasControlCharacter(value: string): boolean {
     return /[\u0000-\u001f\u007f]/.test(value)
 }
 
-function buildSkillName(subject: LearnedSkillSubject, agentName?: string): string {
-    const skillDirectory = learnedSkillDirectory(subject)
+function buildSkillName(subject: LearnedSkillSubject, agentName?: string, sshKey?: string): string {
+    const skillDirectory = learnedSkillDirectory(subject, sshKey)
     return agentName === undefined ? skillDirectory : `${skillDirectory}/${agentName}`
 }
 
-function buildSkillDescription(subject: LearnedSkillSubject): string {
+function buildSkillDescription(subject: LearnedSkillSubject, sshKey?: string): string {
+    if (subject === "env" && sshKey !== undefined) {
+        return `Use \`${learnedSkillDirectory(subject, sshKey)}\` skill to find related external projects on remote SSH server intended for SSH key ${sshKey.toUpperCase()} or recall its limitations/setup.`
+    }
+
     const descriptions = {
         corrections: "Use `learned-corrections` skill to avoid OBSTACLES, troubleshooting mistakes, recall lessons learned in previous sessions.",
-        env:         "Use `learned-env` skill to find related external projects locally or recall local dev environment limitations/setup.",
+        env: "Use `learned-env` skill to find related external projects locally or recall local dev environment limitations/setup.",
         permissions: "Use `learned-permissions` skill to check if task is safe or DANGEROUS OPERATION.",
         preferences: "Use `learned-preferences` skill to avoid user complaints, design better APPROACHES and improve reports.",
     } satisfies Record<LearnedSkillSubject, string>
@@ -66,15 +72,15 @@ function buildSkillDescription(subject: LearnedSkillSubject): string {
     return descriptions[subject]
 }
 
-function learnedSkillDirectory(subject: LearnedSkillSubject): string {
-    return `learned-${subject}`
+function learnedSkillDirectory(subject: LearnedSkillSubject, sshKey?: string): string {
+    return subject === "env" && sshKey !== undefined ? `learned-env-${sshKey}` : `learned-${subject}`
 }
 
-function buildFrontmatter(subject: LearnedSkillSubject, agentName?: string): string {
+function buildFrontmatter(subject: LearnedSkillSubject, agentName?: string, sshKey?: string): string {
     return [
         "---",
-        `name: ${buildSkillName(subject, agentName)}`,
-        `description: ${buildSkillDescription(subject)}`,
+        `name: ${buildSkillName(subject, agentName, sshKey)}`,
+        `description: ${buildSkillDescription(subject, sshKey)}`,
         "---",
     ].join("\n")
 }
@@ -107,8 +113,8 @@ function getSectionStartIndexes(lines: string[], frontmatterEnd: number): number
     }, [])
 }
 
-function ensureFrontmatter(content: string, subject: LearnedSkillSubject, agentName?: string): string {
-    const frontmatter = buildFrontmatter(subject, agentName)
+function ensureFrontmatter(content: string, subject: LearnedSkillSubject, agentName?: string, sshKey?: string): string {
+    const frontmatter = buildFrontmatter(subject, agentName, sshKey)
     if (!content.trim()) {
         return frontmatter
     }
@@ -149,12 +155,28 @@ export function pruneEldestLearnedSection(content: string, maxLines: number = ma
     return { content: nextContent, pruned: true, lineCount: countMarkdownLines(nextContent) }
 }
 
-export function validateSkillLearnArgs(args: SkillLearnArgs): ValidatedSkillLearnArgs | { error: string, instruction: string } {
-    const unexpectedArgs = Object.keys(args).filter((key) => !["title", "content"].includes(key))
+export function validateSkillLearnArgs(args: SkillLearnArgs, allowSshKey = false): ValidatedSkillLearnArgs | { error: string, instruction: string } {
+    const allowedArgs = allowSshKey ? ["title", "content", "ssh_key"] : ["title", "content"]
+    const unexpectedArgs = Object.keys(args).filter((key) => !allowedArgs.includes(key))
     if (unexpectedArgs.length > 0) {
         return {
             error: `Unexpected argument(s): ${unexpectedArgs.join(", ")}.`,
-            instruction: "Retry with exactly title and content arguments.",
+            instruction: allowSshKey ? "Retry with title, content, and optional ssh_key arguments." : "Retry with exactly title and content arguments.",
+        }
+    }
+
+    if (allowSshKey && args.ssh_key !== undefined && typeof args.ssh_key !== "string") {
+        return {
+            error: "Invalid ssh_key. SSH key must be a string when provided.",
+            instruction: "Retry with ssh_key omitted, blank, or using letters, numbers, underscores, or hyphens.",
+        }
+    }
+
+    const sshKey = allowSshKey && typeof args.ssh_key === "string" && args.ssh_key.trim() ? args.ssh_key.trim().toLowerCase() : undefined
+    if (sshKey !== undefined && !isSafePathIdentifier(sshKey)) {
+        return {
+            error: `Unsafe ssh_key: ${args.ssh_key}`,
+            instruction: "Retry with ssh_key using letters, numbers, underscores, or hyphens.",
         }
     }
 
@@ -175,6 +197,7 @@ export function validateSkillLearnArgs(args: SkillLearnArgs): ValidatedSkillLear
     return {
         title: args.title.trim(),
         content: args.content.trim(),
+        sshKey,
     }
 }
 
@@ -214,16 +237,16 @@ function resolveLearnedSkillAgentName(subject: LearnedSkillSubject, shared: bool
     return validatedAgentName
 }
 
-function resolveSkillFilePath(context: SkillLearnContext, subject: LearnedSkillSubject, agentName?: string): { filePath: string, skillsRoot: string } {
+function resolveSkillFilePath(context: SkillLearnContext, subject: LearnedSkillSubject, agentName?: string, sshKey?: string): { filePath: string, skillsRoot: string } {
     const agentsRoot = path.join(resolveAgentsStorageRoot(context), ".agents")
     const skillsRoot = path.resolve(agentsRoot, "skills")
-    const skillDirectory = learnedSkillDirectory(subject)
+    const skillDirectory = learnedSkillDirectory(subject, sshKey)
     const skillPathParts = agentName === undefined ? [skillDirectory, "SKILL.md"] : [skillDirectory, agentName, "SKILL.md"]
     const filePath = path.resolve(skillsRoot, ...skillPathParts)
     const relativePath = path.relative(skillsRoot, filePath)
 
     if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-        throw new Error(`Invalid learned skill path for ${buildSkillName(subject, agentName)}`)
+        throw new Error(`Invalid learned skill path for ${buildSkillName(subject, agentName, sshKey)}`)
     }
 
     return { filePath, skillsRoot }
@@ -249,15 +272,18 @@ const skillLearnDescriptions = {
     preferences: "ASSIGNMENT/job is complete but reviewer complaint about implementation/report: `subject` = preferences, `content` = reviewer preferences like programming patterns, file organization, naming conventions, etc.",
 } satisfies Record<LearnedSkillSubject, string>
 
-function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fileSystem: FileSystem = defaultFileSystem, shared = false): ReturnType<typeof tool> {
+function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fileSystem: FileSystem = defaultFileSystem, shared = false, allowSshKey = false): ReturnType<typeof tool> {
+    const args = {
+        title: tool.schema.string().describe("Short markdown heading for content."),
+        content: tool.schema.string().describe("Summary of what was learned in Caveman English."),
+        ...(allowSshKey ? { ssh_key: tool.schema.string().optional().describe("Omit for local env; otherwise SFTP/SSH key name for remote env.") } : {}),
+    }
+
     return tool({
         description: `Call \`${toolName}\` to remember when ${skillLearnDescriptions[subject]}`,
-        args: {
-            title: tool.schema.string().describe("Short markdown heading for content."),
-            content: tool.schema.string().describe("Summary of what was learned in Caveman English."),
-        },
+        args,
         async execute(args, context) {
-            const validatedArgs = validateSkillLearnArgs(args)
+            const validatedArgs = validateSkillLearnArgs(args, allowSshKey)
             if ("error" in validatedArgs) {
                 return createRetryResponse("learn skill", validatedArgs.error, validatedArgs.instruction)
             }
@@ -268,11 +294,11 @@ function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fi
             }
 
             try {
-                const { filePath } = resolveSkillFilePath(context, subject, agentName)
+                const { filePath } = resolveSkillFilePath(context, subject, agentName, validatedArgs.sshKey)
                 await fileSystem.mkdir(path.dirname(filePath), { recursive: true })
                 const existingContent = await readExistingSkill(fileSystem, filePath)
                 const nextContent = appendLearnedSection(
-                    ensureFrontmatter(existingContent, subject, agentName),
+                    ensureFrontmatter(existingContent, subject, agentName, validatedArgs.sshKey),
                     validatedArgs.title,
                     validatedArgs.content
                 )
@@ -293,7 +319,7 @@ export function createSkillLearnCorrectionTool(fileSystem: FileSystem = defaultF
 }
 
 export function createSkillLearnEnvTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
-    return createSkillLearnTool("skill_learn_env", "env", fileSystem, true)
+    return createSkillLearnTool("skill_learn_env", "env", fileSystem, true, true)
 }
 
 export function createSkillLearnPermissionTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {

@@ -90,12 +90,12 @@ const defaultSshPool = new SshConnectionPool()
 
 export function createAutocodeSshCommandTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
-        description: "Execute a command over a configured SSH connection.",
+        description: "Execute shell command on SSH server.",
         args: {
-            ssh_key: tool.schema.string(),
-            command: tool.schema.string(),
-            timeout_ms: tool.schema.number().optional(),
-            max_characters: tool.schema.number().optional(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            command: tool.schema.string().describe("Shell command to execute on SSH server."),
+            timeout_ms: tool.schema.number().optional().describe(`Optional command timeout in milliseconds. Defaults to ${defaultCommandTimeoutMs}`),
+            max_characters: tool.schema.number().optional().describe("Optional maximum characters to return from command output."),
         },
         async execute(args): Promise<string> {
             const timeoutMs = args.timeout_ms ?? defaultCommandTimeoutMs
@@ -121,13 +121,13 @@ export function createAutocodeSshCommandTool(deps: SshToolDeps = {}): ReturnType
 
 export function createAutocodeSshListTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
-        description: "List remote directory entries over SSH SFTP.",
+        description: "List SSH server files/directories.",
         args: {
-            ssh_key: tool.schema.string(),
-            directory: tool.schema.string(),
-            name_filter: tool.schema.string().optional(),
-            ext_filter: tool.schema.string().optional(),
-            max_items: tool.schema.number().optional(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            directory: tool.schema.string().describe("Dir to list."),
+            name_filter: tool.schema.string().optional().describe("Optional name contains filter."),
+            ext_filter: tool.schema.string().optional().describe("Optional extension filter."),
+            max_items: tool.schema.number().optional().describe("Optional max items."),
         },
         async execute(args): Promise<string> {
             if (args.max_items !== undefined && !isPositiveInteger(args.max_items)) return createSshToolErrorResponse("list SSH directory", new Error("max_items must be a positive integer"))
@@ -150,8 +150,8 @@ export function createAutocodeSshReadAttributesTool(deps: SshToolDeps = {}): Ret
     return tool({
         description: "Read remote path owner, group, permission, type, and size over SSH.",
         args: {
-            ssh_key: tool.schema.string(),
-            path: tool.schema.string(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            path: tool.schema.string().describe("Remote path."),
         },
         async execute(args): Promise<string> {
             return withSshConnection(args.ssh_key, deps, "read SSH attributes", async ({ client, host, port }) => {
@@ -167,13 +167,13 @@ export function createAutocodeSshWriteAttributesTool(deps: SshToolDeps = {}): Re
     return tool({
         description: "Update remote path owner, group, or permission bits over SSH.",
         args: {
-            ssh_key: tool.schema.string(),
-            path: tool.schema.string(),
-            owner: tool.schema.string().optional(),
-            group: tool.schema.string().optional(),
-            read: tool.schema.array(tool.schema.enum(entities)).optional(),
-            write: tool.schema.array(tool.schema.enum(entities)).optional(),
-            execute: tool.schema.array(tool.schema.enum(entities)).optional(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            path: tool.schema.string().describe("Remote path."),
+            owner: tool.schema.string().optional().describe("New owner name."),
+            group: tool.schema.string().optional().describe("New group name."),
+            read: tool.schema.array(tool.schema.enum(entities)).optional().describe("Who can read."),
+            write: tool.schema.array(tool.schema.enum(entities)).optional().describe("Who can write."),
+            execute: tool.schema.array(tool.schema.enum(entities)).optional().describe("Who can execute."),
         },
         async execute(args): Promise<string> {
             const permissionError = validatePermissionArgs(args.read, args.write, args.execute)
@@ -200,12 +200,12 @@ export function createAutocodeSshWriteAttributesTool(deps: SshToolDeps = {}): Re
 
 export function createAutocodeSshReadFileTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
-        description: "Read a UTF-8 remote file over SSH SFTP.",
+        description: "Read UTF-8 file on SSH/SFTP server.",
         args: {
-            ssh_key: tool.schema.string(),
-            path: tool.schema.string(),
-            first_line: tool.schema.number().optional(),
-            last_line: tool.schema.number().optional(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            path: tool.schema.string().describe("File path relative to SSH filesystem."),
+            first_line: tool.schema.number().optional().describe("First line to read."),
+            last_line: tool.schema.number().optional().describe("Last line to read."),
         },
         async execute(args): Promise<string> {
             const firstLine = args.first_line ?? 1
@@ -232,12 +232,12 @@ export function createAutocodeSshReadFileTool(deps: SshToolDeps = {}): ReturnTyp
 
 export function createAutocodeSshWriteFileTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
-        description: "Write a complete UTF-8 remote file over SSH SFTP.",
+        description: "Write complete UTF-8 file on SSH/SFTP server.",
         args: {
-            ssh_key: tool.schema.string(),
-            path: tool.schema.string(),
-            content: tool.schema.string(),
-            create_dirs: tool.schema.boolean().optional(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            path: tool.schema.string().describe("File path relative to SSH filesystem."),
+            content: tool.schema.string().describe("File content to write."),
+            create_dirs: tool.schema.boolean().optional().describe("Make parent dirs."),
         },
         async execute(args): Promise<string> {
             const inputError = validateWritableRemoteFilePath(args.path, "path") ?? validateNoNul(args.content, "content")
@@ -261,13 +261,13 @@ export function createAutocodeSshWriteFileTool(deps: SshToolDeps = {}): ReturnTy
 
 export function createAutocodeSshEditFileTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
-        description: "Edit a UTF-8 remote file by exact string replacement over SSH SFTP.",
+        description: "Edit UTF-8 remote file by exact string replacement on SSH/SFTP server.",
         args: {
-            ssh_key: tool.schema.string(),
-            path: tool.schema.string(),
-            oldString: tool.schema.string(),
-            newString: tool.schema.string(),
-            replaceAll: tool.schema.boolean().optional(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            path: tool.schema.string().describe("File path relative to SSH filesystem."),
+            oldString: tool.schema.string().describe("Text to replace."),
+            newString: tool.schema.string().describe("New text."),
+            replaceAll: tool.schema.boolean().optional().describe("Replace all matches."),
         },
         async execute(args): Promise<string> {
             const inputError = validateRemotePath(args.path, "path") ?? validateNoNul(args.oldString, "oldString") ?? validateNoNul(args.newString, "newString")
@@ -296,11 +296,11 @@ export function createAutocodeSshEditFileTool(deps: SshToolDeps = {}): ReturnTyp
 
 export function createAutocodeSshPatchFileTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
-        description: "Apply a unified diff to one UTF-8 remote file over SSH SFTP.",
+        description: "Apply unified diff to one UTF-8 remote file over SSH/SFTP server.",
         args: {
-            ssh_key: tool.schema.string(),
-            path: tool.schema.string(),
-            patch: tool.schema.string(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            path: tool.schema.string().describe("File path relative to SSH filesystem."),
+            patch: tool.schema.string().describe("Unified diff patch."),
         },
         async execute(args): Promise<string> {
             const inputError = validateRemotePath(args.path, "path") ?? validateNoNul(args.patch, "patch")
@@ -319,12 +319,12 @@ export function createAutocodeSshPatchFileTool(deps: SshToolDeps = {}): ReturnTy
 
 export function createAutocodeSshGlobTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
-        description: "Find remote files by glob pattern over SSH SFTP.",
+        description: "Find remote files by glob pattern on SSH/SFTP server.",
         args: {
-            ssh_key: tool.schema.string(),
-            pattern: tool.schema.string(),
-            path: tool.schema.string().optional(),
-            limit: tool.schema.number().optional(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            pattern: tool.schema.string().describe("Glob pattern."),
+            path: tool.schema.string().optional().describe("State path relative to SSH filesystem."),
+            limit: tool.schema.number().optional().describe("Max matches."),
         },
         async execute(args): Promise<string> {
             const inputError = validateRemotePattern(args.pattern, "pattern") ?? validateOptionalRemotePath(args.path, "path") ?? validateLimitArg(args.limit)
@@ -349,13 +349,13 @@ export function createAutocodeSshGlobTool(deps: SshToolDeps = {}): ReturnType<ty
 
 export function createAutocodeSshGrepFileTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
-        description: "Search remote UTF-8 files by JavaScript regex over SSH SFTP.",
+        description: "Search SSH UTF-8 text files by regex on SSH/SFTP server.",
         args: {
-            ssh_key: tool.schema.string(),
-            pattern: tool.schema.string(),
-            path: tool.schema.string(),
-            include: tool.schema.string().optional(),
-            limit: tool.schema.number().optional(),
+            ssh_key: tool.schema.string().describe("SSH connection key."),
+            pattern: tool.schema.string().describe("Regex pattern."),
+            path: tool.schema.string().describe("File path relative to SSH filesystem."),
+            include: tool.schema.string().optional().describe("Glob include filter."),
+            limit: tool.schema.number().optional().describe("Max matches."),
         },
         async execute(args): Promise<string> {
             const inputError = validateRemotePattern(args.pattern, "pattern") ?? validateRemotePath(args.path, "path") ?? validateOptionalRemotePattern(args.include, "include") ?? validateLimitArg(args.limit)
