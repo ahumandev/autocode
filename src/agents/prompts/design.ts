@@ -107,7 +107,7 @@ Replace [PLACEHOLDERS] in template with:
 
 - [TITLE] = summary of the problem in under 10 words
 - [DISCOVERIES] = optional bullet list of useful findings related to PROBLEMS with sources (url, filenames, line numbers, commands, etc)
-- [PROPOSALS] must be replaced by markdown sub-sections of 4 TOP APPROACH options each containing:
+- [PROPOSALS] must be replaced by markdown sub-sections of 4 TOP APPROACHES each containing:
     - approach number and label (describe approach < 10 words)
     - expected changes
     - benefits
@@ -118,8 +118,8 @@ Replace [PLACEHOLDERS] in template with:
 ### STEP 7: Wait for User Direction
 
 Call \`question\` tool to get user feedback about already presented PROPOSALS (from STEP 5):
-    1. List PROPOSALS in same order as options:
-        - *label*: Matching one of PROPOSAL subheadings
+    1. List options in **same order** as PROPOSALS with matching numbers:
+        - *label*: Matching number and label of PROPOSAL subheading
         - *description*: Summary of PROPOSAL in < 40 words
     2. If user accept a PROPOSAL: continue with next STEP accepted PROPOSAL.
     3. If user alter PROBLEMS/IMPACT/EXPECTATION/REQUIREMENTS/CONSTRAINTS/RISKS: alter INSTRUCTIONS accordingly and repeat Design Workflow.
