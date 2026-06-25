@@ -439,10 +439,11 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 execute_code: "allow",
                 execute_debug: "allow",
+                execute_os: "allow",
                 execute_rest: "allow",
                 execute_sandbox: "allow",
                 execute_script: "allow",
-                execute_os: "allow",
+                execute_ssh: "allow",
                 "query*": "allow",
             },
             task_external: "ask",
@@ -715,6 +716,7 @@ const baseAgents: AgentMap = {
                 execute_sandbox: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
+                execute_ssh: "allow",
                 "query*": "allow",
             },
             task_resume: "allow",
@@ -809,12 +811,13 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "learned-env": "allow"
+                "learned-env*": "allow"
             },
             skill_learn_env: "allow",
             task: {
                 "*": "deny",
-                query_os: "allow"
+                query_os: "allow",
+                query_ssh: "allow"
             }
         },
         prompt: documentEnvPrompt,
