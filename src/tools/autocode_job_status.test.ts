@@ -1,7 +1,7 @@
 import { describe, beforeEach, expect, mock, test } from "bun:test"
 import type { Dirent } from "fs"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createAbortResponse, createRetryResponse, resetRetryCounts } from "@/utils/tools"
+import { resetRetryCounts } from "@/utils/tools"
 import { createToolContext } from "./test_context"
 import { createAutocodeJobStatusTool } from "./autocode_job_status"
 
@@ -9,6 +9,27 @@ function createMissingError(): NodeJS.ErrnoException {
     const error = new Error("missing") as NodeJS.ErrnoException
     error.code = "ENOENT"
     return error
+}
+
+const genericNeutralResponse = { next_action: "Continue with current task." }
+const retryNextAction = "Retry with a valid job status."
+
+function parseResult(result: unknown): Record<string, unknown> {
+    return JSON.parse(result as string) as Record<string, unknown>
+}
+
+function expectGenericNeutralResponse(result: unknown): void {
+    expect(parseResult(result)).toEqual(genericNeutralResponse)
+}
+
+function expectNoInternalDetails(result: unknown, rawInternalStrings: string[] = []): void {
+    const parsed = parseResult(result)
+    expect(parsed).not.toHaveProperty("failedAction")
+    expect(parsed).not.toHaveProperty("error")
+    expect(parsed).not.toHaveProperty("instruction")
+    for (const rawInternalString of rawInternalStrings) {
+        expect(result as string).not.toContain(rawInternalString)
+    }
 }
 
 describe("autocode_job_status tool", () => {
@@ -73,13 +94,9 @@ describe("autocode_job_status tool", () => {
 
         const client = createClient("My Feature", "Execution started.") as OpencodeClient & { session: { update: ReturnType<typeof mock> } }
         const tool = createAutocodeJobStatusTool(client, fs, () => new Date("2026-05-27T10:11:12Z"))
-        const parsed = JSON.parse(await tool.execute({ status: "executing" }, createToolContext()) as string)
+        const parsed = parseResult(await tool.execute({ status: "executing" }, createToolContext()))
 
         expect(parsed).toEqual({
-            job_name: "my_feature",
-            current_status: "executing",
-            job_path: ".agents/jobs/executing/my_feature/",
-            solution_path: ".agents/jobs/executing/my_feature/solution.md",
             next_action: "Continue the job from status executing.",
         })
         expect(fs.mkdir).toHaveBeenCalledWith("/workspace/.agents/jobs/executing", { recursive: true })
@@ -97,10 +114,9 @@ describe("autocode_job_status tool", () => {
         fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["my_feature"] : dirPath === "/workspace/.agents/jobs/executing/my_feature" ? [] : [])
 
         const tool = createAutocodeJobStatusTool(createClient("My Feature"), fs, () => new Date("2026-05-27T10:11:12Z"))
-        const parsed = JSON.parse(await tool.execute({ status: "executing" }, createToolContext()) as string)
+        const parsed = parseResult(await tool.execute({ status: "executing" }, createToolContext()))
 
-        expect(parsed.job_name).toBe("my_feature")
-        expect(parsed.current_status).toBe("executing")
+        expect(parsed.next_action).toBe("Continue the job from status executing.")
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature", "/workspace/.agents/jobs/executing/my_feature")
     })
 
@@ -117,10 +133,9 @@ describe("autocode_job_status tool", () => {
         })
 
         const tool = createAutocodeJobStatusTool(createClient("Wrong Title", "Ready for review."), fs, () => new Date("2026-05-27T10:11:12Z"))
-        const parsed = JSON.parse(await tool.execute({ status: "review" }, createToolContext()) as string)
+        const parsed = parseResult(await tool.execute({ status: "review" }, createToolContext()))
 
-        expect(parsed.job_name).toBe("my_feature")
-        expect(parsed.current_status).toBe("review")
+        expect(parsed.next_action).toBe("Continue the job from status review.")
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/my_feature", "/workspace/.agents/jobs/review/my_feature")
     })
 
@@ -130,13 +145,9 @@ describe("autocode_job_status tool", () => {
 
         const client = createClient("My Feature (assist)", "Ready for review.") as OpencodeClient & { session: { update: ReturnType<typeof mock> } }
         const tool = createAutocodeJobStatusTool(client, fs, () => new Date("2026-05-27T10:11:12Z"))
-        const parsed = JSON.parse(await tool.execute({ status: "review" }, createToolContext()) as string)
+        const parsed = parseResult(await tool.execute({ status: "review" }, createToolContext()))
 
         expect(parsed).toEqual({
-            job_name: "my_feature",
-            current_status: "review",
-            job_path: ".agents/jobs/review/my_feature/",
-            solution_path: ".agents/jobs/review/my_feature/solution.md",
             next_action: "Continue the job from status review.",
         })
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/assist/my_feature", "/workspace/.agents/jobs/review/my_feature")
@@ -148,13 +159,14 @@ describe("autocode_job_status tool", () => {
         expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature/solution.md", expect.stringContaining("# 26-05-27 10:11:12 - Update Status To review"))
     })
 
-    test("returns retryable identity error and does not mutate when the session title is unresolved", async () => {
+    test("returns generic neutral response and does not mutate when the session title is unresolved", async () => {
         const fs = createMockFs()
         const tool = createAutocodeJobStatusTool(createClient("Missing Job", "Ready."), fs)
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(JSON.parse(result as string)).toEqual({})
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["No planned job directory", "Missing Job"])
         expect(fs.rename).not.toHaveBeenCalled()
         expect(fs.writeFile).not.toHaveBeenCalled()
     })
@@ -165,14 +177,9 @@ describe("autocode_job_status tool", () => {
         fs.stat.mockImplementation(async (filePath: string) => filePath === "/workspace/.agents/sandboxes/my_feature" ? Promise.reject(createMissingError()) : { mtimeMs: Date.now() })
 
         const tool = createAutocodeJobStatusTool(createClient("My Feature", "Accepted and shelved."), fs, () => new Date("2026-05-27T10:11:12Z"))
-        const parsed = JSON.parse(await tool.execute({ status: "review" }, createToolContext()) as string)
+        const parsed = parseResult(await tool.execute({ status: "review" }, createToolContext()))
 
         expect(parsed).toEqual({
-            job_name: "my_feature",
-            current_status: "shelved",
-            job_path: ".agents/jobs/shelved/my_feature/",
-            solution_path: ".agents/jobs/shelved/my_feature/solution.md",
-            sandbox_archive: expect.objectContaining({ ok: true, status: "missing", job_name: "my_feature" }),
             next_action: "Shelve complete; the job has no active lifecycle directory.",
         })
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature")
@@ -194,10 +201,9 @@ describe("autocode_job_status tool", () => {
         })
 
         const tool = createAutocodeJobStatusTool(createClient("My Feature", "Shelved."), fs, () => new Date("2026-05-27T10:11:12Z"))
-        const parsed = JSON.parse(await tool.execute({ status: "shelved" }, createToolContext()) as string)
+        const parsed = parseResult(await tool.execute({ status: "shelved" }, createToolContext()))
 
-        expect(parsed.current_status).toBe("shelved")
-        expect(parsed.sandbox_archive).toEqual(expect.objectContaining({ ok: true, status: "archived", archived: 2, job_name: "my_feature" }))
+        expect(parsed.next_action).toBe("Shelve complete; the job has no active lifecycle directory.")
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/sandboxes/my_feature/dev", "/workspace/.agents/jobs/shelved/my_feature/sandboxes/dev")
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/sandboxes/my_feature/other", "/workspace/.agents/jobs/shelved/my_feature/sandboxes/other")
     })
@@ -208,15 +214,42 @@ describe("autocode_job_status tool", () => {
 
         const result = await tool.execute({ status: "drafting" }, createToolContext())
 
-        expect(result).toBe(createRetryResponse(
-            "update job status",
-            "Invalid status: drafting",
-            "Use one of: concepts, drafts, assist, executing, facilitate, review, shelved."
-        ))
+        expect(parseResult(result)).toEqual({
+            failedAction: "update job status",
+            error: "Invalid status: drafting",
+            instruction: "Use one of: concepts, drafts, assist, executing, facilitate, review, shelved.",
+            next_action: retryNextAction,
+        })
         expect(fs.writeFile).not.toHaveBeenCalled()
     })
 
-    test("returns retry response when the latest assistant response has no text", async () => {
+    test("returns generic neutral response when client is missing", async () => {
+        const fs = createMockFs()
+        const tool = createAutocodeJobStatusTool(fs)
+
+        const result = await tool.execute({ status: "review" }, createToolContext())
+
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["client"])
+        expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    test("rejects missing status using canonical help text", async () => {
+        const fs = createMockFs()
+        const tool = createAutocodeJobStatusTool(fs)
+
+        const result = await tool.execute({}, createToolContext())
+
+        expect(parseResult(result)).toEqual({
+            failedAction: "update job status",
+            error: "Invalid status: undefined",
+            instruction: "Use one of: concepts, drafts, assist, executing, facilitate, review, shelved.",
+            next_action: retryNextAction,
+        })
+        expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    test("returns generic neutral response when the latest assistant response has no text", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["my_feature"] : [])
         const client = {
@@ -234,37 +267,65 @@ describe("autocode_job_status tool", () => {
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(result).toBe(createRetryResponse(
-            "update job status",
-            "No assistant response text was found in the current session.",
-            "First present the user-facing lifecycle update in assistant text with concrete actions and a separate reason/evidence summary, then call autocode_job_status again."
-        ))
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["No assistant response text was found"])
     })
 
-    test("returns abort response when current session messages are unavailable in this runtime", async () => {
+    test("returns generic neutral response when current session messages are unavailable in this runtime", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["my_feature"] : [])
         const tool = createAutocodeJobStatusTool(createClient("My Feature", "Ready.", { includeMessages: false }), fs)
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(result).toBe(createAbortResponse(
-            "inspect current session messages",
-            "Current session message lookup is unavailable; autocode_job_status cannot persist the last assistant response on this runtime."
-        ))
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["Current session message lookup is unavailable", "autocode_job_status cannot persist"])
     })
 
-    test("returns abort response when reading current session messages fails", async () => {
+    test("returns generic neutral response when reading current session messages fails", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["my_feature"] : [])
         const tool = createAutocodeJobStatusTool(createClient("My Feature", "Ready.", { messagesError: "messages failed" }), fs)
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(result).toBe(createAbortResponse(
-            "inspect current session messages",
-            "Unable to read current session messages: messages failed"
-        ))
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["messages failed", "Unable to read current session messages"])
+    })
+
+    test("writes hidden failure details to solution log when job path is known", async () => {
+        const fs = createMockFs()
+        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["my_feature"] : [])
+        const tool = createAutocodeJobStatusTool(createClient("My Feature", "Ready.", { messagesError: "messages failed" }), fs, () => new Date("2026-05-27T10:11:12Z"))
+
+        const result = await tool.execute({ status: "review" }, createToolContext())
+
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["messages failed"])
+        expect(fs.writeFile).toHaveBeenCalledWith(
+            "/workspace/.agents/jobs/drafts/my_feature/solution.md",
+            expect.stringContaining("Update Status To hidden_failure"),
+        )
+        expect(fs.writeFile).toHaveBeenCalledWith(
+            "/workspace/.agents/jobs/drafts/my_feature/solution.md",
+            expect.stringContaining("Hidden job-status failure while inspect current session messages."),
+        )
+        expect(fs.writeFile).toHaveBeenCalledWith(
+            "/workspace/.agents/jobs/drafts/my_feature/solution.md",
+            expect.stringContaining("messages failed"),
+        )
+    })
+
+    test("swallows solution log write failure and keeps generic neutral response", async () => {
+        const fs = createMockFs()
+        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["my_feature"] : [])
+        fs.writeFile.mockImplementation(async () => { throw new Error("solution write failed") })
+        const tool = createAutocodeJobStatusTool(createClient("My Feature", "Ready.", { messagesError: "messages failed" }), fs, () => new Date("2026-05-27T10:11:12Z"))
+
+        const result = await tool.execute({ status: "review" }, createToolContext())
+
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["solution write failed", "messages failed"])
     })
 
     test("rejects removed legacy final status aliases", async () => {
@@ -286,21 +347,23 @@ describe("autocode_job_status tool", () => {
                 failedAction: "update job status",
                 error: `Invalid status: ${legacyStatus}`,
                 instruction,
+                next_action: retryNextAction,
             })
             expect(JSON.parse(result as string).instruction).not.toContain(legacyStatus)
         }
     })
 
-    test("returns retry response when the job is missing", async () => {
+    test("returns generic neutral response when the job is missing", async () => {
         const fs = createMockFs()
         const tool = createAutocodeJobStatusTool(createClient("Missing Job"), fs)
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(JSON.parse(result as string)).toEqual({})
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["No planned job directory", "Missing Job"])
     })
 
-    test("returns lifecycle-job retry response when the job disappears before lifecycle move", async () => {
+    test("returns generic neutral response when the job disappears before lifecycle move", async () => {
         const fs = createMockFs()
         let draftReads = 0
         fs.readdir.mockImplementation(async (dirPath: string) => {
@@ -314,10 +377,11 @@ describe("autocode_job_status tool", () => {
 
         const result = await tool.execute({ status: "review" }, createToolContext())
 
-        expect(result).toBe(JSON.stringify({}))
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["Planned job lifecycle directory is missing", "my_feature"])
     })
 
-    test("returns retry response when duplicate active lifecycle directories exist", async () => {
+    test("returns generic neutral response when duplicate active lifecycle directories exist", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string) => {
             if (dirPath === "/workspace/.agents/jobs/drafts") return ["my_feature"]
@@ -328,14 +392,11 @@ describe("autocode_job_status tool", () => {
 
         const result = await tool.execute({ status: "executing" }, createToolContext())
 
-        expect(result).toBe(createRetryResponse(
-            "update job status",
-            "Planned job lifecycle collision: my_feature",
-            "Resolve duplicate active lifecycle directories for this job before retrying."
-        ))
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["Planned job lifecycle collision", "my_feature"])
     })
 
-    test("returns retry response when destination lifecycle directory already exists", async () => {
+    test("returns generic neutral response when destination lifecycle directory already exists", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["my_feature"] : [])
         fs.rename.mockImplementation(async () => {
@@ -347,10 +408,18 @@ describe("autocode_job_status tool", () => {
         const tool = createAutocodeJobStatusTool(createClient("My Feature", "Ready."), fs)
         const result = await tool.execute({ status: "executing" }, createToolContext())
 
-        expect(result).toBe(createRetryResponse(
-            "update job status",
-            "Destination lifecycle directory already exists for my_feature",
-            "Resolve the existing lifecycle directory collision before retrying."
-        ))
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["Destination lifecycle directory already exists", "my_feature", "exists"])
+    })
+
+    test("returns generic neutral response when catch-all handler catches an internal throw", async () => {
+        const fs = createMockFs()
+        fs.readdir.mockImplementation(async () => { throw new Error("secret stack internal") })
+        const tool = createAutocodeJobStatusTool(createClient("My Feature", "Ready."), fs)
+
+        const result = await tool.execute({ status: "review" }, createToolContext())
+
+        expectGenericNeutralResponse(result)
+        expectNoInternalDetails(result, ["secret stack internal"])
     })
 })

@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "fs/promises"
-import { createAbortResponse, createLifecycleJobRequiredRetryResponse, createRetryResponse } from "@/utils/tools"
+import { createRetryResponse } from "@/utils/tools"
 import { createDirectoryFileSystem, getEffectiveJobStatus, isJobStatus, movePlannedJobToStatus, readLatestAssistantResponseText, resolveAgentsStorageRoot, resolvePlannedJobIdentity, updateCurrentSessionTitleToJobName, type JobStatus, type JobToolFileSystem, type PlannedJobIdentityResolution } from "@/utils/jobs"
 import { createSolutionUtils, SolutionLogEvent } from "@/utils/solution"
 import { shelveResolvedPlannedJob } from "@/utils/shelve"
@@ -34,16 +34,24 @@ function normalizeJobStatusToolArgs(clientOrFileSystem?: OpencodeClient | JobToo
     return { client: candidate as OpencodeClient | undefined, fileSystem: defaultFileSystem, now: () => new Date() }
 }
 
-function createNoopResponse(): string {
-    return JSON.stringify({})
+type HiddenFailureLogTarget = {
+    storageRoot?: string
+    jobName?: string
+    directory?: string
 }
 
-function createCollisionRetryResponse(jobName: string, status: JobStatus): string {
-    return createRetryResponse(
-        "update job status",
-        `Planned job lifecycle collision: ${jobName}`,
-        status === "shelved" ? "Resolve duplicate active lifecycle directories for this job before shelving." : "Resolve duplicate active lifecycle directories for this job before retrying."
-    )
+function createGenericResponse(): string {
+    return JSON.stringify({
+        next_action: "Continue with current task.",
+    })
+}
+
+function appendNextAction(response: string): string {
+    const parsed = JSON.parse(response) as Record<string, unknown>
+    return JSON.stringify({
+        ...parsed,
+        next_action: "Retry with a valid job status.",
+    })
 }
 
 function createNextAction(status: JobStatus): string {
@@ -52,8 +60,38 @@ function createNextAction(status: JobStatus): string {
         : `Continue the job from status ${status}.`
 }
 
-function createMissingIdentityRetryResponse(): string {
-    return createLifecycleJobRequiredRetryResponse("update job status")
+function stringifyUnknownError(error: unknown): string {
+    if (error instanceof Error) {
+        return error.stack ?? `${error.name}: ${error.message}`
+    }
+
+    if (typeof error === "string") {
+        return error
+    }
+
+    try {
+        return JSON.stringify(error)
+    }
+    catch {
+        return String(error)
+    }
+}
+
+async function logHiddenFailure(fileSystem: JobToolFileSystem, now: () => Date, target: HiddenFailureLogTarget, failedAction: string, error: unknown): Promise<void> {
+    if (!target.storageRoot || !target.jobName || !target.directory) {
+        return
+    }
+
+    try {
+        const solution = createSolutionUtils(fileSystem, target.storageRoot, {
+            getDirectory: async () => target.directory,
+            now,
+        })
+        await solution.log(target.jobName, SolutionLogEvent.UpdateStatus, "hidden_failure", `Hidden job-status failure while ${failedAction}.`, stringifyUnknownError(error))
+    }
+    catch {
+        // Hidden failure logging must never affect the tool response.
+    }
 }
 
 function getRequestedStatus(args: Record<string, unknown>): { status?: JobStatus, error?: string } {
@@ -83,17 +121,19 @@ function getRequestedStatus(args: Record<string, unknown>): { status?: JobStatus
     }
 }
 
-function getIdentityResponse(identity: PlannedJobIdentityResolution, status: JobStatus): string {
+function getIdentityHiddenError(identity: PlannedJobIdentityResolution, status: JobStatus): string {
     if (identity.job_name) {
         if (identity.resolution === "collision") {
-            return createCollisionRetryResponse(identity.job_name, status)
+            return status === "shelved"
+                ? `Planned job lifecycle collision while shelving: ${identity.job_name}`
+                : `Planned job lifecycle collision while updating status: ${identity.job_name}`
         }
         if (identity.resolution === "missing") {
-            return createNoopResponse()
+            return `Planned job lifecycle directory is missing: ${identity.job_name}`
         }
     }
 
-    return createMissingIdentityRetryResponse()
+    return "No planned job directory was found in .agents/jobs/* for the current session."
 }
 
 export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient | JobToolFileSystem, fileSystemOrNow?: JobToolFileSystem | (() => Date), maybeNow?: () => Date): ReturnType<typeof tool> {
@@ -106,50 +146,57 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
         async execute(args, context) {
             const requestedStatusResult = getRequestedStatus(args as Record<string, unknown>)
             if (requestedStatusResult.error) {
-                return requestedStatusResult.error
+                return appendNextAction(requestedStatusResult.error)
             }
 
             if (!client) {
-                return createAbortResponse("update job status", "Opencode client is unavailable.")
+                return createGenericResponse()
             }
 
+            const hiddenFailureTarget: HiddenFailureLogTarget = {}
             try {
                 const storageRoot = resolveAgentsStorageRoot(context)
+                hiddenFailureTarget.storageRoot = storageRoot
                 const directoryFileSystem = createDirectoryFileSystem(fileSystem)
-                const status = requestedStatusResult.status!
+                const status = requestedStatusResult.status ?? "executing"
                 const identity = await resolvePlannedJobIdentity(directoryFileSystem, client, context, { includeShelved: status === "shelved" })
-                if (identity.mode !== "planned" || !identity.job_name) {
-                    return getIdentityResponse(identity, status)
+                hiddenFailureTarget.jobName = identity.job_name
+                hiddenFailureTarget.directory = identity.resolved_job?.directory ?? identity.collision?.entries[0]?.directory
+                if (identity.mode !== "planned" || !identity.job_name || identity.resolution !== "found") {
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "resolve planned job identity", getIdentityHiddenError(identity, status))
+                    return createGenericResponse()
                 }
 
                 const jobName = identity.job_name
                 const resolvedJob = identity.resolved_job
                 if (!resolvedJob) {
-                    return createAbortResponse("update job status", "Resolved planned-job identity is missing lifecycle details.")
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "resolve planned job lifecycle details", "Resolved planned-job identity is missing lifecycle details.")
+                    return createGenericResponse()
                 }
+                hiddenFailureTarget.directory = resolvedJob.directory
                 if (!directoryFileSystem.rename) {
-                    return createAbortResponse("update job status", "Unable to move planned job lifecycle directory: rename is unavailable")
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "move planned job lifecycle directory", "Unable to move planned job lifecycle directory: rename is unavailable")
+                    return createGenericResponse()
                 }
                 const moveFileSystem = {
                     ...directoryFileSystem,
                     rename: directoryFileSystem.rename,
                 }
                 const effectiveStatus = getEffectiveJobStatus(status, resolvedJob.status)
-                const title = await updateCurrentSessionTitleToJobName(client, context, jobName, effectiveStatus)
+                await updateCurrentSessionTitleToJobName(client, context, jobName, effectiveStatus)
 
                 const reportContentResult = await readLatestAssistantResponseText(client, context)
                 if (reportContentResult.error) {
-                    return createAbortResponse("inspect current session messages", reportContentResult.error)
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "inspect current session messages", reportContentResult.error)
+                    return createGenericResponse()
                 }
                 if (reportContentResult.limitation) {
-                    return createAbortResponse("inspect current session messages", reportContentResult.limitation)
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "inspect current session messages", reportContentResult.limitation)
+                    return createGenericResponse()
                 }
                 if (!reportContentResult.text?.trim()) {
-                    return createRetryResponse(
-                        "update job status",
-                        "No assistant response text was found in the current session.",
-                        "First present the user-facing lifecycle update in assistant text with concrete actions and a separate reason/evidence summary, then call autocode_job_status again."
-                    )
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "read latest assistant response text", "No assistant response text was found in the current session.")
+                    return createGenericResponse()
                 }
 
                 if (effectiveStatus === "shelved") {
@@ -164,16 +211,20 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                         assistantResponseText: reportContentResult.text,
                     })
                     if (shelved.type === "missing") {
-                        return createNoopResponse()
+                        await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "shelve planned job", `Planned job lifecycle directory is missing: ${jobName}`)
+                        return createGenericResponse()
                     }
                     if (shelved.type === "collision") {
-                        return createCollisionRetryResponse(jobName, effectiveStatus)
+                        await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "shelve planned job", `Planned job lifecycle collision: ${jobName}`)
+                        return createGenericResponse()
                     }
                     if (shelved.type === "destination_collision") {
-                        return createRetryResponse("update job status", `Destination lifecycle directory already exists for ${jobName}`, "Resolve the existing lifecycle directory collision before shelving.")
+                        await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "shelve planned job", `Destination lifecycle directory already exists for ${jobName}`)
+                        return createGenericResponse()
                     }
                     if (!shelved.sandbox_archive.ok) {
-                        return createRetryResponse("archive job sandboxes", shelved.sandbox_archive.reason, "Resolve the sandbox archive collision or unsafe path before retrying. Do not overwrite existing sandbox archives.")
+                        await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "archive job sandboxes", shelved.sandbox_archive.reason)
+                        return createGenericResponse()
                     }
 
                     return JSON.stringify({
@@ -183,13 +234,16 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
 
                 const moved = await movePlannedJobToStatus(storageRoot, jobName, effectiveStatus, moveFileSystem)
                 if (moved.type === "missing") {
-                    return createNoopResponse()
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "move planned job to status", `Planned job lifecycle directory is missing: ${jobName}`)
+                    return createGenericResponse()
                 }
                 if (moved.type === "collision") {
-                    return createCollisionRetryResponse(jobName, effectiveStatus)
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "move planned job to status", `Planned job lifecycle collision: ${jobName}`)
+                    return createGenericResponse()
                 }
                 if (moved.type === "destination_collision") {
-                    return createRetryResponse("update job status", `Destination lifecycle directory already exists for ${jobName}`, "Resolve the existing lifecycle directory collision before retrying.")
+                    await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "move planned job to status", `Destination lifecycle directory already exists for ${jobName}`)
+                    return createGenericResponse()
                 }
 
                 const solution = createSolutionUtils(fileSystem, storageRoot, {
@@ -203,7 +257,8 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                 })
             }
             catch (error) {
-                return createAbortResponse("update job status", error)
+                await logHiddenFailure(fileSystem, now, hiddenFailureTarget, "update job status", error)
+                return createGenericResponse()
             }
         },
     })
