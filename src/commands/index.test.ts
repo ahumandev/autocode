@@ -61,9 +61,11 @@ describe("commands", () => {
             if ("model" in command) expect(command.model).toEqual(expect.any(String))
         }
 
-        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "help", "rename", "review"] as const) {
+        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "help", "rename", "review"] as const) {
             expect(commands[commandName]).toBeUndefined()
         }
+
+        expect(Object.values(commands).some((command) => "agent" in command && command.agent === "execute_opencode")).toBe(false)
     })
 
     test("keeps standard command registrations stable", () => {

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, type AutocodeAgentConfig } from "./index"
+import { executeOpencodePrompt } from "./prompts/execute_opencode"
+import { queryAutocodePrompt } from "./prompts/query-autocode"
 
 function permissionRule(permission: AutocodeAgentConfig["permission"], key: string): unknown {
     if (!permission || typeof permission === "string") return undefined
@@ -8,6 +10,12 @@ function permissionRule(permission: AutocodeAgentConfig["permission"], key: stri
 
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]
 const executeRestToolNames = ["autocode_rest", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_rest_response_read"]
+const executeOpencodeAllowedPermissionKeys = ["edit", "glob", "grep", "read"]
+const executeOpencodeForbiddenToolKeys = ["apply_patch", "bash", "execute", "patch", "task", "write"]
+const executeOpencodeAllowedSkillNames = ["author-agent", "author-command", "author-skill", "author-rules"]
+const queryAutocodeAllowedPermissionKeys = ["glob", "grep", "read", "webfetch", "websearch*"]
+const queryAutocodeForbiddenWritePermissionKeys = ["apply_patch", "bash", "edit", "execute", "patch", "task", "task_external", "write"]
+const queryAutocodeAllowedSkillNames = ["author-agent", "author-command", "author-skill"]
 
 describe("agent policies", () => {
     test("applies external-directory rules to external_directory and task_external permissions", () => {
@@ -163,6 +171,78 @@ describe("agent policies", () => {
         expect(permissionRule(agents.auto_review_api?.permission, "task")).toEqual(expect.objectContaining({
             execute_rest: "allow",
         }))
+    })
+
+    test("buildAgents exposes query_autocode as read-only query worker", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const permission = agents.query_autocode?.permission
+        const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
+
+        expect(agents.query_autocode?.hidden).toBe(true)
+        expect(agents.query_autocode?.mode).toBe("subagent")
+        expect(agents.query_autocode?.prompt).toBe(queryAutocodePrompt)
+        expect(permissionRule(permission, "*")).toBe("deny")
+        expect(permissionRule(permission, "doom_loop")).toBe("deny")
+        for (const key of queryAutocodeAllowedPermissionKeys) {
+            expect(permissionRule(permission, key)).toBe("allow")
+        }
+        for (const key of queryAutocodeForbiddenWritePermissionKeys) {
+            expect(permissionRule(permission, key)).not.toBe("allow")
+        }
+        expect(Object.entries(permission ?? {})
+            .filter(([, value]) => value === "allow")
+            .map(([key]) => key)
+            .sort()).toEqual([...queryAutocodeAllowedPermissionKeys].sort())
+        expect(skillPermission["*"]).toBe("deny")
+        expect(skillPermission["author*"]).not.toBe("allow")
+        expect(Object.entries(skillPermission)
+            .filter(([, value]) => value === "allow")
+            .map(([key]) => key)
+            .sort()).toEqual([...queryAutocodeAllowedSkillNames].sort())
+    })
+
+    test("buildAgents exposes execute_opencode as scoped OpenCode authoring worker", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const permission = agents.execute_opencode?.permission
+        const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
+
+        expect(Object.keys(agents)).toContain("execute_opencode")
+        expect(agents.execute_opencode).toBeDefined()
+        expect(agents.execute_opencode?.mode).toBe("subagent")
+        expect(agents.execute_opencode?.prompt).toBe(executeOpencodePrompt)
+        expect(permissionRule(permission, "*")).toBe("deny")
+        for (const key of executeOpencodeAllowedPermissionKeys) {
+            expect(permissionRule(permission, key)).toBe("allow")
+        }
+        for (const key of executeOpencodeForbiddenToolKeys) {
+            expect(permissionRule(permission, key)).not.toBe("allow")
+        }
+        expect(skillPermission["*"]).toBe("deny")
+        expect(Object.entries(skillPermission)
+            .filter(([, value]) => value === "allow")
+            .map(([key]) => key)
+            .sort()).toEqual([...executeOpencodeAllowedSkillNames].sort())
+    })
+
+    test("execute_opencode prompt stays scoped to OpenCode Markdown artifacts", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const prompt = String(agents.execute_opencode?.prompt ?? "")
+
+        for (const path of [
+            "~/.config/opencode/agents/{name}.md",
+            ".opencode/agents/{name}.md",
+            "~/.config/opencode/commands/{name}.md",
+            ".opencode/commands/{name}.md",
+            "~/.config/opencode/skills/{name}/SKILL.md",
+            ".opencode/skills/{name}/SKILL.md",
+        ]) {
+            expect(prompt).toContain(path)
+        }
+        expect(prompt).toContain("Use lowercase kebab-case names")
+        expect(prompt).toContain("Reject unsafe path traversal")
+        expect(prompt).toContain("Verify the target path is within the allowed roots before any edit")
+        expect(prompt).toContain("Make minimal targeted edits")
+        expect(prompt).toContain("You MUST NOT edit source code, scripts, package/config files, or Markdown outside the allowed paths")
     })
 
     test("execute_rest prompt examples use strict JSON object text", () => {

@@ -27,10 +27,12 @@ import { executeDocumentPrompt } from "./prompts/execute_document"
 import { executeExcelPrompt } from "./prompts/execute_excel";
 import { executeGitCommitPrompt } from "./prompts/execute_git_commit";
 import { executeOsPrompt } from "./prompts/execute_os";
+import { executeOpencodePrompt } from "./prompts/execute_opencode";
 import { executeRestPrompt } from "./prompts/execute_rest";
 import { executeScriptPrompt } from "./prompts/execute_script";
 import { isSandboxPlatformSupported, type SandboxPlatformSupportOptions } from "@/utils/sandbox"
 import { queryArchitectPrompt } from "./prompts/query_architect";
+import { queryAutocodePrompt } from "./prompts/query-autocode";
 import { queryBrowserPrompt } from "./prompts/query_browser";
 import { queryCodePrompt } from "./prompts/query_code";
 import { queryDbPrompt } from "./prompts/query_db";
@@ -430,7 +432,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "ask",
                 "execute*": "allow",
-                "learned-corrections/*_troubleshoot": "allow",
+                "learned-corrections-troubleshoot": "allow",
                 "learned-env": "allow",
             },
             skill_learn_correction: "allow",
@@ -671,7 +673,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "test*": "allow",
-                "learned-corrections/auto_test": "allow"
+                "learned-corrections-test": "allow"
             },
             skill_learn_correction: "allow",
             task: {
@@ -703,7 +705,7 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "learned-corrections/*_troubleshoot": "allow",
+                "learned-corrections-troubleshoot": "allow",
                 "learned-env": "allow",
             },
             skill_learn_correction: "allow",
@@ -1065,7 +1067,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
-                "learned-corrections/execute_os": "allow",
+                "learned-corrections-os": "allow",
                 "learned-env": "allow",
                 "learned-permissions": "allow"
             },
@@ -1075,6 +1077,29 @@ const baseAgents: AgentMap = {
         },
         prompt: executeOsPrompt,
         temperature: 0.1,
+        tier: "balanced",
+    },
+
+    execute_opencode: {
+        color: colorWritableWorker,
+        description: "Task `execute_opencode` to create or update OpenCode agent, command, skill and AGENTS.md files only.",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            edit: "allow",
+            glob: "allow",
+            grep: "allow",
+            read: "allow",
+            skill: {
+                "*": "deny",
+                "author-skill": "allow",
+                "author-agent": "allow",
+                "author-command": "allow",
+                "author-rules": "allow",
+            },
+        },
+        prompt: executeOpencodePrompt,
+        temperature: 0.3,
         tier: "balanced",
     },
 
@@ -1092,7 +1117,7 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "learned-corrections/execute_rest": "allow",
+                "learned-corrections-rest": "allow",
                 "learned-env": "allow",
             },
             skill_learn_correction: "allow"
@@ -1117,7 +1142,7 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "learned-corrections/execute_sandbox": "allow",
+                "learned-corrections-sandbox": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
                 "learned-env": "allow",
@@ -1153,7 +1178,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "learned-corrections/execute_script": "allow",
+                "learned-corrections-script": "allow",
                 "learned-env": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
@@ -1180,7 +1205,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "execute-install": "allow",
-                "learned-corrections/execute_ssh": "allow",
+                "learned-corrections-ssh": "allow",
                 "learned-env-*": "allow",
                 "learned-permissions": "allow"
             },
@@ -1194,6 +1219,31 @@ const baseAgents: AgentMap = {
     },
 
     // Query workers
+
+    query_autocode: {
+        color: colorReadOnlyWorker,
+        description: "Task `query_autocode` for read-only OpenCode or AutoCode documentation queries or configuration advise.",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            doom_loop: "deny",
+            glob: "allow",
+            grep: "allow",
+            read: "allow",
+            skill: {
+                "*": "deny",
+                "author-agent": "allow",
+                "author-command": "allow",
+                "author-skill": "allow",
+            },
+            webfetch: "allow",
+            "websearch*": "allow",
+        },
+        prompt: queryAutocodePrompt,
+        temperature: 0.1,
+        tier: "fast",
+    },
 
     query_browser: {
         color: colorReadOnlyWorker,
@@ -1332,7 +1382,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "design*": "allow",
                 "execute*": "allow",
-                "learned-corrections/primary": "allow",
+                "learned-corrections-primary": "allow",
                 "learned-env*": "allow",
                 "learned-permissions": "allow",
                 "learned-preferences": "allow"

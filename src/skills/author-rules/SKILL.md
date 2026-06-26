@@ -1,162 +1,55 @@
 ---
 name: author-rules
-description: Use `author-rules` get Agent Rule Format when reviewing/writing agent prompts, commands or AGENTS.md
+description: Use `author-rules` to write `AGENTS.md` files.
 ---
 
-# Agent Rule Format
+# AGENTS.md Authoring
 
-When writing agent prompts, commands or AGENTS.md apply this layout:
+Use this skill only for `AGENTS.md` files.
 
-## Root Layout Template
+## Valid locations
+
+* Project root `AGENTS.md`: common rules applicable to whole repo.
+* Subdirectory `AGENTS.md`: specialized rules for that folder and child folders only.
+* Use one file per scope when rules apply only there.
+
+## AGENTS.md Layout Template
 
 ```markdown
 # [TITLE]
 
 [PURPOSE]
 
-[USER REQUEST ANALYSIS]
-
-[WORKFLOW]
-
-[CONDITIONAL INSTRUCTIONS]
+[COMMON RULES]
 
 [USER CONTENT]
 
-[RULES]
+[CONDITIONAL RULES]
 ```
 
 Replace placeholders in Root Layout Template as follow:
-* Replace [TITLE] with:
-  - Unique description of rules file
-  - Must be < 7 words
-  - Type of rule file determine title:
-    - Agent prompt: [TITLE] = Agent role (e.g. "Java Coder")
-    - Skill: [TITLE] = What knowledge and/or ability agent should expect (e.g. "Spring Boot Applications")
-    - AGENTS.md: [TITLE] = Scope of instructions (e.g. Project name for root AGENTS.md "Autocode Plugin" or Package purpose for sub AGENTS.md like "Business Services")
-* Replace [PURPOSE] with:
-  - Agent prompt + multiple AGENTS.md files + skill files will be concatenated into 1 system prompt which may confuse agent about when to apply which rules
-  - Solution: Define purpose for rule set such that agent understands when or how to apply rules
-  - Must be < 20 words
-  - Type of rule file determine title:
-    - Agent prompts: [PURPOSE] = High-level responsibilities of agent (e.g. "You write professional Java Code...")
-    - Skill: [PURPOSE] = Conditions when rules become relevant (e.g. "When designing Spring Boot Application...")
-    - AGENTS.md: [PURPOSE] = What content to find in scope AGENTS.md file covers: root AGENTS.md summarize purpose of entire project; sub AGENTS.md summarize purpose of sub-scope
-* Replace [USER REQUEST ANALYSIS] with:
-  - Only include [USER REQUEST ANALYSIS] for agent prompts or commands
-  - Defining "user request":
-    - commands: "user request" = existing session context
-    - agent prompts: "user request" = user's original prompt
-  1. This section must first indicate how to categorize each type of supported "user request" in < 20 words per category
-  2. Then this section must map each category to workflow/conditional instructions and/or any special rules that may apply for that condition in < 40 words per category
-  - [USER REQUEST ANALYSIS] must also indicate how to handle unsupported "user requests" in < 20 words
-  - Omit [USER REQUEST ANALYSIS] section entirely if all user request should be treated the same
-* Replace [CONDITIONAL INSTRUCTIONS] with:
-  - Conditional Instructions may be 1 or more primary sections
-  - Unlike Workflows that contain fixed sequential steps, conditional instructions apply ad-hoc based on conditions
-  - Typical examples:
-      - Interviewing User
-      - Handling Errors
-      - Presenting Report
-  - Each Conditional Instruction section must start with condition: when to apply instructions
-  - Numeric list of sequential instructions agent must follow
-  - Keep instructions concise but understandable in < 40 words per instruction
-  - Large (40+ lines) or complex [CONDITIONAL INSTRUCTIONS] should be moved to separate skills or references/ folders to be loaded ad-hoc
-* Replace [USER CONTENT] with:
-  - Omit entire [USER CONTENT] section by default, unless user specified additional content
-  - Format content according to user request
-  - May span across multiple primary sections
-  - May include examples
-  - Preferably keep write content as concise bullet points (unless user specified different format)
-* Replace [RULES] with:
-  - Must be section final in md file
-  - Only include very critical (dangerous consequence if not adhered - e.g. forbidden actions/limiting scope) rules or common rules that always applies (edge-cases belong in [CONDITIONAL INSTRUCTIONS] section)
-  - When rules contradict: Add conditions when each contradicting rule applies
-  - Must be < 40 words per rule (excluding conditions)
-* Replace [WORKFLOW] with:
-  - Only include [WORKFLOW] section if rules contain sequential instructions (steps)
-  - It usually follows default happy path to accomplish specific purpose of agent
-  - ALWAYS omit entire [WORKFLOW] section for AGENTS.md (too general)
-
-### Workflow Template
-
-```markdown
-
----
-
-## Workflow
-
-[WORKFLOW TOC]
-
-### STEP 1: [STEP TITLE]
-
-[STEP GOAL]
-
-[STEP INSTRUCTIONS]
-
-[STEP EXAMPLE]
-
-### Step 2...
-
----
-
-```
-
-Line dividers (`---`) helps to organize large Workflow with its steps together
-
-Include every step section's header without "STEP X: " prefixes in same order steps appear in [WORKFLOW TOC] section, for example:
-
-```markdown
-
----
-
-## Workflow
-
-1. Analyze Problem
-2. Solve Problem
-3. Test Solution
-
-### STEP 1: Analyze Problem
-...
-
-### STEP 2: Solve Problem
-...
-
-### STEP 3: Test Solution
-...
-
----
-
-```
-
-In Workflow Template:
-* Replace [STEP GOAL] with:
-  - Briefly describe goal of specific STEP in < 20 words
-* Replace [STEP INSTRUCTIONS] with:
-  - Numeric list of sequential step instructions agent must follow
-  - Keep instructions concise but understandable in < 40 words per instruction
-* Replace [STEP EXAMPLE] with:
-  - Only include examples for complex STEPS or specific templates
-  - User provided examples MUST be keep as-is (no stripping, reducing, formatting or any other modifications allowed)
-  - Keep generated examples minimalistic but understandable to limited LLM
-  - Generate max 1 good example per step (if no user example was provided)
-  - Generate only bad examples if common pitfalls are expected that should be avoided
-  - Never generate examples for obvious steps
-  - When writing skills: Extract large examples/templates (> 40 lines) to template files (located in `.agents/skills/{skill-name}/templates/`) with references to `templates/{template-file}` in original skill
+* Replace [TITLE] with scope of instructions (e.g. Project name for root AGENTS.md like "Autocode Plugin" or Package purpose for sub AGENTS.md like "Business Services")
+* Replace [PURPOSE] with purpose of repo directory (max 20 words)
+* Replace [COMMON RULES] with common or critical rules like forbidden actions/limiting scope
+  - Group related rules with H2 headers
+  - When rules contradict: Add conditions when to apply which rule (move rules to [CONDITIONAL RULES] section)
+  - Must be < 30 words per rule
+* Replace [USER CONTENT] with H2 title and user-provided content only if explicitly requested
+  - Prefer concise bullets unless user specified format
+  - Omit entire [USER CONTENT] section by default  
+* Replace [CONDITIONAL RULES] rules that apply conditionally:
+  - Group related conditions with H2 headers
+  - Numbered list to indicate priority of conditions
+  - Format "If [some condition], then: [rule]"
 
 ## Rules
 
-- ALWAYS speak and write Caveman English
-- Each point < 20 words
-- No repetitions
-- Only use emojis to highlight important aspects to LLM, like attention, warning, checklists, correct vs wrong
-- Always keep md < 400 lines by:
-  - Cleaning up redundant content
-  - Removing excessive examples
-  - Only if skill's [USER CONTENT] section is > 200 lines:
-    1. Divide content into smaller < 200 line sections
-    2. Divided skills user content should not overlap
-    3. Move subdivided content to reference files (located in `.agents/skills/{skill-name}/references/`)
-    4. Refer to `reference/{reference-name}` references in original `SKILL.md` with instruction when load which reference
-    5. Report list of skill files you created to user
-  - Otherwise summarize trivial info in [USER CONTENT] section
-  - As last resort: Reducing/grouping obvious instructions agent can derive by itself
+* ALWAYS speak and write Caveman English
+* No repetitions
+* Only use emojis to highlight important aspects to LLM, like attention, warning, checklists, correct vs wrong
+* ALWAYS keep md < 100 lines by:
+  1. Cleaning up redundant content (try first)
+  2. Removing excessive examples
+  3. Summarize trivial info
+  4. Merge basic instructions (last resort)
+* Use this skill layout/format as example `AGENTS.md`.

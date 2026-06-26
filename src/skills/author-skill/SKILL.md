@@ -1,6 +1,6 @@
 ---
 name: author-skill
-description: Use `author-rules` to get Skill File Authoring when you need to review/write skill files for agents.
+description: Use `author-skill` to get Skill File Authoring when you need to review/write skill files for agents.
 ---
 
 # Skill File Authoring

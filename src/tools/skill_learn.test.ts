@@ -39,6 +39,10 @@ async function executeSkillLearn(root: string, args: Record<string, unknown>, ..
 }
 
 function skillFilePath(root: string, agent = "pair", subject = "learned-corrections"): string {
+    if (subject === "learned-corrections") {
+        return join(root, ".agents", "skills", `${subject}-${agent}`, "SKILL.md")
+    }
+
     return join(root, ".agents", "skills", subject, agent, "SKILL.md")
 }
 
@@ -70,8 +74,8 @@ describe("skill_learn tool", () => {
             expect(result).toBe("OK")
             expect(readFileSync(filePath, "utf8")).toBe([
                 "---",
-                "name: learned-corrections/pair",
-                "description: Use `learned-corrections` skill to avoid OBSTACLES, troubleshooting mistakes, recall lessons learned in previous sessions.",
+                "name: learned-corrections-pair",
+                "description: Use this skill to design/apply project changes.",
                 "---",
                 "",
                 "## Use bounded search",
@@ -99,8 +103,7 @@ describe("skill_learn tool", () => {
 
             const content = readFileSync(skillFilePath(root, "primary"), "utf8")
 
-            expect(content).toContain("name: learned-corrections/primary")
-            expect(content).toContain("description: Use `learned-corrections` skill to avoid OBSTACLES, troubleshooting mistakes, recall lessons learned in previous sessions.")
+            expect(content).toContain("name: learned-corrections-primary")
             for (const agent of primaryAgents) {
                 expect(content).toContain(`## Primary ${agent}`)
                 expect(existsSync(skillFilePath(root, agent))).toBe(false)
@@ -108,10 +111,30 @@ describe("skill_learn tool", () => {
         })
     })
 
+    test("underscore-delimited agents write corrections under last word suffix", async () => {
+        await withTempDir(async (root) => {
+            const executeResult = await executeSkillLearn(root, {
+                title: "Shell correction",
+                content: "- Keep os lesson short.",
+            }, "execute_os")
+            const testResult = await executeSkillLearn(root, {
+                title: "Test correction",
+                content: "- Keep test lesson short.",
+            }, "auto_test")
+
+            expect(executeResult).toBe("OK")
+            expect(testResult).toBe("OK")
+            expect(readFileSync(skillFilePath(root, "os"), "utf8")).toContain("name: learned-corrections-os")
+            expect(readFileSync(skillFilePath(root, "test"), "utf8")).toContain("name: learned-corrections-test")
+            expect(existsSync(skillFilePath(root, "execute_os"))).toBe(false)
+            expect(existsSync(skillFilePath(root, "auto_test"))).toBe(false)
+        })
+    })
+
     test("appends trimmed learned section after existing frontmatter and content", async () => {
         await withTempDir(async (root) => {
             const filePath = skillFilePath(root)
-            mkdirSync(join(root, ".agents", "skills", "learned-corrections", "pair"), { recursive: true })
+            mkdirSync(join(root, ".agents", "skills", "learned-corrections-pair"), { recursive: true })
             writeFileSync(filePath, [
                 "---",
                 "description: Existing.",
@@ -142,7 +165,7 @@ describe("skill_learn tool", () => {
     test("prunes only eldest learned section and reports final line count", async () => {
         await withTempDir(async (root) => {
             const filePath = skillFilePath(root)
-            mkdirSync(join(root, ".agents", "skills", "learned-corrections", "pair"), { recursive: true })
+            mkdirSync(join(root, ".agents", "skills", "learned-corrections-pair"), { recursive: true })
             writeFileSync(filePath, [
                 "---",
                 "description: Existing.",
@@ -194,7 +217,6 @@ describe("skill_learn tool", () => {
             expect(existsSync(skillFilePath(root, "pair", "learned-env"))).toBe(false)
             expect(existsSync(skillFilePath(root, "reviewer", "learned-env"))).toBe(false)
             expect(content).toContain("name: learned-env")
-            expect(content).toContain("description: Use `learned-env` skill to find related external projects locally or recall local dev environment limitations/setup.")
             expect(content).toContain("## First")
             expect(content).toContain("## Second")
         })
@@ -218,7 +240,6 @@ describe("skill_learn tool", () => {
             expect(existsSync(envSkillFilePath(root))).toBe(true)
             expect(existsSync(envSkillFilePath(root, "learned-env-prod_box"))).toBe(false)
             expect(content).toContain("name: learned-env")
-            expect(content).toContain("description: Use `learned-env` skill to find related external projects locally or recall local dev environment limitations/setup.")
         })
     })
 
@@ -304,7 +325,6 @@ describe("skill_learn tool", () => {
             expect(existsSync(skillFilePath(root, "pair", "learned-preferences"))).toBe(false)
             expect(existsSync(skillFilePath(root, "reviewer", "learned-preferences"))).toBe(false)
             expect(content).toContain("name: learned-preferences")
-            expect(content).toContain("description: Use `learned-preferences` skill to avoid user complaints, design better APPROACHES and improve reports.")
             expect(content).toContain("## First")
             expect(content).toContain("## Second")
         })

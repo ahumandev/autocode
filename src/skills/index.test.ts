@@ -6,7 +6,9 @@ import path from "path"
 import { ensureGeneratedSkills, getGeneratedSkillsRoot, managedSkills } from "./index"
 
 const expectedManagedDirectories = [
+    "author-agent",
     "author-article",
+    "author-command",
     "author-readme",
     "author-rules",
     "author-skill",
@@ -21,6 +23,18 @@ const expectedManagedDirectories = [
     "test-vitest",
 ]
 const intentionalSourceExclusions = ["author-caveman"]
+const sourceSkillPathExpectations = [
+    {
+        directory: "author-agent",
+        pluralPaths: [".opencode/agents/{name}.md", "~/.config/opencode/agents/{name}.md"],
+        singularPaths: [".opencode/agent/{name}.md", "~/.config/opencode/agent/{name}.md"],
+    },
+    {
+        directory: "author-command",
+        pluralPaths: [".opencode/commands/{name}.md", "~/.config/opencode/commands/{name}.md"],
+        singularPaths: [".opencode/command/{name}.md", "~/.config/opencode/command/{name}.md"],
+    },
+]
 
 const originalHome = process.env.HOME
 const originalXdgConfigHome = process.env.XDG_CONFIG_HOME
@@ -78,6 +92,20 @@ describe("managed skills", () => {
             expect(skill.description.length).toBeGreaterThan(0)
             expect(skill.content.length).toBeGreaterThan(0)
             expect(skill.content.startsWith("---")).toBe(false)
+        }
+    })
+
+    test("source skill docs use plural OpenCode paths", () => {
+        for (const expectation of sourceSkillPathExpectations) {
+            const content = readFileSync(path.join(sourceSkillsRoot(), expectation.directory, "SKILL.md"), "utf8")
+
+            for (const pluralPath of expectation.pluralPaths) {
+                expect(content).toContain(pluralPath)
+            }
+
+            for (const singularPath of expectation.singularPaths) {
+                expect(content).not.toContain(singularPath)
+            }
         }
     })
 

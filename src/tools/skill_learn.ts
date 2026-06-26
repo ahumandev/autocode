@@ -54,6 +54,10 @@ function hasControlCharacter(value: string): boolean {
 
 function buildSkillName(subject: LearnedSkillSubject, agentName?: string, sshKey?: string): string {
     const skillDirectory = learnedSkillDirectory(subject, sshKey)
+    if (subject === "corrections" && agentName !== undefined) {
+        return `${skillDirectory}-${agentName}`
+    }
+
     return agentName === undefined ? skillDirectory : `${skillDirectory}/${agentName}`
 }
 
@@ -63,13 +67,17 @@ function buildSkillDescription(subject: LearnedSkillSubject, sshKey?: string): s
     }
 
     const descriptions = {
-        corrections: "Use `learned-corrections` skill to avoid OBSTACLES, troubleshooting mistakes, recall lessons learned in previous sessions.",
-        env: "Use `learned-env` skill to find related external projects locally or recall local dev environment limitations/setup.",
+        corrections: "Use this skill to design/apply project changes.",
+        env: "Use `learned-env` skill to run commands in local dev environment.",
         permissions: "Use `learned-permissions` skill to check if task is safe or DANGEROUS OPERATION.",
-        preferences: "Use `learned-preferences` skill to avoid user complaints, design better APPROACHES and improve reports.",
+        preferences: "Use `learned-preferences` skill to design/apply code/config changes.",
     } satisfies Record<LearnedSkillSubject, string>
 
     return descriptions[subject]
+}
+
+function learnedCorrectionAgentSuffix(agentName: string): string {
+    return agentName.split("_").at(-1) ?? agentName
 }
 
 function learnedSkillDirectory(subject: LearnedSkillSubject, sshKey?: string): string {
@@ -234,6 +242,10 @@ function resolveLearnedSkillAgentName(subject: LearnedSkillSubject, shared: bool
         return primaryLearnedCorrectionAgentName
     }
 
+    if (subject === "corrections") {
+        return learnedCorrectionAgentSuffix(validatedAgentName)
+    }
+
     return validatedAgentName
 }
 
@@ -241,7 +253,9 @@ function resolveSkillFilePath(context: SkillLearnContext, subject: LearnedSkillS
     const agentsRoot = path.join(resolveAgentsStorageRoot(context), ".agents")
     const skillsRoot = path.resolve(agentsRoot, "skills")
     const skillDirectory = learnedSkillDirectory(subject, sshKey)
-    const skillPathParts = agentName === undefined ? [skillDirectory, "SKILL.md"] : [skillDirectory, agentName, "SKILL.md"]
+    const skillPathParts = subject === "corrections" && agentName !== undefined
+        ? [`${skillDirectory}-${agentName}`, "SKILL.md"]
+        : agentName === undefined ? [skillDirectory, "SKILL.md"] : [skillDirectory, agentName, "SKILL.md"]
     const filePath = path.resolve(skillsRoot, ...skillPathParts)
     const relativePath = path.relative(skillsRoot, filePath)
 

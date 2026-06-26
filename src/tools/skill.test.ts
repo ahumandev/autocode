@@ -134,9 +134,10 @@ function writeProjectSkill(worktree: string, name = "a", content = "Project skil
 }
 
 function writeLearnedSkill(worktree: string, subject = "learned-corrections", agent = "pair", content = "Learned skill content."): string {
-    const dir = join(worktree, ".agents", "skills", subject, agent)
+    const name = `${subject}-${agent}`
+    const dir = join(worktree, ".agents", "skills", name)
     mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, "SKILL.md"), `---\ndescription: Use ${subject}/${agent} skill to recall ${subject} of previous sessions.\n---\n\n${content}`)
+    writeFileSync(join(dir, "SKILL.md"), `---\ndescription: Use ${name} skill to recall ${subject} of previous sessions.\n---\n\n${content}`)
     return dir
 }
 
@@ -244,14 +245,26 @@ describe("skill tool", () => {
         })
     })
 
-    test("loads learned skill from subject agent path", async () => {
+    test("loads learned skill from hyphenated subject agent path", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
             const directory = writeLearnedSkill(worktree, "learned-corrections", "pair", "Learned correction guidance.")
 
-            const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections/pair" })
+            const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-pair" })
 
-            expectLoadedResultShape(result, "learned-corrections/pair", directory)
+            expectLoadedResultShape(result, "learned-corrections-pair", directory)
             expect(result.output).toContain("Learned correction guidance.")
+            expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
+        })
+    })
+
+    test("loads learned correction skill from shortened suffix path", async () => {
+        await withTempSkillRoots(async ({ root, configHome, worktree }) => {
+            const directory = writeLearnedSkill(worktree, "learned-corrections", "os", "Learned os correction guidance.")
+
+            const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-os" }, "execute_os")
+
+            expectLoadedResultShape(result, "learned-corrections-os", directory)
+            expect(result.output).toContain("Learned os correction guidance.")
             expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
         })
     })
