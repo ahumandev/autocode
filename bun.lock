@@ -8,7 +8,9 @@
         "@opencode-ai/plugin": "1.17.9",
         "@opencode-ai/sdk": "1.17.9",
         "gray-matter": "4.0.3",
+        "jsonc-parser": "3.3.1",
         "ssh2": "1.17.0",
+        "yaml": "2.9.0",
       },
       "devDependencies": {
         "@types/bun": "1.3.14",
@@ -77,6 +79,8 @@
     "isexe": ["isexe@2.0.0", "", {}, "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw=="],
 
     "js-yaml": ["js-yaml@3.14.2", "", { "dependencies": { "argparse": "^1.0.7", "esprima": "^4.0.0" }, "bin": { "js-yaml": "bin/js-yaml.js" } }, "sha512-PMSmkqxr106Xa156c2M265Z+FTrPl+oxd/rgOQy2tijQeK5TxQ43psO1ZCwhVOSdnn+RzkzlRz/eY4BgJBYVpg=="],
+
+    "jsonc-parser": ["jsonc-parser@3.3.1", "", {}, "sha512-HtPEH2gxjCsknLl/ru6mg4FlQkpVMWE8ZJtaRdhYFcAMXUWUMo7mPAVqgY5LomyyQGI8NHV4f4T7uOXh/lD5+A=="],
 
     "kind-of": ["kind-of@6.0.3", "", {}, "sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw=="],
 

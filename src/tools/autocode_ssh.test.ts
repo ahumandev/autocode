@@ -714,6 +714,15 @@ describe("autocode_ssh tools", () => {
 
         expect(Object.keys(tools).filter((name) => name.startsWith("autocode_ssh_")).sort()).toEqual([
             "autocode_ssh_command",
+            "autocode_ssh_content_frontmatter_read",
+            "autocode_ssh_content_frontmatter_write",
+            "autocode_ssh_content_grep",
+            "autocode_ssh_content_insert",
+            "autocode_ssh_content_move",
+            "autocode_ssh_content_read",
+            "autocode_ssh_content_remove",
+            "autocode_ssh_content_toc",
+            "autocode_ssh_content_write",
             "autocode_ssh_edit_file",
             "autocode_ssh_glob",
             "autocode_ssh_grep_file",

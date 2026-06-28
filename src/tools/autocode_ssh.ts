@@ -31,12 +31,12 @@ type Permission = {
     execute: Entity[]
 }
 
-type SshToolDeps = SshDeps & {
+export type SshToolDeps = SshDeps & {
     env?: NodeJS.ProcessEnv
     pool?: SshConnectionPool
 }
 
-type SshConnectionContext = {
+export type SshConnectionContext = {
     client: SshClientLike
     host: string
     port: number
@@ -386,7 +386,7 @@ export function createAutocodeSshGrepFileTool(deps: SshToolDeps = {}): ReturnTyp
     })
 }
 
-async function withSftp(sshKey: string, deps: SshToolDeps, failedAction: string, operation: (context: SshConnectionContext & { sftp: SftpLike }) => Promise<string>): Promise<string> {
+export async function withSftp(sshKey: string, deps: SshToolDeps, failedAction: string, operation: (context: SshConnectionContext & { sftp: SftpLike }) => Promise<string>): Promise<string> {
     return withSshConnection(sshKey, deps, failedAction, async (context) => {
         const sftp = await openSftp(context.client)
         return operation({ ...context, sftp })
@@ -420,12 +420,12 @@ async function withSshConnection(sshKey: string, deps: SshToolDeps, failedAction
     }
 }
 
-function validateRemotePath(value: string, name: string): Error | undefined {
+export function validateRemotePath(value: string, name: string): Error | undefined {
     if (!value.trim()) return new Error(`${name} must be a non-empty string`)
     return validateNoNul(value, name)
 }
 
-function validateWritableRemoteFilePath(value: string, name: string): Error | undefined {
+export function validateWritableRemoteFilePath(value: string, name: string): Error | undefined {
     const pathError = validateRemotePath(value, name)
     if (pathError) return pathError
     const normalized = normalizeRemotePath(value.trim())

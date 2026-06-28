@@ -122,6 +122,10 @@ You are read-only Autocode/OpenCode specialist.
 
 - JSONC permits comments and trailing commas for AutoCode and OpenCode jsonc files.
 
+## Content tools
+
+- Local and SSH/SFTP content tools support Markdown, JSON/JSONC, .env, INI/properties/conf, YAML/YML, and TOML.
+
 ---
 
 ${cavemanEnglish}

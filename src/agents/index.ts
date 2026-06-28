@@ -738,12 +738,10 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             autocode_agent_previous: "allow",
             doom_loop: "deny",
-            edit: "allow",
             glob: "allow",
-            grep: "allow",
-            read: "allow",
             skill: {
                 "*": "deny",
                 "author-rules": "allow"
@@ -761,9 +759,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             autocode_agent_previous: "allow",
             doom_loop: "deny",
-            edit: "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -785,6 +783,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             autocode_agent_previous: "allow",
             doom_loop: "deny",
             edit: "allow",
@@ -809,6 +808,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             autocode_agent_previous: "allow",
             doom_loop: "deny",
             skill: {
@@ -834,9 +834,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             autocode_agent_previous: "allow",
             doom_loop: "deny",
-            edit: "allow",
             glob: "allow",
             grep: "allow",
             read: "allow",
@@ -857,9 +857,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             autocode_agent_previous: "allow",
             doom_loop: "deny",
-            edit: "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -881,9 +881,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             autocode_agent_previous: "allow",
             doom_loop: "deny",
-            edit: "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -907,12 +907,10 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_agent_previous: "allow",
+            "autocode_content*": "allow",
             autocode_logo_find: "allow",
             doom_loop: "deny",
-            edit: "allow",
             glob: "allow",
-            grep: "allow",
-            read: "allow",
             skill: {
                 "*": "deny",
                 "author*": "allow",
@@ -933,7 +931,6 @@ const baseAgents: AgentMap = {
             "context7*": "allow",
             doom_loop: "deny",
             edit: "allow",
-            "intellij_*": "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -959,7 +956,6 @@ const baseAgents: AgentMap = {
             "*": "deny",
             doom_loop: "deny",
             edit: "allow",
-            "intellij_*": "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -977,9 +973,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             doom_loop: "deny",
-            edit: "allow",
-            read: "allow",
             skill: {
                 "*": "deny",
                 "author-caveman": "allow",
@@ -1054,6 +1049,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_content_*": "allow",
             bash: "allow",
             doom_loop: "deny",
             edit: "allow",
@@ -1086,10 +1082,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            edit: "allow",
+            "autocode_content_*": "allow",
             glob: "allow",
-            grep: "allow",
-            read: "allow",
             skill: {
                 "*": "deny",
                 "author-skill": "allow",
@@ -1173,7 +1167,6 @@ const baseAgents: AgentMap = {
             "filesystem*": "allow",
             glob: "allow",
             grep: "allow",
-            "intellij_*": "allow",
             "pty*": "allow",
             read: "allow",
             skill: {
@@ -1227,10 +1220,12 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_content_frontmatter_read: "allow",
+            autocode_content_grep: "allow",
+            autocode_content_read: "allow",
+            autocode_content_toc: "allow",
             doom_loop: "deny",
             glob: "allow",
-            grep: "allow",
-            read: "allow",
             skill: {
                 "*": "deny",
                 "author-agent": "allow",
@@ -1275,7 +1270,6 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             glob: "allow",
             grep: "allow",
-            "intellij_read*": "allow",
             lsp: "allow",
             read: "allow",
             skill: {
@@ -1352,6 +1346,10 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_content_frontmatter_read: "allow",
+            autocode_content_grep: "allow",
+            autocode_content_read: "allow",
+            autocode_content_toc: "allow",
             bash: "allow",
             doom_loop: "deny",
             external_directory: "allow",
@@ -1400,6 +1398,10 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_ssh_content_frontmatter_read: "allow",
+            autocode_ssh_content_grep: "allow",
+            autocode_ssh_content_read: "allow",
+            autocode_ssh_content_toc: "allow",
             autocode_ssh_command: "allow",
             autocode_ssh_glob: "allow",
             autocode_ssh_grep_file: "allow",
@@ -1425,11 +1427,13 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            autocode_content_frontmatter_read: "allow",
+            autocode_content_grep: "allow",
+            autocode_content_read: "allow",
+            autocode_content_toc: "allow",
             doom_loop: "deny",
-            "intellij_read*": "allow",
             glob: "allow",
             grep: "allow",
-            lsp: "allow",
             read: "allow"
         },
         prompt: queryTextPrompt,

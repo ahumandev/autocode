@@ -98,6 +98,7 @@ export interface SftpLike {
     mkdir(path: string, callback: (err: Error | undefined) => void): void
     readdir(path: string, callback: (err: Error | undefined, list: FileEntryWithStats[]) => void): void
     unlink(path: string, callback: (err: Error | undefined) => void): void
+    rename?(oldPath: string, newPath: string, callback: (err: Error | undefined) => void): void
 }
 
 export interface SshExecOptions {
@@ -434,6 +435,12 @@ export async function sftpReaddir(sftp: SftpLike, path: string): Promise<FileEnt
 
 export async function sftpUnlink(sftp: SftpLike, path: string): Promise<void> {
     return wrapSftpVoid((callback) => sftp.unlink(path, callback))
+}
+
+export async function sftpRename(sftp: SftpLike, oldPath: string, newPath: string): Promise<void> {
+    const rename = sftp.rename
+    if (!rename) throw new Error("SFTP rename is not supported by this client")
+    return wrapSftpVoid((callback) => rename.call(sftp, oldPath, newPath, callback))
 }
 
 export function truncateSshOutput(
