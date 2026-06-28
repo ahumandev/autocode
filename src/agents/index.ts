@@ -48,6 +48,7 @@ import { tempReportPrompt } from "@/agents/prompts/temp_report";
 import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
+import { executeConfigPrompt } from "./prompts/execute_config";
 
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules
@@ -928,6 +929,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            apply_patch: "allow",
             "context7*": "allow",
             doom_loop: "deny",
             edit: "allow",
@@ -945,6 +947,25 @@ const baseAgents: AgentMap = {
         },
         prompt: executeCodePrompt,
         temperature: 0.3,
+        tier: "balanced",
+    },
+
+    execute_config: {
+        color: colorWritableWorker,
+        description: "Task `execute_config` to create or update configs or data files: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; It NEVER edit source code.",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            apply_patch: "allow",
+            autocode_agent_previous: "allow",
+            "autocode_content*": "allow",
+            doom_loop: "deny",
+            edit: "allow",
+            glob: "allow",
+            read: "allow"
+        },
+        prompt: executeConfigPrompt,
+        temperature: 0.1,
         tier: "balanced",
     },
 
@@ -1155,6 +1176,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            apply_patch: "allow",
             autocode_sandbox_cli: "allow",
             autocode_sandbox_copy: sandboxCopyTargetPermission,
             autocode_sandbox_edit: "allow",
