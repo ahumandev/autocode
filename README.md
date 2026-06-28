@@ -263,14 +263,14 @@ For example:
 ```jsonc
 {
   "autocode": {
-    "tier": "openai",
+    "tier": "mixed",
     "tiers": {
-      "openai": {
+      "mixed": {
         "smart": { "model": "openai/gpt-5.5", "variant": "high" },
         "balanced": { "model": "openai/gpt-5.4", "variant": "medium" },
-        "fast": { "model": "openai/gpt-5.3-spark", "variant": "low" },
-        "cheap": { "model": "openai/gpt-5.4-mini", "variant": "low" }
-      }
+        "fast": { "model": "openai/gpt-5.4-mini", "variant": "low" },
+        "cheap": { "model": "opencode/big-pickle", "variant": "low" }
+      },
     }
   },
   "permission": {
@@ -298,15 +298,15 @@ Replace `{db_key}` with letters, digits, or underscores. Environment lookup is c
 
 Configure each SSH target with `{ssh_key}` environment variables:
 
-| Variable pattern                  | Description                                              | Default |
-| --------------------------------- | -------------------------------------------------------- | ------- |
-| `AUTOCODE_SSH_{ssh_key}_HOST`     | Required SSH hostname or IP address for one target.      | None.   |
-| `AUTOCODE_SSH_{ssh_key}_PORT`     | Optional SSH port. Valid range is `1` to `65535`.        | `22`.   |
-| `AUTOCODE_SSH_{ssh_key}_KEYFILE`  | Optional private key file path.                          | Unset.  |
-| `AUTOCODE_SSH_{ssh_key}_KEYPASS`  | Optional private key passphrase.                         | Unset.  |
-| `AUTOCODE_SSH_{ssh_key}_USERNAME` | Optional SSH username.                                   | `root`. |
-| `AUTOCODE_SSH_{ssh_key}_PASSWORD` | Optional SSH password.                                   | Unset.  |
-| `AUTOCODE_SSH_{ssh_key}_AGENT`    | Optional SSH agent socket or path.                       | Unset.  |
+| Variable pattern                  | Description                                         | Default |
+| --------------------------------- | --------------------------------------------------- | ------- |
+| `AUTOCODE_SSH_{ssh_key}_HOST`     | Required SSH hostname or IP address for one target. | None.   |
+| `AUTOCODE_SSH_{ssh_key}_PORT`     | Optional SSH port. Valid range is `1` to `65535`.   | `22`.   |
+| `AUTOCODE_SSH_{ssh_key}_KEYFILE`  | Optional private key file path.                     | Unset.  |
+| `AUTOCODE_SSH_{ssh_key}_KEYPASS`  | Optional private key passphrase.                    | Unset.  |
+| `AUTOCODE_SSH_{ssh_key}_USERNAME` | Optional SSH username.                              | `root`. |
+| `AUTOCODE_SSH_{ssh_key}_PASSWORD` | Optional SSH password.                              | Unset.  |
+| `AUTOCODE_SSH_{ssh_key}_AGENT`    | Optional SSH agent socket or path.                  | Unset.  |
 
 `AUTOCODE_SSH_{ssh_key}_HOST` must contain only a hostname or IP address. AutoCode does not parse `host:port` values from `HOST`; set `AUTOCODE_SSH_{ssh_key}_PORT` when a target uses a non-default port.
 
