@@ -263,14 +263,26 @@ For example:
 ```jsonc
 {
   "autocode": {
-    "tier": "mixed",
+    "tier": "go",
     "tiers": {
-      "mixed": {
-        "smart": { "model": "openai/gpt-5.5", "variant": "high" },
-        "balanced": { "model": "openai/gpt-5.4", "variant": "medium" },
-        "fast": { "model": "openai/gpt-5.4-mini", "variant": "low" },
-        "cheap": { "model": "opencode/big-pickle", "variant": "low" }
+      "go": {
+        "smart":    { "model": "opencode-go/gml-5.2", "variant": "high" },
+        "balanced": { "model": "opencode-go/minimax-m3", "variant": "medium" },
+        "fast":     { "model": "opencode/deepseek-v4-flash-free", "variant": "low" },
+        "cheap":    { "model": "opencode/deepseek-v4-flash-free", "variant": "low" }
       },
+      "openai": {
+        "smart":    { "model": "openai/gpt-5.5", "variant": "high" },
+        "balanced": { "model": "openai/gpt-5.4", "variant": "medium" },
+        "fast":     { "model": "openai/gpt-5.3-spark", "variant": "low" },
+        "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "low" }
+      },
+      "zai": {
+        "smart":    { "model": "zai/gml-5.2", "variant": "high" },
+        "balanced": { "model": "zai/gml-5.2", "variant": "medium" },
+        "fast":     { "model": "zai/gml-5-turbo", "variant": "low" },
+        "cheap":    { "model": "zai/gml-4.7", "variant": "low" }
+      }
     }
   },
   "permission": {
@@ -283,6 +295,8 @@ For example:
 ```
 
 OpenCode applies a last-matching-rule-wins model to external-directory permissions. Place broad defaults first and more specific overrides later.
+
+See [OpenCode Go documentation](https://opencode.ai/docs/go#endpoints) for supported model names.
 
 ### Database environment variables
 
