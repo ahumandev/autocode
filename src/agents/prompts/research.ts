@@ -80,8 +80,4 @@ ${errorRules}
 ---
 
 ${plannerRules}
-
----
-
-${cavemanEnglish}
 `

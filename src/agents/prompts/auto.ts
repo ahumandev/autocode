@@ -134,6 +134,7 @@ ${errorRules}
 
 ## Rules
 
+- Only call \`read\` tool when user attach filePath with line numbers (e.g. \`{"filePath":"file.md:2-9"}\`), otherwise task subagent.
 - Only call task \`execute_git_commit\` when instructed by user.
 - NEVER stop, but continue anonymously until solution is complete, unless DANGEROUS OPERATION is required or stuck with same obstacle after 5 attempts.
 `
