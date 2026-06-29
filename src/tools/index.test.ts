@@ -1200,7 +1200,6 @@ describe("autocode_plan_save tool", () => {
         await configurePlugin(plugin, cfg)
         expect(Object.keys(plugin.tool ?? {}).sort()).toEqual([
             "autocode_agent_execute",
-            "autocode_agent_previous",
             "autocode_agent_swap",
             "autocode_concept_create",
             "autocode_concept_list",
@@ -1312,7 +1311,6 @@ describe("autocode_plan_save tool", () => {
         expect(plugin.tool?.autocode_act_prompt).toBeUndefined()
         expect(plugin.tool?.autocode_act).toBeUndefined()
         expect(plugin.tool?.autocode_agent_execute).toBeDefined()
-        expect(plugin.tool?.autocode_agent_previous).toBeDefined()
         expect(plugin.tool?.autocode_agent_swap).toBeDefined()
         expect(plugin.tool?.autocode_session_context).toBeDefined()
         expect(Object.keys((plugin.tool?.autocode_session_context as unknown as { args: Record<string, unknown> }).args)).toEqual([])
@@ -1336,7 +1334,6 @@ describe("autocode_plan_save tool", () => {
         expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Selected planned job_name in safe snake_case.")
         expect(toolSurfaceText(plugin.tool?.autocode_agent_swap)).toContain("Swap agent in this session.")
         expect(toolSurfaceText(plugin.tool?.autocode_agent_swap)).toContain("Name of agent to swap to.")
-        expect(Object.keys((plugin.tool?.autocode_agent_previous as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         const sessionCreateToolText = toolSurfaceText(plugin.tool?.autocode_session_create)
         expect(sessionCreateToolText).toContain("Hand off task to new session.")
         expect(sessionCreateToolText).toContain("Agent to execute task.")
@@ -1362,7 +1359,6 @@ describe("autocode_plan_save tool", () => {
         expect(cfg.agent.autocode).toBeUndefined()
         expect(cfg.agent.plan).toEqual({ disable: true })
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_execute")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_previous")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_swap")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
@@ -1370,14 +1366,12 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_job_list")).toBe("allow")
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_job_status")).toBe("allow")
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "question")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_previous")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_agent_swap")).toBe("allow")
         expect(getPermissionRule(cfg.agent.temp_execute?.permission, "autocode_plan_read")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_plan_save")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
         expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo_find")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_agent_previous")).toBe("allow")
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_agent_swap")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_session_create")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo")).toBeUndefined()
@@ -1389,7 +1383,6 @@ describe("autocode_plan_save tool", () => {
         expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "design")).toBe("deny")
         expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "research")).toBe("deny")
         expect(cfg.agent.auto_general?.prompt).toContain("fallback auto orchestrator")
-        expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_agent_previous")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_agent_swap")).toBe("allow")
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_create")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_feedback")).toBeUndefined()
@@ -1398,7 +1391,6 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_read")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_save")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_draft_job_create")).toBeUndefined()
-        expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_agent_previous")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_agent_swap")).toBe("allow")
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_create")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_plan_read")).toBeUndefined()
@@ -1414,7 +1406,6 @@ describe("autocode_plan_save tool", () => {
         expect(cfg.agent.research?.prompt).toContain("Research Workflow")
         expect(cfg.agent.research?.prompt).toContain("Task `query*` subagents")
         const queryDbAgent = (cfg.agent as Record<string, Record<string, unknown>>).query_db
-        expect((queryDbAgent.permission as Record<string, unknown> | undefined)?.autocode_agent_previous).toBeUndefined()
         expect((queryDbAgent.permission as Record<string, unknown> | undefined)?.autocode_agent_swap).toBeUndefined()
         expect((queryDbAgent.permission as Record<string, unknown> | undefined)?.autocode_session_create).toBeUndefined()
         expect(queryDbAgent.mode).toBe("subagent")
@@ -1460,7 +1451,6 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.execute_rest?.permission, "previous_agent")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.execute_rest?.permission, "autocode_session_create")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.execute_rest?.permission, "autocode_agent_swap")).toBeUndefined()
-        expect(getPermissionRule(cfg.agent.execute_rest?.permission, "autocode_agent_previous")).toBeUndefined()
     })
 })
 

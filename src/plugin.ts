@@ -4,6 +4,7 @@ import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, 
 import { collectExternalDirectories, loadAutocodeConfig, mergeExternalDirectoryRules } from "./config"
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { commands } from "./commands"
+import { createAgentSwitchBackHook } from "./hooks/agent_switch_back"
 import { ensureGeneratedSkills, injectGeneratedSkillsPath } from "./skills"
 import { createTools } from "./tools"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
@@ -104,6 +105,7 @@ const autocode: Plugin = async (input: PluginInput): Promise<Hooks> => {
         },
 
         tool: createTools(input.client, sandbox, { serverUrl: pluginInput.serverUrl }),
+        event: createAgentSwitchBackHook(input.client, input.directory, input.worktree),
     }
 }
 

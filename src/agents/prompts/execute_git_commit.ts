@@ -91,12 +91,12 @@ Replace [placeholders] with:
    - Is an optional part, omit if reason for commit is unknown
    - NEVER wrap long sentences
    - Max 40 words
-- [difference] to list **Behavioural Changes** which is observable behaviour in contrast to old behaviour before commit
+- [difference] to list **Behavioral Changes** which is observable behaviour in contrast to old behaviour before commit
    - DO include user observable changes like "Improved startup performance", "Implemented feature x", "Removed legacy api"
    - NEVER include technical changes available from git diff like "a.ts renamed to b.ts", "function x added to c.js"
-   - Omit this section if there are no behavioural changes
-   - Title before list is "Behavioural Changes:"
-   - 1 behavioural change description per line (no wrapping)
+   - Omit this section if there are no behavioral changes
+   - Title before list is "Behavioral Changes:"
+   - 1 behavioral change description per line (no wrapping)
    - Start each line with emojis to indicate type of change
    - Keep emojis consistent (same action = same emoji)
    - Max 10 words per line

@@ -740,7 +740,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_content_*": "allow",
-            autocode_agent_previous: "allow",
             doom_loop: "deny",
             glob: "allow",
             skill: {
@@ -761,7 +760,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_content_*": "allow",
-            autocode_agent_previous: "allow",
             doom_loop: "deny",
             glob: "allow",
             grep: "allow",
@@ -785,7 +783,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_content_*": "allow",
-            autocode_agent_previous: "allow",
             doom_loop: "deny",
             edit: "allow",
             glob: "allow",
@@ -810,7 +807,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_content_*": "allow",
-            autocode_agent_previous: "allow",
             doom_loop: "deny",
             skill: {
                 "*": "deny",
@@ -836,7 +832,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_content_*": "allow",
-            autocode_agent_previous: "allow",
             doom_loop: "deny",
             glob: "allow",
             grep: "allow",
@@ -859,7 +854,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_content_*": "allow",
-            autocode_agent_previous: "allow",
             doom_loop: "deny",
             glob: "allow",
             grep: "allow",
@@ -883,7 +877,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_content_*": "allow",
-            autocode_agent_previous: "allow",
             doom_loop: "deny",
             glob: "allow",
             grep: "allow",
@@ -907,7 +900,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_previous: "allow",
             "autocode_content*": "allow",
             autocode_logo_find: "allow",
             doom_loop: "deny",
@@ -957,7 +949,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             apply_patch: "allow",
-            autocode_agent_previous: "allow",
             "autocode_content*": "allow",
             doom_loop: "deny",
             edit: "allow",
@@ -1042,7 +1033,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_previous: "allow",
             autocode_job_shelve: "allow",
             doom_loop: "deny",
             git_add: "allow",
@@ -1489,7 +1479,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_previous: "allow",
             autocode_concept_create: "allow",
             skill: {
                 "*": "deny",
@@ -1523,7 +1512,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_previous: "allow",
             skill: {
                 "learned-permissions": "allow"
             }
@@ -1539,7 +1527,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_previous: "allow",
             autocode_session_context: "allow",
         },
         prompt: "---",
@@ -1553,7 +1540,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_previous: "allow",
         },
         prompt: tempReportPrompt,
         temperature: 0.3,
@@ -1566,7 +1552,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_agent_previous: "allow",
             autocode_session_create: "allow",
         },
         prompt: "---",

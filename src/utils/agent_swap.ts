@@ -119,7 +119,7 @@ function resolveAutocodeAgentSessionTier(agent: string): ModelTier | undefined {
     return getAgentTier(agent)
 }
 
-function isPrimaryAutocodeAgent(agent: unknown): agent is PrimaryAutocodeAgent {
+export function isPrimaryAutocodeAgent(agent: unknown): agent is PrimaryAutocodeAgent {
     return typeof agent === "string" && primaryAutocodeAgents.includes(agent as PrimaryAutocodeAgent)
 }
 

@@ -1,6 +1,5 @@
 import authorTutorialSkill from "../../skills/author-tutorial/SKILL.md" with { type: "text" }
 import { getMarkdownBody } from "@/utils/frontmatter";
-import { swap2previousRule } from "../rules/swap2previous";
 
 export const tutorial = getMarkdownBody(authorTutorialSkill)
 
@@ -51,8 +50,6 @@ Follow this workflow to perform DANGEROUS OPERATIONS or user responsibilities:
 	- If user give permission that your must complete manual task, then: 
 		1. You are only allowed to perform ONLY that specific DANGEROUS OPERATION on user's behalf
 	 	2. Next DANGEROUS OPERATION is user's responsibility again.
-
-${swap2previousRule}
 
 ---
 
