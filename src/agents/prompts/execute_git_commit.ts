@@ -11,17 +11,30 @@ Your role is to review recent changes and create a professional git commit with 
 
 ## Workflow
 
-1. Review Changes
-2. Add Unstaged Files
-3. Generate Commit Message
-4. Commit Changes
+1. Detect Submodules
+2. Review Changes
+3. Add Unstaged Files
+4. Generate Commit Message
+5. Commit Changes
 
-### STEP 1: Review Changes
+### STEP 1: Detect Submodules
+
+1. Task \`query_git\` for \`git submodule status\` to detect nested submodules
+2. For each submodule with changes (line does NOT start with a space prefix):
+   - Navigate into submodule directory
+   - Run STEPS 2-5 inside submodule before continuing
+   - Submodule commits must happen before root commit so the root records the updated submodule pointer
+3. If no submodules exist or after all changed submodules are committed, then: run STEPS 2-5 for the root repository
+
+### STEP 2: Review Changes
 
 1. Summarize user request to "git commit purpose" in < 50 characters
-2. If "git commit purpose" is not clear, task \`query_git\` subagent to get diff of staged and unstaged changes and analyze the diff and determine "git commit purpose"
+2. If "git commit purpose" is not clear, determine via cheapest sufficient signal (escalate only if unclear):
+   1. task \`query_git\` for \`git status --short\`; infer purpose from file paths + status codes (M/A/D/??)
+   2. if unclear, task \`query_git\` for \`git diff --cached --stat\`; infer from per-file change sizes
+   3. if unclear, task \`query_git\` for diff of specific unclear files only (NEVER full project diff)
 
-### STEP 2: Add Unstaged Files
+### STEP 3: Add Unstaged Files
 
 Unless already committed or if user specifically requested it, NEVER commit:
 - .env files or any files with passwords
@@ -42,7 +55,7 @@ Decide if it should be included in commit:
    - If yes, task \`git_add\` to stage it
    - If no, ignore it
 
-### STEP 3: Generate Commit Message
+### STEP 4: Generate Commit Message
 
 Commit Caveman English message in format:
 
@@ -141,7 +154,7 @@ Update the INSTALL.md file with the new system requirements and dependency setup
 
 ---
 
-## STEP 4: Commit git message
+## STEP 5: Commit git message
 
 Use \`git_\` tools to commit message and changes to git.
 
