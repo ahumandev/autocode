@@ -266,7 +266,7 @@ For example:
     "tier": "go",
     "tiers": {
       "go": {
-        "smart":    { "model": "opencode-go/gml-5.2", "variant": "high" },
+        "smart":    { "model": "opencode-go/glm-5.2", "variant": "high" },
         "balanced": { "model": "opencode-go/minimax-m3", "variant": "medium" },
         "fast":     { "model": "opencode/deepseek-v4-flash-free", "variant": "low" },
         "cheap":    { "model": "opencode/deepseek-v4-flash-free", "variant": "low" }
@@ -278,10 +278,10 @@ For example:
         "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "low" }
       },
       "zai": {
-        "smart":    { "model": "zai/gml-5.2", "variant": "high" },
-        "balanced": { "model": "zai/gml-5.2", "variant": "medium" },
-        "fast":     { "model": "zai/gml-5-turbo", "variant": "low" },
-        "cheap":    { "model": "zai/gml-4.7", "variant": "low" }
+        "smart":    { "model": "zai/glm-5.2", "variant": "high" },
+        "balanced": { "model": "zai/glm-5.2", "variant": "medium" },
+        "fast":     { "model": "zai/glm-5-turbo", "variant": "low" },
+        "cheap":    { "model": "zai/glm-4.7", "variant": "low" }
       }
     }
   },
