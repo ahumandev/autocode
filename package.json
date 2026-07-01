@@ -40,7 +40,7 @@
     "install:shim": "bun src/install.ts",
     "watch": "rm -rf dist && bun run copy:skills && bun build src/plugin.ts --outdir dist --target bun --watch & tsc --emitDeclarationOnly --noEmit false --watch",
     "copy:skills": "bun scripts/copy-skill-sources.ts",
-    "test": "bun test src",
+    "test": "bun test src --isolate",
     "typecheck": "tsc --noEmit",
     "verify:package": "bun scripts/verify-package-artifacts.ts",
     "prepublishOnly": "bun run test && bun run typecheck && bun run build && bun run verify:package",

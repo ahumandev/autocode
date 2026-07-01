@@ -1,49 +1,18 @@
 import { describe, expect, mock, test, beforeEach } from "bun:test"
 import type { Event } from "@opencode-ai/sdk"
+import { findPreviousPrimaryAutocodeAgent, resolveAutocodeAgentSessionSettings, swapCurrentAutocodeSession } from "@/utils/agent_swap"
+import { createAgentSwitchBackHook } from "@/hooks/agent_switch_back"
 
 const SWAP_BACK_PROMPT = "Present the next action to the user using the question tool."
 const PRIMARY = ["assist", "auto", "design", "research"]
 
-type SwapFn = (
-    client: unknown,
-    directory: string,
-    sessionID: string,
-    agent: string,
-    prompt: string,
-    resolvedModel: unknown,
-) => Promise<{ sessionID: string } | { error: string; instruction: string }>
+type SwapFn = typeof swapCurrentAutocodeSession
+type ResolveFn = typeof resolveAutocodeAgentSessionSettings
+type FindPrevFn = typeof findPreviousPrimaryAutocodeAgent
 
-type ResolveFn = (
-    agent: string,
-    worktree: string,
-    directory: string,
-) => Promise<{ resolvedModel: unknown } | { error: string; instruction: string }>
-
-type FindPrevFn = (
-    client: unknown,
-    directory: string,
-    sessionID: string,
-    currentAgent?: string,
-) => Promise<{ agent?: string; skipped: boolean; reason?: string } | { error: string; instruction: string }>
-
-const swapImpl: SwapFn = async () => ({ sessionID: "s1" })
-const resolveSettingsImpl: ResolveFn = async () => ({ resolvedModel: {} })
-const findPrevImpl: FindPrevFn = async () => ({ skipped: true, reason: "none" })
-
-const swapMock = mock(swapImpl)
-const resolveSettingsMock = mock(resolveSettingsImpl)
-const findPrevMock = mock(findPrevImpl)
-
-await mock.module("@/utils/agent_swap", () => ({
-    swapCurrentAutocodeSession: swapMock,
-    resolveAutocodeAgentSessionSettings: resolveSettingsMock,
-    findPreviousPrimaryAutocodeAgent: findPrevMock,
-    isPrimaryAutocodeAgent: (agent: unknown): agent is string =>
-        typeof agent === "string" && PRIMARY.includes(agent),
-    primaryAutocodeAgents: PRIMARY,
-}))
-
-const { createAgentSwitchBackHook } = await import("@/hooks/agent_switch_back")
+const swapMock = mock<SwapFn>(async () => ({ sessionID: "s1" }) as Awaited<ReturnType<SwapFn>>)
+const resolveSettingsMock = mock<ResolveFn>(async () => ({ resolvedModel: {} }) as Awaited<ReturnType<ResolveFn>>)
+const findPrevMock = mock<FindPrevFn>(async () => ({ skipped: true, reason: "none" }) as Awaited<ReturnType<FindPrevFn>>)
 
 const client = {} as never
 const DIRECTORY = "/dir"
@@ -69,6 +38,14 @@ function deletedBySessionID(sessionID: string) {
 }
 
 describe("createAgentSwitchBackHook", () => {
+    function createHandler() {
+        return createAgentSwitchBackHook(client, DIRECTORY, WORKTREE, {
+            swapCurrentAutocodeSession: swapMock as unknown as typeof swapCurrentAutocodeSession,
+            resolveAutocodeAgentSessionSettings: resolveSettingsMock as unknown as typeof resolveAutocodeAgentSessionSettings,
+            findPreviousPrimaryAutocodeAgent: findPrevMock as unknown as typeof findPreviousPrimaryAutocodeAgent,
+        })
+    }
+
     beforeEach(() => {
         swapMock.mockClear()
         resolveSettingsMock.mockClear()
@@ -79,7 +56,7 @@ describe("createAgentSwitchBackHook", () => {
     })
 
     test("swaps to in-memory lastPrimary when temp_* session goes idle", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "auto"))
         await handler(updated("s1", "temp_concept"))
         await handler(idle("s1"))
@@ -97,7 +74,7 @@ describe("createAgentSwitchBackHook", () => {
 
     test("uses findPreviousPrimaryAutocodeAgent fallback when no in-memory primary", async () => {
         findPrevMock.mockImplementation(async () => ({ agent: "design", skipped: false }))
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "temp_concept"))
         await handler(idle("s1"))
 
@@ -108,7 +85,7 @@ describe("createAgentSwitchBackHook", () => {
     })
 
     test("does not swap when fallback reports skipped", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "temp_concept"))
         await handler(idle("s1"))
         expect(swapMock).not.toHaveBeenCalled()
@@ -116,7 +93,7 @@ describe("createAgentSwitchBackHook", () => {
 
     test("does not swap when fallback returns no agent", async () => {
         findPrevMock.mockImplementation(async () => ({ skipped: false }))
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "temp_concept"))
         await handler(idle("s1"))
         expect(swapMock).not.toHaveBeenCalled()
@@ -124,28 +101,28 @@ describe("createAgentSwitchBackHook", () => {
 
     test("does not swap when fallback errors", async () => {
         findPrevMock.mockImplementation(async () => ({ error: "boom", instruction: "" }))
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "temp_concept"))
         await handler(idle("s1"))
         expect(swapMock).not.toHaveBeenCalled()
     })
 
     test("does not swap when no current agent tracked (cold idle)", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(idle("s1"))
         expect(swapMock).not.toHaveBeenCalled()
         expect(findPrevMock).not.toHaveBeenCalled()
     })
 
     test("does not swap when current agent is primary", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "assist"))
         await handler(idle("s1"))
         expect(swapMock).not.toHaveBeenCalled()
     })
 
     test("does not swap when current agent is non-primary and non-temp", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "query_db"))
         await handler(idle("s1"))
         expect(swapMock).not.toHaveBeenCalled()
@@ -154,7 +131,7 @@ describe("createAgentSwitchBackHook", () => {
 
     test("does not swap when resolveAutocodeAgentSessionSettings errors", async () => {
         resolveSettingsMock.mockImplementation(async () => ({ error: "cfg", instruction: "" }))
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "auto"))
         await handler(updated("s1", "temp_concept"))
         await handler(idle("s1"))
@@ -163,7 +140,7 @@ describe("createAgentSwitchBackHook", () => {
 
     test("does not update tracked agent when swap errors (retry on next idle)", async () => {
         swapMock.mockImplementation(async () => ({ error: "net", instruction: "" }))
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "auto"))
         await handler(updated("s1", "temp_concept"))
         await handler(idle("s1"))
@@ -172,7 +149,7 @@ describe("createAgentSwitchBackHook", () => {
     })
 
     test("after successful swap, second idle does not re-swap", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "auto"))
         await handler(updated("s1", "temp_concept"))
         await handler(idle("s1"))
@@ -181,7 +158,7 @@ describe("createAgentSwitchBackHook", () => {
     })
 
     test("session.deleted clears tracked state (cold idle after delete)", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "auto"))
         await handler(updated("s1", "temp_concept"))
         await handler(deletedById("s1"))
@@ -190,7 +167,7 @@ describe("createAgentSwitchBackHook", () => {
     })
 
     test("session.deleted extracts id from properties.sessionID fallback", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "auto"))
         await handler(updated("s1", "temp_concept"))
         await handler(deletedBySessionID("s1"))
@@ -199,7 +176,7 @@ describe("createAgentSwitchBackHook", () => {
     })
 
     test("message.updated with missing sessionID/agent is ignored", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updatedMissing())
         await handler(idle("s1"))
         expect(swapMock).not.toHaveBeenCalled()
@@ -209,14 +186,14 @@ describe("createAgentSwitchBackHook", () => {
         swapMock.mockImplementation(async () => {
             throw new Error("kaboom")
         })
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "auto"))
         await handler(updated("s1", "temp_concept"))
         await expect(handler(idle("s1"))).resolves.toBeUndefined()
     })
 
     test("other event types are ignored", async () => {
-        const handler = createAgentSwitchBackHook(client, DIRECTORY, WORKTREE)
+        const handler = createHandler()
         await handler(updated("s1", "auto"))
         await handler(updated("s1", "temp_concept"))
         await handler(event({ type: "session.created", properties: {} }))

@@ -9,11 +9,22 @@ import {
 const TEMP_AGENT_PREFIX = "temp_"
 const SWAP_BACK_PROMPT = "Present the next action to the user using the question tool."
 
+type AgentSwitchBackDeps = {
+    findPreviousPrimaryAutocodeAgent?: typeof findPreviousPrimaryAutocodeAgent
+    resolveAutocodeAgentSessionSettings?: typeof resolveAutocodeAgentSessionSettings
+    swapCurrentAutocodeSession?: typeof swapCurrentAutocodeSession
+}
+
 export function createAgentSwitchBackHook(
     client: OpencodeClient,
     directory: string,
     worktree: string,
+    deps: AgentSwitchBackDeps = {},
 ): (input: { event: Event }) => Promise<void> {
+    const findPrevFn = deps.findPreviousPrimaryAutocodeAgent ?? findPreviousPrimaryAutocodeAgent
+    const resolveSettingsFn = deps.resolveAutocodeAgentSessionSettings ?? resolveAutocodeAgentSessionSettings
+    const swapFn = deps.swapCurrentAutocodeSession ?? swapCurrentAutocodeSession
+
     const currentAgentBySession = new Map<string, string>()
     const lastPrimaryBySession = new Map<string, string>()
 
@@ -45,16 +56,16 @@ export function createAgentSwitchBackHook(
 
                 let target = lastPrimaryBySession.get(sessionID)
                 if (!target) {
-                    const fallback = await findPreviousPrimaryAutocodeAgent(client, directory, sessionID, current)
+                    const fallback = await findPrevFn(client, directory, sessionID, current)
                     if ("error" in fallback) return
                     if (fallback.skipped || !fallback.agent) return
                     target = fallback.agent
                 }
 
-                const settings = await resolveAutocodeAgentSessionSettings(target, worktree, directory)
+                const settings = await resolveSettingsFn(target, worktree, directory)
                 if ("error" in settings) return
 
-                const result = await swapCurrentAutocodeSession(client, directory, sessionID, target, SWAP_BACK_PROMPT, settings.resolvedModel)
+                const result = await swapFn(client, directory, sessionID, target, SWAP_BACK_PROMPT, settings.resolvedModel)
                 if (!("error" in result)) {
                     currentAgentBySession.set(sessionID, target)
                 }

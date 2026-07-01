@@ -11,6 +11,7 @@ Goal: confirm npm publish access, complete the one-time initial publish if neede
 - You have push access to this GitHub repository.
 - You have an npm account that can publish the `@ahumandev/autocode` package.
 - You have Bun and Node.js available locally for preflight checks.
+- The `test` script in `package.json` runs `bun test src --isolate`; the `--isolate` flag scopes `mock.module` state per test file so the suite is deterministic. Do not remove the flag when running tests locally or in CI.
 - You can configure npm Trusted Publisher for this package.
 
 Package details from [`package.json`](../package.json):

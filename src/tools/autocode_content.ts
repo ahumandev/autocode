@@ -22,7 +22,7 @@ export function createAutocodeContentReadTool(): ReturnType<typeof tool> {
     return tool({
         description: `Read local file content when line number is unknown. Supports Markdown section, JSON/JSONC/YAML/TOML value, .env key value, or config key/section.`,
         args: {
-            path: tool.schema.string().describe("Relative file path to .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf."),
+            path: tool.schema.string().describe("Current-working-directory relative file path to .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf."),
             section: jsonPathSchema.describe("Section title, exact dotted section path, JSON/YAML/TOML/config path, path array, env key, or config key."),
         },
         execute: (args, context) => createContentReadHandler(createLocalFilesystemContentAdapter(context))(args),
@@ -33,7 +33,7 @@ export function createAutocodeContentWriteTool(): ReturnType<typeof tool> {
     return tool({
         description: `Replace local file content: Supports Markdown section body, JSON/JSONC/YAML/TOML value, .env key value, or config key value.`,
         args: {
-            path: tool.schema.string().describe("Relative file path to .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file."),
+            path: tool.schema.string().describe("Current-working-directory relative file path to .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file."),
             section: jsonPathSchema.describe("Section title, exact dotted section path, JSON/YAML/TOML/config path, path array, env key, or config key."),
             content: tool.schema.string().describe("Replacement Markdown content, JSON/JSONC/YAML/TOML value, single-line env value, or config value."),
         },
@@ -45,7 +45,7 @@ export function createAutocodeContentInsertTool(): ReturnType<typeof tool> {
     return tool({
         description: `Insert content into local file: Supports Markdown content, JSON/JSONC/YAML/TOML value, .env key value, or config key value relative to a target.`,
         args: {
-            path: tool.schema.string().describe("Relative file path to .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file."),
+            path: tool.schema.string().describe("Current-working-directory relative .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file."),
             target: jsonPathSchema.describe("Target section title, exact dotted section path, JSON/YAML/TOML/config path, path array, new env key, or config key."),
             content: tool.schema.string().describe("Markdown, JSON/JSONC/YAML/TOML, single-line env value, or config value content to insert."),
             position: tool.schema.number().int().min(0).optional().describe("Zero-based insertion index. 0 inserts at first position; omitted appends at end."),
@@ -58,7 +58,7 @@ export function createAutocodeContentMoveTool(): ReturnType<typeof tool> {
     return tool({
         description: `Move content within local file: Supports Markdown section subtree, JSON/JSONC/YAML/TOML node, .env key assignment, or config key/section.`,
         args: {
-            path: tool.schema.string().describe("Relative file path to .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file."),
+            path: tool.schema.string().describe("Current-working-directory relative .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file."),
             section: jsonPathSchema.describe("Section title, exact dotted section path, JSON/YAML/TOML/config path, path array, env key, or config key/section to move."),
             target: jsonPathSchema.describe("Target section title, exact dotted section path, JSON/YAML/TOML/config path, path array, env key, or config key/section."),
             position: tool.schema.number().int().min(0).optional().describe("Zero-based insertion index. 0 moves to first position; omitted appends at end."),
@@ -71,7 +71,7 @@ export function createAutocodeContentRemoveTool(): ReturnType<typeof tool> {
     return tool({
         description: `Remove content from local file: Supports Markdown section subtree, JSON/JSONC/YAML/TOML node, .env key assignment, or config key/section.`,
         args: {
-            path: tool.schema.string().describe("Relative file path to .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file."),
+            path: tool.schema.string().describe("Current-working-directory relative .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file."),
             section: jsonPathSchema.describe("Section title, exact dotted section path, JSON/YAML/TOML/config path, path array, env key, or config key/section to remove."),
         },
         execute: (args, context) => createContentRemoveHandler(createLocalFilesystemContentAdapter(context))(args),
