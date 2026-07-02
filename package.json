@@ -43,6 +43,7 @@
     "test": "bun test src --isolate",
     "typecheck": "tsc --noEmit",
     "verify:package": "bun scripts/verify-package-artifacts.ts",
+    "release:version": "bun scripts/release-version.ts",
     "prepublishOnly": "bun run test && bun run typecheck && bun run build && bun run verify:package",
     "verify:sandbox-online": "node scripts/verify-sandbox-online.mjs"
   },
