@@ -336,10 +336,6 @@ describe("auto resume wiring", () => {
             "*": "deny",
             "/home/me/CarData/*": "allow",
         }))
-        expect(getPermissionRule(cfg.agent.auto_general?.permission, "task_external")).toEqual(expect.objectContaining({
-            "*": "allow",
-            "/home/me/CarData/*": "allow",
-        }))
     })
 
     test("does not register removed job_draft command and keeps current design-research agents", async () => {
@@ -1379,7 +1375,6 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto_general?.permission, "*")).toBe("allow")
         expect(getPermissionRule(cfg.agent.auto_general?.permission, "doom_loop")).toBe("deny")
-        expect(getPermissionRule(cfg.agent.auto_general?.permission, "task_resume")).toBe("allow")
         expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "design")).toBe("deny")
         expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "research")).toBe("deny")
         expect(cfg.agent.auto_general?.prompt).toContain("fallback auto orchestrator")

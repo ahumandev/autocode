@@ -917,8 +917,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "author*": "allow",
-            },
-            "todo*": "allow",
+            }
         },
         prompt: executeAuthorPrompt,
         temperature: 0.5,
@@ -944,8 +943,7 @@ const baseAgents: AgentMap = {
                 "code*": "allow",
                 "design*": "allow",
                 "learned-preferences": "allow"
-            },
-            "todo*": "allow"
+            }
         },
         prompt: executeCodePrompt,
         temperature: 0.3,
@@ -981,8 +979,7 @@ const baseAgents: AgentMap = {
             glob: "allow",
             grep: "allow",
             lsp: "allow",
-            read: "allow",
-            "todo*": "allow"
+            read: "allow"
         },
         prompt: executeDebugPrompt,
         temperature: 0.6,
@@ -1007,8 +1004,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "document_*": "allow"
             },
-            task_resume: "allow",
-            "todo*": "allow",
+            task_resume: "allow"
         },
         prompt: executeDocumentPrompt,
         temperature: 0.1,
@@ -1050,14 +1046,7 @@ const baseAgents: AgentMap = {
             git_log: "allow",
             git_reset: "allow",
             git_status: "allow",
-            task: {
-                "*": "deny",
-                query_code: "allow",
-                query_git: "allow",
-                query_text: "allow"
-            },
             task_resume: "allow",
-            "todo*": "allow",
         },
         prompt: executeGitCommitPrompt,
         temperature: 0.5,
@@ -1090,7 +1079,6 @@ const baseAgents: AgentMap = {
             },
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
-            "todo*": "allow",
         },
         prompt: executeOsPrompt,
         temperature: 0.1,

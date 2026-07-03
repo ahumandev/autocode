@@ -27,7 +27,6 @@ Goal: Analyze article for requested changes, error and potential improvements.
 1. Use \`glob\` tool to find files by pattern
 2. Use \`grep\` tool to search for specific content or sections
 3. Use \`read\` tool to inspect the exact file and exact relevant local section you plan to edit before making any changes
-4. Use \`todo*\` tool remember every editorial that is required.
 
 ### Step 4: Implement Exactly as Requested
 

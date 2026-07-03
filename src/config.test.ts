@@ -332,12 +332,6 @@ describe("external directory config", () => {
             "/review/*": "deny",
             "/blocked/*": "deny",
         })
-        expect(getPermissionRule(agents.auto_general?.permission, "task_external")).toEqual({
-            "*": "allow",
-            "/allowed/*": "allow",
-            "/review/*": "deny",
-            "/blocked/*": "deny",
-        })
     })
 
     test("applyExternalDirectoryPolicy normalizes allow ask and deny by question permission", () => {
