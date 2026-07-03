@@ -1,5 +1,6 @@
 import type { AgentConfig } from "@opencode-ai/sdk/v2"
 import type { ExternalDirectoryRules, ModelTier, PermissionAction } from "@/config"
+import { assistBrowserPrompt } from "./prompts/assist_browser";
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
 import { assistPrompt } from "./prompts/assist";
 import { assistTroubleshootPrompt } from "./prompts/assist_troubleshoot";
@@ -280,7 +281,6 @@ const baseAgents: AgentMap = {
                 assist: "deny",
                 "auto*": "deny",
                 build: "deny",
-                execute_git_commit: "ask",
                 plan: "deny",
             },
             task_external: "ask",
@@ -306,7 +306,6 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "deny",
                 "auto*": "allow",
-                general: "allow",
                 query_skills: "allow"
             },
             task_resume: "allow",
@@ -375,6 +374,27 @@ const baseAgents: AgentMap = {
 
     // Secondary Orchestrators
 
+    assist_browser: {
+        color: colorWritableInteractiveOrchestrator,
+        description: "Task `assist_browser` for interactive browser automation: Browser access that can fill forms, submit, save, upload, and pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so the tab and login session are not re-discovered.",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            "chrome*": "allow",
+            doom_loop: "deny",
+            question: "allow",
+            skill: {
+                "*": "deny",
+                "execute-ux": "allow",
+            },
+            "todo*": "allow",
+        },
+        prompt: assistBrowserPrompt,
+        temperature: 0.3,
+        tier: "balanced",
+    },
+
     assist_git_conflict: {
         color: colorWritableInteractiveOrchestrator,
         description: "Task `assist_git_conflict` to resolve git merge conflicts",
@@ -410,7 +430,7 @@ const baseAgents: AgentMap = {
                 query_text: "allow"
             },
             task_resume: "allow",
-            "todo*": "allow",
+            "todowrite": "allow",
         },
         prompt: assistGitConflictPrompt,
         temperature: 0.3,
@@ -475,7 +495,6 @@ const baseAgents: AgentMap = {
             },
             task_external: "allow",
             task_resume: "allow",
-            "todo*": "allow",
         },
         prompt: autoDesignPrompt,
         temperature: 0.7,
@@ -524,7 +543,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "allow",
             doom_loop: "deny",
-            external_directory: "allow",
             skill: {
                 "*": "allow"
             },
@@ -539,9 +557,6 @@ const baseAgents: AgentMap = {
                 research: "deny",
                 session: "deny",
             },
-            task_external: "allow",
-            task_resume: "allow",
-            "todo*": "allow",
         },
         prompt: autoGeneralPrompt,
         tier: "smart",
@@ -573,7 +588,6 @@ const baseAgents: AgentMap = {
                 query_git: "allow",
             },
             task_resume: "allow",
-            "todo*": "allow",
         },
         prompt: buildRefactorPrompt,
         temperature: 0.3,
@@ -593,7 +607,6 @@ const baseAgents: AgentMap = {
                 "query*": "allow",
             },
             task_resume: "allow",
-            "todo*": "allow",
         },
         prompt: buildResearchPrompt,
         temperature: 0.7,
@@ -623,7 +636,6 @@ const baseAgents: AgentMap = {
                 query_text: "allow",
             },
             task_resume: "allow",
-            "todo*": "allow",
         },
         prompt: buildReviewApiPrompt,
         temperature: 0.3,
@@ -653,7 +665,6 @@ const baseAgents: AgentMap = {
                 query_text: "allow",
             },
             task_resume: "allow",
-            "todo*": "allow",
         },
         prompt: buildReviewUiPrompt,
         temperature: 0.3,
@@ -686,7 +697,6 @@ const baseAgents: AgentMap = {
                 query_git: "allow",
             },
             task_resume: "allow",
-            "todo*": "allow",
         },
         prompt: buildTestPrompt,
         temperature: 0.3,
@@ -1264,8 +1274,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "execute-ux": "allow",
-            },
-            "todo*": "allow"
+            }
         },
         prompt: queryBrowserPrompt,
         tier: "fast",
