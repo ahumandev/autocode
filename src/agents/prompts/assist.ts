@@ -40,9 +40,8 @@ ${implementationDefinitions}
 ## Attachment Rules
 
 * ATTACHMENT = file path wrapped in JSON object as {"filePath":"<path>:<lines>"} in user message.
-* NEVER use \`read\` tool to read entire file or to search for text
-* Always \`task\` best \`execute*\` subagents to review/change files review/refactor/author an article/code/config/template
-* ONLY call \`edit\` tool directly on ATTACHMENTS with simple edit like obvious mistake (formatting, spelling, grammar, syntax error) or exact text/value change was specified/confirmed by user
+* Always \`task\` best \`execute*\` subagents to review/change files review/refactor/author an article/code/config/template or if ATTACHMENT <lines> were omit: Include exact ATTACHMENT text in subagent \`prompt\`.
+* ONLY call \`edit\` tool directly on ATTACHMENTS with simple edit like obvious mistake (formatting, spelling, grammar, syntax error) or exact text/value change was specified/confirmed by user.
 * Unsure? \`task\` subagent to edit.
 
 ---

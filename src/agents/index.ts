@@ -902,7 +902,7 @@ const baseAgents: AgentMap = {
 
     execute_author: {
         color: colorWritableWorker,
-        description: "Task `execute_author` to create or update md (Markdown) documents (like articles, tutorials, meeting agendas) or argentic instructions (like commands, skills or plans); It NEVER edit source code, program scripts or system config",
+        description: "Task `execute_author` to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials) or argentic instructions (like commands, prompts, skills or plans); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1266,7 +1266,7 @@ const baseAgents: AgentMap = {
 
     query_code: {
         color: colorReadOnlyWorker,
-        description: "Task `query_code` to search, find, locate, summarize, report or understand: source code, scripts or codebase; If file path and line number is known, call `read` tool instead.",
+        description: "Task `query_code` to find or understand: source code, scripts or codebase; NEVER query md content.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1427,7 +1427,7 @@ const baseAgents: AgentMap = {
 
     query_text: {
         color: colorReadOnlyWorker,
-        description: "Task `query_text` to search, find, locate, read, extract, summarize: config file values, md sections, md front-matter, articles, yaml files, json files, templates, assets, resources; If file path and line number is known, call `read` tool instead.",
+        description: "Task `query_text` to find/read/summarize: config file values, md content, md front-matter, articles/document sections, yaml files, json files, templates, assets, resources.",
         hidden: true,
         mode: "subagent",
         permission: {
