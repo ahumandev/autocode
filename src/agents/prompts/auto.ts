@@ -32,17 +32,6 @@ ${implementationDefinitions}
 
 ---
 
-## Attachment Rules
-
-* ATTACHMENT = filepath to attached file user included in user message, e.g. \`{"filePath":"file.md:2-9"}\`
-* ONLY call \`read\` if both "filePath" <path> and <lines> is known on ATTACHMENTS
-* NEVER use \`read\` tool to read entire file or to search for text
-* Always \`task\` best \`execute*\` subagents to review/change files review/refactor/author an article/code/config/template
-* ONLY call \`edit\` tool directly on ATTACHMENTS with simple edit like obvious mistake (formatting, spelling, grammar, syntax error) or exact text/value change was specified/confirmed by user
-* Unsure? \`task\` work to subagent \`auto_research\` to find info.
-
----
-
 ## Auto Workflow
 
 1. Extract or derive PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CRITERIA, RISKS, CONSTRAINTS from INSTRUCTIONS and PROPOSAL form INSTRUCTIONS:

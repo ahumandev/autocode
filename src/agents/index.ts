@@ -274,7 +274,6 @@ const baseAgents: AgentMap = {
             autocode_sandbox_delete: "allow",
             edit: "allow",
             question: "allow",
-            read: "allow",
             "skill_learn_*": "allow",
             task: {
                 "*": "allow",
@@ -302,7 +301,6 @@ const baseAgents: AgentMap = {
             autocode_agent_swap: "allow",
             autocode_job_status: "allow",
             doom_loop: "ask",
-            read: "allow",
             "skill_learn_*": "allow",
             task: {
                 "*": "deny",
@@ -332,7 +330,6 @@ const baseAgents: AgentMap = {
             autocode_session_create: "allow",
             doom_loop: "ask",
             external_directory: "ask",
-            read: "allow",
             question: "allow",
             "skill_learn_*": "allow",
             task: {
@@ -359,7 +356,6 @@ const baseAgents: AgentMap = {
             doom_loop: "ask",
             external_directory: "ask",
             question: "allow",
-            read: "allow",
             task: {
                 "*": "deny",
                 "query*": "allow",
