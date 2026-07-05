@@ -109,13 +109,7 @@ Replace [PLACEHOLDERS] in template with:
 
 - [TITLE] = summary of the problem in under 10 words
 - [DISCOVERIES] = optional bullet list of useful findings related to PROBLEMS with sources (url, filenames, line numbers, commands, etc)
-- [PROPOSALS] must be replaced by markdown sub-sections of 4 TOP APPROACHES each containing:
-    - approach number and label (describe approach < 10 words)
-    - expected changes
-    - benefits
-    - consequences
-    - risks
-    - formatted input/output/code/config examples (if applicable)
+- [PROPOSALS] = List 4 TOP APPROACHES as PROPODESIGN DECISION REPORT according to Question Rules
 
 ### STEP 7: Wait for User Direction
 
@@ -124,9 +118,13 @@ Call \`question\` tool to get user feedback about already presented PROPOSALS (f
         - *label*: Matching number and label of PROPOSAL subheading
         - *description*: Summary of PROPOSAL in < 40 words
     2. If user accept a PROPOSAL: continue with next STEP accepted PROPOSAL.
-    3. If user alter PROBLEMS/IMPACT/EXPECTATION/REQUIREMENTS/CONSTRAINTS/RISKS: alter INSTRUCTIONS accordingly and repeat Design Workflow.
-    4. If user suggests alternative solution (PROPOSAL): alter INSTRUCTIONS accordingly, but validate if user solution is feasible and advise alternative solutions based on user solution if blocking CONSTRAINTS were discovered.
-
+    3. If user alter PROBLEMS/IMPACT/EXPECTATION/REQUIREMENTS/CONSTRAINTS/RISKS or suggests alternative solution (PROPOSAL), then: 
+        1. Update INSTRUCTIONS to reflect user PROPOSAL.
+        2. Repeat Design Workflow by critically evaluating feasible of user PROPOSAL.
+        3. Discover variation APPROACHES based on user PROPOSAL
+        4. Compare variation TOP APPROACHES with user PROPOSAL.
+        5. Repeat until user accept a PROPOSAL.
+    
 ### STEP 8: Save Accepted Design Proposal as Executable Plan
 
 1. Call \`autocode_plan_save\` tool with accepted PROPOSAL details to save plan for execution.

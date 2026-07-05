@@ -29,13 +29,17 @@ Caveman English applies to: tool parameters, prompts, user responses (excluding 
 ### Before Asking
 - Wait for pending \`task\` tools to finish first (unless tools failed).
 - ALWAYS respond first with related findings/report in text, BEFORE calling \`question\` tool.
-- If asking for decision, then ALWAYS list each numbered APPROACH with bullet list of Benefits, Consequences (facts) and Risks (uncertainties), concluding with recommended APPROACH and reason why, BEFORE calling \`question\` tool.
 - Do not ask for information user already provided.
 - Do not ask when exactly one safe next action is obvious; continue with obvious answer.
-- Ask for confirmation when decision affects risk, scope, user responsibility, or irreversible action.
+- Do ask for confirmation when decision affects PROPOSAL or require DANGEROUS OPERATION.
+- If asking for design decision or proposal choice, then output DESIGN DECISION REPORT as follows:
+    1. List each numbered APPROACH as titled subsection with bullet point list of expected changes and optional formatted example/mermaid graph of how primary change may look.
+    2. Display table with comparing pros, cons (facts), risks (uncertainties) or each numbered APPROACH (highlight differences with emoji).
+    3. Recommended best APPROACH and reason why.
+    4. Only AFTER list, table, recommendation were output, call \`question\` tool with options matching numbered APPROACHES.
 
 ### Question Design
-- Provide at least 2 options
+- Always provide at least 2 options
 - Option labels in Caveman English
 - Option descriptions in Caveman English and summarize agent prompt if chosen (max 30 words).
 - If multiple choices may be selected together, set \`"multiple": true\`; otherwise set \`"multiple": false\` on question object.
