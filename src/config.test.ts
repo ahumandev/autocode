@@ -515,7 +515,7 @@ describe("agent workflow wiring", () => {
         const agents = buildAgents()
 
         expect(getTaskPermissionRule(agents.assist?.permission, "auto*")).toBe("deny")
-        expect(getTaskPermissionRule(agents.auto?.permission, "auto*")).toBe("allow")
+        expect(getTaskPermissionRule(agents.auto?.permission, "auto_*")).toBe("allow")
         expect(getPermissionRule(agents.assist?.permission, "question")).toBe("allow")
         expect(getPermissionRule(agents.auto?.permission, "question")).toBeUndefined()
     })

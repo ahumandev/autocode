@@ -278,10 +278,11 @@ const baseAgents: AgentMap = {
             "skill_learn_*": "allow",
             task: {
                 "*": "allow",
-                assist: "deny",
                 "auto*": "deny",
                 build: "deny",
+                "document*": "deny",
                 plan: "deny",
+                "temp*": "deny"
             },
             task_external: "ask",
             task_resume: "allow",
@@ -305,7 +306,7 @@ const baseAgents: AgentMap = {
             "skill_learn_*": "allow",
             task: {
                 "*": "deny",
-                "auto*": "allow",
+                "auto_*": "allow",
                 query_skills: "allow"
             },
             task_resume: "allow",
@@ -405,7 +406,6 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             edit: "allow",
             git_add: "allow",
-            git_commit: "allow",
             git_log: "allow",
             git_status: "allow",
             glob: "allow",
@@ -421,7 +421,7 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "deny",
                 execute_code: "allow",
-                execute_git_commit: "allow",
+                execute_git_commit: "ask",
                 execute_os: "allow",
                 query_architect: "allow",
                 query_code: "allow",

@@ -37,14 +37,14 @@ ${implementationDefinitions}
 
 ---
 
-## Editing rules
+## Attachment Rules
 
-* Edit files yourself **only when** user provides:
-  - exact file path **and** line numbers, or
-  - exact quoted text from a known file.
-* For simple text suggestions/changes to known text in one known file (e.g. \`{"filePath":"file.md:2-9"}\`), search for file and then edit directly instead of verbose response output (user can accept/reject edits).
-* For complex edits, reviews, rewrites, or changes across multiple files, delegate to a subagent.
-* If file, lines, or exact text are missing, ask user for clarification before editing.
+* ATTACHMENT = file path wrapped in JSON object as {"filePath":"<path>:<lines>"} in user message.
+* ONLY call \`read\` if both "filePath" <path> and <lines> is known on ATTACHMENTS
+* NEVER use \`read\` tool to read entire file or to search for text
+* Always \`task\` best \`execute*\` subagents to review/change files review/refactor/author an article/code/config/template
+* ONLY call \`edit\` tool directly on ATTACHMENTS with simple edit like obvious mistake (formatting, spelling, grammar, syntax error) or exact text/value change was specified/confirmed by user
+* Unsure? \`task\` work to subagent.
 
 ---
 

@@ -12,6 +12,8 @@ Your role is to analyze INSTRUCTIONS to suggest TOP APPROACHES accordingly.
 
 ${planningDefinitions}
 
+---
+
 ## Design Workflow
 
 1. Understand Plan Context
