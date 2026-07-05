@@ -133,12 +133,12 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
 * Otherwise suggest top 3 logical "Next Action Options" based on this pattern:
     1. Analyze assignment (identify constraints and research risks/uncertainties)
     2. Brainstorm approaches to solve a problem
-    3. Implement best approach
-    4. Verify implementation
-    5. Learn from mistakes, adjust and repeat until user expections are met
-    6. Optimize implementation (maintainability, performance, reliability, security)
-    7. Document changes (comments, update/learn skills)
-    8. Regression testing
+    3. Add regression test (TDD)
+    4. Implement best approach
+    5. Verify implementation (using system like user with browser, CLI, curl, sandbox or inspect DB/file/SSH entries after using new feature)
+    6. Learn from mistakes, adjust and repeat until user expections are met
+    7. Optimize implementation (maintainability, performance, reliability, security)
+    8. Document changes (comments, update/learn skills)
     9. Commit changes to repo
     10. Consider next task (from Solution Plan if known)
 * ALWAYS suggest improvement on last performed action (if possible)
