@@ -1,0 +1,75 @@
+features:
+  bibleTooltips: true
+  sourceEdit: https://github.com/ahumandev/autocode/blob/main/
+  footer: []
+menu:
+  - index
+  - configuration
+  - usage
+  - ===
+  - development
+  - distribution
+  - terminology
+paths:
+  input: docs
+  build: .mdsite
+  output: .output
+site:
+  canonical: "https://ahumandev.github.io/autocode"
+  favicon: docs/logo.webp
+  name: "AutoCode"
+themes:
+  light:
+    colors:
+      primary: "#0969da"
+      secondary: "#656d76"
+      selected: "#dbe3eb"
+      error: "#d1242f"
+      warning: "#bf8700"
+      info: "#0969da"
+      success: "#1a7f37"
+      background: "#f6f8fa"
+      surface: "#ffffff"
+      surface-rail: "#edf1f5"
+      surface-appbar: "#e4eaf0"
+      on-surface-rail: "#32302a"
+      on-surface-appbar: "#000000"
+      on-background: "#24292f"
+      on-surface: "#24292f"
+      on-primary: "#ffffff"
+      on-secondary: "#ffffff"
+      on-selectable: "#24292f"
+      on-selected: "#000000"
+      on-error: "#ffffff"
+      on-warning: "#ffffff"
+      on-info: "#ffffff"
+      on-success: "#ffffff"
+      outline: "#d0d7de"
+      outline-bars: "#f3f4f6"
+  dark:
+    colors:
+      primary: "#58a6ff"
+      secondary: "#8b949e"
+      selected: "#313943"
+      error: "#f85149"
+      warning: "#d29922"
+      info: "#58a6ff"
+      success: "#3fb950"
+      background: "#000000"
+      surface: "#0d1117"
+      surface-rail: "#1f252d"
+      surface-appbar: "#282f38"
+      on-surface-rail: "#ced0d6"
+      on-surface-appbar: "#ffffff"
+      on-background: "#c9d1d9"
+      on-surface: "#c9d1d9"
+      on-primary: "#0d1117"
+      on-secondary: "#0d1117"
+      on-selectable: "#c9d1d9"
+      on-selected: "#ffffff"
+      on-error: "#ffffff"
+      on-warning: "#ffffff"
+      on-info: "#ffffff"
+      on-success: "#ffffff"
+      outline: "#30363d"
+      outline-bars: "#161b22"

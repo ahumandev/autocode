@@ -1,6 +1,9 @@
-***The workflow engine for traceable autonomous job execution***
+<div align="center">
+<img src="logo.webp" alt="AutoCode"/>
+<p><i>The workflow engine for traceable autonomous job execution</i></p>
+</div>
 
-![Autocode](docs/logo.webp)
+---
 
 AutoCode is an OpenCode plugin that turns rough conceptual ideas into completed solutions by means of structured workflow phases and optional review gates.
 
@@ -48,49 +51,60 @@ curl -s https://raw.githubusercontent.com/ahumandev/autocode/refs/heads/main/doc
 
 ### Installation for Humans
 
-Follow this [installation guide](docs/index.md#installation-for-humans).
+OpenCode installs npm plugins automatically at startup when they are listed in the global plugin configuration.
 
-## Usage
+Use the global OpenCode config at `~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`, then merge the plugin entry into the existing `plugin` array instead of overwriting the file.
 
-AutoCode is an OpenCode plugin. It is not a standalone application and does not start a web server or expose a local URL. It registers managed agents, slash commands, generated skills, and tools.
-
-### Primary Agents
-
-| Agent      | Purpose                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------- |
-| `research` | Gathers evidence and produces Research Reports.                                                         |
-| `design`   | Creates solution plans from conversation and optional Research Report data.                             |
-| `auto`     | Autonomously executes drafted jobs from solution plans.                                                 |
-| `assist`   | Interactively executes immediate tasks with human control, optionally using solution plans as guidance. |
-
-### Typical job workflow
-
-```mermaid
-flowchart TD
-  Concepts[.agents/jobs/concepts] --> Drafts[.agents/jobs/drafts]
-  Drafts --> Assist[.agents/jobs/assist]
-  Drafts --> Executing[.agents/jobs/executing]
-  Executing --> Review[.agents/jobs/review]
-  Executing -.blocked.-> Facilitate[.agents/jobs/facilitate]
-  Facilitate -.unblocked.-> Executing
-  Assist --> Shelved[.agents/jobs/shelved]
-  Review --> Shelved
+```json
+{
+  "plugin": ["@ahumandev/autocode"]
+}
 ```
 
-1. Create or select a concept in `.agents/jobs/concepts`.
-2. Run `/job-design` to create a solution plan from the selected concept or current planning context.
-3. Run `/job-draft` to save the plan in `.agents/jobs/drafts/{job_name}/plan.md`.
-4. Run `/job-execute-assist` to execute with human steering, or `/job-execute-auto` to execute autonomously.
-5. Review the completed work from `.agents/jobs/review`.
-6. Run `/job-review-commit` to accept (git commit) and shelve (clean up files) the job, or `/job-shelve` (alias `/shelve`) to close it without acceptance.
+If your config already contains other plugins or settings, keep them and add `@ahumandev/autocode` to the existing array.
 
-### Reference
+#### Verify installation
 
-- [Configuration](docs/configuration.md) — config locations, keys, model tiers, and DB/SSH environment variables.
-- [Usage](docs/usage.md) — more details on how to use AutoCode.
-- [Terminology](docs/terminology.md) — glossary of AutoCode concepts.
+1. Save the updated OpenCode config.
+2. Start or restart OpenCode.
+3. Confirm OpenCode loads AutoCode commands or agents after startup.
 
-## Development
+### Update the plugin version
+
+To update the public package version, change the plugin entry to `@ahumandev/autocode@latest` in your OpenCode config, save the file, and restart OpenCode.
+
+```jsonc
+{
+  "plugin": ["@ahumandev/autocode@latest"]
+}
+```
+
+OpenCode re-installs the requested npm plugin version during startup.
+
+### Uninstall
+
+Remove `@ahumandev/autocode` from the OpenCode `plugin` array, save the config, and restart OpenCode.
+
+If you previously used the repository-only shim workflow, also remove `~/.config/opencode/plugins/autocode.js` if present.
+
+### Troubleshooting
+
+- Confirm the config file is `~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`.
+- Confirm your JSON or JSONC stays valid after merging the plugin entry.
+- Confirm the plugin entry uses `@ahumandev/autocode` or `@ahumandev/autocode@latest` exactly.
+- Restart OpenCode after every config change so startup installation can run again.
+
+## Core
+
+- [Configuration](configuration.md) — config locations, keys, model tiers, and DB/SSH environment variables.
+- [Usage](usage.md) — more details on how to use AutoCode.
+- [Terminology](terminology.md) — glossary of AutoCode concepts.
+
+## Reference
+
+- [Terminology](terminology.md) — glossary of AutoCode concepts.
+
+## Development & Distribution
 
 - [Development](development.md) — architecture, local setup, commands, testing, and local plugin deployment.
 - [Distribution Guide](distribution.md) — distributing AutoCode on public registries.
