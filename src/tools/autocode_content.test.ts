@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { dirname, join, resolve } from "path"
 import { resetRetryCounts } from "@/utils/tools"
-import { createAutocodeContentFrontmatterReadTool, createAutocodeContentFrontmatterWriteTool, createAutocodeContentGrepTool, createAutocodeContentInsertTool, createAutocodeContentMoveTool, createAutocodeContentReadTool, createAutocodeContentRemoveTool, createAutocodeContentTocTool, createAutocodeContentWriteTool } from "./autocode_content"
+import { createAutocodeContentFrontmatterReadTool, createAutocodeContentFrontmatterWriteTool, createAutocodeContentGrepTool, createAutocodeContentInsertTool, createAutocodeContentMoveTool, createAutocodeContentReadTool, createAutocodeContentRemoveTool, createAutocodeContentTocTool, createAutocodeContentWriteTool, normalizeHeaderBlankLines } from "./autocode_content"
 import { createAskEffect, createToolContext } from "./test_context"
 import type { ToolContext } from "@opencode-ai/plugin"
 
@@ -99,6 +99,65 @@ function toolSurfaceText(tool: any): string {
     const argDescriptions = Object.values(tool?.args ?? {}).map((arg: any) => arg.description ?? arg.unwrap?.().description ?? arg.def?.innerType?.description ?? "")
     return [tool?.description ?? "", ...argDescriptions].join("\n")
 }
+
+describe("normalizeHeaderBlankLines", () => {
+    test("inserts one blank line below a header that has no blank below", () => {
+        const input = "# H\nparagraph\n"
+        expect(normalizeHeaderBlankLines(input)).toBe("# H\n\nparagraph\n")
+    })
+
+    test("inserts one blank line above a header that has no blank above", () => {
+        const input = "paragraph\n# H\nbody\n"
+        expect(normalizeHeaderBlankLines(input)).toBe("paragraph\n\n# H\n\nbody\n")
+    })
+
+    test("applies the rule to all H1-H6 header levels", () => {
+        const input = "# H1\np1\n## H2\np2\n### H3\np3\n#### H4\np4\n##### H5\np5\n###### H6\np6\n"
+        const expected = "# H1\n\np1\n\n## H2\n\np2\n\n### H3\n\np3\n\n#### H4\n\np4\n\n##### H5\n\np5\n\n###### H6\n\np6\n"
+        expect(normalizeHeaderBlankLines(input)).toBe(expected)
+    })
+
+    test("collapses multiple consecutive blank lines around a header to exactly one", () => {
+        const input = "p1\n\n\n# H\n\n\np2\n"
+        expect(normalizeHeaderBlankLines(input)).toBe("p1\n\n# H\n\np2\n")
+    })
+
+    test("does not treat # lines inside fenced code blocks as headers", () => {
+        const input = "Some text.\n\n```\n# Not a header\nstill code\n```\n\nMore text.\n"
+        expect(normalizeHeaderBlankLines(input)).toBe(input)
+    })
+
+    test("does not treat # lines inside ~~~ fenced code blocks as headers", () => {
+        // The # inside ~~~ is not a header, so no blank-line normalization occurs anywhere.
+        const input = "Before\n~~~\n# Not a header\n~~~\nAfter\n"
+        expect(normalizeHeaderBlankLines(input)).toBe(input)
+    })
+
+    test("enforces blank line between header and following fenced code block", () => {
+        const input = "# H\n```\ncode\n```\n"
+        expect(normalizeHeaderBlankLines(input)).toBe("# H\n\n```\ncode\n```\n")
+    })
+
+    test("leaves non-header content unchanged when no headers are present", () => {
+        const input = "para 1\n\npara 2\n\n\npara 3\n"
+        expect(normalizeHeaderBlankLines(input)).toBe(input)
+    })
+
+    test("first-line header has no leading blank inserted", () => {
+        const input = "# H\n\nbody\n"
+        expect(normalizeHeaderBlankLines(input)).toBe(input)
+    })
+
+    test("idempotent: normalizing an already-normalized input is a no-op", () => {
+        const input = "# H1\n\np1\n\n## H2\n\np2\n"
+        expect(normalizeHeaderBlankLines(input)).toBe(input)
+    })
+
+    test("preserves content with header directly before end of file", () => {
+        const input = "p1\n\n# H"
+        expect(normalizeHeaderBlankLines(input)).toBe("p1\n\n# H")
+    })
+})
 
 describe("autocode content tools", () => {
 
@@ -1065,6 +1124,18 @@ name = "target"
         const descendantMove = await execute(tool, { path: "guide.md", section: "Root.Install", target: "Root.Install.Setup" })
         expect(descendantMove.failedAction).toBe("move markdown content")
         expect(descendantMove.error).toContain("descendant")
+    })
+
+    test("write normalizes blank lines around headers in the written section", async () => {
+        useTempCwd()
+        writeMarkdown("guide.md")
+
+        const result = await execute(createAutocodeContentWriteTool(), { path: "guide.md", section: "Root.Install", content: "## Added\nAdded body.\n" })
+
+        expect(result.changed).toBe(true)
+        const content = readFileSync("guide.md", "utf8")
+        // The new section body should have exactly 1 blank between the heading and its body
+        expect(content).toContain("### Added\n\nAdded body.")
     })
 
     test("move normalizes skipped heading levels", async () => {

@@ -37,7 +37,13 @@ export function createAutocodeContentWriteTool(): ReturnType<typeof tool> {
             section: jsonPathSchema.describe("Section title, exact dotted section path, JSON/YAML/TOML/config path, path array, env key, or config key."),
             content: tool.schema.string().describe("Replacement Markdown content, JSON/JSONC/YAML/TOML value, single-line env value, or config value."),
         },
-        execute: (args, context) => createContentWriteHandler(createLocalFilesystemContentAdapter(context))(args),
+        execute: (args, context) => {
+            // Markdown lint rule: enforce exactly 1 blank line between any H1-H6 header and
+            // its adjacent paragraph/text, only outside fenced code blocks. Runs before the
+            // engine write handler so every content write is normalized.
+            const nextArgs = typeof args.content === "string" ? { ...args, content: normalizeHeaderBlankLines(args.content) } : args
+            return createContentWriteHandler(createLocalFilesystemContentAdapter(context))(nextArgs)
+        },
     })
 }
 
@@ -114,3 +120,82 @@ export function createAutocodeContentGrepTool(): ReturnType<typeof tool> {
 
 export { formatJsonPath, parseJsonPath, parseJsonPathString } from "./content/json"
 export { availablePaths, parseMarkdown, resolveSection, splitFrontmatter } from "./content/markdown"
+
+// Markdown rule: a header (H1-H6, matched by `^#{1,6}\s+.+$`) must be separated from
+// the next/previous non-empty line by exactly 1 blank line. Headers inside fenced
+// code blocks (``` or ~~~) are not treated as headers and are preserved as-is.
+// Only blank lines immediately adjacent to a header are normalized; other content
+// and whitespace are preserved. A header at the start of the file requires no
+// leading blank line.
+export function normalizeHeaderBlankLines(content: string): string {
+    if (content === "") return content
+    const lines = content.split("\n")
+    const headerPattern = /^#{1,6}\s+.+$/
+    const fenceStartPattern = /^(`{3,}|~{3,})/
+
+    type Kind = "header" | "content" | "blank" | "fence"
+    type Item = { line: string, kind: Kind }
+    const items: Item[] = []
+    let inFence = false
+    let fenceMarker: string | null = null
+
+    for (const rawLine of lines) {
+        const line = rawLine.replace(/\r$/, "")
+        const fenceMatch = fenceStartPattern.exec(line)
+        if (fenceMatch) {
+            if (!inFence) {
+                inFence = true
+                fenceMarker = fenceMatch[1]
+                items.push({ line: rawLine, kind: "fence" })
+            }
+            else if (fenceMarker !== null && line.startsWith(fenceMarker)) {
+                inFence = false
+                fenceMarker = null
+                items.push({ line: rawLine, kind: "fence" })
+            }
+            else {
+                items.push({ line: rawLine, kind: "fence" })
+            }
+            continue
+        }
+        if (inFence) {
+            items.push({ line: rawLine, kind: "fence" })
+            continue
+        }
+        if (line.trim() === "") {
+            items.push({ line: rawLine, kind: "blank" })
+            continue
+        }
+        if (headerPattern.test(line)) {
+            items.push({ line: rawLine, kind: "header" })
+            continue
+        }
+        items.push({ line: rawLine, kind: "content" })
+    }
+
+    const result: Item[] = []
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.kind !== "header") {
+            result.push(item)
+            continue
+        }
+        // Trim trailing blanks before this header, then ensure exactly 1 blank above
+        // (only if there is non-blank content above; first-line header has no leading blank).
+        while (result.length > 0 && result[result.length - 1].kind === "blank") result.pop()
+        if (result.length > 0) {
+            result.push({ line: "", kind: "blank" })
+        }
+        result.push(item)
+        // Skip the original blanks following the header, then ensure exactly 1 blank
+        // below if a non-blank line follows.
+        let j = i + 1
+        while (j < items.length && items[j].kind === "blank") j++
+        if (j < items.length) {
+            result.push({ line: "", kind: "blank" })
+        }
+        i = j - 1
+    }
+
+    return result.map((item) => item.line).join("\n")
+}
