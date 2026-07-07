@@ -2548,7 +2548,16 @@ describe("plugin.config tier wiring", () => {
                 expect(getAgentField(cfg, "auto", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "execute_code", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "query_git", "tier")).toBeUndefined()
-                expect(cfg.agent.title).toBeUndefined()
+                expect(getAgentField(cfg, "title", "model")).toBe("openai/gpt-5-nano")
+                expect(getAgentField(cfg, "title", "variant")).toBe("economy")
+                expect(getAgentField(cfg, "title", "tier")).toBeUndefined()
+                expect(getAgentField(cfg, "title", "prompt")).toBeUndefined()
+                expect(getAgentField(cfg, "title", "permission")).toBeUndefined()
+                expect(getAgentField(cfg, "title", "mode")).toBeUndefined()
+                expect(getAgentField(cfg, "title", "description")).toBeUndefined()
+                expect(getAgentField(cfg, "title", "tools")).toBeUndefined()
+                expect(getAgentField(cfg, "title", "instructions")).toBeUndefined()
+                expect(getAgentField(cfg, "title", "behavior")).toBeUndefined()
             } finally {
                 rmSync(worktree, { recursive: true, force: true })
             }
@@ -2632,8 +2641,7 @@ describe("plugin.config tier wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.agent.title).toBe(titleAgent)
-                expect(cfg.agent.title).toEqual({ model: "user/title-model", prompt: "Keep title agent" })
+                expect(cfg.agent.title).toEqual({ model: "user/title-model", variant: "economy", prompt: "Keep title agent" })
             } finally {
                 rmSync(worktree, { recursive: true, force: true })
             }
