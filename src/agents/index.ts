@@ -1089,6 +1089,7 @@ const baseAgents: AgentMap = {
             apply_path: "allow",
             doom_loop: "deny",
             edit: "allow",
+            bash: "allow",
             external_directory: "allow",
             "filesystem*": "allow",
             glob: "allow",

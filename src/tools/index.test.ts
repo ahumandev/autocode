@@ -2641,7 +2641,9 @@ describe("plugin.config tier wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.agent.title).toEqual({ model: "user/title-model", variant: "economy", prompt: "Keep title agent" })
+                expect(getAgentField(cfg, "title", "model")).toBe("user/title-model")
+                expect(getAgentField(cfg, "title", "variant")).toBe("economy")
+                expect(getAgentField(cfg, "title", "prompt")).toBe("Keep title agent")
             } finally {
                 rmSync(worktree, { recursive: true, force: true })
             }

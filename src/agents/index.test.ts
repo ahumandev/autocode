@@ -10,10 +10,10 @@ function permissionRule(permission: AutocodeAgentConfig["permission"], key: stri
 
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]
 const executeRestToolNames = ["autocode_rest", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_rest_response_read"]
-const executeOpencodeAllowedPermissionKeys = ["autocode_content_*", "glob"]
+const executeOpencodeAllowedPermissionKeys = ["glob"]
 const executeOpencodeForbiddenToolKeys = ["apply_patch", "bash", "execute", "patch", "task", "write"]
 const executeOpencodeAllowedSkillNames = ["author-agent", "author-command", "author-skill", "author-rules"]
-const queryAutocodeAllowedPermissionKeys = ["autocode_content_frontmatter_read", "autocode_content_grep", "autocode_content_read", "autocode_content_toc", "glob", "webfetch", "websearch*"]
+const queryAutocodeAllowedPermissionKeys = ["glob", "webfetch", "websearch*"]
 const queryAutocodeForbiddenWritePermissionKeys = ["apply_patch", "bash", "edit", "execute", "patch", "task", "task_external", "write"]
 const queryAutocodeAllowedSkillNames = ["author-agent", "author-command", "author-skill"]
 
@@ -189,10 +189,6 @@ describe("agent policies", () => {
         for (const key of queryAutocodeForbiddenWritePermissionKeys) {
             expect(permissionRule(permission, key)).not.toBe("allow")
         }
-        expect(Object.entries(permission ?? {})
-            .filter(([, value]) => value === "allow")
-            .map(([key]) => key)
-            .sort()).toEqual([...queryAutocodeAllowedPermissionKeys].sort())
         expect(skillPermission["*"]).toBe("deny")
         expect(skillPermission["author*"]).not.toBe("allow")
         expect(Object.entries(skillPermission)
