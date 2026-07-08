@@ -32,8 +32,8 @@ export const planningDefinitions = `
 export const implementationDefinitions = `
 ### Implementation Terminology
 
-- ACTION = reasoning prompt / tool call / user response
-- TASK = sequence of sub-TASKS or ACTIONS (delegated to subagents)
-- ASSIGNMENT = sequence of ACTIONS or TASKS that add value to project/research from user perspective
+- ACTION = practical executable tool call or reasoning step
+- TASK = sequence of ACTIONS (delegated to subagents)
+- ASSIGNMENT = smallest sequence of TASKS that add minimum value to project/research from user perspective
 - OBSTACLE = unplanned CONSTRAINT blocking ASSIGNMENT
 `

@@ -282,6 +282,7 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "allow",
                 "auto*": "deny",
+                auto_research: "allow",
                 build: "deny",
                 "document*": "deny",
                 plan: "deny",
@@ -309,7 +310,7 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "deny",
                 "auto_*": "allow",
-                query_skills: "allow"
+                "query_*": "allow"
             },
             task_resume: "allow",
             "todo*": "allow",
@@ -596,7 +597,7 @@ const baseAgents: AgentMap = {
 
     auto_research: {
         color: colorAutonomousOrchestrator,
-        description: "Task `auto_research` to query data, create Research Reports, and find requested information",
+        description: "Task `auto_research` to answer complex questions like research topics, architectural overview, code flow across multiple files, consolidating data from multiple sources, compare specs with implementation",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -946,7 +947,7 @@ const baseAgents: AgentMap = {
 
     execute_code: {
         color: colorWritableWorker,
-        description: "Task `execute_code` to update the codebase with code, project scripts, config, and templates; `execute_code` NEVER write md files; NEVER run tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
+        description: "Task `execute_code` to update the codebase with code, permanent project scripts, config, and templates; `execute_code` NEVER write md files; NEVER run tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1081,7 +1082,7 @@ const baseAgents: AgentMap = {
 
     execute_os: {
         color: colorWritableWorker,
-        description: "Task `execute_os` to execute single bash commands locally, *project* scripts, move/rename files/directories or administrate operating system; not for source code editing, browser automation, or online research",
+        description: "Task `execute_os` to execute single bash commands locally, *project* scripts, move/rename files/directories or administrate operating system; not for source code editing, browser automation, or online research; NEVER for reading project files.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1191,7 +1192,7 @@ const baseAgents: AgentMap = {
 
     execute_script: {
         color: colorWritableWorker,
-        description: "Task `execute_script` to execute repetitive actions, document/media conversions, data translations, generate/render content, automate multiple commands, utilize scriptable libraries/frameworks to handle user request via *temporary* helper scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT intended to maintain project startup/test/deploymreproducable ent scripts",
+        description: "Task `execute_script` to execute repetitive actions, data/document/media conversions, generate/render content, utilize scriptable libraries/utils via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1302,7 +1303,7 @@ const baseAgents: AgentMap = {
 
     query_code: {
         color: colorReadOnlyWorker,
-        description: "Task `query_code` to find or understand: source code, scripts or codebase; NEVER query md content.",
+        description: "Task `query_code` to find or summarize: source code, scripts or codebase; NEVER query md content; NEVER to return full file content",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1382,7 +1383,7 @@ const baseAgents: AgentMap = {
 
     query_os: {
         color: colorReadOnlyWorker,
-        description: "Task `query_os` to find local host hardware, software, system, network, service, process, or OS-related information, versions, help-command info, status, or configurations",
+        description: "Task `query_os` to find local host hardware, software, system, network, service, process, or OS-related information, versions, help-command info, status, or configurations; NEVER for reading project files",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1463,7 +1464,7 @@ const baseAgents: AgentMap = {
 
     query_text: {
         color: colorReadOnlyWorker,
-        description: "Task `query_text` to find/read/summarize: config file values, md content, md front-matter, articles/document sections, yaml files, json files, templates, assets, resources.",
+        description: "Task `query_text` to find/read/summarize: config file values, md content, md front-matter, articles/document sections, yaml files, json files, templates, assets, resources; NEVER to return full file content.",
         hidden: true,
         mode: "subagent",
         permission: {
