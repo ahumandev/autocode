@@ -2,7 +2,7 @@ import { errorRules } from "@/agents/rules/error";
 import { toolTaskRules } from "@/agents/rules/task";
 import { toolQuestionRules } from "@/agents/rules/question";
 import { plannerRules } from "@/agents/rules/planner";
-import { responseRules } from "../rules/response";
+import { responseHumanRules } from "../rules/response-human";
 import { cavemanEnglish } from "../rules/caveman";
 
 export const researchPrompt = `
@@ -71,7 +71,7 @@ ${toolQuestionRules}
 
 ---
 
-${responseRules}
+${responseHumanRules}
 
 ---
 

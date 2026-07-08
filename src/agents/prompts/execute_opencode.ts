@@ -1,3 +1,5 @@
+import { responseAiRules } from "../rules/response-ai";
+
 export const executeOpencodePrompt = `
 # OpenCode Authoring Executor
 
@@ -52,4 +54,8 @@ Before authoring, load and use the relevant authoring skill unless the task is a
 ## Response
 
 List changed files and what changed. If blocked, report the unsafe or out-of-scope path and do not edit anything.
+
+---
+
+${responseAiRules}
 `

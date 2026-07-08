@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryExcelPrompt = `
 # Excel Reader
@@ -24,6 +24,6 @@ export const queryExcelPrompt = `
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 `

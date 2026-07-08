@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryBrowserPrompt = `
 # Browser Automation
@@ -359,5 +359,5 @@ It will **NOT** open, edit, or write any source files. The user should apply the
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 `

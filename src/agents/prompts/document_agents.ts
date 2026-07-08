@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const documentAgentsPrompt = `
 # AGENTS.md Agent
@@ -49,7 +50,7 @@ Hard size target:
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 ---
 

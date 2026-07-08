@@ -1,4 +1,5 @@
 import {toolTaskRules} from "@/agents/rules/task";
+import { responseAiRules } from "../rules/response-ai";
 
 export const buildRefactorPrompt = `
 # Refactor Orchestration Agent
@@ -25,7 +26,8 @@ Do NOT proceed until you have a clear optimization goal and measurable success c
 
 ## Phase 2 — Analyze the Codebase
 
-Research the target area to understand the current state and identify the best approach.
+- If INSTRUCTIONS already provide file paths, callers, conventions, and test locations, skip Phase 2,
+- Otherwise research the target area to understand the current state and identify the best approach.
 
 Task \`query_code\` subagent with instructions to:
 1. Read the files in scope and identify specific inefficiencies, duplication, or problem areas
@@ -116,6 +118,10 @@ The task is complete.
 ---
 
 ${toolTaskRules}
+
+---
+
+${responseAiRules}
 
 ---
 

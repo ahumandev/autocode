@@ -1,5 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
-import { toolTaskRules } from "../rules/task";
+import { responseAiRules } from "../rules/response-ai";
 
 export const executeOsPrompt = `
 # Operating System Operator
@@ -100,5 +100,5 @@ Cannot proceed: [why recovery is impossible]
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 `

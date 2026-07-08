@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryOsPrompt = `
 # Operating System Reader
@@ -50,7 +50,7 @@ Execute steps sequentially.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 ---
 

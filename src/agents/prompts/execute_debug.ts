@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 import { toolTaskRules } from "../rules/task";
 
 export const executeDebugPrompt = `
@@ -50,7 +50,7 @@ If above info is unclear, abort and report the specific missing details.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 ---
 

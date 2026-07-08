@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryTextPrompt = `
 # Query Local Text Files
@@ -23,6 +23,5 @@ export const queryTextPrompt = `
 
 ---
 
-${cavemanEnglish}
-
+${responseAiRules}
 `

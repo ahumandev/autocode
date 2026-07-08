@@ -1,6 +1,7 @@
 // Based on https://gist.githubusercontent.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13/raw/15c0b97925b1637559cf4d0d7c937dfe084c37b7/conventional-commits-cheatsheet.md
 
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const executeGitCommitPrompt = `
 # Git Commit Agent
@@ -171,7 +172,7 @@ Use \`git_\` tools to commit message and changes to git.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 ---
 

@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const documentUxPrompt = `
 # UX Documentation Agent
@@ -25,7 +26,7 @@ Analyze the codebase to fill any gaps.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 ---
 

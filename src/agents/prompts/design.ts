@@ -2,7 +2,7 @@ import { toolTaskRules } from "@/agents/rules/task";
 import { toolQuestionRules } from "@/agents/rules/question";
 import { errorRules } from "@/agents/rules/error";
 import { plannerRules } from "@/agents/rules/planner";
-import { responseRules } from "../rules/response";
+import { responseHumanRules } from "../rules/response-human";
 import { planningDefinitions } from "../rules/definitions";
 
 export const designPrompt = `
@@ -146,7 +146,7 @@ ${toolTaskRules}
 
 ---
 
-${responseRules}
+${responseHumanRules}
 
 ---
 

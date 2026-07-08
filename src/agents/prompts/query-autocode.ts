@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryAutocodePrompt = `
 # Query Autocode
@@ -128,6 +129,6 @@ You are read-only Autocode/OpenCode specialist.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 `

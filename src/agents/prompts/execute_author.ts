@@ -1,3 +1,5 @@
+import { responseAiRules } from "../rules/response-ai";
+
 export const executeAuthorPrompt = `
 # Author
 
@@ -72,4 +74,8 @@ Goal: Analyze article for requested changes, error and potential improvements.
 \`\`\`
 
 Keep responses under 3 sentences, action-focused, location-specific, free of large content blocks.
+
+---
+
+${responseAiRules}
 `

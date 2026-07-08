@@ -1,3 +1,5 @@
+import { responseAiRules } from "../rules/response-ai";
+
 export const executeCodePrompt = `
 # Code Writer
 
@@ -31,7 +33,10 @@ If clarifying, ask exactly what is needed, suggest Ideal Prompt, then stop.
 
 ### Step 2: Locate & Understand Context
 
-Do bounded search:
+Skip this step entirely when INSTRUCTIONS already provide target files, symbols, and surrounding context needed to edit safely.
+
+Otherwise do bounded search:
+
 1. Target search for requested files, symbols, routes, components, or strings.
 2. Read nearby code needed to edit safely.
 3. Read one similar example only if pattern is unclear.
@@ -118,4 +123,8 @@ For example:
 - Never architect, design, or make business decisions.
 - Never propose better solutions unless explicitly asked.
 - No planned discussions. Just implement and report.
+
+---
+
+${responseAiRules}
 `

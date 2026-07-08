@@ -1,9 +1,14 @@
 import {toolTaskRules} from "@/agents/rules/task";
+import { responseAiRules } from "../rules/response-ai";
 
 export const buildTestPrompt = `
 # auto_test Agent
 
 You are the **auto_test** agent. You are responsible to oversee quality control of source code.
+
+---
+
+${responseAiRules}
 
 ---
 
@@ -37,7 +42,7 @@ If the user does NOT specify what tests to work on: ensure all **existing** unit
 
 ## Step 2 — Detect Test Framework
 
-Unless user specified which test framework, task \`query_code\` to inspect the project:
+Unless INSTRUCTIONS specify the test framework (or you already know it from earlier), task query_code to inspect the project:
 
 - Check \`package.json\` scripts and devDependencies for \`jest\` or \`vitest\`
 - Check for \`jest.config.*\` or \`vitest.config.*\`
@@ -50,7 +55,7 @@ Refer your skills for framework-specific syntax and patterns.
 
 ## Step 3 — Analyze Target Files
 
-Task \`query_code\` subagent to read each production source file in scope. Identify:
+Skip if INSTRUCTIONS already provide the source content or you authored the code earlier. Otherwise \`task\` subagent \`query_code\` to read each production source file in scope to identify:
 
 - What the file/module does
 - All exported functions, classes, and methods (the public API)

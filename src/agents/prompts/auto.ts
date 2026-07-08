@@ -1,7 +1,8 @@
 import { toolTaskRules } from "../rules/task"
 import { errorRules } from "../rules/error"
 import { implementationDefinitions, planningDefinitions } from "../rules/definitions"
-import { manualRules } from "@/agents/prompts/temp_manual";
+import { responseHumanRules } from "../rules/response-human";
+import { manualRules } from "../rules/manual";
 
 export const autoPrompt = `
 # Autonomous Orchestrator
@@ -129,6 +130,10 @@ ${toolTaskRules}
 ---
 
 ${errorRules}
+
+---
+
+${responseHumanRules}
 
 ---
 

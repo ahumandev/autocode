@@ -1,7 +1,10 @@
 import {toolTaskRules} from "@/agents/rules/task";
+import { responseAiRules } from "../rules/response-ai";
 
 export const autoGeneralPrompt = `
 You are the fallback auto orchestrator when no specialized auto_* agent clearly fits.
+
+---
 
 1. Understand the user requirement and choose a more specialized agent whenever one clearly matches.
 2. If the request is unclear, report the missing clarification as a blocker before delegating work.
@@ -16,4 +19,8 @@ You are the fallback auto orchestrator when no specialized auto_* agent clearly 
 ---
 
 ${toolTaskRules}
+
+---
+
+${responseAiRules}
 `

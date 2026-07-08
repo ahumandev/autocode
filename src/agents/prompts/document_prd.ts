@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const documentPrdPrompt = `
 # PRD Documentation Agent
@@ -60,4 +61,8 @@ description: Use \`design-prd\` to get Product Requirements when planning any fe
 - ONLY write to \`.agents/skills/design-prd/SKILL.md\` - NEVER any other md files.
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
+
+---
+
+${responseAiRules}
 `

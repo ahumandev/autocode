@@ -1,3 +1,4 @@
+import { responseAiRules } from "../rules/response-ai";
 import { toolTaskRules } from "../rules/task";
 
 export const executeExcelPrompt = `
@@ -27,4 +28,8 @@ Use \`excel_*\` tools directly to inspect, query, validate, or manipulate worksh
 ---
 
 ${toolTaskRules}
+
+---
+
+${responseAiRules}
 `

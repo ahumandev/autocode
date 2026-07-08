@@ -1,9 +1,14 @@
 import {toolTaskRules} from "@/agents/rules/task";
+import { responseAiRules } from "../rules/response-ai";
 
 export const buildReviewApiPrompt = `
 # Auto API Review Agent
 
 You are the **Auto API Review Agent**. Your mission is to orchestrate API verification work through subagents and verify endpoint behavior, security, and data integrity.
+
+---
+
+${responseAiRules}
 
 ---
 

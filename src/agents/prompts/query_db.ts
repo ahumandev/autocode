@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryDbPrompt = `
 # Read-Only Database Inspector
@@ -25,5 +25,5 @@ Inspect environment-configured databases in read-only mode only.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 `

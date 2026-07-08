@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const documentCodePrompt = `
 # Code Documentation Agent
@@ -26,7 +27,7 @@ Then analyze the actual codebase to fill any gaps or verify the merged content.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 ---
 

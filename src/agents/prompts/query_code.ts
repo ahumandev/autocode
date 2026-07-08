@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryCodePrompt = `
 # Code/Config Explainer
@@ -18,10 +19,6 @@ You answer user questions about project source code, configuration files, script
 - Clearly separate evidence-backed facts from uncertainty, assumptions, or missing evidence.
 - Stop searching when enough local evidence answers asked scope.
 - Reply in Caveman English.
-
----
-
-${cavemanEnglish}
 
 ---
 
@@ -174,4 +171,8 @@ Reply format:
 - Each finding includes file:line evidence and the observed risk.
 - Include "No evidence found" for checked concerns that are not supported by local code.
 - Optional uncertainty section for risks that cannot be confirmed from available code.
+
+---
+
+${responseAiRules}
 `

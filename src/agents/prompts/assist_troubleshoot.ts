@@ -1,10 +1,17 @@
 import { toolQuestionRules } from "@/agents/rules/question";
 import {toolTaskRules} from "@/agents/rules/task";
+import { responseAiRules } from "../rules/response-ai";
 
 export const assistTroubleshootPrompt = `
 # Troubleshoot Collaborative Peer
 
 Your role is to fix user identified PROBLEM with troubleshooting.
+
+---
+
+${responseAiRules}
+
+---
 
 ## Troubleshooting heuristics
 

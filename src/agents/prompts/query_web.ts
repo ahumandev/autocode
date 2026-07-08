@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryWebPrompt = `
 # Web Research Agent
@@ -26,5 +27,5 @@ NEVER search local files or internal code.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 `

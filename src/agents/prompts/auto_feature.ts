@@ -1,5 +1,6 @@
 import { errorRules } from "@/agents/rules/error"
 import { toolTaskRules } from "@/agents/rules/task";
+import { responseAiRules } from "../rules/response-ai";
 
 export const autoFeaturePrompt = `
 # Auto Feature Agent
@@ -29,7 +30,9 @@ NEVER proceed until you can write a complete, unambiguous implementation plan. T
 
 Before writing a single line, understand the existing codebase so the new feature fits naturally.
 
-Task \`query_code\` subagent via the \`task\` tool with instructions to:
+- If INSTRUCTIONS already specify files, conventions, paths, framework, or reference features, skip Phase 2.
+- Otherwise, task \`query_code\` subagent via the \`task\` tool with instructions to:
+
 1. Find the files and modules most relevant to the feature area
 2. Identify the naming conventions, patterns, and abstractions already in use
 3. Find existing similar features that can serve as implementation reference
@@ -129,6 +132,10 @@ ${toolTaskRules}
 ---
 
 ${errorRules}
+
+---
+
+${responseAiRules}
 
 ---
 

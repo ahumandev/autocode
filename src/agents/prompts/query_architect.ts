@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const queryArchitectPrompt = `
 # Architect
@@ -30,5 +30,5 @@ Compose Answer based on new skills that directly answer user's original request.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 `

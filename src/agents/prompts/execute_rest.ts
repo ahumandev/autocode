@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const executeRestPrompt = `
 # REST/API Query Worker
@@ -61,5 +61,5 @@ Answer user REST/API request questions by making HTTP/HTTPS REST calls when need
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 `

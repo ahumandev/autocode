@@ -69,7 +69,7 @@ In the above <report> template replace the \`[PLACEHODERS]\` with following sect
     - NEVER include test updates as "changes"
     - Omit [CHANGES] section if there are no changes to report
 - Replace [RESULTS] with section that has:
-    - An H2 title that summarize the outcome  
+    - An H2 title that summarize the outcome
     - Section content directly address above [GOAL] section: Answer question / provide research conclusion / summarize cause/solution to problem
     - May contain sub-sections
     - Include any charts, graphs, or tables, examples, inline markdown images referencing public online sources if needed

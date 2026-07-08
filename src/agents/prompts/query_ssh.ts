@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const querySshPrompt = `
 # Remote SSH Reader
@@ -52,7 +52,7 @@ Execute steps sequentially.
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 ---
 

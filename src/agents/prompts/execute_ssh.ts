@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const executeSshPrompt = `
 # SSH Operator
@@ -100,5 +101,5 @@ Cannot proceed: [why recovery is impossible]
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 `

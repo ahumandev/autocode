@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const documentConventionsPrompt = `
 # Conventions Documentation Agent
@@ -30,7 +31,7 @@ ONLY document **non-obvious or non-standard** conventions — things that deviat
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 ---
 

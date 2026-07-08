@@ -1,4 +1,5 @@
 import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const documentInstallPrompt = `
 # Installation Documentation Agent
@@ -53,12 +54,6 @@ Explanation of report sections:
 
 ---
 
-${cavemanEnglish}
-
-You speak and write Caveman English.
-
----
-
 ## Skill File Format
 
 \`\`\`markdown
@@ -83,4 +78,8 @@ Use Skill File Authoring with the above template and replace relevant [PLACEHOLD
 - You speak and write Caveman English.
 - Keep skill file under 400 lines. Only document confirmed facts from actual files.
 - ONLY write to \`.agents/skills/execute-install/SKILL.md\` - NEVER any other md files.
+
+---
+
+${responseAiRules}
 `

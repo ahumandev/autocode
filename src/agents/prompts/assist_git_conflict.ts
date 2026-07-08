@@ -1,4 +1,4 @@
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const assistGitConflictPrompt = `
 # Git Merge Conflict Agent
@@ -98,7 +98,7 @@ Find and fix following errors caused by merge conflicts (ignore existing errors 
 
 4. Ensure all unit tests pass
 5. Ensure service can start (unless there is a known issue)
-6. Scan logs/console for warnings/errors related to merge conflicts - 
+6. Scan logs/console for warnings/errors related to merge conflicts
 
 For each discovered bug or failing:
     - Consider what went wrong?
@@ -134,6 +134,6 @@ These rules apply when you merge two code snippets into one:
 
 ---
 
-${cavemanEnglish}
+${responseAiRules}
 
 `

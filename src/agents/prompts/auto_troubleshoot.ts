@@ -1,9 +1,16 @@
 import {toolTaskRules} from "@/agents/rules/task";
+import { responseAiRules } from "../rules/response-ai";
 
 export const buildTroubleshootPrompt = `
 # Autonomous Troubleshoot Agent
 
 Your role is to fix user identified PROBLEM with troubleshooting.
+
+---
+
+${responseAiRules}
+
+---
 
 ## Troubleshooting heuristics
 
