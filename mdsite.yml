@@ -16,7 +16,7 @@ paths:
   output: .output
 site:
   canonical: "https://ahumandev.github.io/autocode"
-  favicon: docs/logo.webp
+  favicon: docs/favicon.png
   name: "AutoCode"
 themes:
   light:
