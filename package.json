@@ -35,6 +35,9 @@
       "default": "./dist/plugin.js"
     }
   },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "rm -rf dist && bun build src/plugin.ts --outdir dist --target bun && tsc --emitDeclarationOnly --noEmit false && bun run copy:skills",
     "install:shim": "bun src/install.ts",
