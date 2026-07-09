@@ -128,4 +128,3 @@ Cached response lookup tools resolve only inside the current job `rest/` directo
 
 - [Configuration](configuration.md) — database and SSH environment variables.
 - [Terminology](terminology.md) — job lifecycle terms.
-- [Features](features.md) — capability overview.
