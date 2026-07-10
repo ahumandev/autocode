@@ -1,6 +1,6 @@
 {
   "name": "@ahumandev/autocode",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "type": "module",
   "private": false,
   "main": "./dist/plugin.js",
@@ -34,6 +34,9 @@
       "types": "./dist/plugin.d.ts",
       "default": "./dist/plugin.js"
     }
+  },
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "build": "rm -rf dist && bun build src/plugin.ts --outdir dist --target bun && tsc --emitDeclarationOnly --noEmit false && bun run copy:skills",

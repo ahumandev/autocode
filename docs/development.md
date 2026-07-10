@@ -12,10 +12,9 @@ flowchart LR
   Tools --> Utils[src/utils]
 ```
 
-The managed agent catalogue lives in [`src/agents/index.ts`](../src/agents/index.ts), and prompt templates live under [`src/agents/prompts/`](../src/agents/prompts/). Commands are registered in [`src/commands/index.ts`](../src/commands/index.ts), so the published package does not need separate command Markdown files. Generated skills are bundled from source during builds, and [`scripts/copy-skill-sources.mjs`](../scripts/copy-skill-sources.mjs) copies them into `dist/skills`.
+The managed agent catalogue lives in [`src/agents/index.ts`](../src/agents/index.ts), and prompt templates live under [`src/agents/prompts/`](../src/agents/prompts/). Commands are registered in [`src/commands/index.ts`](../src/commands/index.ts), so the published package does not need separate command Markdown files. Generated skills are bundled from source during builds, and [`scripts/copy-skill-sources.ts`](../scripts/copy-skill-sources.ts) copies them into `dist/skills`.
 
 Runtime tools live in [`src/tools/`](../src/tools/). They cover concept and plan management, job lifecycle updates, criteria tracking, read-only database discovery and table reads, REST requests and cached response lookup, sandbox lifecycle operations, cross-project task execution, and session resume support. Shared tool error handling should stay aligned with [`src/utils/tools.ts`](../src/utils/tools.ts) and the agent error rules.
-
 ### Generated skills
 
 Builds copy bundled skills into `dist/skills`, and the plugin can install the generated output for OpenCode under `~/.agents/skills/autocode/` or the equivalent XDG configuration location. Skills are knowledge files that OpenCode loads into AI context so agents and workflows can follow project-specific instructions; users do not need to invoke these files directly.
@@ -58,7 +57,7 @@ Local setup is for repository development only. It is not the public npm install
 
 4. Load the plugin in OpenCode.
 
-   For local development in this repository, [`.opencode/plugin/AutoCode.ts`](../.opencode/plugin/AutoCode.ts) re-exports the built plugin from `dist/plugin.js`.
+   For local development in this repository, [`.opencode/plugin/autocode.ts`](../.opencode/plugin/autocode.ts) re-exports the built plugin from `dist/plugin.js`.
 
 ### Development commands
 

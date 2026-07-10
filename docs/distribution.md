@@ -181,7 +181,7 @@ Publish continues only when all prepublishOnly checks succeed
 
 ### 🏗️ Step 7: Know which package artifacts must exist
 
-The package verification script in [`scripts/verify-package-artifacts.mjs`](../scripts/verify-package-artifacts.mjs) requires these artifacts and package settings:
+The package verification script in [`scripts/verify-package-artifacts.ts`](../scripts/verify-package-artifacts.ts) requires these artifacts and package settings:
 
 - `dist/plugin.js`
 - `dist/plugin.d.ts`
