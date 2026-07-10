@@ -40,11 +40,16 @@ jobs:
 
       - name: Upgrade npm
         run: |
-          npm install -g npm@10.8.2
+          npm install -g npm@11.18.0
           npm --version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Strip empty npm authToken (enable OIDC trusted publishing)
+        run: |
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          [ -f "$npmrc" ] && sed -i '/_authToken/d' "$npmrc" || true
 
       - name: Publish package
         run: npm publish --provenance --access public
