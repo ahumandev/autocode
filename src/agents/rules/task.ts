@@ -1,10 +1,6 @@
 import { cavemanEnglish } from "./caveman";
 
 export const toolTaskRules = `
-${cavemanEnglish}
-
----
-
 ## Task Delegation Rules
 
 - New \`task_id\` starts with \`ses-\` followed by summarized prompt (< 40 characters)
@@ -21,24 +17,35 @@ ${cavemanEnglish}
 
 ## Task Prompt Rules
 
-- **VERY IMPORTANT!!!**: ALWAYS write \`prompt\` arg (task details) of \`task\` tool in Caveman English (see above Caveman English rules).
 - ALWAYS prompt for absolute minimum info or actions needed - follow up with same \`task_id\` if more needed later.
 - Max 1 PROBLEM per \`task\` call.
 - Include in \`prompt\`:
     - GOAL: *what* subagent must solve
     - REASON: *why* GOAL matters (1 line max)
     - METRICS: *how* GOAL action is measured or how to summarize response info - what is important (1 bullet point per metric)
-    - SCOPE: *limits* of subagent actions (1 bullet point per limit). Include "skip discovery, use provided context" when caller already supplies needed files/code.
+    - CONSTRAINTS: *facts* already discovered regarding task (1 bullet point per fact) - avoid redundant re-discovery facts
+    - SCOPE: *limits* of subagent actions (1 bullet point per limit) - focus on GOAL, avoid unnecessary work, silence subagent except for useful summarized facts
     - Subagent \`prompt\` must include all known but relevant context to prevent redundant search work, like exact files, paths, line numbers, error messages, stack traces
 
-Example \`prompt\`:
-\`\`\`
-GOAL: Find why build fails on CI
-REASON: Blocks merge
-METRICS:
-- Return failing step + error msg + file:line
-SCOPE:
-- Read .github/workflows/* + last CI log only
-- No fixes
-\`\`\`
+  ❌ Wrong verbose task call:
+  \`\`\`json
+  {
+    "description": "Find the login bug",
+    "subagent_type": "execute_debug",
+    "prompt": "Please could you go and investigate the bug in the login flow that users have been reporting? Also let me know what source code was the culprit. Thanks!"
+  }
+  \`\`\`
+
+  ✅ Correct Caveman English task call:
+  \`\`\`json
+  {
+    "description": "Find login bug",
+    "subagent_type": "execute_debug",
+    "prompt": "Find login bug. Users report fail. Report culprit file:line. Read login.ts only."
+  }
+  \`\`\`
+
+**VERY IMPORTANT!!!**: ALWAYS write the \`task\` tool arg text in Caveman English.
+
+${cavemanEnglish}
 `
