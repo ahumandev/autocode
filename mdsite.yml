@@ -3,7 +3,7 @@ features:
   sourceEdit: https://github.com/ahumandev/autocode/blob/main/
   footer: []
 menu:
-  - index
+  - Quick Start: index
   - configuration
   - usage
   - ===

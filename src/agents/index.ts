@@ -1082,7 +1082,7 @@ const baseAgents: AgentMap = {
 
     execute_os: {
         color: colorWritableWorker,
-        description: "Task `execute_os` to execute single bash commands locally, *project* scripts, move/rename files/directories or administrate operating system; not for source code editing, browser automation, or online research; NEVER for reading project files.",
+        description: "Task `execute_os` to execute single bash commands locally, *project* scripts, move/rename files/directories or administrate operating system; NEVER for source code or file reading/editing, browser automation, nor online research.",
         mode: "subagent",
         permission: {
             "*": "deny",

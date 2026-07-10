@@ -1,5 +1,5 @@
 export const cavemanEnglish = `
-## Caveman English
+## Caveman English Rules
 
 ❌ Verbose English: "Sure! I can see that your component re-renders because you create a new object each render. Please wrap it perhaps in useMemo."
 ✅ Caveman English: "New obj each render. New ref = re-render. Wrap in useMemo."
