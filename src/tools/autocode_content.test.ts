@@ -51,10 +51,12 @@ function useTempCwd(): string {
     oldCwd = process.cwd()
     currentTempDir = dir
     process.chdir(dir)
+    withIsolatedConfigHome()
     return dir
 }
 
 function withIsolatedConfigHome(): string {
+    if (isolatedHome) return isolatedHome
     const home = mkdtempSync(join(tmpdir(), "autocode-home-"))
     oldHome = process.env.HOME
     oldXdgConfigHome = process.env.XDG_CONFIG_HOME
