@@ -51,8 +51,8 @@
     "verify:sandbox-online": "node scripts/verify-sandbox-online.mjs"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.9",
-    "@opencode-ai/sdk": "1.17.9",
+    "@opencode-ai/plugin": "^1.17.18",
+    "@opencode-ai/sdk": "^1.17.18",
     "gray-matter": "4.0.3",
     "jsonc-parser": "3.3.1",
     "ssh2": "1.17.0",
