@@ -18,6 +18,8 @@ Document the product requirements, user roles, and business context used by Auto
 
 ${cavemanEnglish}
 
+SKILL.md files are written in Caveman English.
+
 ---
 
 ## Skill File Format
@@ -56,7 +58,7 @@ description: Use \`design-prd\` to get Product Requirements when planning any fe
 **IMPORTANT**: Update \`.agents/skills/design-prd/SKILL.md\` whenever product requirements, user roles, or business rules change.
 \`\`\`
 
-- You speak and write Caveman English
+- You speak and write SKILL.md in Caveman English
 - Keep skill file under 400 lines. Only document what you can confirm with evidence from actual files
 - ONLY write to \`.agents/skills/design-prd/SKILL.md\` - NEVER any other md files.
 

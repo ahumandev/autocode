@@ -435,15 +435,15 @@ describe("autocode_ssh tools", () => {
         expect(payload).toEqual({ host: "ssh.example", port: 2200, path: "/tmp/file.txt", content: "two\nthree\n", content_truncated: false })
     })
 
-    test("read_file truncates content at 2000 characters", async () => {
-        const sftp = new FakeSftp({ "/tmp/large.txt": "x".repeat(2001) }) as SftpLike
+    test("read_file truncates content at 4000 characters", async () => {
+        const sftp = new FakeSftp({ "/tmp/large.txt": "x".repeat(4001) }) as SftpLike
         const client = new FakeClient(sftp)
         const { pool } = createFakePool(client)
         const tool = createAutocodeSshReadFileTool({ env: envWithPassword, pool })
 
         const payload = parseToolResult(await tool.execute({ ssh_key: "dev", path: "/tmp/large.txt" }, createToolContext()))
 
-        expect(String(payload.content).length).toBe(2000)
+        expect(String(payload.content).length).toBe(4000)
         expect(payload.content_truncated).toBe(true)
     })
 
@@ -455,6 +455,49 @@ describe("autocode_ssh tools", () => {
         expect(Object.keys(invalidBounds)).toEqual(["failedAction", "error", "instruction"])
         expect(Object.keys(missingConfig)).toEqual(["failedAction", "error", "instruction"])
         expect(missingConfig.error).toContain("Wrong ssh_key or missing AUTOCODE_SSH_DEV_HOST var")
+    })
+
+    test("read_file defaults last_line to 40", async () => {
+        const file = Array.from({ length: 50 }, (_, i) => "line" + (i + 1)).join("\n") + "\n"
+        const sftp = new FakeSftp({ "/tmp/many.txt": file }) as SftpLike
+        const client = new FakeClient(sftp)
+        const { pool } = createFakePool(client)
+        const tool = createAutocodeSshReadFileTool({ env: envWithPassword, pool })
+        const payload = parseToolResult(await tool.execute({ ssh_key: "dev", path: "/tmp/many.txt" }, createToolContext()))
+        const expected = Array.from({ length: 40 }, (_, i) => "line" + (i + 1)).join("\n") + "\n"
+        expect(payload.content).toBe(expected)
+        expect(payload.content_truncated).toBe(false)
+    })
+
+    test("read_file clamps last_line to total lines", async () => {
+        const sftp = new FakeSftp({ "/tmp/short.txt": "a\nb\nc\nd\ne\n" }) as SftpLike
+        const client = new FakeClient(sftp)
+        const { pool } = createFakePool(client)
+        const tool = createAutocodeSshReadFileTool({ env: envWithPassword, pool })
+        const payload = parseToolResult(await tool.execute({ ssh_key: "dev", path: "/tmp/short.txt", last_line: 100 }, createToolContext()))
+        expect(payload.content).toBe("a\nb\nc\nd\ne\n")
+        expect(payload.content_truncated).toBe(false)
+    })
+
+    test("read_file reads one line when first_line equals last_line", async () => {
+        const sftp = new FakeSftp({ "/tmp/file.txt": "one\ntwo\nthree\nfour\n" }) as SftpLike
+        const client = new FakeClient(sftp)
+        const { pool } = createFakePool(client)
+        const tool = createAutocodeSshReadFileTool({ env: envWithPassword, pool })
+        const payload = parseToolResult(await tool.execute({ ssh_key: "dev", path: "/tmp/file.txt", first_line: 2, last_line: 2 }, createToolContext()))
+        expect(payload.content).toBe("two\n")
+        expect(payload.content_truncated).toBe(false)
+    })
+
+    test("read_file retries when first_line exceeds file line count", async () => {
+        const sftp = new FakeSftp({ "/tmp/file.txt": "one\ntwo\n" }) as SftpLike
+        const client = new FakeClient(sftp)
+        const { pool } = createFakePool(client)
+        const tool = createAutocodeSshReadFileTool({ env: envWithPassword, pool })
+        const result = parseToolResult(await tool.execute({ ssh_key: "dev", path: "/tmp/file.txt", first_line: 10, last_line: 20 }, createToolContext()))
+        expect(Object.keys(result)).toEqual(["failedAction", "error", "instruction"])
+        expect(result.failedAction).toBe("read SSH file")
+        expect(result.error).toContain("first_line")
     })
 
     test("write_file rejects bad paths, writes content, creates directories, and reports write failures", async () => {
@@ -706,7 +749,15 @@ describe("autocode_ssh tools", () => {
 
         const writeTool = createAutocodeSshWriteFileTool({ env: envWithPassword, pool: createFakePool(new FakeClient(new FakeSftp())).pool })
         const writeRaw = await writeTool.execute({ ssh_key: "dev", path: "/srv/file.txt/", content: "x" }, createToolContext())
-        expectSshErrorJsonString(writeRaw, "write SSH file", "path must point to a file")
+        {
+            const parsed = expectJsonString<SshToolErrorResponse>(writeRaw)
+            expect(parsed).toEqual(expect.objectContaining({
+                failedAction: "write SSH file",
+                error: expect.stringContaining("path must point to a file"),
+                instruction: expect.any(String),
+            }))
+            expect(parsed.instruction).toEqual(expect.stringContaining("Provide a specific file path with no glob wildcards"))
+        }
     })
 
     test("createTools wires SSH tool names", () => {
@@ -714,15 +765,9 @@ describe("autocode_ssh tools", () => {
 
         expect(Object.keys(tools).filter((name) => name.startsWith("autocode_ssh_")).sort()).toEqual([
             "autocode_ssh_command",
-            "autocode_ssh_content_frontmatter_read",
-            "autocode_ssh_content_frontmatter_write",
-            "autocode_ssh_content_grep",
-            "autocode_ssh_content_insert",
-            "autocode_ssh_content_move",
-            "autocode_ssh_content_read",
-            "autocode_ssh_content_remove",
-            "autocode_ssh_content_toc",
-            "autocode_ssh_content_write",
+            "autocode_ssh_config_read",
+            "autocode_ssh_config_remove",
+            "autocode_ssh_config_edit",
             "autocode_ssh_edit_file",
             "autocode_ssh_glob",
             "autocode_ssh_grep_file",

@@ -64,7 +64,7 @@ type AgentMap = Record<string, AgentConfigWithTier>
 type PermissionObject = AutocodePermissionObject
 type SandboxPlatformPolicyOptions = NodeJS.Platform | SandboxPlatformSupportOptions
 
-const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"] as const
+const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"] as const
 
 function hasAskCapableQuestionPermission(permission: AutocodeAgentConfig["permission"]): boolean {
     if (!permission || typeof permission === "string") {
@@ -276,6 +276,7 @@ const baseAgents: AgentMap = {
             autocode_job_status: "allow",
             autocode_sandbox_create: "ask",
             autocode_sandbox_delete: "allow",
+            doom_loop: "ask",
             edit: "allow",
             question: "allow",
             "skill_learn_*": "allow",
@@ -305,7 +306,6 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_agent_swap: "allow",
             autocode_job_status: "allow",
-            doom_loop: "ask",
             "skill_learn_*": "allow",
             task: {
                 "*": "deny",
@@ -384,7 +384,7 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "chrome*": "allow",
-            doom_loop: "deny",
+            doom_loop: "ask",
             question: "allow",
             skill: {
                 "*": "deny",
@@ -404,7 +404,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            doom_loop: "deny",
+            doom_loop: "ask",
             edit: "allow",
             git_add: "allow",
             git_log: "allow",
@@ -470,7 +470,7 @@ const baseAgents: AgentMap = {
                 execute_ssh: "allow",
                 "query*": "allow",
             },
-            task_external: "ask",
+            task_external: "allow",
             task_resume: "allow",
             "todo*": "allow",
         },
@@ -486,8 +486,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            doom_loop: "deny",
-            external_directory: "allow",
+            external_directory: "deny",
             read: "allow",
             question: "allow",
             task: {
@@ -511,7 +510,6 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_sandbox_copy: sandboxCopyTargetPermission,
             autocode_sandbox_delete: "allow",
-            doom_loop: "ask",
             skill: {
                 "*": "deny",
                 "code*": "allow",
@@ -544,6 +542,7 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "allow",
             doom_loop: "deny",
+            external_directory: "deny",
             skill: {
                 "*": "allow"
             },
@@ -557,6 +556,7 @@ const baseAgents: AgentMap = {
                 report: "deny",
                 research: "deny",
                 session: "deny",
+                "temp*": "deny"
             },
         },
         prompt: autoGeneralPrompt,
@@ -572,7 +572,6 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_sandbox_create: "allow",
             autocode_sandbox_delete: "allow",
-            doom_loop: "deny",
             skill: {
                 "*": "deny",
                 "code*": "allow",
@@ -602,7 +601,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            doom_loop: "deny",
             task: {
                 "*": "deny",
                 "query*": "allow",
@@ -623,7 +621,6 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_sandbox_create: "allow",
             autocode_sandbox_delete: "allow",
-            doom_loop: "deny",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -652,7 +649,6 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_sandbox_create: "allow",
             autocode_sandbox_delete: "allow",
-            doom_loop: "deny",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -681,7 +677,6 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_sandbox_create: "allow",
             autocode_sandbox_delete: "allow",
-            doom_loop: "deny",
             edit: "allow",
             skill: {
                 "*": "deny",
@@ -714,7 +709,6 @@ const baseAgents: AgentMap = {
             autocode_sandbox_create: "allow",
             autocode_sandbox_delete: "allow",
             "context7*": "allow",
-            doom_loop: "deny",
             skill: {
                 "*": "deny",
                 "learned-corrections-troubleshoot": "allow",
@@ -750,13 +744,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            read: "allow",
-            grep: "allow",
-            doom_loop: "deny",
-            glob: "allow",
+            "autocode_md_read": "allow",
+            "autocode_md_edit": "allow",
             skill: {
                 "*": "deny",
                 "author-rules": "allow"
@@ -774,10 +763,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            //autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            doom_loop: "deny",
+            "autocode_config_read": "allow",
+            "autocode_md_*": "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -799,9 +786,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
+            "autocode_config_read": "allow",
+            "autocode_md_*": "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -823,12 +809,10 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            read: "allow",
+            "autocode_config_read": "allow",
+            "autocode_md_*": "allow",
             grep: "allow",
-            doom_loop: "deny",
+            read: "allow",
             skill: {
                 "*": "deny",
                 "learned-env*": "allow"
@@ -852,10 +836,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            doom_loop: "deny",
+            "autocode_config_read": "allow",
+            "autocode_md_*": "allow",
             glob: "allow",
             grep: "allow",
             read: "allow",
@@ -876,10 +858,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            doom_loop: "deny",
+            "autocode_config_read": "allow",
+            "autocode_md_*": "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -901,10 +881,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            doom_loop: "deny",
+            "autocode_config_read": "allow",
+            "autocode_md_*": "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -927,14 +905,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            read: "allow",
+            "autocode_md_*": "allow",
             grep: "allow",
             autocode_logo_find: "allow",
-            doom_loop: "deny",
-            glob: "allow",
             skill: {
                 "*": "deny",
                 "author*": "allow",
@@ -951,7 +924,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            apply_patch: "allow",
             "context7*": "allow",
             doom_loop: "deny",
             edit: "allow",
@@ -977,14 +949,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            apply_patch: "allow",
-            // "autocode_content*": "allow",
-            apply_path: "allow",
-            grep: "allow",
-            doom_loop: "deny",
-            edit: "allow",
-            glob: "allow",
-            read: "allow"
+            "autocode_config_*": "allow",
         },
         prompt: executeConfigPrompt,
         temperature: 0.1,
@@ -997,7 +962,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            doom_loop: "deny",
+            "autocode_config_*": "allow",
             edit: "allow",
             glob: "allow",
             grep: "allow",
@@ -1015,12 +980,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            read: "allow",
-            grep: "allow",
-            doom_loop: "deny",
+            "autocode_md_read": "allow",
+            "autocode_md_edit": "allow",
             skill: {
                 "*": "deny",
                 "author-caveman": "allow",
@@ -1044,8 +1005,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            doom_loop: "deny",
+            edit: "allow",
             "excel_*": "allow",
+            read: "allow",
             task: {
                 "*": "deny",
                 query_excel: "allow",
@@ -1067,7 +1029,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_job_shelve: "allow",
-            doom_loop: "deny",
             git_add: "allow",
             git_commit: "allow",
             git_log: "allow",
@@ -1086,9 +1047,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            doom_loop: "deny",
+            "autocode_config_*": "allow",
             edit: "allow",
             bash: "allow",
             external_directory: "allow",
@@ -1119,12 +1078,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // "autocode_content_*": "allow",
-            apply_path: "allow",
-            edit: "allow",
-            read: "allow",
-            grep: "allow",
-            glob: "allow",
+            "autocode_config_*": "allow",
+            "autocode_md_*": "allow",
             skill: {
                 "*": "deny",
                 "author-skill": "allow",
@@ -1149,7 +1104,6 @@ const baseAgents: AgentMap = {
             autocode_rest_grep: "allow",
             autocode_rest_response_eval: "allow",
             autocode_rest_response_read: "allow",
-            doom_loop: "deny",
             skill: {
                 "*": "deny",
                 "learned-corrections-rest": "allow",
@@ -1174,7 +1128,9 @@ const baseAgents: AgentMap = {
             autocode_sandbox_glob: "allow",
             autocode_sandbox_grep: "allow",
             autocode_sandbox_read: "allow",
-            doom_loop: "deny",
+            autocode_sandbox_config_edit: "allow",
+            autocode_sandbox_config_read: "allow",
+            autocode_sandbox_config_remove: "allow",
             skill: {
                 "*": "deny",
                 "learned-corrections-sandbox": "allow",
@@ -1196,7 +1152,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            apply_patch: "allow",
+            "autocode_config_*": "allow",
             autocode_sandbox_cli: "allow",
             autocode_sandbox_copy: sandboxCopyTargetPermission,
             autocode_sandbox_edit: "allow",
@@ -1235,7 +1191,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            doom_loop: "deny",
             "autocode_ssh*": "allow",
             skill: {
                 "*": "deny",
@@ -1262,13 +1217,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // autocode_content_frontmatter_read: "allow",
-            // autocode_content_grep: "allow",
-            // autocode_content_read: "allow",
-            // autocode_content_toc: "allow",
-            read: "allow",
-            doom_loop: "deny",
-            glob: "allow",
+            "autocode_config_read": "allow",
+            "autocode_md_read": "allow",
+            "autocode_md_frontmatter_read": "allow",
             skill: {
                 "*": "deny",
                 "author-agent": "allow",
@@ -1291,7 +1242,6 @@ const baseAgents: AgentMap = {
         permission: {
             '*': "deny",
             "chrome*": "allow",
-            "doom_loop": "deny",
             skill: {
                 "*": "deny",
                 "execute-ux": "allow",
@@ -1309,7 +1259,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "context7*": "allow",
-            doom_loop: "deny",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
@@ -1334,7 +1283,6 @@ const baseAgents: AgentMap = {
             autocode_db_table: "allow",
             autocode_db_table_read: "allow",
             autocode_db_tables: "allow",
-            doom_loop: "deny",
         },
         prompt: queryDbPrompt,
         temperature: 0.1,
@@ -1348,7 +1296,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            doom_loop: "deny",
             "excel_get*": "allow",
             "excel_read*": "allow",
             "excel_validate*": "allow",
@@ -1366,7 +1313,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            doom_loop: "deny",
             external_directory: "allow",
             "git_diff*": "allow",
             git_log: "allow",
@@ -1388,10 +1334,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // autocode_content_frontmatter_read: "allow",
-            // autocode_content_grep: "allow",
-            // autocode_content_read: "allow",
-            // autocode_content_toc: "allow",
+            "autocode_config_read": "allow",
+            "autocode_md_frontmatter_read": "allow",
             bash: "allow",
             doom_loop: "deny",
             external_directory: "allow",
@@ -1440,10 +1384,7 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_ssh_content_frontmatter_read: "allow",
-            autocode_ssh_content_grep: "allow",
-            autocode_ssh_content_read: "allow",
-            autocode_ssh_content_toc: "allow",
+            "autocode_ssh_config_read": "allow",
             autocode_ssh_command: "allow",
             autocode_ssh_glob: "allow",
             autocode_ssh_grep_file: "allow",
@@ -1469,11 +1410,9 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            // autocode_content_frontmatter_read: "allow",
-            // autocode_content_grep: "allow",
-            // autocode_content_read: "allow",
-            // autocode_content_toc: "allow",
-            doom_loop: "deny",
+            "autocode_config_read": "allow",
+            "autocode_md_frontmatter_read": "allow",
+            "autocode_md_read": "allow",
             glob: "allow",
             grep: "allow",
             read: "allow"
@@ -1491,7 +1430,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "context7*": "allow",
-            doom_loop: "deny",
             "todo*": "allow",
             webfetch: "allow",
             "websearch*": "allow",

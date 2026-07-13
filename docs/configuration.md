@@ -91,6 +91,4 @@ Configure each SSH target with `{ssh_key}` environment variables:
 
 `AUTOCODE_SSH_{ssh_key}_HOST` must contain only a hostname or IP address. AutoCode does not parse `host:port` values from `HOST`; set `AUTOCODE_SSH_{ssh_key}_PORT` when a target uses a non-default port.
 
-SSH tools: `autocode_ssh_command`, `autocode_ssh_list`, `autocode_ssh_read_attributes`, `autocode_ssh_write_attributes`, `autocode_ssh_read_file`, `autocode_ssh_write_file`, `autocode_ssh_edit_file`, `autocode_ssh_patch_file`, `autocode_ssh_glob`, `autocode_ssh_grep_file`.
-
 Keyfile auth has precedence. A nonexistent or unreadable keyfile falls back to password. `AUTOCODE_SSH_{ssh_key}_AGENT` is used only when there is no readable `AUTOCODE_SSH_{ssh_key}_KEYFILE` and no `AUTOCODE_SSH_{ssh_key}_PASSWORD`. Idle SSH connections can be reused for 5 minutes. Remote glob/grep/patch/edit/write mirror local tool intent where practical, not exact parity.

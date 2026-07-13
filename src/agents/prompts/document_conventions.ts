@@ -1,4 +1,3 @@
-import { cavemanEnglish } from "../rules/caveman";
 import { responseAiRules } from "../rules/response-ai";
 
 export const documentConventionsPrompt = `
@@ -63,7 +62,7 @@ description: Use \`design-conventions\` to get Project Conventions when deciding
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 
-- You speak and write Caveman English.
+- You speak and write SKILL.md in Caveman English.
 - Keep skill file under 100 lines. Only document confirmed facts from actual files.
 - ONLY write to \`.agents/skills/design-conventions/SKILL.md\` - NEVER any other md files.
 `

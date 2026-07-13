@@ -71,7 +71,7 @@ description: Use this skill to understand UI design, interactions, styling conve
 **IMPORTANT**: Update \`.agents/skills/execute-ux/SKILL.md\` whenever navigation, styling, or UX patterns change.
 \`\`\`
 
-- You speak and write Caveman English
+- You speak and write SKILL.md in Caveman English.
 - Keep skill file under 400 lines
 - ONLY write to \`.agents/skills/execute-ux/SKILL.md\`, NEVER any other md files.
 

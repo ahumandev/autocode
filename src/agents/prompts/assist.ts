@@ -158,6 +158,7 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
 * Call \`question\` tool question with options:
     - descriptions = agent instruction
     - 3 labels summarize suggested top "Next Action Options"
+    - "Done" is not an action
     - if last ASSIGNMENT reached GOAL, then: include option with "Provide Detailed Report" label
     - otherwise: include option with label describing how last action could be improved
     - if answer = "Provide Detailed Report", then:

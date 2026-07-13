@@ -10,10 +10,10 @@ function permissionRule(permission: AutocodeAgentConfig["permission"], key: stri
 
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]
 const executeRestToolNames = ["autocode_rest", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_rest_response_read"]
-const executeOpencodeAllowedPermissionKeys = ["glob"]
+const executeOpencodeAllowedPermissionKeys = ["autocode_config_*", "autocode_md_*"]
 const executeOpencodeForbiddenToolKeys = ["apply_patch", "bash", "execute", "patch", "task", "write"]
 const executeOpencodeAllowedSkillNames = ["author-agent", "author-command", "author-skill", "author-rules"]
-const queryAutocodeAllowedPermissionKeys = ["glob", "webfetch", "websearch*"]
+const queryAutocodeAllowedPermissionKeys = ["autocode_config_read", "autocode_md_read", "autocode_md_frontmatter_read", "webfetch", "websearch*"]
 const queryAutocodeForbiddenWritePermissionKeys = ["apply_patch", "bash", "edit", "execute", "patch", "task", "task_external", "write"]
 const queryAutocodeAllowedSkillNames = ["author-agent", "author-command", "author-skill"]
 
@@ -155,7 +155,7 @@ describe("agent policies", () => {
         for (const toolName of executeRestToolNames) {
             expect(permissionRule(agents.execute_rest?.permission, toolName)).toBe("allow")
         }
-        expect(permissionRule(agents.execute_rest?.permission, "doom_loop")).toBe("deny")
+        expect(permissionRule(agents.execute_rest?.permission, "doom_loop")).toBeUndefined()
         expect(agents.execute_rest?.prompt).toContain("autocode_rest")
         expect(agents.execute_rest?.prompt).toContain("autocode_rest_response_read")
         expect(agents.execute_rest?.prompt).toContain("autocode_rest_grep")
@@ -182,7 +182,7 @@ describe("agent policies", () => {
         expect(agents.query_autocode?.mode).toBe("subagent")
         expect(agents.query_autocode?.prompt).toBe(queryAutocodePrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
-        expect(permissionRule(permission, "doom_loop")).toBe("deny")
+        expect(permissionRule(permission, "doom_loop")).toBeUndefined()
         for (const key of queryAutocodeAllowedPermissionKeys) {
             expect(permissionRule(permission, key)).toBe("allow")
         }

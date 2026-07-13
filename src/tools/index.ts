@@ -5,7 +5,17 @@ import { createAutocodeAgentSwapTool } from "./autocode_agent_swap"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptReadTool } from "./autocode_concept_read"
-import { createAutocodeContentFrontmatterReadTool, createAutocodeContentFrontmatterWriteTool, createAutocodeContentGrepTool, createAutocodeContentInsertTool, createAutocodeContentMoveTool, createAutocodeContentReadTool, createAutocodeContentRemoveTool, createAutocodeContentTocTool, createAutocodeContentWriteTool } from "./autocode_content"
+import { createAutocodeConfigReadTool } from "./config/read"
+import { createAutocodeConfigEditTool } from "./config/edit"
+import { createAutocodeConfigRemoveTool } from "./config/remove"
+import { createAutocodeMdReadTool } from "./md/read"
+import { createAutocodeMdEditTool } from "./md/edit"
+import { createAutocodeMdRemoveTool } from "./md/remove"
+import { createAutocodeMdFrontmatterReadTool } from "./md/frontmatter/read"
+import { createAutocodeMdFrontmatterEditTool } from "./md/frontmatter/edit"
+import { createAutocodeSshConfigReadTool } from "./config/ssh/read"
+import { createAutocodeSshConfigEditTool } from "./config/ssh/edit"
+import { createAutocodeSshConfigRemoveTool } from "./config/ssh/remove"
 import { createAutocodeDbSchemasTool, createAutocodeDbTableReadTool, createAutocodeDbTableTool, createAutocodeDbTablesTool } from "./autocode_db"
 import { createAutocodeDependenciesTool } from "./autocode_dependencies"
 import { createGitTools } from "./autocode_git"
@@ -22,8 +32,8 @@ import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
+import { createAutocodeSandboxConfigEditTool, createAutocodeSandboxConfigReadTool, createAutocodeSandboxConfigRemoveTool } from "./autocode_sandbox_config_tools"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
-import { createAutocodeSshContentFrontmatterReadTool, createAutocodeSshContentFrontmatterWriteTool, createAutocodeSshContentGrepTool, createAutocodeSshContentInsertTool, createAutocodeSshContentMoveTool, createAutocodeSshContentReadTool, createAutocodeSshContentRemoveTool, createAutocodeSshContentTocTool, createAutocodeSshContentWriteTool } from "./autocode_ssh_content"
 import { createAutocodeSessionContextTool } from "./autocode_session_context"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createSkillLearnCorrectionTool, createSkillLearnEnvTool, createSkillLearnPermissionTool, createSkillLearnPreferenceTool } from "./skill_learn"
@@ -37,38 +47,41 @@ type ToolRuntime = {
 
 export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandboxConfig = {}, runtime?: ToolRuntime) {
     return {
+        ...createGitTools(),
         autocode_agent_execute: createAutocodeAgentExecuteTool(client),
         autocode_agent_swap: createAutocodeAgentSwapTool(client),
         autocode_concept_create: createAutocodeConceptCreateTool(client),
         autocode_concept_list: createAutocodeConceptListTool(),
         autocode_concept_read: createAutocodeConceptReadTool(client),
-        autocode_content_toc: createAutocodeContentTocTool(),
-        autocode_content_read: createAutocodeContentReadTool(),
-        autocode_content_write: createAutocodeContentWriteTool(),
-        autocode_content_insert: createAutocodeContentInsertTool(),
-        autocode_content_move: createAutocodeContentMoveTool(),
-        autocode_content_remove: createAutocodeContentRemoveTool(),
-        autocode_content_frontmatter_read: createAutocodeContentFrontmatterReadTool(),
-        autocode_content_frontmatter_write: createAutocodeContentFrontmatterWriteTool(),
-        autocode_content_grep: createAutocodeContentGrepTool(),
+        autocode_config_edit: createAutocodeConfigEditTool(),
+        autocode_config_read: createAutocodeConfigReadTool(),
+        autocode_config_remove: createAutocodeConfigRemoveTool(),
         autocode_db_schemas: createAutocodeDbSchemasTool(),
-        autocode_db_table_read: createAutocodeDbTableReadTool(),
         autocode_db_table: createAutocodeDbTableTool(),
+        autocode_db_table_read: createAutocodeDbTableReadTool(),
         autocode_db_tables: createAutocodeDbTablesTool(),
         autocode_dependencies: createAutocodeDependenciesTool(),
-        autocode_job_list: createAutocodeJobListTool(),
         autocode_job_execute: createAutocodeJobExecuteTool(client),
+        autocode_job_list: createAutocodeJobListTool(),
         autocode_job_shelve: createAutocodeJobShelveTool(client),
         autocode_job_status: createAutocodeJobStatusTool(client),
         autocode_kill: createAutocodeKillTool(),
         autocode_logo_find: createAutocodeLogoFindTool(),
+        autocode_md_edit: createAutocodeMdEditTool(),
+        autocode_md_frontmatter_edit: createAutocodeMdFrontmatterEditTool(),
+        autocode_md_frontmatter_read: createAutocodeMdFrontmatterReadTool(),
+        autocode_md_read: createAutocodeMdReadTool(),
+        autocode_md_remove: createAutocodeMdRemoveTool(),
         autocode_plan_read: createAutocodePlanReadTool(client),
         autocode_plan_save: createAutocodePlanSaveTool(client),
         autocode_rest: createAutocodeRestTool(client),
+        autocode_rest_grep: createAutocodeRestResponseGrepTool(client),
         autocode_rest_response_eval: createAutocodeRestResponseEvalTool(client),
         autocode_rest_response_read: createAutocodeRestResponseReadTool(client),
-        autocode_rest_grep: createAutocodeRestResponseGrepTool(client),
         autocode_sandbox_cli: createAutocodeSandboxCliTool(client),
+        autocode_sandbox_config_edit: createAutocodeSandboxConfigEditTool(client),
+        autocode_sandbox_config_read: createAutocodeSandboxConfigReadTool(client),
+        autocode_sandbox_config_remove: createAutocodeSandboxConfigRemoveTool(client),
         autocode_sandbox_copy: createAutocodeSandboxCopyTool(client),
         autocode_sandbox_create: createAutocodeSandboxCreateTool(client, undefined, sandboxConfig),
         autocode_sandbox_delete: createAutocodeSandboxDeleteTool(client),
@@ -79,30 +92,23 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_session_context: createAutocodeSessionContextTool(client),
         autocode_session_create: createAutocodeSessionCreateTool(client),
         autocode_ssh_command: createAutocodeSshCommandTool(),
-        autocode_ssh_content_toc: createAutocodeSshContentTocTool(),
-        autocode_ssh_content_read: createAutocodeSshContentReadTool(),
-        autocode_ssh_content_write: createAutocodeSshContentWriteTool(),
-        autocode_ssh_content_insert: createAutocodeSshContentInsertTool(),
-        autocode_ssh_content_move: createAutocodeSshContentMoveTool(),
-        autocode_ssh_content_remove: createAutocodeSshContentRemoveTool(),
-        autocode_ssh_content_frontmatter_read: createAutocodeSshContentFrontmatterReadTool(),
-        autocode_ssh_content_frontmatter_write: createAutocodeSshContentFrontmatterWriteTool(),
-        autocode_ssh_content_grep: createAutocodeSshContentGrepTool(),
-        autocode_ssh_list: createAutocodeSshListTool(),
-        autocode_ssh_read_attributes: createAutocodeSshReadAttributesTool(),
-        autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool(),
-        autocode_ssh_read_file: createAutocodeSshReadFileTool(),
+        autocode_ssh_config_edit: createAutocodeSshConfigEditTool(),
+        autocode_ssh_config_read: createAutocodeSshConfigReadTool(),
+        autocode_ssh_config_remove: createAutocodeSshConfigRemoveTool(),
+        autocode_ssh_edit_file: createAutocodeSshEditFileTool(),
         autocode_ssh_glob: createAutocodeSshGlobTool(),
         autocode_ssh_grep_file: createAutocodeSshGrepFileTool(),
+        autocode_ssh_list: createAutocodeSshListTool(),
         autocode_ssh_patch_file: createAutocodeSshPatchFileTool(),
-        autocode_ssh_edit_file: createAutocodeSshEditFileTool(),
+        autocode_ssh_read_attributes: createAutocodeSshReadAttributesTool(),
+        autocode_ssh_read_file: createAutocodeSshReadFileTool(),
+        autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool(),
         autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
+        skill: createSkillTool(client, undefined, runtime),
         skill_learn_correction: createSkillLearnCorrectionTool(),
         skill_learn_env: createSkillLearnEnvTool(),
         skill_learn_permission: createSkillLearnPermissionTool(),
         skill_learn_preference: createSkillLearnPreferenceTool(),
-        skill: createSkillTool(client, undefined, runtime),
-        ...createGitTools(),
         task_external: createTaskExternalTool(),
         task_resume: createTaskResumeTool(client),
     }

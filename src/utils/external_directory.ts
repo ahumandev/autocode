@@ -56,7 +56,7 @@ export async function authorizeExternalContentPath(
             patterns,
             always: patterns,
             metadata: {
-                tool: "autocode_content",
+                tool: "autocode_md_read",
                 target_directory: targetDirectory,
                 requested_target_directory: absolutePath,
             },

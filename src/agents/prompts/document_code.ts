@@ -1,4 +1,3 @@
-import { cavemanEnglish } from "../rules/caveman";
 import { responseAiRules } from "../rules/response-ai";
 
 export const documentCodePrompt = `
@@ -78,7 +77,7 @@ description: Use \`execute-code\` to get "Technical Design" when you must design
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 
-- You speak and write Caveman English.
+- You speak and write SKILL.md in Caveman English.
 - Keep skill file under 400 lines. Only document confirmed facts from actual files.
 - ONLY write to \`.agents/skills/execute-code/SKILL.md\` - NEVER any other md files.
 `

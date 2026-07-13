@@ -20,6 +20,7 @@ import {
     type SshDeps,
     type SftpLike,
 } from "@/utils/ssh"
+import { createRetryResponse } from "@/utils/tools"
 
 const entities = ["owner", "group", "other"] as const
 
@@ -53,7 +54,7 @@ type SshAttributes = {
 
 type RemoteEntryType = "file" | "directory" | "symlink" | "other"
 
-type RemoteEntry = {
+export type RemoteEntry = {
     path: string
     type: RemoteEntryType
     size?: number
@@ -83,7 +84,7 @@ type PatchResult = {
 }
 
 const defaultCommandTimeoutMs = 300000
-const readFileMaxCharacters = 2000
+const readFileMaxCharacters = 4000
 const defaultFileToolLimit = 100
 const maximumFileToolLimit = 1000
 const defaultSshPool = new SshConnectionPool()
@@ -176,6 +177,8 @@ export function createAutocodeSshWriteAttributesTool(deps: SshToolDeps = {}): Re
             execute: tool.schema.array(tool.schema.enum(entities)).optional().describe("Who can execute."),
         },
         async execute(args): Promise<string> {
+            const pathError = validateRemotePath(args.path, "path")
+            if (pathError) return createRetryResponse("write SSH attributes", pathError, "Provide a specific file path with no glob wildcards (* ? [ ] { }). Absolute or relative paths are accepted.")
             const permissionError = validatePermissionArgs(args.read, args.write, args.execute)
             if (permissionError) return createSshToolErrorResponse("write SSH attributes", permissionError)
 
@@ -209,13 +212,17 @@ export function createAutocodeSshReadFileTool(deps: SshToolDeps = {}): ReturnTyp
         },
         async execute(args): Promise<string> {
             const firstLine = args.first_line ?? 1
-            const lastLine = args.last_line
+            const lastLine = args.last_line ?? 40
             const lineError = validateLineBounds(firstLine, lastLine)
             if (lineError) return createSshToolErrorResponse("read SSH file", lineError)
+            if (firstLine > lastLine) return createRetryResponse("read SSH file", new Error("first_line must not exceed last_line"), "Set first_line to be less than or equal to last_line.")
 
             return withSftp(args.ssh_key, deps, "read SSH file", async ({ sftp, host, port }) => {
-                const file = await sftpReadFile(sftp, args.path, "utf8")
-                const selectedContent = selectLineRange(String(file), firstLine, lastLine)
+                const file = String(await sftpReadFile(sftp, args.path, "utf8"))
+                const totalLines = file.split(/(?<=\n)/).length
+                const effectiveLastLine = lastLine > totalLines ? totalLines : lastLine
+                if (firstLine > effectiveLastLine) return createRetryResponse("read SSH file", new Error("first_line exceeds the file's total line count (" + totalLines + ")"), "Reduce first_line to within the file's line count.")
+                const selectedContent = selectLineRange(file, firstLine, effectiveLastLine)
                 const contentTruncated = selectedContent.length > readFileMaxCharacters
 
                 return JSON.stringify({
@@ -240,8 +247,10 @@ export function createAutocodeSshWriteFileTool(deps: SshToolDeps = {}): ReturnTy
             create_dirs: tool.schema.boolean().optional().describe("Make parent dirs."),
         },
         async execute(args): Promise<string> {
-            const inputError = validateWritableRemoteFilePath(args.path, "path") ?? validateNoNul(args.content, "content")
-            if (inputError) return createSshToolErrorResponse("write SSH file", inputError)
+            const pathError = validateWritableRemoteFilePath(args.path, "path")
+            if (pathError) return createRetryResponse("write SSH file", pathError, "Provide a specific file path with no glob wildcards (* ? [ ] { }). Absolute or relative paths are accepted.")
+            const contentError = validateNoNul(args.content, "content")
+            if (contentError) return createSshToolErrorResponse("write SSH file", contentError)
 
             return withSftp(args.ssh_key, deps, "write SSH file", async ({ sftp }) => {
                 const existing = await statIfExists(sftp, args.path)
@@ -265,13 +274,15 @@ export function createAutocodeSshEditFileTool(deps: SshToolDeps = {}): ReturnTyp
         args: {
             ssh_key: tool.schema.string().describe("SSH connection key."),
             path: tool.schema.string().describe("File path relative to SSH filesystem."),
-            oldString: tool.schema.string().describe("Text to replace."),
+            oldString: tool.schema.string().describe("Text to replace. When `oldString` is empty and file does not exist, creates new file with `newString` as its content."),
             newString: tool.schema.string().describe("New text."),
-            replaceAll: tool.schema.boolean().optional().describe("Replace all matches."),
+            replaceAll: tool.schema.boolean().optional().default(false).describe("Replace all matches."),
         },
         async execute(args): Promise<string> {
-            const inputError = validateRemotePath(args.path, "path") ?? validateNoNul(args.oldString, "oldString") ?? validateNoNul(args.newString, "newString")
-            if (inputError) return createSshToolErrorResponse("edit SSH file", inputError)
+            const pathError = validateRemotePath(args.path, "path")
+            if (pathError) return createRetryResponse("edit SSH file", pathError, "Provide a specific file path with no glob wildcards (* ? [ ] { }). Absolute or relative paths are accepted.")
+            const contentError = validateNoNul(args.oldString, "oldString") ?? validateNoNul(args.newString, "newString")
+            if (contentError) return createSshToolErrorResponse("edit SSH file", contentError)
             if (args.oldString === args.newString) return createSshToolErrorResponse("edit SSH file", new Error("oldString and newString must differ"))
 
             return withSftp(args.ssh_key, deps, "edit SSH file", async ({ sftp }) => {
@@ -300,11 +311,13 @@ export function createAutocodeSshPatchFileTool(deps: SshToolDeps = {}): ReturnTy
         args: {
             ssh_key: tool.schema.string().describe("SSH connection key."),
             path: tool.schema.string().describe("File path relative to SSH filesystem."),
-            patch: tool.schema.string().describe("Unified diff patch."),
+            patch: tool.schema.string().describe("Unified diff patch. Only content-modifying hunks are supported. File creation, deletion, rename, and /dev/null patches are rejected."),
         },
         async execute(args): Promise<string> {
-            const inputError = validateRemotePath(args.path, "path") ?? validateNoNul(args.patch, "patch")
-            if (inputError) return createSshToolErrorResponse("patch SSH file", inputError)
+            const pathError = validateRemotePath(args.path, "path")
+            if (pathError) return createRetryResponse("patch SSH file", pathError, "Provide a specific file path with no glob wildcards (* ? [ ] { }). Absolute or relative paths are accepted.")
+            const contentError = validateNoNul(args.patch, "patch")
+            if (contentError) return createSshToolErrorResponse("patch SSH file", contentError)
 
             return withSftp(args.ssh_key, deps, "patch SSH file", async ({ sftp }) => {
                 const current = String(await sftpReadFile(sftp, args.path, "utf8"))
@@ -323,7 +336,7 @@ export function createAutocodeSshGlobTool(deps: SshToolDeps = {}): ReturnType<ty
         args: {
             ssh_key: tool.schema.string().describe("SSH connection key."),
             pattern: tool.schema.string().describe("Glob pattern."),
-            path: tool.schema.string().optional().describe("State path relative to SSH filesystem."),
+            path: tool.schema.string().optional().describe("Search root directory relative to SSH filesystem. When provided, results use absolute paths."),
             limit: tool.schema.number().optional().describe("Max matches."),
         },
         async execute(args): Promise<string> {
@@ -422,6 +435,7 @@ async function withSshConnection(sshKey: string, deps: SshToolDeps, failedAction
 
 export function validateRemotePath(value: string, name: string): Error | undefined {
     if (!value.trim()) return new Error(`${name} must be a non-empty string`)
+    if (/[*?[\]{}]/.test(value)) return new Error(`glob wildcards not allowed in file path: ${value}`)
     return validateNoNul(value, name)
 }
 
@@ -462,7 +476,7 @@ function normalizeFileToolLimit(value: number | undefined): number {
     return Math.min(value ?? defaultFileToolLimit, maximumFileToolLimit)
 }
 
-async function statIfExists(sftp: SftpLike, filePath: string): Promise<Stats | undefined> {
+export async function statIfExists(sftp: SftpLike, filePath: string): Promise<Stats | undefined> {
     try {
         return await sftpStat(sftp, filePath)
     }
@@ -506,7 +520,7 @@ function countOccurrences(content: string, search: string): number {
     return count
 }
 
-function globToRegExp(pattern: string): RegExp {
+export function globToRegExp(pattern: string): RegExp {
     const normalized = pattern.replaceAll("\\", "/")
     let source = "^"
     for (let index = 0; index < normalized.length; index += 1) {
@@ -527,7 +541,7 @@ function globToRegExp(pattern: string): RegExp {
     return new RegExp(`${source}$`)
 }
 
-function createGlobSearch(pattern: string, basePath?: string): { root: string; matchRoot: string; matchPattern: string; absoluteOutput: boolean } {
+export function createGlobSearch(pattern: string, basePath?: string): { root: string; matchRoot: string; matchPattern: string; absoluteOutput: boolean } {
     const normalizedPattern = pattern.trim().replaceAll("\\", "/")
     if (basePath) {
         const root = normalizeRemotePath(basePath)
@@ -546,7 +560,7 @@ function nonGlobPrefix(pattern: string): string {
     return pattern.slice(0, slash) || "/"
 }
 
-async function walkRemote(sftp: SftpLike, start: string, visitor: (entry: RemoteEntry) => Promise<boolean> | boolean): Promise<boolean> {
+export async function walkRemote(sftp: SftpLike, start: string, visitor: (entry: RemoteEntry) => Promise<boolean> | boolean): Promise<boolean> {
     const startStats = await statIfExists(sftp, start)
     if (!startStats) return true
     if (!startStats.isDirectory()) {
@@ -583,9 +597,10 @@ function entryWithOutputPath(entry: RemoteEntry, filePath: string): RemoteEntry 
     return { ...entry, path: filePath }
 }
 
-function globEntryMatches(matcher: RegExp, root: string, entry: RemoteEntry, rootStats?: Stats): boolean {
+export function globEntryMatches(matcher: RegExp, root: string, entry: RemoteEntry, rootStats?: Stats): boolean {
     if (rootStats?.isFile()) return matcher.test(remoteBasename(entry.path)) || matcher.test(entry.path)
-    return matcher.test(remoteRelative(root, entry.path))
+    const relative = remoteRelative(root, entry.path)
+    return matcher.test(relative) || matcher.test(`/${relative}`)
 }
 
 function includeMatches(include: RegExp | undefined, root: string, filePath: string): boolean {
@@ -744,7 +759,7 @@ function normalizeRemotePath(filePath: string): string {
     return normalized === "" ? "." : normalized
 }
 
-function stripLeadingSlash(filePath: string): string {
+export function stripLeadingSlash(filePath: string): string {
     return filePath.replace(/^\/+/, "")
 }
 
@@ -945,7 +960,6 @@ function validatePermissionArgs(...values: Array<Entity[] | undefined>): Error |
 function validateLineBounds(firstLine: number, lastLine?: number): Error | undefined {
     if (!isPositiveInteger(firstLine)) return new Error("first_line must be a positive integer")
     if (lastLine !== undefined && !isPositiveInteger(lastLine)) return new Error("last_line must be a positive integer")
-    if (lastLine !== undefined && lastLine < firstLine) return new Error("last_line must be greater than or equal to first_line")
     return undefined
 }
 

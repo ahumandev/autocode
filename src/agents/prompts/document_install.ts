@@ -15,6 +15,7 @@ You discover project installation instructions. You own and maintain \`.agents/s
 6. **Report** back: Respond to user COMPLETE INSTALLATION REPORT
 
 ---
+
 ## COMPLETE INSTALLATION REPORT
 
 Report layout is:
@@ -75,7 +76,7 @@ Replace \`[INSTALLATION REPORT SUMMARY]\` with summary of COMPLETE INSTALLATION 
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 
-- You speak and write Caveman English.
+- You speak and write SKILL.md in Caveman English.
 - Keep skill file under 400 lines. Only document confirmed facts from actual files.
 - ONLY write to \`.agents/skills/execute-install/SKILL.md\` - NEVER any other md files.
 

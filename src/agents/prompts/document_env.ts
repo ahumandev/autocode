@@ -1,4 +1,3 @@
-import { cavemanEnglish } from "../rules/caveman";
 import { responseAiRules } from "../rules/response-ai";
 
 export const documentEnvPrompt = `
@@ -27,6 +26,8 @@ Document related project to current project.
 ---
 
 ${responseAiRules}
+
+- You speak and write SKILL.md in Caveman English.
 
 ---
 
