@@ -36,11 +36,11 @@ Write Skill Template as follow:
   - Prefix with `author-` for skill related to human readable content, articles
   - Prefix with `code-` for skill related to project source code, configurations, scripts
   - Prefix with `design-` for skill related to project designs (architecture)
-* Replace [ACTION] with short topic in Caveman English as follows:
-  - Unique header summarizing topic skill addresses - What knowledge and/or ability agent should expect (e.g. "Deploying Spring Boot Applications")
+* Replace [ACTION] with short action in Caveman English as follows:
+  - Unique header summarizing action skill addresses - What knowledge and/or ability agent should expect (e.g. "Deploying Spring Boot Applications")
   - Must be < 7 words
   - Use exact phrase and case consistently
-* Replace [TRIGGERS] with description of when topic is relevant (< 20 words) like "Understand how to build and package Spring Boot Application for production deployments, ..."
+* Replace [TRIGGERS] with description of when action is relevant (< 20 words) like "Understand how to build and package Spring Boot Application for production deployments, ..."
 * Replace [CONTENT] with translated content from user request into Caveman English:
   - Preferably format as structured sequence lists or bullet points
   - May include formatted examples when applicable
