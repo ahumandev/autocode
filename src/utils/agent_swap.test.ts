@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createAutocodeAgentPreviousSkippedResponse, createAutocodeAgentSwapSuccessResponse, createAutocodeSession, createAutocodeSessionCreateSuccessResponse, createAutocodeSessionPrompt, deriveAutocodeAgentSwapTitle, dispatchAutocodeAgentPrompt, findPreviousPrimaryAutocodeAgent, resolveTierModel, swapCurrentAutocodeSession, validateAutocodeAgentSwapInput, validateAutocodeSessionCreateInput } from "./agent_swap"
+import { createAutocodeAgentPreviousSkippedResponse, createAutocodeAgentSwapSuccessResponse, createAutocodeSession, createAutocodeSessionCreateSuccessResponse, createAutocodeSessionPrompt, deriveAutocodeAgentSwapTitle, dispatchAutocodeAgentPrompt, findPreviousPrimaryAutocodeAgent, formatAutocodeSessionTitleForAgent, resolveTierModel, swapCurrentAutocodeSession, validateAutocodeAgentSwapInput, validateAutocodeSessionCreateInput } from "./agent_swap"
 
 function createClient() {
     return {
@@ -50,6 +50,14 @@ describe("agent swap utilities", () => {
     test("derives session titles from the first sixty prompt characters", () => {
         expect(deriveAutocodeAgentSwapTitle("short prompt")).toBe("short prompt")
         expect(deriveAutocodeAgentSwapTitle("x".repeat(80))).toBe("x".repeat(60))
+    })
+
+    test("formats session title with agent postfix, stripping any prior single-word paren postfix", () => {
+        expect(formatAutocodeSessionTitleForAgent("Create login screen", "design")).toBe("Create login screen (design)")
+        expect(formatAutocodeSessionTitleForAgent("Some title (executing)", "design")).toBe("Some title (design)")
+        expect(formatAutocodeSessionTitleForAgent("Some title (research)", "design")).toBe("Some title (design)")
+        expect(formatAutocodeSessionTitleForAgent("Some title (design) ", "research")).toBe("Some title (research)")
+        expect(formatAutocodeSessionTitleForAgent("Fix (critical issue)", "design")).toBe("Fix (critical issue) (design)")
     })
 
     test("validates and trims prompt and agent values", () => {

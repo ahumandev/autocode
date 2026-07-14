@@ -1,24 +1,16 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { allowedAutocodeSessionCreateAgentsText, createAutocodeSessionCreateSuccessResponse, createAutocodeSessionPrompt, resolveAutocodeAgentSessionSettings, validateAutocodeSessionCreateInput } from "@/utils/agent_swap"
+import { allowedAutocodeSessionCreateAgentsText, createAutocodeSessionCreateSuccessResponse, createAutocodeSessionPrompt, formatAutocodeSessionTitleForAgent, resolveAutocodeAgentSessionSettings, validateAutocodeSessionCreateInput } from "@/utils/agent_swap"
+import { getCurrentSessionTitle } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
+import { taskPrompt } from "@/agents/rules/task"
 
 export function createAutocodeSessionCreateTool(client?: OpencodeClient) {
     return tool({
         description: "Hand off task to new session.",
         args: {
             agent: tool.schema.string().describe(`Agent to execute task.`),
-            prompt: tool.schema.string().describe(`Context or instructions to new agent in Caveman English.
-             
-- Only include summary of info related to task
-- But include enough info to prevent unnecessary search work, like: exact files, paths, line numbers, error messages, stack traces
-- \`prompt\` outline:
-    - GOAL: *what* agent must solve
-    - REASON: *why* GOAL matters (1 line max)
-    - METRICS: *how* GOAL action is measured or how to summarize response info - what is important (1 bullet point per metric)
-    - CONSTRAINTS: *facts* already discovered regarding task (1 bullet point per fact) - avoid redundant re-discovery facts
-    - SCOPE: *limits* of subagent actions (1 bullet point per limit) - focus on GOAL, avoid unnecessary work, silence subagent except for useful summarized facts
-`),
+            prompt: tool.schema.string().describe(taskPrompt),
         },
         async execute(args, context) {
             const validation = validateAutocodeSessionCreateInput(args.prompt, args.agent)
@@ -48,19 +40,23 @@ export function createAutocodeSessionCreateTool(client?: OpencodeClient) {
                     return createAbortResponse("autocode_session_create", sessionSettings.error)
                 }
 
+                const currentTitleResult = await getCurrentSessionTitle(client, context)
+                const baseTitle = currentTitleResult.title ?? validation.title
+                const sessionTitle = formatAutocodeSessionTitleForAgent(baseTitle, validation.agent)
+
                 const handoff = await createAutocodeSessionPrompt(
                     client,
                     context.directory,
                     validation.agent,
                     validation.prompt,
-                    validation.title,
+                    sessionTitle,
                     sessionSettings.resolvedModel,
                 )
                 if ("error" in handoff) {
                     return createAbortResponse("autocode_session_create", handoff.error)
                 }
 
-                return createAutocodeSessionCreateSuccessResponse(validation.agent, validation.title, handoff.sessionID)
+                return createAutocodeSessionCreateSuccessResponse(validation.agent, sessionTitle, handoff.sessionID)
             }
             catch (error) {
                 return createAbortResponse("autocode_session_create", error)

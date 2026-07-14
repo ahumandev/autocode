@@ -325,7 +325,7 @@ const baseAgents: AgentMap = {
 
     design: {
         color: colorReadOnlyInteractiveOrchestrator,
-        description: "Design implementation proposals from recent conversation and Research Report data.",
+        description: "Design solutions to problems.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -356,7 +356,7 @@ const baseAgents: AgentMap = {
 
     edit: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Quick direct file edits. No planning, no delegation.",
+        description: "Quick direct file edits.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -391,12 +391,12 @@ const baseAgents: AgentMap = {
 
     research: {
         color: colorReadOnlyInteractiveOrchestrator,
-        description: "Research a topic and produce a Research Report.",
+        description: "Research a topic.",
         hidden: false,
         mode: "primary",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
+            autocode_session_create: "allow",
             doom_loop: "ask",
             external_directory: "ask",
             question: "allow",

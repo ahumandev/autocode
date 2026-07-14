@@ -137,7 +137,7 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
     3. Add regression test (TDD)
     4. Implement best approach
     5. Verify implementation (using system like user with browser, CLI, curl, sandbox or inspect DB/file/SSH entries after using new feature)
-    6. Learn from mistakes, adjust and repeat until user expections are met
+    6. Learn from mistakes, adjust and repeat until user expectations are met
     7. Optimize implementation (maintainability, performance, reliability, security)
     8. Document changes (comments, update/learn skills)
     9. Commit changes to repo

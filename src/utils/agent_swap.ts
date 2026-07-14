@@ -158,8 +158,15 @@ export function resolveTierModel(tier: ModelTier | undefined, tiers: Partial<Rec
     }
 }
 
+const SESSION_TITLE_POSTFIX_PATTERN = /\s+\(([a-z]+)\)\s*$/
+
 export function deriveAutocodeAgentSwapTitle(prompt: string): string {
     return prompt.slice(0, 60)
+}
+
+export function formatAutocodeSessionTitleForAgent(baseTitle: string, agent: string): string {
+    const stripped = baseTitle.replace(SESSION_TITLE_POSTFIX_PATTERN, "").trim()
+    return `${stripped} (${agent})`
 }
 
 export function validateAutocodeAgentSwapInput(

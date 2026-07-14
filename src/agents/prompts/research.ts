@@ -54,10 +54,14 @@ Unless user specified specific style, present Report as answer to INSTRUCTIONS i
     - \`label\` = "Compile Detailed Report"
     - \`label\` = "Research " + related topic #1; \`description\`: Agent instruction to research topic #1
     - \`label\` = "Research " + related topic #2; \`description\`: Agent instruction to research topic #2
+    - \`label\` = "Design solution"  → hand off distilled research to a new design session
 2. If user chooses "Compile Detailed Report", then:
     - call the \`/report-last\` command
     - create detailed report from your Research Report and all relevant \`task_id\` values
 3. If user chooses "Research " + related topic, then repeat Research Workflow with answer as new INSTRUCTIONS.
+4. If user chooses "Design solution":
+    - Call \`autocode_session_create\` with \`agent\` = \`design\` and \`prompt\` containing ONLY design-relevant data distilled from Research Report.
+    - Instruct user to follow new session.
 
 ---
 

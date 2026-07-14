@@ -85,6 +85,16 @@ describe("autocode_session_create tool", () => {
     function createMockClient() {
         return {
             session: {
+                get: mock(async (args: { path: { id: string } }) => ({
+                    data: {
+                        id: args.path.id,
+                        projectID: "project-1",
+                        directory: "/workspace",
+                        title: "Original Session Title",
+                        version: "1",
+                        time: { created: Date.now(), updated: Date.now() },
+                    },
+                })),
                 create: mock(async (args: { query?: { directory?: string }, body?: { title?: string } }) => ({
                     data: {
                         id: "new-session",
@@ -99,6 +109,7 @@ describe("autocode_session_create tool", () => {
             },
         } as unknown as OpencodeClient & {
             session: {
+                get: ReturnType<typeof mock>
                 create: ReturnType<typeof mock>
                 promptAsync: ReturnType<typeof mock>
             }
@@ -115,7 +126,7 @@ describe("autocode_session_create tool", () => {
         const client = createMockClient()
         const prompt = `   ${"Swap to design and continue from the latest requirement set. ".repeat(2)}   `
         const trimmedPrompt = prompt.trim()
-        const title = trimmedPrompt.slice(0, 60)
+        const title = "Original Session Title (design)"
         const tool = createAutocodeSessionCreateTool(client)
 
         const parsed = parseToolResult(await tool.execute({ agent: "design", prompt }, createToolContext({ sessionID: "old-session" })))
@@ -152,8 +163,19 @@ describe("autocode_session_create tool", () => {
             })
 
             const client = createMockClient()
+            ;(client.session.get as ReturnType<typeof mock>).mockImplementation(async (args: { path: { id: string } }) => ({
+                data: {
+                    id: args.path.id,
+                    projectID: "project-1",
+                    directory: worktree,
+                    title: prompt,
+                    version: "1",
+                    time: { created: Date.now(), updated: Date.now() },
+                },
+            }))
             const tool = createAutocodeSessionCreateTool(client)
             const tier = getAgentTier(agent)
+            const expectedTitle = `${prompt} (${agent})`
 
             expect(tier).toBe(expectedTier)
 
@@ -161,7 +183,7 @@ describe("autocode_session_create tool", () => {
 
             expect(client.session.create).toHaveBeenCalledWith({
                 query: { directory: worktree },
-                body: { title: prompt },
+                body: { title: expectedTitle },
             })
             expect(client.session.promptAsync).toHaveBeenCalledWith({
                 path: { id: "new-session" },
@@ -219,5 +241,50 @@ describe("autocode_session_create tool", () => {
         }
         expect(client.session.create).toHaveBeenCalledTimes(4)
         expect(client.session.promptAsync).toHaveBeenCalledTimes(4)
+    })
+
+    test("replaces existing (executing) postfix with the selected agent postfix", async () => {
+        const client = createMockClient()
+        ;(client.session.get as ReturnType<typeof mock>).mockImplementation(async (args: { path: { id: string } }) => ({
+            data: {
+                id: args.path.id,
+                projectID: "project-1",
+                directory: "/workspace",
+                title: "Some Job (executing)",
+                version: "1",
+                time: { created: Date.now(), updated: Date.now() },
+            },
+        }))
+        const tool = createAutocodeSessionCreateTool(client)
+
+        const parsed = parseToolResult(await tool.execute({ agent: "design", prompt: "Some Job" }, createToolContext()))
+
+        const expectedTitle = "Some Job (design)"
+        expect(client.session.create).toHaveBeenCalledWith({
+            query: { directory: "/workspace" },
+            body: { title: expectedTitle },
+        })
+        expect(parsed.session_title).toBe(expectedTitle)
+        expect(parsed.message).toBe(`Created new session for design: ${expectedTitle} (new-session).`)
+    })
+
+    test("falls back to the prompt-derived title when current session title lookup returns a warning", async () => {
+        const client = createMockClient()
+        ;(client.session.get as ReturnType<typeof mock>).mockImplementation(async () => {
+            throw new Error("session.get failure")
+        })
+        const tool = createAutocodeSessionCreateTool(client)
+        const prompt = "Continue execution."
+        const fallbackBase = prompt.slice(0, 60)
+        const expectedTitle = `${fallbackBase} (auto)`
+
+        const parsed = parseToolResult(await tool.execute({ agent: "auto", prompt }, createToolContext()))
+
+        expect(client.session.create).toHaveBeenCalledWith({
+            query: { directory: "/workspace" },
+            body: { title: expectedTitle },
+        })
+        expect(parsed.session_title).toBe(expectedTitle)
+        expect(parsed.message).toBe(`Created new session for auto: ${expectedTitle} (new-session).`)
     })
 })
