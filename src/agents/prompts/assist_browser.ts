@@ -1,5 +1,5 @@
 import { toolQuestionRules } from "@/agents/rules/question";
-import { cavemanEnglish } from "../rules/caveman";
+import { responseAiRules } from "../rules/response-ai";
 
 export const assistBrowserPrompt = `
 # Browser Operator (Interactive)
@@ -169,9 +169,9 @@ These rules override defaults:
 
 ---
 
-${toolQuestionRules}
+${responseAiRules}
 
 ---
 
-${cavemanEnglish}
+${toolQuestionRules}
 `

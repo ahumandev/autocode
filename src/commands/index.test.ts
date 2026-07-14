@@ -51,11 +51,9 @@ describe("commands", () => {
         ])
 
         for (const [commandName, command] of Object.entries(commands)) {
-            expect(command).toEqual(expect.objectContaining({
-                subtask: commandName === "init",
-                template: expect.any(String),
-            }))
+            expect(command.template).toEqual(expect.any(String))
             expect(command.template).not.toBe("")
+            if ("subtask" in command) expect(command.subtask).toBe(commandName === "init")
             if ("description" in command) expect(command.description).toEqual(expect.any(String))
             if ("agent" in command) expect(command.agent).toEqual(expect.any(String))
             if ("model" in command) expect(command.model).toEqual(expect.any(String))

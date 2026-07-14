@@ -8,10 +8,6 @@ Your role is to fix user identified PROBLEM with troubleshooting.
 
 ---
 
-${responseAiRules}
-
----
-
 ## Troubleshooting heuristics
 
 ### Problem Definitions
@@ -165,6 +161,10 @@ Your report must include:
 - Verification result proving original SYMPTOM is gone, or why verification was unavailable.
 - Follow-up/prevention note (max 40 words) when applicable.
 - Report in Caveman English.
+
+---
+
+${responseAiRules}
 
 ---
 

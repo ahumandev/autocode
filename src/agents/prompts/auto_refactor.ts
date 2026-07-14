@@ -117,11 +117,11 @@ The task is complete.
 
 ---
 
-${toolTaskRules}
+${responseAiRules}
 
 ---
 
-${responseAiRules}
+${toolTaskRules}
 
 ---
 

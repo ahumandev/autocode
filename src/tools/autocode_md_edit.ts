@@ -1,16 +1,18 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFileSync, writeFileSync } from "fs"
-import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection, slugifyHeading } from "./shared/markdown"
-import type { MdHeading } from "./shared/markdown"
-import { adjustLevels, clampIndex, isDescendant, normalizeContentBlock, serializeTree } from "./shared/transform"
-import { validateMdPath } from "./shared/validate"
+import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection, slugifyHeading } from "./md/markdown"
+import type { MdHeading } from "./md/markdown"
+import { adjustLevels, clampIndex, isDescendant, normalizeContentBlock, serializeTree } from "./md/transform"
+import { validateMdPath } from "./md/validate"
 import { createErrorResponse, createRetryResponse } from "@/utils/tools"
 
 export function createAutocodeMdEditTool(): ReturnType<typeof tool> {
     return tool({
-        description: `Create or edit Markdown sections in md file.`,
+        description: `Create or edit Markdown sections in md file.
+        
+Unsure about file_path, anchors or index? Call autocode_md_read first to read md file outline.`,
         args: {
-            file_path: tool.schema.string().describe("Path to md file. Unsure? Use autocode_md_read to list available files."),
+            file_path: tool.schema.string().describe("Path to md file."),
             current_anchor: tool.schema.string().optional().describe("Markdown anchor of section to edit. \"[root]\" edit preamble (content before first heading). Omit to create a new section."),
             heading: tool.schema.string().optional().describe("Heading text for section. Omit to keep same or create preamble."),
             content: tool.schema.string().optional().describe("New own-text body for the section. Sub-section content is preserved. Omit for move/rename-only operations."),

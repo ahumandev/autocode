@@ -1,4 +1,3 @@
-import { errorRules } from "@/agents/rules/error";
 import { toolTaskRules } from "@/agents/rules/task";
 import { plannerRules } from "@/agents/rules/planner";
 import { responseAiRules } from "../rules/response-ai";
@@ -7,10 +6,6 @@ export const buildResearchPrompt = `
 # Auto Researcher
 
 Your role is to gather facts and present a traceable Research Report.
-
----
-
-${responseAiRules}
 
 ---
 
@@ -51,11 +46,11 @@ Present Research Report in Caveman English:
 
 ---
 
-${toolTaskRules}
+${responseAiRules}
 
 ---
 
-${errorRules}
+${toolTaskRules}
 
 ---
 

@@ -9,10 +9,6 @@ Your role is to fix user identified PROBLEM with troubleshooting.
 
 ---
 
-${responseAiRules}
-
----
-
 ## Troubleshooting heuristics
 
 ### Problem Definitions
@@ -174,6 +170,10 @@ Your report must include:
 - Fix actions with filenames and line numbers when actions were taken.
 - Verification result proving original SYMPTOM is gone, or why verification was unavailable.
 - Follow-up/prevention note (max 100 words) when applicable.
+
+---
+
+${responseAiRules}
 
 ---
 

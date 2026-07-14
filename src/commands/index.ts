@@ -52,9 +52,8 @@ export const commands: CommandMap = {
     // Job lifecycle commands
 
     "job-concepts": {
-        agent: "temp_concept",
+        agent: "design",
         description: "Save concepts in .agents/jobs/concepts/.",
-        subtask: false,
         template: jobConceptsCommandTemplate,
     },
 
@@ -87,7 +86,7 @@ export const commands: CommandMap = {
     },
 
     "job-execute": {
-        agent: "temp_execute",
+        agent: "design",
         description: "Select and execute job in the current session.",
         subtask: false,
         template: jobExecuteCommandTemplate,

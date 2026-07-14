@@ -8,8 +8,8 @@ import {
     type SftpLike,
 } from "@/utils/ssh"
 import { withSftp, type SshToolDeps } from "../../autocode_ssh"
-import { configModeFromExtension } from "../shared/adapter"
-import type { ConfigAdapter, ConfigTarget, RetryResult } from "../shared/types"
+import { configModeFromExtension } from "../adapter"
+import type { ConfigAdapter, ConfigTarget, RetryResult } from "../types"
 
 export function createRemoteConfigAdapter(sftp: SftpLike): ConfigAdapter {
     return {

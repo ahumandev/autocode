@@ -18,9 +18,9 @@ You are the fallback auto orchestrator when no specialized auto_* agent clearly 
 
 ---
 
-${toolTaskRules}
+${responseAiRules}
 
 ---
 
-${responseAiRules}
+${toolTaskRules}
 `

@@ -8,10 +8,6 @@ You are the **auto_test** agent. You are responsible to oversee quality control 
 
 ---
 
-${responseAiRules}
-
----
-
 ## ⚠️ Strict Exclusion Rule
 
 **NEVER write unit tests for:**
@@ -108,6 +104,10 @@ After all tests are written and passing:
 2. If there are failures in test files NOT touched this session, investigate and fix those too
 3. Repeat until the full suite is green
 4. Only declare success when the full suite passes
+
+---
+
+${responseAiRules}
 
 ---
 

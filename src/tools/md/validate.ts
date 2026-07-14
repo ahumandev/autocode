@@ -1,5 +1,5 @@
 import type { ToolContext } from "@opencode-ai/plugin"
-import { validateFilePath } from "../../../utils/validate_file_path"
+import { validateFilePath } from "../../utils/validate_file_path"
 
 type ValidationResult = { ok: true, value: string } | { ok: false, response: string }
 

@@ -18,7 +18,6 @@ const managedSkillDirectories = [
     "author-readme",
     "author-rules",
     "author-skill",
-    "author-tutorial",
     "code-java",
     "code-rest",
     "code-typescript",

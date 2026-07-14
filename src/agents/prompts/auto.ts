@@ -1,5 +1,4 @@
 import { toolTaskRules } from "../rules/task"
-import { errorRules } from "../rules/error"
 import { implementationDefinitions, planningDefinitions } from "../rules/definitions"
 import { responseHumanRules } from "../rules/response-human";
 import { manualRules } from "../rules/manual";
@@ -87,10 +86,6 @@ If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREME
 
 ---
 
-${manualRules}
-
----
-
 ## Job Statuses
 
 - when Task Execution: \`status\` = \`executing\`
@@ -132,15 +127,15 @@ After the 5 failed PROPOSALS of same OBSTACLE you must abort PROPOSAL and call \
 
 ---
 
-${toolTaskRules}
-
----
-
-${errorRules}
-
----
-
 ${responseHumanRules}
+
+---
+
+${manualRules}
+
+---
+
+${toolTaskRules}
 
 ---
 

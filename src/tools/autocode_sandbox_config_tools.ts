@@ -7,9 +7,9 @@ import { resolveSafeRelativePath, resolveSandboxForFileTool, validateSafeWriteTa
 import type { SessionJobContext } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { expandGlob } from "@/utils/glob"
-import { configModeFromExtension } from "./config/shared/adapter"
-import { configEditFlow, configRead, configRemoveFlow, formatPath, getParser, parseKeyPath, resolvePath } from "./config/shared/core"
-import type { ConfigAdapter, ConfigMode, ConfigTarget, RetryResult } from "./config/shared/types"
+import { configModeFromExtension } from "./config/adapter"
+import { configEditFlow, configRead, configRemoveFlow, formatPath, getParser, parseKeyPath, resolvePath } from "./config/core"
+import type { ConfigAdapter, ConfigMode, ConfigTarget, RetryResult } from "./config/types"
 
 const configPathSchema = tool.schema.string()
 

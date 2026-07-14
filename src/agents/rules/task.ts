@@ -1,5 +1,3 @@
-import { cavemanEnglish } from "./caveman";
-
 export const toolTaskRules = `
 ## Task Delegation Rules
 
@@ -19,13 +17,14 @@ export const toolTaskRules = `
 
 - ALWAYS prompt for absolute minimum info or actions needed - follow up with same \`task_id\` if more needed later.
 - Max 1 PROBLEM per \`task\` call.
-- Include in \`prompt\`:
+- Only include summary of info related to task.
+- But include enough info to prevent unnecessary search work, like: exact files, paths, line numbers, error messages, stack traces
+- \`prompt\` outline:
     - GOAL: *what* subagent must solve
     - REASON: *why* GOAL matters (1 line max)
     - METRICS: *how* GOAL action is measured or how to summarize response info - what is important (1 bullet point per metric)
     - CONSTRAINTS: *facts* already discovered regarding task (1 bullet point per fact) - avoid redundant re-discovery facts
     - SCOPE: *limits* of subagent actions (1 bullet point per limit) - focus on GOAL, avoid unnecessary work, silence subagent except for useful summarized facts
-    - Subagent \`prompt\` must include all known but relevant context to prevent redundant search work, like exact files, paths, line numbers, error messages, stack traces
 
   ❌ Wrong verbose task call:
   \`\`\`json
@@ -46,6 +45,4 @@ export const toolTaskRules = `
   \`\`\`
 
 **VERY IMPORTANT!!!**: ALWAYS write the \`task\` tool arg text in Caveman English.
-
-${cavemanEnglish}
 `

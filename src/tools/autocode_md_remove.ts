@@ -1,14 +1,16 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFileSync, writeFileSync } from "fs"
-import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection } from "./shared/markdown"
-import type { MdHeading } from "./shared/markdown"
-import { serializeTree } from "./shared/transform"
-import { validateMdPath } from "./shared/validate"
+import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection } from "./md/markdown"
+import type { MdHeading } from "./md/markdown"
+import { serializeTree } from "./md/transform"
+import { validateMdPath } from "./md/validate"
 import { createErrorResponse } from "@/utils/tools"
 
 export function createAutocodeMdRemoveTool(): ReturnType<typeof tool> {
     return tool({
-        description: `Remove markdown section together with its entire subtree.`,
+        description: `Remove markdown section together with its entire subtree.
+        
+Unsure about file_path or anchors? Call autocode_md_read first to read outline.`,
         args: {
             file_path: tool.schema.string().describe("Path to md file."),
             anchor: tool.schema.string().describe("MD heading anchor of section to remove."),

@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFile } from "fs/promises"
-import { configRead, formatPath, getParser, parseKeyPath, resolvePath } from "./shared/core"
-import { configModeFromExtension } from "./shared/adapter"
+import { configRead, formatPath, getParser, parseKeyPath, resolvePath } from "./config/core"
+import { configModeFromExtension } from "./config/adapter"
 import { createRetryResponse } from "@/utils/tools"
 import { expandGlob } from "@/utils/glob"
 

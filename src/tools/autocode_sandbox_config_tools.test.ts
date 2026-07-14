@@ -5,7 +5,7 @@ import path from "path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { getSandboxPaths, type SandboxDependencies } from "@/utils/sandbox"
 import { createToolContext } from "./test_context"
-import type { ConfigMode } from "./config/shared/types"
+import type { ConfigMode } from "./config/types"
 import {
     createAutocodeSandboxConfigEditTool,
     createAutocodeSandboxConfigReadTool,

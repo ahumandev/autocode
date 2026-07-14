@@ -135,5 +135,4 @@ These rules apply when you merge two code snippets into one:
 ---
 
 ${responseAiRules}
-
 `

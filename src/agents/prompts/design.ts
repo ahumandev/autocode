@@ -1,6 +1,5 @@
 import { toolTaskRules } from "@/agents/rules/task";
 import { toolQuestionRules } from "@/agents/rules/question";
-import { errorRules } from "@/agents/rules/error";
 import { plannerRules } from "@/agents/rules/planner";
 import { responseHumanRules } from "../rules/response-human";
 import { planningDefinitions } from "../rules/definitions";
@@ -139,11 +138,7 @@ Call \`question\` tool to get user feedback about already presented PROPOSALS (f
     - "Execute Autonomously": call \`autocode_job_execute\` tool with agent \`auto\`.
     - "Execute Interactively": call \`autocode_job_execute\` tool with agent \`assist\`.
     - "Revise Plan": repeat Design Workflow, but include user answer in INSTRUCTIONS.
- 
----
-
-${toolTaskRules}
-
+   
 ---
 
 ${responseHumanRules}
@@ -154,7 +149,7 @@ ${toolQuestionRules}
 
 ---
 
-${errorRules}
+${toolTaskRules}
 
 ---
 

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-import { createAutocodeMdRemoveTool } from "./remove"
-import { createToolContext } from "../test_context"
+import { createAutocodeMdRemoveTool } from "./autocode_md_remove"
+import { createToolContext } from "./test_context"
 
 describe("autocode_md_remove", () => {
     let dir: string

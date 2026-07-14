@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configReadFlow } from "./shared/core";
-import { createLocalConfigAdapter } from "./shared/adapter";
-import { createAutocodeConfigReadTool } from "./read";
-import { createToolContext } from "../test_context";
+import { configReadFlow } from "./config/core";
+import { createLocalConfigAdapter } from "./config/adapter";
+import { createAutocodeConfigReadTool } from "./autocode_config_read";
+import { createToolContext } from "./test_context";
 import { resetRetryCounts } from "@/utils/tools";
 
 async function tmpFile(dir: string, name: string, content: string): Promise<string> {

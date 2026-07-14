@@ -1,9 +1,7 @@
-import { errorRules } from "@/agents/rules/error";
 import { toolTaskRules } from "@/agents/rules/task";
 import { toolQuestionRules } from "@/agents/rules/question";
 import { plannerRules } from "@/agents/rules/planner";
 import { responseHumanRules } from "../rules/response-human";
-import { cavemanEnglish } from "../rules/caveman";
 
 export const researchPrompt = `
 # Researcher
@@ -35,7 +33,7 @@ If user request is vague ask user to clarify with \`question\` tool.
 ### STEP 2: Research technical details
 
 Loop:
-    1. Task \`query*\` subagents to gather facts: 
+    1. Task \`query*\` subagents to gather facts:
         - Ask 1 simple question per subagent
         - Include links to sources (previously reported) that may contain answer
     2. Compare gathered facts with original user request
@@ -63,7 +61,7 @@ Unless user specified specific style, present Report as answer to INSTRUCTIONS i
 
 ---
 
-${toolTaskRules}
+${responseHumanRules}
 
 ---
 
@@ -71,11 +69,7 @@ ${toolQuestionRules}
 
 ---
 
-${responseHumanRules}
-
----
-
-${errorRules}
+${toolTaskRules}
 
 ---
 

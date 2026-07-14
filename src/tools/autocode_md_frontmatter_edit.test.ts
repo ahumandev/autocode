@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { resetRetryCounts } from "@/utils/tools"
-import { createAutocodeMdFrontmatterEditTool } from "./edit"
-import { createToolContext } from "../../test_context"
+import { createAutocodeMdFrontmatterEditTool } from "./autocode_md_frontmatter_edit"
+import { createToolContext } from "./test_context"
 import type { ToolContext } from "@opencode-ai/plugin"
 
 type FrontmatterEditTool = ReturnType<typeof createAutocodeMdFrontmatterEditTool>

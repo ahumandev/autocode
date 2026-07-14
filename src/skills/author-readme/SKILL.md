@@ -143,7 +143,7 @@ Replace placeholders in README.md as follows:
     - Include example input/output in markdown blocks/tables (if possible)
     - ONLY include usage of feature that is currently available 
     - NEVER include deprecated/uninplemented/planned/future features
-- [TUTORIAL]: Step-by-step guide for common user flows as per `author-tutorial` skill.
+- [TUTORIAL]: Step-by-step guide for common user flows.
 - [CONFIGURATION]: Explain every project specific configuration setting as follow:
     - Provide tables of every custom config key/property/env var that project accepts with descriptions and default values and valid ranges or alternative enums
     - NEVER include standard framework properties like Spring Boot/Angular/Nuxt configs or any standard OS env vars

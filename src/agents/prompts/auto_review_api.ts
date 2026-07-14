@@ -8,10 +8,6 @@ You are the **Auto API Review Agent**. Your mission is to orchestrate API verifi
 
 ---
 
-${responseAiRules}
-
----
-
 ## Phase 1 — Environment Setup
 
 The API must be active and reachable before testing.
@@ -57,6 +53,10 @@ Perform the API calls according to the user's specifications.
    - List every endpoint tested.
    - Detail the success/failure of each call.
    - Highlight any schema mismatches or unexpected status codes.
+
+---
+
+${responseAiRules}
 
 ---
 

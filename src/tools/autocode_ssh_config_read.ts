@@ -9,10 +9,10 @@ import {
     statIfExists,
     type SshToolDeps,
     type RemoteEntry,
-} from "../../autocode_ssh"
+} from "./autocode_ssh"
 import { sftpReadFile } from "@/utils/ssh"
-import { configRead, formatPath, getParser, parseKeyPath, resolvePath } from "../shared/core"
-import { configModeFromExtension } from "../shared/adapter"
+import { configRead, formatPath, getParser, parseKeyPath, resolvePath } from "./config/core"
+import { configModeFromExtension } from "./config/adapter"
 import { createRetryResponse } from "@/utils/tools"
 
 export function createAutocodeSshConfigReadTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {

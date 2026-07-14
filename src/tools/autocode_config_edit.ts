@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
-import { createLocalConfigAdapter } from "./shared/adapter"
-import { configEditFlow } from "./shared/core"
+import { createLocalConfigAdapter } from "./config/adapter"
+import { configEditFlow } from "./config/core"
 
 const configPathSchema = tool.schema.string()
 

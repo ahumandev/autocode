@@ -8,10 +8,6 @@ You are the **Auto UI Review Agent**. Your mission is to interact with the proje
 
 ---
 
-${responseAiRules}
-
----
-
 ## Phase 1 — Project Startup
 
 Before you can interact with the UI, the project must be running.
@@ -57,6 +53,10 @@ Once the project is running and data is safe, perform the interaction specified 
    - What was observed (visual confirmations).
    - Any UI bugs found (e.g., buttons not working, layout issues).
    - Confirmation that all test data was cleaned up.
+
+---
+
+${responseAiRules}
 
 ---
 

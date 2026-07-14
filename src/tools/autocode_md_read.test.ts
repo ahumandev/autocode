@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { resetRetryCounts } from "@/utils/tools"
-import { createAutocodeMdReadTool } from "./read"
-import { createToolContext } from "../test_context"
+import { createAutocodeMdReadTool } from "./autocode_md_read"
+import { createToolContext } from "./test_context"
 
 describe("autocode_md_read", () => {
     let dir: string
@@ -170,17 +170,77 @@ describe("autocode_md_read", () => {
         expect(e.content).toBe("a1 text")
     })
 
-    test("max_content_chars truncates content cumulatively and stops further sections", async () => {
+    test("max_content_chars distributes budget evenly across all matching sections (2-pass water-filling)", async () => {
         write("cap.md", [
             "# A", "", "12345", "", "## B", "", "6789012345", "", "## C", "", "abcdef",
         ])
         const out = await read("cap.md", { max_content_chars: 12 })
         const entry = out.file_paths["cap.md"]
-        expect(entry.length).toBe(2)
-        expect(entry[0].anchor).toBe("a")
-        expect(entry[0].content).toBe("12345")
-        expect(entry[1].anchor).toBe("b")
-        expect(entry[1].content).toBe("6789012")
+        expect(entry.length).toBe(3)
+        const byAnchor: Record<string, string> = {}
+        for (const e of entry) byAnchor[e.anchor] = e.content
+        expect(byAnchor["a"]).toBe("1234")
+        expect(byAnchor["b"]).toBe("6789")
+        expect(byAnchor["c"]).toBe("abcd")
+    })
+
+    test("water-filling: small sections keep full content, leftover budget redistributed to larger section", async () => {
+        write("wf.md", [
+            "# A", "", "xy", "", "## B", "", "zw", "", "## C", "", "cccccccccccccccc",
+        ])
+        const out = await read("wf.md", { max_content_chars: 12 })
+        const entry = out.file_paths["wf.md"]
+        expect(entry.length).toBe(3)
+        const byAnchor: Record<string, string> = {}
+        for (const e of entry) byAnchor[e.anchor] = e.content
+        expect(byAnchor["a"]).toBe("xy")
+        expect(byAnchor["b"]).toBe("zw")
+        expect(byAnchor["c"]).toBe("cccccccc")
+        const total = entry.reduce((n: number, e: { content: string }) => n + e.content.length, 0)
+        expect(total).toBe(12)
+    })
+
+    test("water-filling: all sections smaller than fair share keep full content (budget underused)", async () => {
+        write("small.md", [
+            "# A", "", "xy", "", "## B", "", "zw", "", "## C", "", "uv",
+        ])
+        const out = await read("small.md", { max_content_chars: 100 })
+        const entry = out.file_paths["small.md"]
+        expect(entry.length).toBe(3)
+        const byAnchor: Record<string, string> = {}
+        for (const e of entry) byAnchor[e.anchor] = e.content
+        expect(byAnchor["a"]).toBe("xy")
+        expect(byAnchor["b"]).toBe("zw")
+        expect(byAnchor["c"]).toBe("uv")
+    })
+
+    test("water-filling: even split when every section exceeds fair share", async () => {
+        write("even.md", [
+            "# A", "", "aaaaa", "", "## B", "", "bbbbbbbbb", "", "## C", "", "cccccc",
+        ])
+        const out = await read("even.md", { max_content_chars: 12 })
+        const entry = out.file_paths["even.md"]
+        expect(entry.length).toBe(3)
+        for (const e of entry) {
+            expect(e.content.length).toBe(4)
+        }
+        const byAnchor: Record<string, string> = {}
+        for (const e of entry) byAnchor[e.anchor] = e.content
+        expect(byAnchor["a"]).toBe("aaaa")
+        expect(byAnchor["b"]).toBe("bbbb")
+        expect(byAnchor["c"]).toBe("cccc")
+    })
+
+    test("water-filling: budget below section count yields empty content for every section but all listed", async () => {
+        write("edge.md", [
+            "# A", "", "12345", "", "## B", "", "67890", "", "## C", "", "abcdef",
+        ])
+        const out = await read("edge.md", { max_content_chars: 2 })
+        const entry = out.file_paths["edge.md"]
+        expect(entry.length).toBe(3)
+        for (const e of entry) {
+            expect(e.content).toBe("")
+        }
     })
 
     test("multi-file: file with line_start > its lineCount is skipped, others included", async () => {

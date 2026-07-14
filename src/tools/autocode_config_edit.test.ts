@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configEditFlow } from "./shared/core";
-import { createLocalConfigAdapter } from "./shared/adapter";
+import { configEditFlow } from "./config/core";
+import { createLocalConfigAdapter } from "./config/adapter";
 
 async function tmpFile(dir: string, name: string, content: string): Promise<string> {
   const p = join(dir, name);

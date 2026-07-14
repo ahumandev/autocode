@@ -1,12 +1,12 @@
 import { EventEmitter } from "node:events"
 import { describe, expect, test } from "bun:test"
 import type { ConnectConfig, FileEntryWithStats, Stats } from "ssh2"
-import type { SftpLike, SshChannelLike, SshClientLike, SshConnectionPool, SshResolvedConfig } from "../../../utils/ssh"
-import { createToolContext } from "../../test_context"
-import { configReadFlow } from "../shared/core"
-import type { ConfigMode } from "../shared/types"
-import { createRemoteConfigAdapter, createRemoteConfigExecute } from "./adapter"
-import { createAutocodeSshConfigReadTool } from "./read"
+import type { SftpLike, SshChannelLike, SshClientLike, SshConnectionPool, SshResolvedConfig } from "../utils/ssh"
+import { createToolContext } from "./test_context"
+import { configReadFlow } from "./config/core"
+import type { ConfigMode } from "./config/types"
+import { createRemoteConfigAdapter, createRemoteConfigExecute } from "./config/ssh/adapter"
+import { createAutocodeSshConfigReadTool } from "./autocode_ssh_config_read"
 
 const envWithPassword = {
     AUTOCODE_SSH_DEV_HOST: "ssh.example:2200",

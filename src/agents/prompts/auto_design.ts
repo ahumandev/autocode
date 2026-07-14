@@ -1,5 +1,4 @@
 import { toolTaskRules } from "@/agents/rules/task";
-import { errorRules } from "@/agents/rules/error";
 import { plannerRules } from "@/agents/rules/planner";
 import { planningDefinitions } from "../rules/definitions";
 import { responseAiRules } from "../rules/response-ai";
@@ -92,15 +91,11 @@ Report PROPOSAL as follows:
 
 ---
 
-${toolTaskRules}
-
----
-
 ${responseAiRules}
 
 ---
 
-${errorRules}
+${toolTaskRules}
 
 ---
 

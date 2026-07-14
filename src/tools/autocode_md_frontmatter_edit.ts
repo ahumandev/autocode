@@ -1,8 +1,8 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFile, writeFile } from "fs/promises"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
-import { validateContentPath } from "./shared/validate"
-import { yamlParser } from "@/tools/config/shared/yaml"
+import { validateContentPath } from "./md/frontmatter/validate"
+import { yamlParser } from "@/tools/config/yaml"
 
 function splitFrontmatter(raw: string): { block: string; content: string; body: string; hasFrontmatter: boolean } {
     const firstNewline = raw.indexOf("\n")

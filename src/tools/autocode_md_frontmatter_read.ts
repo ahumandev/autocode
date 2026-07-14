@@ -2,8 +2,8 @@ import { tool } from "@opencode-ai/plugin"
 import { readFile } from "fs/promises"
 import { createRetryResponse } from "@/utils/tools"
 import { expandGlob } from "@/utils/glob"
-import { configRead, formatPath } from "@/tools/config/shared/core"
-import { yamlParser } from "@/tools/config/shared/yaml"
+import { configRead, formatPath } from "@/tools/config/core"
+import { yamlParser } from "@/tools/config/yaml"
 
 function splitFrontmatter(raw: string): { block: string; content: string; body: string; hasFrontmatter: boolean } {
     const firstNewline = raw.indexOf("\n")

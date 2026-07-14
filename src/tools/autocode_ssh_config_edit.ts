@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
-import type { SshToolDeps } from "../../autocode_ssh"
-import { createRemoteConfigExecute } from "./adapter"
-import { configEditFlow } from "../shared/core"
+import type { SshToolDeps } from "./autocode_ssh"
+import { createRemoteConfigExecute } from "./config/ssh/adapter"
+import { configEditFlow } from "./config/core"
 
 const configPathSchema = tool.schema.string()
 
