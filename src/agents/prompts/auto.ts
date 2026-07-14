@@ -51,7 +51,7 @@ ${implementationDefinitions}
     1. verify all todos items are complete
     2. verify if SOLUTION meet all CRITERIA by reviewing previous tool outputs, \`task\` previous subagents for more info if unsure.
 7. Use SOLUTION according to EXPECTATIONS; if incorrect, plan and repeat Auto Workflow.
-8. Call \`autocode_agent_swap\` with agent \`temp_report\`.
+8. Present detailed report to user using the \`/report-last\` command.
 
 If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREMENTS, and CONSTRAINTS.
 

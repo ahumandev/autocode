@@ -55,7 +55,7 @@ Unless user specified specific style, present Report as answer to INSTRUCTIONS i
     - \`label\` = "Research " + related topic #1; \`description\`: Agent instruction to research topic #1
     - \`label\` = "Research " + related topic #2; \`description\`: Agent instruction to research topic #2
 2. If user chooses "Compile Detailed Report", then:
-    - call \`autocode_agent_swap\` with \`agent\` = \`temp_report\`
+    - call the \`/report-last\` command
     - create detailed report from your Research Report and all relevant \`task_id\` values
 3. If user chooses "Research " + related topic, then repeat Research Workflow with answer as new INSTRUCTIONS.
 

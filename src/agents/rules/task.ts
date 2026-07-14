@@ -25,6 +25,7 @@ export const toolTaskRules = `
     - METRICS: *how* GOAL action is measured or how to summarize response info - what is important (1 bullet point per metric)
     - CONSTRAINTS: *facts* already discovered regarding task (1 bullet point per fact) - avoid redundant re-discovery facts
     - SCOPE: *limits* of subagent actions (1 bullet point per limit) - focus on GOAL, avoid unnecessary work, silence subagent except for useful summarized facts
+- Instead full content / output, ask for answers: snippets, outlines, pseudo code, steps, summaries -> let subagent do work.
 
   ❌ Wrong verbose task call:
   \`\`\`json

@@ -202,10 +202,10 @@ describe("autocode_agent_swap tool", () => {
         const client = createMockClient()
         const tool = createAutocodeAgentSwapTool(client)
 
-        const tempReportResult = parseToolResult(await tool.execute({ agent: " temp_report ", prompt: "Write a hidden report." }, createToolContext()))
+        const hiddenReporterResult = parseToolResult(await tool.execute({ agent: " hidden_reporter ", prompt: "Run a custom task." }, createToolContext()))
         const madeUpResult = parseToolResult(await tool.execute({ agent: " made-up-agent ", prompt: "Continue execution." }, createToolContext()))
 
-        expect(tempReportResult.agent).toBe("temp_report")
+        expect(hiddenReporterResult.agent).toBe("hidden_reporter")
         expect(madeUpResult.agent).toBe("made-up-agent")
         expect(client.session.update).not.toHaveBeenCalled()
         expect(client.session.promptAsync).toHaveBeenCalledTimes(2)
@@ -213,8 +213,8 @@ describe("autocode_agent_swap tool", () => {
             path: { id: "current-session" },
             query: { directory: "/workspace" },
             body: {
-                agent: "temp_report",
-                parts: [{ type: "text", text: "Write a hidden report." }],
+                agent: "hidden_reporter",
+                parts: [{ type: "text", text: "Run a custom task." }],
             },
         })
         expect(client.session.promptAsync).toHaveBeenNthCalledWith(2, {
@@ -228,21 +228,21 @@ describe("autocode_agent_swap tool", () => {
         expect(client.session.create).not.toHaveBeenCalled()
     })
 
-    test("passes exact temp_report swap agent to promptAsync", async () => {
+    test("passes exact arbitrary agent swap to promptAsync", async () => {
         const client = createMockClient()
         const tool = createAutocodeAgentSwapTool(client)
 
-        const parsed = parseToolResult(await tool.execute({ agent: "temp_report", prompt: "Prepare a temporary report." }, createToolContext({ sessionID: "old-session" })))
+        const parsed = parseToolResult(await tool.execute({ agent: "hidden_reporter", prompt: "Prepare a temporary report." }, createToolContext({ sessionID: "old-session" })))
 
         expect(client.session.promptAsync).toHaveBeenCalledWith({
             path: { id: "old-session" },
             query: { directory: "/workspace" },
             body: {
-                agent: "temp_report",
+                agent: "hidden_reporter",
                 parts: [{ type: "text", text: "Prepare a temporary report." }],
             },
         })
-        expect(parsed.agent).toBe("temp_report")
+        expect(parsed.agent).toBe("hidden_reporter")
         expect(client.session.create).not.toHaveBeenCalled()
     })
 

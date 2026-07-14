@@ -44,7 +44,6 @@ import { queryOsPrompt } from "./prompts/query_os";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
 import { researchPrompt } from "./prompts/research";
-import { tempReportPrompt } from "@/agents/prompts/temp_report";
 import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
@@ -418,7 +417,7 @@ const baseAgents: AgentMap = {
 
     assist_browser: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Interactive browser automation: Browser access that can fill forms, submit, save, upload, and pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so the tab and login session are not re-discovered.",
+        description: "Handle interactive browser automation tasks: Have browser access that can fill forms, submit, save, upload, and pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so the tab and login session are not re-discovered.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -439,7 +438,7 @@ const baseAgents: AgentMap = {
 
     assist_git_conflict: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Resolve git merge conflicts",
+        description: "Resolve git merge conflicts.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -480,7 +479,7 @@ const baseAgents: AgentMap = {
 
     assist_troubleshoot: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Troubleshoot assignment obstacles",
+        description: "Troubleshoot assignment obstacles.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -521,7 +520,7 @@ const baseAgents: AgentMap = {
 
     auto_design: {
         color: colorAutonomousOrchestrator,
-        description: "Redesign failed PROPOSAL.",
+        description: "Research and redesign failed PROPOSALS.",
         hidden: false,
         mode: "subagent",
         permission: {
@@ -576,7 +575,7 @@ const baseAgents: AgentMap = {
 
     auto_general: {
         color: colorAutonomousOrchestrator,
-        description: "Fallback to `auto_general` when no specialized subagent clearly fits task",
+        description: "Fallback to `auto_general` when no specialized subagent clearly fits task.",
         hidden: true,
         mode: "all",
         permission: {
@@ -605,7 +604,7 @@ const baseAgents: AgentMap = {
 
     auto_refactor: {
         color: colorAutonomousOrchestrator,
-        description: "Upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability",
+        description: "Upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1492,17 +1491,6 @@ const baseAgents: AgentMap = {
         tier: "fast",
     },
 
-    temp_report: {
-        color: colorReadOnlyWorker,
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-        },
-        prompt: tempReportPrompt,
-        temperature: 0.3,
-        tier: "fast",
-    },
 
     temp_session: {
         color: colorWritableWorker,

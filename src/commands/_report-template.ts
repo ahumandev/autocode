@@ -1,6 +1,6 @@
-import { markdown } from "@/agents/rules/markdown";
+import { markdown } from "@/agents/rules/markdown"
 
-export const tempReportPrompt = `
+export const reportCommandTemplate = `
 
 Unless user specified report format, respond to user with this report template:
 
@@ -29,7 +29,7 @@ Unless user specified report format, respond to user with this report template:
 In the above <report> template replace the \`[PLACEHODERS]\` with following sections:
 
 - Replace [GOAL] with section that has:
-    - An H2 title that summarize overall goal: 
+    - An H2 title that summarize overall goal:
     - Content summarize problem being address in 1 sentence (max 20 words)
     - Bullet point list of requirements to meet goal without repeating yourself (max 40 words per requirement)
 - Replace [ACTIONS] with section that has:
@@ -41,7 +41,7 @@ In the above <report> template replace the \`[PLACEHODERS]\` with following sect
         - Reason why action item were taken (20 words max)
 - Replace [CONSTRAINTS] with section that has:
     - An H2 title that summarize overall constraints and include subsections which each:
-        - Subsection title summarize 1 key constraint discovery 
+        - Subsection title summarize 1 key constraint discovery
         - Subsection content explain: what constraints were found (how it limits solution approaches)
         - Include formatted sample code, diagrams, tables and quotes if applicable
         - Include path/link to source of every constraint
@@ -91,7 +91,7 @@ In the above <report> template replace the \`[PLACEHODERS]\` with following sect
         - Include formatted sample input/output in step subsections
         - Include warnings about common pitfalls
     - Only include [REVIEW] section if there were verifiable changes made to project from user perspective
-    - NEVER include [REVIEW] section that lead to "read this file content" or "compare these files" as that will be verified by pull requests 
+    - NEVER include [REVIEW] section that lead to "read this file content" or "compare these files" as that will be verified by pull requests
 
 Rules:
 - Every heading title must be < 10 words

@@ -67,10 +67,10 @@ describe("agent swap utilities", () => {
             agent: "assist",
             title: "Continue the task.",
         })
-        expect(validateAutocodeAgentSwapInput("  Prepare a report.  ", " temp_report ")).toEqual({
-            prompt: "Prepare a report.",
-            agent: "temp_report",
-            title: "Prepare a report.",
+        expect(validateAutocodeAgentSwapInput("  Run a custom task.  ", " hidden_worker ")).toEqual({
+            prompt: "Run a custom task.",
+            agent: "hidden_worker",
+            title: "Run a custom task.",
         })
         expect(validateAutocodeAgentSwapInput("Continue the task.", "   ")).toEqual({
             error: "Invalid agent:    ",
@@ -88,8 +88,8 @@ describe("agent swap utilities", () => {
             agent: "auto",
             title: "Continue the task.",
         })
-        expect(validateAutocodeSessionCreateInput("Continue the task.", "temp_report")).toEqual({
-            error: "Invalid agent: temp_report",
+        expect(validateAutocodeSessionCreateInput("Continue the task.", "hidden_worker")).toEqual({
+            error: "Invalid agent: hidden_worker",
             instruction: "Provide agent as one of: assist, auto, research, design.",
         })
         expect(validateAutocodeSessionCreateInput("Continue the task.", "invalid-agent")).toEqual({
@@ -215,7 +215,7 @@ describe("agent swap utilities", () => {
             createSessionMessage("assist", 10),
             createSessionMessage("pair", 90),
             createSessionMessage("design", 70),
-            createSessionMessage("temp_report", 100),
+            createSessionMessage("hidden_worker", 100),
             createSessionMessage("research", 80),
         ])
 
@@ -246,7 +246,7 @@ describe("agent swap utilities", () => {
         const client = createMessagesClient([
             createSessionMessage("design", 100),
             createSessionMessage("pair", 90),
-            createSessionMessage("temp_report", 80),
+            createSessionMessage("hidden_worker", 80),
             createSessionMessage("design", 70),
         ])
 

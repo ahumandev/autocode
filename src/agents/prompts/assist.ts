@@ -150,7 +150,7 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
     - if last ASSIGNMENT reached GOAL, then: include option with "Provide Detailed Report" label
     - otherwise: include option with label describing how last action could be improved
     - if answer = "Provide Detailed Report", then:
-        - call \`autocode_agent_swap\` with \`agent\` = \`temp_report\`
+        - call the \`/report-last\` command
         - then create report **ONLY** on your last ASSIGNMENT: ONLY include last ASSIGNMENT request, recent actions and tool outputs in prompt.
     - all other answers, repeat "Assistant Workflow" with answer as new ASSIGNMENT
 

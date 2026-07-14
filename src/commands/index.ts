@@ -277,14 +277,12 @@ Report to user:
     },
 
     "report-last": {
-        agent: "temp_report",
         description: "Provide detailed report of last task.",
         subtask: false,
         template: reportLastCommandTemplate,
     },
 
     "report-session": {
-        agent: "temp_report",
         description: "Provide detailed report of entire session.",
         subtask: false,
         template: reportSessionCommandTemplate,

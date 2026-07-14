@@ -1,25 +1,25 @@
 ---
 name: author-skill
-description: Use `author-skill` to get Skill File Authoring when you need to review/write skill files for agents.
+description: How to Author Skill Files when reviewing/writing skill files for agents.
 ---
 
-# Skill File Authoring
+# Authoring Skill Files
 
 Use this Skill Template to review/write skill files:
 
 ---
 
-## Skill Template 
+## Skill Template
 
 ```markdown
 ---
 name: [NAME]
-description: Use `[NAME]` to get [TOPIC] if [CONDITION].
+description: How to [ACTION] when [TRIGGER].
 ---
 
-# [TOPIC]
+# [ACTION]
 
-[TRIGGERS]
+[TRIGGER]
 
 ---
 
@@ -36,7 +36,7 @@ Write Skill Template as follow:
   - Prefix with `author-` for skill related to human readable content, articles
   - Prefix with `code-` for skill related to project source code, configurations, scripts
   - Prefix with `design-` for skill related to project designs (architecture)
-* Replace [TOPIC] with short topic in Caveman English as follows:
+* Replace [ACTION] with short topic in Caveman English as follows:
   - Unique header summarizing topic skill addresses - What knowledge and/or ability agent should expect (e.g. "Deploying Spring Boot Applications")
   - Must be < 7 words
   - Use exact phrase and case consistently
