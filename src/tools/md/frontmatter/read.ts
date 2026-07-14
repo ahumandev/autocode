@@ -35,34 +35,34 @@ function splitFrontmatter(raw: string): { block: string; content: string; body: 
 
 export function createAutocodeMdFrontmatterReadTool(): ReturnType<typeof tool> {
     return tool({
-        description: "Read frontmatter from local Markdown (.md) files. Optionally filter frontmatter keys and values for outline.",
+        description: "Grep find frontmatter values in local Markdown (.md) files or read frontmatter by glob.",
         args: {
-            glob: tool.schema.string().describe("Glob pattern for Markdown files, e.g. 'docs/**/*.md'."),
-            key_pattern: tool.schema.string().optional().describe("Regex; include nodes whose key path has any segment matching it. Default = all."),
-            value_pattern: tool.schema.string().optional().describe("Regex; include leaf nodes whose value matches it. Default = all."),
-            max_keys: tool.schema.number().int().min(0).optional().default(40).describe("Cap on total output nodes across all matching files."),
-            max_value_chars: tool.schema.number().int().min(0).optional().default(40).describe("Truncate string values longer than this."),
+            file_path_glob: tool.schema.string().describe("Glob pattern for Markdown files, e.g. 'docs/**/*.md'."),
+            key_regex: tool.schema.string().optional().describe("Regex; find nodes with matching key paths. Default = all."),
+            value_regex: tool.schema.string().optional().describe("Regex; find leaf nodes with matching values. Default = all."),
+            max_keys: tool.schema.number().int().min(0).optional().default(40).describe("Cap on total output nodes across all matching files. Default = 40."),
+            max_value_chars: tool.schema.number().int().min(0).optional().default(40).describe("Truncate string values exceeding max_value_chars by appending '...'. Default = 40."),
         },
         execute: async (args, context) => {
             const failedAction = "Read frontmatter"
 
-            if (typeof args.glob !== "string" || args.glob.length === 0) {
+            if (typeof args.file_path_glob !== "string" || args.file_path_glob.length === 0) {
                 return createRetryResponse(failedAction, new Error("glob required"), "Provide a glob pattern.")
             }
 
             let keyPattern: RegExp | undefined
             let valuePattern: RegExp | undefined
             try {
-                keyPattern = args.key_pattern ? new RegExp(args.key_pattern) : undefined
-                valuePattern = args.value_pattern ? new RegExp(args.value_pattern) : undefined
+                keyPattern = args.key_regex ? new RegExp(args.key_regex) : undefined
+                valuePattern = args.value_regex ? new RegExp(args.value_regex) : undefined
             } catch (error) {
                 return createRetryResponse(failedAction, error, "Fix the regex pattern.")
             }
 
             const cwd = context.directory ?? process.cwd()
-            const matches = await expandGlob(String(args.glob), cwd)
+            const matches = await expandGlob(String(args.file_path_glob), cwd)
             if (matches.length === 0) {
-                return createRetryResponse(failedAction, new Error("no files matched glob: " + args.glob), "Check the glob pattern and path.")
+                return createRetryResponse(failedAction, new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")
             }
 
             const file_paths: Record<string, { key_paths: Record<string, string | null>; nodes_shown: number; nodes_total: number }> = {}
@@ -122,7 +122,7 @@ export function createAutocodeMdFrontmatterReadTool(): ReturnType<typeof tool> {
             }
 
             if (Object.keys(file_paths).length === 0) {
-                return createRetryResponse(failedAction, new Error("no files with frontmatter for glob: " + args.glob), "Check the glob pattern targets .md files with frontmatter.")
+                return createRetryResponse(failedAction, new Error("no files with frontmatter for glob: " + args.file_path_glob), "Check the glob pattern targets .md files with frontmatter.")
             }
 
             return JSON.stringify({

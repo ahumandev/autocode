@@ -264,7 +264,7 @@ describe("createAutocodeSandboxConfigReadTool", () => {
         await writeFile(path.join(paths.sandboxPath, "app.json"), JSON.stringify({ server: { port: 3000, host: "x" } }))
         const tool = createAutocodeSandboxConfigReadTool(client, deps)
 
-        const result = parseResult(await tool.execute({ sandbox_name: "dev", glob: "app.json" }, context))
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", file_path_glob: "app.json" }, context))
 
         expect(Object.keys(result.file_paths)).toEqual(["app.json"])
         const fileEntry = result.file_paths["app.json"] as { key_paths: Record<string, string>, nodes_shown: number, nodes_total: number }
@@ -279,7 +279,7 @@ describe("createAutocodeSandboxConfigReadTool", () => {
         await writeFile(path.join(paths.sandboxPath, "app.json"), JSON.stringify({ server: { port: 3000, host: "x" }, other: 1 }))
         const tool = createAutocodeSandboxConfigReadTool(client, deps)
 
-        const result = parseResult(await tool.execute({ sandbox_name: "dev", glob: "app.json", key_path: "server" }, context))
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", file_path_glob: "app.json", key_path: "server" }, context))
         const fileEntry = result.file_paths["app.json"] as { key_paths: Record<string, string> }
 
         expect(fileEntry.key_paths["port"]).toBe("3000")
@@ -294,16 +294,16 @@ describe("createAutocodeSandboxConfigReadTool", () => {
         await writeFile(path.join(paths.sandboxPath, "cfg", "sub", "c.json"), JSON.stringify({ c: 3 }))
         const tool = createAutocodeSandboxConfigReadTool(client, deps)
 
-        const result = parseResult(await tool.execute({ sandbox_name: "dev", glob: "cfg/**/*.{json,yaml}" }, context))
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", file_path_glob: "cfg/**/*.{json,yaml}" }, context))
 
         expect(Object.keys(result.file_paths).sort()).toEqual(["cfg/a.json", "cfg/b.yaml", "cfg/sub/c.json"])
     }))
 
-    test("value_pattern filters leaf nodes by regex", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {
+    test("value_regex filters leaf nodes by regex", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {
         await writeFile(path.join(paths.sandboxPath, "vp.json"), JSON.stringify({ a: "hello", b: "world", c: 42 }))
         const tool = createAutocodeSandboxConfigReadTool(client, deps)
 
-        const result = parseResult(await tool.execute({ sandbox_name: "dev", glob: "vp.json", value_pattern: "ello" }, context))
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", file_path_glob: "vp.json", value_regex: "ello" }, context))
         const fileEntry = result.file_paths["vp.json"] as { key_paths: Record<string, string> }
 
         expect(fileEntry.key_paths["a"]).toBe("hello")
@@ -313,7 +313,7 @@ describe("createAutocodeSandboxConfigReadTool", () => {
     test("non-matching glob returns retry 'no files matched glob'", async () => withSandboxFixture(async ({ deps, client, context }) => {
         const tool = createAutocodeSandboxConfigReadTool(client, deps)
 
-        const result = parseResult(await tool.execute({ sandbox_name: "dev", glob: "nope/*.json" }, context))
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", file_path_glob: "nope/*.json" }, context))
 
         expect(String(result.error)).toContain("no files matched glob")
         expect(result.file_paths).toBeUndefined()
@@ -323,7 +323,7 @@ describe("createAutocodeSandboxConfigReadTool", () => {
         await writeFile(path.join(paths.sandboxPath, "readme.md"), "# heading")
         const tool = createAutocodeSandboxConfigReadTool(client, deps)
 
-        const result = parseResult(await tool.execute({ sandbox_name: "dev", glob: "*.md" }, context))
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", file_path_glob: "*.md" }, context))
 
         expect(String(result.error)).toContain("no readable config files")
         expect(result.file_paths).toBeUndefined()

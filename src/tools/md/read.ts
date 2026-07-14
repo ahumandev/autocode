@@ -4,34 +4,38 @@ import { expandGlob } from "@/utils/glob"
 import { ownText, parseMarkdown } from "./shared/markdown"
 import { createRetryResponse } from "@/utils/tools"
 
+const DEFAULT_MAX_ANCHORS = 40
+const DEFAULT_MAX_CONTENT_CHARS = 0
+
 export function createAutocodeMdReadTool(): ReturnType<typeof tool> {
     return tool({
-        description: `Read markdown files by glob search pattern. Single match retrive Markdown section content, otherwise read md file outline.`,
+        description: `Grep find content in md files or read markdown files by glob search pattern.`,
         args: {
-            glob: tool.schema.string().describe("Glob pattern for Markdown files, e.g. 'docs/**/*.md'."),
-            line_start: tool.schema.number().int().min(1).default(1).optional().describe("Optional start line of md file for filtering sections. Default 1."),
-            line_end: tool.schema.number().int().min(1).default(Number.MAX_SAFE_INTEGER).optional().describe("Optional end line of md file for filtering sections. Default = last line."),
-            anchor_pattern: tool.schema.string().optional().describe("Regex; include sections whose anchor matches it (GitHub MD standard). Default = all."),
-            content_pattern: tool.schema.string().optional().describe("Regex; include sections whose own text content matches it. Default = all."),
-            max_anchors: tool.schema.number().int().min(2).optional().default(40).describe("Cap on number of anchors returned per file."),
+            file_path_glob: tool.schema.string().describe("Glob pattern for Markdown files, e.g. 'docs/**/*.md'."),
+            line_start: tool.schema.number().int().min(1).default(1).optional().describe("Optional filter from start line of md. Default 1."),
+            line_end: tool.schema.number().int().min(1).default(Number.MAX_SAFE_INTEGER).optional().describe("Optional filter from end line of md file. Default = last line."),
+            anchor_regex: tool.schema.string().optional().describe("Regex; find sections whose anchor matches it (GitHub MD standard). Default = all."),
+            content_regex: tool.schema.string().optional().describe("Regex; find sections whose own text content matches it. Default = all."),
+            max_anchors: tool.schema.number().int().min(2).optional().default(DEFAULT_MAX_ANCHORS).describe("Cap on number of anchors returned per file."),
+            max_content_chars: tool.schema.number().int().min(0).optional().default(DEFAULT_MAX_CONTENT_CHARS).describe("Cap on number of content chars returned in total for all matches. Set to 0 to return only md outlines."),
         },
         execute: async (args, context) => {
-            if (typeof args.glob !== "string" || args.glob.length === 0) {
+            if (typeof args.file_path_glob !== "string" || args.file_path_glob.length === 0) {
                 return createRetryResponse("Read md section", new Error("glob required"), "Provide a glob pattern.")
             }
 
             let anchorPattern: RegExp | null = null
-            if (args.anchor_pattern !== undefined) {
+            if (args.anchor_regex !== undefined) {
                 try {
-                    anchorPattern = new RegExp(args.anchor_pattern)
+                    anchorPattern = new RegExp(args.anchor_regex)
                 } catch (error) {
                     return createRetryResponse("Read md section", error, "Fix the regex pattern.")
                 }
             }
             let contentPattern: RegExp | null = null
-            if (args.content_pattern !== undefined) {
+            if (args.content_regex !== undefined) {
                 try {
-                    contentPattern = new RegExp(args.content_pattern)
+                    contentPattern = new RegExp(args.content_regex)
                 } catch (error) {
                     return createRetryResponse("Read md section", error, "Fix the regex pattern.")
                 }
@@ -44,12 +48,12 @@ export function createAutocodeMdReadTool(): ReturnType<typeof tool> {
             }
 
             const cwd = context.directory ?? process.cwd()
-            const matches = await expandGlob(String(args.glob), cwd)
+            const matches = await expandGlob(String(args.file_path_glob), cwd)
             if (matches.length === 0) {
-                return createRetryResponse("Read md section", new Error("no files matched glob: " + args.glob), "Check the glob pattern and path.")
+                return createRetryResponse("Read md section", new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")
             }
 
-            const maxKeys = args.max_anchors ?? 40
+            const maxKeys = args.max_anchors ?? DEFAULT_MAX_ANCHORS
             const selected = matches
 
             type Collected = { key: string; model: ReturnType<typeof parseMarkdown>; filtered: ReturnType<typeof parseMarkdown>["headings"] }
@@ -89,28 +93,55 @@ export function createAutocodeMdReadTool(): ReturnType<typeof tool> {
                 collected.push({ key, model, filtered })
             }
 
-            const total = collected.reduce((sum, c) => sum + c.filtered.length, 0)
-            const includeContent = total === 1
+            const maxContentChars = args.max_content_chars ?? DEFAULT_MAX_CONTENT_CHARS
 
             const file_paths: Record<string, { heading: string; anchor: string; line: number; content?: string }[]> = {}
-            for (const { key, model, filtered } of collected) {
-                const shown = filtered.slice(0, maxKeys)
-                const entry = shown.map((h) => {
-                    const obj: { heading: string; anchor: string; line: number; content?: string } = {
+            if (maxContentChars <= 0) {
+                for (const { key, filtered } of collected) {
+                    const shown = filtered.slice(0, maxKeys)
+                    file_paths[key] = shown.map((h) => ({
                         heading: h.title,
                         anchor: h.referenceId,
                         line: h.start,
+                    }))
+                }
+            } else {
+                let remaining = maxContentChars
+                let stop = false
+                for (const { key, model, filtered } of collected) {
+                    if (stop) break
+                    const shown = filtered.slice(0, maxKeys)
+                    const entry: { heading: string; anchor: string; line: number; content: string }[] = []
+                    for (const h of shown) {
+                        if (remaining <= 0) {
+                            stop = true
+                            break
+                        }
+                        const fullContent = ownText(model, h)
+                        let content: string
+                        if (fullContent.length <= remaining) {
+                            content = fullContent
+                        } else {
+                            content = fullContent.slice(0, remaining)
+                            stop = true
+                        }
+                        remaining -= content.length
+                        entry.push({
+                            heading: h.title,
+                            anchor: h.referenceId,
+                            line: h.start,
+                            content,
+                        })
+                        if (stop) break
                     }
-                    if (includeContent) {
-                        obj.content = ownText(model, h)
+                    if (entry.length > 0) {
+                        file_paths[key] = entry
                     }
-                    return obj
-                })
-                file_paths[key] = entry
+                }
             }
 
             if (Object.keys(file_paths).length === 0) {
-                return createRetryResponse("Read md section", new Error("no readable md files/sections for glob: " + args.glob), "Check the glob pattern targets .md files with matching headers.")
+                return createRetryResponse("Read md section", new Error("no readable md files/sections for glob: " + args.file_path_glob), "Check the glob pattern targets .md files with matching headers.")
             }
 
             return JSON.stringify({ file_paths })

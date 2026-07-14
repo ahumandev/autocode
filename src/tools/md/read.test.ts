@@ -28,7 +28,7 @@ describe("autocode_md_read", () => {
         return p
     }
     const read = (glob: string, args: Record<string, unknown> = {}) =>
-        tool.execute({ glob, ...args } as never, createToolContext({ directory: dir })).then((s) => JSON.parse(s as string))
+        tool.execute({ file_path_glob: glob, ...args } as never, createToolContext({ directory: dir })).then((s) => JSON.parse(s as string))
 
     test("glob *.md returns file_paths with heading/anchor/line entries; counts correct (multiple -> outline only)", async () => {
         write("doc.md", [
@@ -55,11 +55,11 @@ describe("autocode_md_read", () => {
         expect((entry[0] as Record<string, unknown>).nodes_total).toBeUndefined()
     })
 
-    test("anchor_pattern filter returns only matching section (single match -> content returned)", async () => {
+    test("anchor_regex filter returns only matching section (single match -> content returned)", async () => {
         write("a.md", [
             "# A", "", "intro", "", "## A1", "", "a1 text", "", "## A2", "", "a2 text",
         ])
-        const out = await read("a.md", { anchor_pattern: "^a1$" })
+        const out = await read("a.md", { anchor_regex: "^a1$", max_content_chars: 700 })
         const entry = out.file_paths["a.md"]
         expect(entry.length).toBe(1)
         const e = entry[0]
@@ -69,7 +69,7 @@ describe("autocode_md_read", () => {
         expect(e.content).toBe("a1 text")
     })
 
-    test("anchor_pattern omitted returns all sections (multiple -> no content)", async () => {
+    test("anchor_regex omitted returns all sections (multiple -> no content)", async () => {
         write("b.md", ["# A", "", "a", "", "## B", "", "b"])
         const out = await read("b.md")
         const entry = out.file_paths["b.md"]
@@ -100,7 +100,7 @@ describe("autocode_md_read", () => {
 
     test("single match returns full content", async () => {
         write("tr.md", ["# H", "", "a1 text"])
-        const out = await read("tr.md", { anchor_pattern: "^h$" })
+        const out = await read("tr.md", { anchor_regex: "^h$", max_content_chars: 700 })
         const entry = out.file_paths["tr.md"]
         expect(entry.length).toBe(1)
         const e = entry[0]
@@ -162,12 +162,25 @@ describe("autocode_md_read", () => {
 
     test("partial overlap returns full section content (not truncated)", async () => {
         write("doc.md", ["# A", "", "intro", "", "## A1", "", "a1 text", "", "## A2", "", "a2 text"])
-        const out = await read("doc.md", { anchor_pattern: "^a1$", line_start: 6, line_end: 7 })
+        const out = await read("doc.md", { anchor_regex: "^a1$", line_start: 6, line_end: 7, max_content_chars: 700 })
         const entry = out.file_paths["doc.md"]
         expect(entry.length).toBe(1)
         const e = entry[0]
         expect(e.anchor).toBe("a1")
         expect(e.content).toBe("a1 text")
+    })
+
+    test("max_content_chars truncates content cumulatively and stops further sections", async () => {
+        write("cap.md", [
+            "# A", "", "12345", "", "## B", "", "6789012345", "", "## C", "", "abcdef",
+        ])
+        const out = await read("cap.md", { max_content_chars: 12 })
+        const entry = out.file_paths["cap.md"]
+        expect(entry.length).toBe(2)
+        expect(entry[0].anchor).toBe("a")
+        expect(entry[0].content).toBe("12345")
+        expect(entry[1].anchor).toBe("b")
+        expect(entry[1].content).toBe("6789012")
     })
 
     test("multi-file: file with line_start > its lineCount is skipped, others included", async () => {

@@ -416,8 +416,8 @@ async function configReadFlow(adapter: ConfigAdapter, args: any): Promise<string
     let subkeyPattern: RegExp | undefined
     let valuePattern: RegExp | undefined
     try {
-        subkeyPattern = args.subkey_pattern ? new RegExp(args.subkey_pattern) : undefined
-        valuePattern = args.value_pattern ? new RegExp(args.value_pattern) : undefined
+        subkeyPattern = args.subkey_regex ? new RegExp(args.subkey_regex) : undefined
+        valuePattern = args.value_regex ? new RegExp(args.value_regex) : undefined
     } catch (error) {
         return createRetryResponse(failedAction, error, "Fix the regex pattern.")
     }

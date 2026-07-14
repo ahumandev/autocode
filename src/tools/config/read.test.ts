@@ -115,17 +115,17 @@ describe("config read", () => {
     expect(out.nodes[0].value).toBe("[3 items]");
   });
 
-  it("subkey_pattern filter", async () => {
+  it("subkey_regex filter", async () => {
     const file = await tmpFile(dir, "data2.json", JSON.stringify({ server: { host: "h", port: 8080 }, client: { name: "x" } }));
-    const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, subkey_pattern: "server" });
+    const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, subkey_regex: "server" });
     const out = JSON.parse(res);
     expect(out.nodes_total).toBe(3);
     expect(out.nodes.every((n: { path: string[] }) => n.path.some((seg) => seg === "server"))).toBe(true);
   });
 
-  it("value_pattern filter", async () => {
+  it("value_regex filter", async () => {
     const file = await tmpFile(dir, "data3.json", JSON.stringify({ a: "hello", b: "world", c: 42 }));
-    const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, value_pattern: "ello" });
+    const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, value_regex: "ello" });
     const out = JSON.parse(res);
     expect(out.nodes_total).toBe(2);
   });
@@ -202,7 +202,7 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
   it("glob *.json returns file_paths with key_paths for each json file", async () => {
     await tmpFile(toolDir, "a.json", JSON.stringify({ name: "A", version: "1.0" }));
     await tmpFile(toolDir, "b.json", JSON.stringify({ name: "B" }));
-    const out = await execute({ glob: "*.json" });
+    const out = await execute({ file_path_glob: "*.json" });
     expect(Object.keys(out.file_paths).sort()).toEqual(["a.json", "b.json"]);
     expect(out.file_paths["a.json"].key_paths["name"]).toBe("A");
     expect(out.file_paths["a.json"].key_paths["version"]).toBe("1.0");
@@ -213,14 +213,14 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
 
   it("key_path drills into nested key", async () => {
     await tmpFile(toolDir, "data.json", JSON.stringify({ server: { host: "h", port: 80 } }));
-    const out = await execute({ glob: "data.json", key_path: "server" });
+    const out = await execute({ file_path_glob: "data.json", key_path: "server" });
     expect(out.file_paths["data.json"].key_paths["host"]).toBe("h");
     expect(out.file_paths["data.json"].key_paths["port"]).toBe("80");
   });
 
-  it("value_pattern filters leaves", async () => {
+  it("value_regex filters leaves", async () => {
     await tmpFile(toolDir, "vp.json", JSON.stringify({ a: "hello", b: "world", c: 42 }));
-    const out = await execute({ glob: "vp.json", value_pattern: "orld|ello" });
+    const out = await execute({ file_path_glob: "vp.json", value_regex: "orld|ello" });
     // root (object, non-leaf) is included; a and b match; c (42) is excluded
     expect(out.file_paths["vp.json"].nodes_total).toBe(3);
     expect(out.file_paths["vp.json"].key_paths["a"]).toBe("hello");
@@ -229,7 +229,7 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
   });
 
   it("non-match glob returns retry JSON error", async () => {
-    const out = await execute({ glob: "nope/*.json" });
+    const out = await execute({ file_path_glob: "nope/*.json" });
     expect(out.failedAction).toBe("Read configuration file");
     expect(typeof out.error).toBe("string");
     expect(out.file_paths).toBeUndefined();
@@ -237,7 +237,7 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
 
   it("unsupported extension (markdown) is skipped and yields retry error", async () => {
     await tmpFile(toolDir, "x.md", "# hi");
-    const out = await execute({ glob: "x.md" });
+    const out = await execute({ file_path_glob: "x.md" });
     expect(out.failedAction).toBe("Read configuration file");
     expect(out.file_paths).toBeUndefined();
   });

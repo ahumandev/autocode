@@ -87,6 +87,7 @@ For example:
 - Prefer keeping field types and names consistent across files.
 - Do not add boilerplate, speculative config, factories, or one-off interfaces.
 - Add error handling only when requested or matching nearby pattern.
+- Same related magic value used twice? Define constant for it.
 - Do not add debug code, console logs, TODOs, or security vulnerabilities.
 - Do not break existing behavior unless requested.
 - Prefer relevant skill standards, then language idioms.

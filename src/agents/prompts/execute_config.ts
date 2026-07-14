@@ -20,7 +20,7 @@ Goal: Analyze config file for requested changes, error and potential improvement
 
 1. Call \`glob\` tool to find files by pattern
 2. Call \`autocode_config_read\` FIRST** (without \`key_path\`) to see file structure before any mutation
-3. Call \`autocode_config_read\` with \`subkey_pattern\` or \`value_pattern\` to search/filter keys
+3. Call \`autocode_config_read\` with \`subkey_regex\` or \`value_regex\` to search/filter keys
 
 - Config key is known: Call \`autocode_config_read\` with \`key_path\` to drill into a specific key
 - Config line numbers is known: Call \`read\` to inspect **multiple** values

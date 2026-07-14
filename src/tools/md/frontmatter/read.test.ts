@@ -26,7 +26,7 @@ function parseResult(result: unknown): Record<string, any> {
 
 async function execute(
     tool: FrontmatterReadTool,
-    args: { glob: string; [k: string]: unknown },
+    args: { file_path_glob: string; [k: string]: unknown },
     context: ToolContext = createToolContext({ directory: tempDir }),
 ) {
     return parseResult(await tool.execute(args as never, context))
@@ -50,7 +50,7 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         writeFileSync(`${dir}/a.md`, "---\ntitle: A\nauthor: alice\n---\n# Body\n")
         writeFileSync(`${dir}/b.md`, "---\ntitle: B\n---\n# Body\n")
         const tool = createAutocodeMdFrontmatterReadTool()
-        const result = await execute(tool, { glob: "*.md" })
+        const result = await execute(tool, { file_path_glob: "*.md" })
         expect(Object.keys(result.file_paths).sort()).toEqual(["a.md", "b.md"])
         expect(result.file_paths["a.md"].key_paths["title"]).toBe("A")
         expect(result.file_paths["a.md"].key_paths["author"]).toBe("alice")
@@ -60,11 +60,11 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         expect(result.file_paths["a.md"].nodes_shown).toBeGreaterThan(0)
     })
 
-    test("key_pattern filters nodes by key segment", async () => {
+    test("key_regex filters nodes by key segment", async () => {
         const dir = useTempCwd()
         writeFileSync(`${dir}/deep.md`, "---\nnested:\n  child: deepvalue\n  other: kept\n---\nbody\n")
         const tool = createAutocodeMdFrontmatterReadTool()
-        const result = await execute(tool, { glob: "deep.md", key_pattern: "child" })
+        const result = await execute(tool, { file_path_glob: "deep.md", key_regex: "child" })
         expect(result.file_paths["deep.md"].key_paths["nested.child"]).toBe("deepvalue")
         expect(result.file_paths["deep.md"].key_paths["nested.other"]).toBeUndefined()
     })
@@ -74,7 +74,7 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         writeFileSync(`${dir}/fm.md`, "---\ntitle: Has\n---\nbody")
         writeFileSync(`${dir}/nofm.md`, "# Just body\n")
         const tool = createAutocodeMdFrontmatterReadTool()
-        const result = await execute(tool, { glob: "*.md" })
+        const result = await execute(tool, { file_path_glob: "*.md" })
         expect(Object.keys(result.file_paths)).toEqual(["fm.md"])
     })
 
@@ -82,7 +82,7 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         const dir = useTempCwd()
         writeFileSync(`${dir}/data.json`, "{\"title\": \"x\"}")
         const tool = createAutocodeMdFrontmatterReadTool()
-        const result = await execute(tool, { glob: "*.json" })
+        const result = await execute(tool, { file_path_glob: "*.json" })
         expect(result.file_paths).toBeUndefined()
         expect(result.failedAction).toBe("Read frontmatter")
         expect(typeof result.error).toBe("string")
@@ -91,17 +91,17 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
     test("non-match glob returns retry JSON error", async () => {
         useTempCwd()
         const tool = createAutocodeMdFrontmatterReadTool()
-        const result = await execute(tool, { glob: "nope/*.md" })
+        const result = await execute(tool, { file_path_glob: "nope/*.md" })
         expect(result.failedAction).toBe("Read frontmatter")
         expect(typeof result.error).toBe("string")
         expect(result.file_paths).toBeUndefined()
     })
 
-    test("value_pattern filters leaf values", async () => {
+    test("value_regex filters leaf values", async () => {
         const dir = useTempCwd()
         writeFileSync(`${dir}/vp.md`, "---\na: hello\nb: world\nc: 42\n---\nbody")
         const tool = createAutocodeMdFrontmatterReadTool()
-        const result = await execute(tool, { glob: "vp.md", value_pattern: "orld|ello" })
+        const result = await execute(tool, { file_path_glob: "vp.md", value_regex: "orld|ello" })
         // root (object, non-leaf) is included; a and b match; c (42) is excluded
         expect(result.file_paths["vp.md"].nodes_total).toBe(3)
         expect(result.file_paths["vp.md"].key_paths["a"]).toBe("hello")
@@ -113,7 +113,7 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         const dir = useTempCwd()
         writeFileSync(`${dir}/big.md`, "---\na: 1\nb: 2\nc: 3\nd: 4\ne: 5\n---\nbody")
         const tool = createAutocodeMdFrontmatterReadTool()
-        const result = await execute(tool, { glob: "big.md", max_keys: 2 })
+        const result = await execute(tool, { file_path_glob: "big.md", max_keys: 2 })
         expect(result.file_paths["big.md"].nodes_shown).toBe(2)
         // root object (path []) is always counted by configRead + 5 leaves = 6
         expect(result.file_paths["big.md"].nodes_total).toBe(6)
@@ -124,7 +124,7 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         writeFileSync(`${dir}/a.md`, "---\nx: 1\ny: 2\n---\nbody")
         writeFileSync(`${dir}/b.md`, "---\nx: 1\ny: 2\n---\nbody")
         const tool = createAutocodeMdFrontmatterReadTool()
-        const result = await execute(tool, { glob: "*.md", max_keys: 4 })
+        const result = await execute(tool, { file_path_glob: "*.md", max_keys: 4 })
         // 2 files x 3 nodes each (root + 2 leaves) = 6 total; global cap shows 4
         expect(result.nodes_shown).toBe(4)
         expect(result.nodes_total).toBe(6)

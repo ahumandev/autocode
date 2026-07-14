@@ -274,7 +274,7 @@ describe("ssh config read tool", () => {
     test("reads config over SFTP and returns nodes", async () => {
         const sftp = new MemorySftp({ "/etc/app.json": JSON.stringify({ host: "localhost", port: 3000 }) })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(out.file_paths["/etc/app.json"].nodes_total).toBe(3)
         expect(out.file_paths["/etc/app.json"].nodes_shown).toBe(3)
@@ -284,7 +284,7 @@ describe("ssh config read tool", () => {
     test("drills into key_path over SFTP", async () => {
         const sftp = new MemorySftp({ "/etc/app.json": JSON.stringify({ server: { host: "h", port: 9 } }) })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*.json", key_path: "server" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json", key_path: "server" }, createToolContext())
         const out = parseOut(result)
         expect(out.file_paths["/etc/app.json"].nodes_total).toBe(3)
     })
@@ -292,7 +292,7 @@ describe("ssh config read tool", () => {
     test("skips markdown files without reading SFTP", async () => {
         const sftp = new MemorySftp({ "/etc/README.md": "# hi" })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*.md" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.md" }, createToolContext())
         const out = parseOut(result)
         expect(out.error).toContain("no readable config files")
         expect(sftp.readFileCalls).toHaveLength(0)
@@ -301,7 +301,7 @@ describe("ssh config read tool", () => {
     test("returns error for unknown ssh_key", async () => {
         const sftp = new MemorySftp({ "/etc/app.json": "{}" })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "missing", glob: "/etc/*.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "missing", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(out.failedAction).toBe("resolve SSH config")
         expect(out.error).toContain("AUTOCODE_SSH_MISSING_HOST")
@@ -313,7 +313,7 @@ describe("ssh config read tool", () => {
             "/etc/b.json": JSON.stringify({ b: 2 }),
         })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths).sort()).toEqual(["/etc/a.json", "/etc/b.json"])
         expect(out.file_paths["/etc/a.json"].nodes_total).toBe(2)
@@ -323,7 +323,7 @@ describe("ssh config read tool", () => {
     test("handles literal file pattern with relative key", async () => {
         const sftp = new MemorySftp({ "/package.json": JSON.stringify({ name: "app", version: "1.0.0" }) })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "package.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "package.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths)).toEqual(["package.json"])
         expect(out.file_paths["package.json"].nodes_total).toBe(3)
@@ -332,7 +332,7 @@ describe("ssh config read tool", () => {
     test("returns retry response when glob matches no files", async () => {
         const sftp = new MemorySftp({ "/etc/app.json": "{}" })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/nonexistent/*.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/nonexistent/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(out.error).toContain("no files matched glob")
         expect(out.instruction).toContain("glob pattern")
@@ -344,7 +344,7 @@ describe("ssh config read tool", () => {
             "/etc/notes.md": "# heading",
         })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths)).toEqual(["/etc/app.json"])
         expect(sftp.readFileCalls).toContain("/etc/app.json")
@@ -358,7 +358,7 @@ describe("ssh config read tool", () => {
         })
         sftp.missing.add("/etc/bad.json")
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths)).toEqual(["/etc/good.json"])
         expect(sftp.readFileCalls).toContain("/etc/bad.json")
@@ -370,7 +370,7 @@ describe("ssh config read tool", () => {
             "/etc/b.json": JSON.stringify({ client: { port: 9090 } }),
         })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*.json", key_path: "server" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json", key_path: "server" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths)).toEqual(["/etc/a.json"])
         expect(out.file_paths["/etc/a.json"].nodes_total).toBe(2)
@@ -381,18 +381,18 @@ describe("ssh config read tool", () => {
             "/etc/app.json": JSON.stringify({ a: 1, b: 2, c: 3, d: 4 }),
         })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*.json", max_keys: 2 }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json", max_keys: 2 }, createToolContext())
         const out = parseOut(result)
         expect(out.file_paths["/etc/app.json"].nodes_shown).toBe(2)
         expect(out.file_paths["/etc/app.json"].nodes_total).toBe(5)
     })
 
-    test("applies subkey_pattern to filter nodes", async () => {
+    test("applies subkey_regex to filter nodes", async () => {
         const sftp = new MemorySftp({
             "/etc/app.json": JSON.stringify({ host: "localhost", port: 3000, debug: true }),
         })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/*.json", subkey_pattern: "^host$" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json", subkey_regex: "^host$" }, createToolContext())
         const out = parseOut(result)
         const keys = Object.keys(out.file_paths["/etc/app.json"].key_paths)
         expect(keys).toEqual(["host"])
@@ -405,7 +405,7 @@ describe("ssh config read tool", () => {
             "/etc/sub/deeper/leaf.json": JSON.stringify({ c: 3 }),
         })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "/etc/**/*.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/**/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths).sort()).toEqual([
             "/etc/app.json",
@@ -420,7 +420,7 @@ describe("ssh config read tool", () => {
             "/sub/nested.json": JSON.stringify({ b: 2 }),
         })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "**/*.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "**/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths).sort()).toEqual(["app.json", "sub/nested.json"])
     })
@@ -432,7 +432,7 @@ describe("ssh config read tool", () => {
             "/other/c.json": JSON.stringify({ c: 3 }),
         })
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
-        const result = await tool.execute({ ssh_key: "dev", glob: "sub/**/*.json" }, createToolContext())
+        const result = await tool.execute({ ssh_key: "dev", file_path_glob: "sub/**/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths).sort()).toEqual(["sub/a.json", "sub/deep/b.json"])
     })

@@ -102,13 +102,13 @@ export function createAutocodeSandboxConfigReadTool(client?: OpencodeClient, dep
         description: "Read config/data files (.json/.jsonc/.yaml/.yml/.toml/.ini/.properties/.conf/.env) inside a sandbox's storage by glob pattern. Outlines config/data file or drills into specific key_path.",
         args: {
             sandbox_name: tool.schema.string().describe("Existing sandbox name."),
-            glob: tool.schema.string().describe("Sandbox-root-relative glob pattern for config files, e.g. 'configs/**/*.json' or 'package.json'."),
+            file_path_glob: tool.schema.string().describe("Sandbox-root-relative glob pattern for config files, e.g. 'configs/**/*.json' or 'package.json'."),
             key_path: tool.schema.string().optional().describe("Optional dotted path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') to drill into a specific key. Default = root."),
-            key_depth: tool.schema.number().int().min(0).optional().default(100).describe("Maximum traversal depth from key_path."),
-            subkey_pattern: tool.schema.string().optional().describe("Regex; include nodes whose key path has any segment matching it. Default = all."),
-            value_pattern: tool.schema.string().optional().describe("Regex; include leaf nodes whose value matches it. Default = all."),
-            max_keys: tool.schema.number().int().min(0).optional().default(40).describe("Cap on total output nodes across all matching files."),
-            max_value_chars: tool.schema.number().int().min(0).optional().default(40).describe("Truncate string values exceeding max_value_chars, appending '...'"),
+            key_depth: tool.schema.number().int().min(0).optional().default(100).describe("Maximum traversal depth from key_path. Default = 100."),
+            subkey_regex: tool.schema.string().optional().describe("Regex; find nodes with matching key paths. Default = all."),
+            value_regex: tool.schema.string().optional().describe("Regex; find leaf nodes with matching values. Default = all."),
+            max_keys: tool.schema.number().int().min(0).optional().default(40).describe("Cap on total output nodes across all matching files. Default = 40."),
+            max_value_chars: tool.schema.number().int().min(0).optional().default(40).describe("Truncate string values exceeding max chars by appending '...'. Default = 40."),
         },
         async execute(args, context): Promise<string> {
             const failedAction = "Read sandbox configuration file"
@@ -116,15 +116,15 @@ export function createAutocodeSandboxConfigReadTool(client?: OpencodeClient, dep
                 if (typeof args.sandbox_name !== "string" || args.sandbox_name.length === 0) {
                     return createRetryResponse(failedAction, new Error("sandbox_name required"), "Provide an existing sandbox name.")
                 }
-                if (typeof args.glob !== "string" || args.glob.length === 0) {
+                if (typeof args.file_path_glob !== "string" || args.file_path_glob.length === 0) {
                     return createRetryResponse(failedAction, new Error("glob required"), "Provide a glob pattern.")
                 }
 
                 let subkeyPattern: RegExp | undefined
                 let valuePattern: RegExp | undefined
                 try {
-                    subkeyPattern = args.subkey_pattern ? new RegExp(String(args.subkey_pattern)) : undefined
-                    valuePattern = args.value_pattern ? new RegExp(String(args.value_pattern)) : undefined
+                    subkeyPattern = args.subkey_regex ? new RegExp(String(args.subkey_regex)) : undefined
+                    valuePattern = args.value_regex ? new RegExp(String(args.value_regex)) : undefined
                 } catch (error) {
                     return createRetryResponse(failedAction, error, "Fix the regex pattern.")
                 }
@@ -133,9 +133,9 @@ export function createAutocodeSandboxConfigReadTool(client?: OpencodeClient, dep
                 if (!sandbox.ok) return sandbox.response
                 const rootPath = sandbox.metadata.root_path
 
-                const matches = await expandGlob(String(args.glob), rootPath)
+                const matches = await expandGlob(String(args.file_path_glob), rootPath)
                 if (matches.length === 0) {
-                    return createRetryResponse(failedAction, new Error("no files matched glob: " + args.glob), "Check the glob pattern and path.")
+                    return createRetryResponse(failedAction, new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")
                 }
 
                 const file_paths: Record<string, { key_paths: Record<string, string | null>; nodes_shown: number; nodes_total: number }> = {}
@@ -192,7 +192,7 @@ export function createAutocodeSandboxConfigReadTool(client?: OpencodeClient, dep
                 }
 
                 if (Object.keys(file_paths).length === 0) {
-                    return createRetryResponse(failedAction, new Error("no readable config files for glob: " + args.glob), "Check the glob pattern and file formats.")
+                    return createRetryResponse(failedAction, new Error("no readable config files for glob: " + args.file_path_glob), "Check the glob pattern and file formats.")
                 }
 
                 return JSON.stringify({ file_paths })
