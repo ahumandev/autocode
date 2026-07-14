@@ -28,7 +28,7 @@ describe("autocode_md_read", () => {
         return p
     }
     const read = (glob: string, args: Record<string, unknown> = {}) =>
-        tool.execute({ glob, ...args } as never, createToolContext()).then((s) => JSON.parse(s as string))
+        tool.execute({ glob, ...args } as never, createToolContext({ directory: dir })).then((s) => JSON.parse(s as string))
 
     test("glob *.md returns file_paths with heading/anchor/line entries; counts correct (multiple -> outline only)", async () => {
         write("doc.md", [

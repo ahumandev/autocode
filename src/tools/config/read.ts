@@ -17,7 +17,7 @@ export function createAutocodeConfigReadTool() {
       max_keys: tool.schema.number().int().min(0).optional().default(40).describe("Cap on total output nodes across all matching files."),
       max_value_chars: tool.schema.number().int().min(0).optional().default(40).describe("Truncate string values exceeding max chars by appending '...'"),
     },
-    execute: async (args) => {
+    execute: async (args, context) => {
       const failedAction = "Read configuration file"
 
       if (typeof args.glob !== "string" || args.glob.length === 0) {
@@ -33,7 +33,8 @@ export function createAutocodeConfigReadTool() {
         return createRetryResponse(failedAction, error, "Fix the regex pattern.")
       }
 
-      const matches = await expandGlob(String(args.glob))
+      const cwd = context.directory ?? process.cwd()
+      const matches = await expandGlob(String(args.glob), cwd)
       if (matches.length === 0) {
         return createRetryResponse(failedAction, new Error("no files matched glob: " + args.glob), "Check the glob pattern and path.")
       }

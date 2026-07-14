@@ -15,7 +15,7 @@ export function createAutocodeMdReadTool(): ReturnType<typeof tool> {
             content_pattern: tool.schema.string().optional().describe("Regex; include sections whose own text content matches it. Default = all."),
             max_anchors: tool.schema.number().int().min(2).optional().default(40).describe("Cap on number of anchors returned per file."),
         },
-        execute: async (args) => {
+        execute: async (args, context) => {
             if (typeof args.glob !== "string" || args.glob.length === 0) {
                 return createRetryResponse("Read md section", new Error("glob required"), "Provide a glob pattern.")
             }
@@ -43,7 +43,8 @@ export function createAutocodeMdReadTool(): ReturnType<typeof tool> {
                 return createRetryResponse("Read md section", new Error(`line_start (${lineStart}) must be <= line_end (${lineEnd})`), "Set line_start <= line_end.")
             }
 
-            const matches = await expandGlob(String(args.glob))
+            const cwd = context.directory ?? process.cwd()
+            const matches = await expandGlob(String(args.glob), cwd)
             if (matches.length === 0) {
                 return createRetryResponse("Read md section", new Error("no files matched glob: " + args.glob), "Check the glob pattern and path.")
             }

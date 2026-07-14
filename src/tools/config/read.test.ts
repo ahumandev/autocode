@@ -196,7 +196,7 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
 
   const execute = async (args: Record<string, unknown>) => {
     const tool = createAutocodeConfigReadTool();
-    return JSON.parse((await tool.execute(args as never, createToolContext())) as string);
+    return JSON.parse((await tool.execute(args as never, createToolContext({ directory: toolDir }))) as string);
   };
 
   it("glob *.json returns file_paths with key_paths for each json file", async () => {

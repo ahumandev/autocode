@@ -27,7 +27,7 @@ function parseResult(result: unknown): Record<string, any> {
 async function execute(
     tool: FrontmatterReadTool,
     args: { glob: string; [k: string]: unknown },
-    context: ToolContext = createToolContext(),
+    context: ToolContext = createToolContext({ directory: tempDir }),
 ) {
     return parseResult(await tool.execute(args as never, context))
 }
