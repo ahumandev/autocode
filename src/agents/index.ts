@@ -906,7 +906,6 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             "autocode_md_*": "allow",
-            grep: "allow",
             autocode_logo_find: "allow",
             skill: {
                 "*": "deny",
