@@ -4,7 +4,7 @@ import os from "os"
 import path from "path"
 import type { SandboxCommandResult, SandboxDependencies } from "@/utils/sandbox"
 import { resetRetryCounts } from "@/utils/tools"
-import { createGitTools, runGitTool, type GitToolName } from "./autocode_git"
+import { createGitTools, runGitTool, type GitToolName } from "./git"
 
 type ParsedError = {
     error: string

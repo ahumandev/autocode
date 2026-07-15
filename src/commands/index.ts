@@ -190,7 +190,7 @@ Report to user:
     },
 
     "git-commit": {
-        description: "Commit added changes to Git repo.",
+        description: "Commit added changes to Git: args = reason for commit",
         subtask: false,
         template: gitCommitCommandTemplate,
     },

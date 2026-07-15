@@ -259,7 +259,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_add: {
-            description: "Run git add for explicit relative files.",
+            description: "Add changed files to Git, ready for commit.",
             args: { repo_path: tool.schema.string(), files: tool.schema.array(tool.schema.string()) },
             keys: ["repo_path", "files"],
             buildArgs: (args) => {
@@ -268,7 +268,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_commit: {
-            description: "Run git commit with a message.",
+            description: "Commit added changes to Git repo.",
             args: { repo_path: tool.schema.string(), message: tool.schema.string() },
             keys: ["repo_path", "message"],
             buildArgs: (args) => {
@@ -277,7 +277,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_reset: {
-            description: "Run git mixed reset (index-only).",
+            description: "Mixed reset of Git changes (index-only).",
             args: { repo_path: tool.schema.string(), paths: tool.schema.array(tool.schema.string()).optional() },
             keys: ["repo_path", "paths"],
             buildArgs: (args) => {
@@ -287,7 +287,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_create_branch: {
-            description: "Run git branch creation.",
+            description: "Create Git new branch.",
             args: { repo_path: tool.schema.string(), branch_name: tool.schema.string(), start_point: tool.schema.string().optional() },
             keys: ["repo_path", "branch_name", "start_point"],
             buildArgs: (args) => {
@@ -299,7 +299,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_checkout: {
-            description: "Run git checkout for a branch name.",
+            description: "Checkout existing Git branch.",
             args: { repo_path: tool.schema.string(), branch_name: tool.schema.string() },
             keys: ["repo_path", "branch_name"],
             buildArgs: (args) => {
@@ -308,7 +308,7 @@ function createGitToolConfig(): Record<GitToolName, GitToolConfig> {
             },
         },
         git_branch: {
-            description: "Run git branch list.",
+            description: "List available Git branches.",
             args: { repo_path: tool.schema.string().describe("Absolute path inside the git repository.") },
             keys: repoOnlyKeys,
             buildArgs: () => ({ ok: true, value: ["branch", "--list", "--verbose", "--no-abbrev"] }),
