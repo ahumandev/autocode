@@ -424,7 +424,7 @@ describe("auto resume wiring", () => {
 
         await configurePlugin(plugin, cfg)
 
-        expect(cfg.command["job-review-commit"]?.agent).toBe("execute_git_commit")
+        expect(cfg.command["job-review-commit"]?.agent).toBe("auto")
         expect(cfg.command["job-review-commit"]?.template).toContain("autocode_job_shelve")
         expect(cfg.command["job-shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
         expect(cfg.command["job-shelve"]?.agent).toBe("temp_shelve")
@@ -1361,7 +1361,7 @@ describe("autocode_plan_save tool", () => {
         expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "research")).toBe("deny")
         expect(cfg.agent.auto_general?.prompt).toContain("fallback auto orchestrator")
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_agent_swap")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_create")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_create")).toBe("allow")
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_feedback")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_review")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_job_list")).toBeUndefined()
@@ -1369,7 +1369,7 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_save")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_draft_job_create")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_agent_swap")).toBe("allow")
-        expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_create")).toBeUndefined()
+        expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_create")).toBe("allow")
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_plan_read")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_list")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_status")).toBe("allow")

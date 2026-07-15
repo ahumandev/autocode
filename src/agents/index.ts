@@ -27,7 +27,6 @@ import { executeCodePrompt } from "./prompts/execute_code";
 import { executeDebugPrompt } from "./prompts/execute_debug";
 import { executeDocumentPrompt } from "./prompts/execute_document"
 import { executeExcelPrompt } from "./prompts/execute_excel";
-import { executeGitCommitPrompt } from "./prompts/execute_git_commit";
 import { executeOsPrompt } from "./prompts/execute_os";
 import { executeOpencodePrompt } from "./prompts/execute_opencode";
 import { executeRestPrompt } from "./prompts/execute_rest";
@@ -276,8 +275,11 @@ const baseAgents: AgentMap = {
             autocode_sandbox_delete: "allow",
             autocode_session_create: "allow",
             doom_loop: "ask",
+            git_commit: "allow",
             question: "allow",
             skill: {
+                "*": "deny",
+                "git-commit": "allow",
                 "learned-permissions": "allow"
             },
             "skill_learn_*": "allow",
@@ -308,7 +310,10 @@ const baseAgents: AgentMap = {
             autocode_agent_swap: "allow",
             autocode_job_status: "allow",
             autocode_session_create: "allow",
+            git_commit: "allow",
             skill: {
+                "*": "deny",
+                "git-commit": "allow",
                 "learned-permissions": "allow"
             },
             "skill_learn_*": "allow",
@@ -371,6 +376,7 @@ const baseAgents: AgentMap = {
             doom_loop: "ask",
             edit: "allow",
             external_directory: "ask",
+            git_commit: "allow",
             glob: "allow",
             grep: "allow",
             list: "allow",
@@ -383,6 +389,7 @@ const baseAgents: AgentMap = {
                 "author-article": "allow",
                 "code*": "allow",
                 "design*": "allow",
+                "git-commit": "allow",
                 "learned-preferences": "allow"
             },
             "skill_learn_*": "allow"
@@ -463,7 +470,6 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "deny",
                 execute_code: "allow",
-                execute_git_commit: "ask",
                 execute_os: "allow",
                 query_architect: "allow",
                 query_code: "allow",
@@ -1057,26 +1063,6 @@ const baseAgents: AgentMap = {
         },
         prompt: executeExcelPrompt,
         temperature: 0.3,
-        tier: "balanced",
-    },
-
-    execute_git_commit: {
-        color: colorWritableWorker,
-        description: "Review Git repo changes and create professional Git commits.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_job_shelve: "allow",
-            git_add: "allow",
-            git_commit: "allow",
-            git_log: "allow",
-            git_reset: "allow",
-            git_status: "allow",
-            task_resume: "allow",
-        },
-        prompt: executeGitCommitPrompt,
-        temperature: 0.5,
         tier: "balanced",
     },
 

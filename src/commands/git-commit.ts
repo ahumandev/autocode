@@ -1,6 +1,5 @@
 export const gitCommitCommandTemplate = `
-Base your git commit message on the following:
-  - Purpose of this session (see title)
-  - Your recent conversation with user
-  - Recent changes
+1. Use \`git-commit\` skill to create Git commit message based on SOLUTION.
+2. Commit git message.
+3. Only if git tool fails: Tell user exact Git commit message wrapped in md block. 
 `

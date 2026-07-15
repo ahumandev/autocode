@@ -4,8 +4,6 @@ import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { fixCommandTemplate } from "./fix"
 import { commands } from "./index"
-import { planCommandTemplate } from "./plan"
-import { refactorCommandTemplate } from "./refactor"
 import { testsCommandTemplate } from "./tests"
 
 describe("commands", () => {
@@ -40,12 +38,9 @@ describe("commands", () => {
             "new-design",
             "new-research",
             "new-troubleshoot",
-            "plan",
-            "refactor",
             "repeat-as-md",
             "repeat-as-wiki",
-            "report-last",
-            "report-session",
+            "report",
             "resume",
             "tests",
         ])
@@ -67,12 +62,6 @@ describe("commands", () => {
     })
 
     test("keeps standard command registrations stable", () => {
-        expect(commands.plan).toEqual({
-            agent: "assist",
-            description: "Summarize and revise current plan",
-            subtask: false,
-            template: planCommandTemplate,
-        })
         expect(commands.explain).toEqual({
             agent: "query_code",
             description: "Explain code or project context",
@@ -85,12 +74,6 @@ describe("commands", () => {
             subtask: false,
             template: fixCommandTemplate,
         })
-        expect(commands.refactor).toEqual({
-            agent: "auto_refactor",
-            description: "Safely refactor focused code",
-            subtask: false,
-            template: refactorCommandTemplate,
-        })
         expect(commands.tests).toEqual({
             agent: "auto_test",
             description: "Generate or improve tests",
@@ -98,7 +81,7 @@ describe("commands", () => {
             template: testsCommandTemplate,
         })
 
-        for (const commandName of ["context", "plan", "explain", "fix", "refactor", "tests"] as const) {
+        for (const commandName of ["context", "explain", "fix", "tests"] as const) {
             expect(commands[commandName]?.description).not.toBe("")
         }
     })
@@ -156,7 +139,7 @@ describe("commands", () => {
         expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_execute` once with selected `job_name` and selected `agent`, then evaluate tool output:")
         expect(commands["job-execute"]?.template).toContain('output includes `current_status`')
         expect(commands["job-execute"]?.template).toContain('Continue job in [agent] session.')
-        expect(commands["job-review-commit"]?.template).toContain("`task` subagent `execute_git_commit`")
+        expect(commands["job-review-commit"]?.template).toContain("`git-commit` skill")
         expect(commands["job-review-commit"]?.template).toContain("autocode_job_shelve")
         expect(commands["job-shelve"]?.template).toContain("Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
         expect(commands["shelve"]?.template).toContain("Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")

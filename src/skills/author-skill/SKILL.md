@@ -1,9 +1,9 @@
 ---
 name: author-skill
-description: How to Author Skill Files when reviewing/writing skill files for agents.
+description: Author Skill Files when reviewing/writing skill files for agents.
 ---
 
-# Authoring Skill Files
+# Author Skill Files
 
 Use this Skill Template to review/write skill files:
 
@@ -14,7 +14,7 @@ Use this Skill Template to review/write skill files:
 ```markdown
 ---
 name: [NAME]
-description: How to [ACTION] when [TRIGGER].
+description: [ACTION] when [TRIGGER].
 ---
 
 # [ACTION]

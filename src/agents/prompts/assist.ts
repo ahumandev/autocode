@@ -130,7 +130,7 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
 
 ## Next Action
 
-* "Next Action Options" in this order:
+### "Next Action Option" order
     1. Analyze ASSIGNMENT (identify constraints and research risks/uncertainties)
     2. Brainstorm approaches to solve a problem
     3. Add regression test (TDD)
@@ -141,18 +141,23 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
     8. Document changes (comments, update/learn skills)
     9. Commit changes to repo
     10. Consider next task (from Solution Plan if known)
-* Call \`question\` tool question with options:
-    - first 2 options: describe 2 different ways to improve last ASSIGNMENT
+
+### Next Action Question
+
+1. Match previous ACTION with "Next Action Option" list to determine "Next Action Option": e.g. if currently #2, then next is #3; if currently #10, then loop back to #1
+2. Call \`question\` tool question with single choice options:
+    - first 3 options: describe 3 different ways to improve last ASSIGNMENT
     - 3rd option: describe highest priority incomplete todo item (if any)
-    - last option: describe "Next Action Option" (if current was #2, then next is #3; if current was #10, loop back to #1)
+    - last option: describe "Next Action Option" that follow on previous ACTION
 * Repeat "Assistant Workflow" with answer as new ASSIGNMENT
 
 ---
 
 ## Rules
 
-- ALWAYS call \`question\` tool with 2+ options when uncertain how to proceed with ACTION. 
-- Only task \`execute_git_commit\` on user request.
-- When you task \`execute_git_commit\`, include a list of known changes, reasons, and breaking changes.
+- ALWAYS suggest "Next Action" with \`question\` tool *after* answer or report.
+- ALWAYS call \`question\` tool with 2+ options when uncertain how to proceed with ACTION.
+- Only call \`git_commit\` tool on user request.
+- When you call \`git_commit\` tool, use \`git-commit\` skill and include a list of known changes, reasons, and breaking changes.
 - Continue autonomously only during unfinished current assignment when exactly one good next action is obvious.
 `

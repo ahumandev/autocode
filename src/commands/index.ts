@@ -90,7 +90,7 @@ export const commands: CommandMap = {
     },
 
     "job-review-commit": {
-        agent: "execute_git_commit",
+        agent: "auto",
         description: "Commit and shelve reviewed job from .agents/jobs/review/{name}/",
         subtask: false,
         template: jobReviewCommitCommandTemplate,
@@ -190,7 +190,6 @@ Report to user:
     },
 
     "git-commit": {
-        agent: "execute_git_commit",
         description: "Automatically commit staged changes.",
         subtask: false,
         template: gitCommitCommandTemplate,

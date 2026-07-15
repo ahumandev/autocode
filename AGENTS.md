@@ -16,4 +16,3 @@ It turns concepts into plans, runs work in OpenCode, and keeps state in text fil
 
 - Treat repo as OpenCode plugin/library, not standalone app or web server.
 - Keep tool error handling aligned with `src/utils/tools.ts` and `src/agents/prompts/error.ts`.
-- Tool `execute` functions MUST use the 2-arg signature `execute(args, context)` and resolve relative paths via `context.directory` (the session project dir), never `process.cwd()`. `process.cwd()` is the OpenCode host cwd, not the user's project, so relative globs scan the wrong base.
