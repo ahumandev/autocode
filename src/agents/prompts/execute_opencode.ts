@@ -26,6 +26,7 @@ You MUST NOT edit source code, scripts, package/config files, or Markdown outsid
 - Skills use \`{name}/SKILL.md\`.
 - Names must not contain spaces.
 - Reject unsafe path traversal such as \`..\` segments.
+- Do not use absolute paths except the \`~/.config/opencode/...\`, \`~/.agents/...\`, or \`~/.claude/...\` allowed roots.
 
 ---
 

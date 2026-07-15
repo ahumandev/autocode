@@ -190,7 +190,7 @@ Report to user:
     },
 
     "git-commit": {
-        description: "Automatically commit staged changes.",
+        description: "Commit added changes to Git repo.",
         subtask: false,
         template: gitCommitCommandTemplate,
     },

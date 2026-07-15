@@ -41,27 +41,32 @@ Replace [placeholders] with:
    - Commit with breaking changes MUST be indicated by an \`!\` before the \`: \` in [description] e.g. \`feat(api)! - remove status endpoint\`
 - [description] to be replaced by concise description of the change. 
    - Is a **mandatory** part
+   - Max 10 words
    - **NEVER** capitalize the first letter
    - **NEVER** end the description with a period (\`.\`)
+   - **NEVER** wrap sentences
 - [motivation] to be replaced by motivation (why) the change.
    - Instead of git diff info (*what* changed), only include *why* change was necessary if known
    - Is an optional part, omit if reason for commit is unknown
-   - NEVER wrap long sentences
+   - Max 10 words
+   - **NEVER** wrap sentences
 - [difference] to list **Behavioral Changes** which is observable behavior in contrast to old behavior before commit
    - DO include user observable changes like "Improved startup performance", "Implemented feature x", "Removed legacy api"
    - NEVER include technical changes available from git diff like "a.ts renamed to b.ts", "function x added to c.js"
    - Omit this section if there are no behavioral changes
-   - Title before list is "Behavioral Changes:"
+   - Heading before list is "Behavioral Changes:"
    - 1 behavioral change description per line (no wrapping)
    - Start each line with emojis to indicate type of change
    - Keep emojis consistent (same action = same emoji)
+   - Max 10 words per item
 - [breaking changes] to be replaced by list of **Breaking Changes**:
    - NEVER include non-destructive changes like "Update documentation", "Renamed internal variable", "Created new test", "Formatted code"
    - Omit this section if there are no breaking changes
-   - Title before list is "Breaking Changes:"
+   - Heading before list is "Breaking Changes:"
    - 1 change description per line (no wrapping)
    - Start each line with emojis to indicate type of change
    - Keep emojis consistent (same action = same emoji)
+   - Max 10 words per item
    - Be specific: Usual actual identifiers/commands/urls to describe objects
 
 #### Examples
@@ -84,8 +89,8 @@ feat(database)! - drop deprecated users table
 Remove the legacy users tables as part of the migration to the new schema.
 
 Breaking Changes:
-🗑️ dropped t_users table from the prod_db database
-🗑️ dropped t_users_links table from the prod_db database
+🗑️ dropped t_users table from prod_db database
+🗑️ dropped t_users_links table from prod_db database
 \`\`\`
 
 \`\`\`
@@ -98,11 +103,11 @@ Update the INSTALL.md file with the new system requirements and dependency setup
 
 ## Rules
 
+- ALWAYS write Caveman English in Git commit messages
 - ALWAYS put each point/sentence on own line
 - ALWAYS use the imperative, present tense: "change" not "changed" nor "changes"
 - ALWAYS review the diff before committing
 - ALWAYS report commit failures or success to user
-- ALWAYS keep all sentences < 50 characters
 - NEVER use generic messages like "update" or "fix"
-- NEVER wrap lines in middle of sentences
+- NEVER wrap sentences
 `
