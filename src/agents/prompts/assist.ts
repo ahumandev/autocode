@@ -130,8 +130,7 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
 
 ## Next Action
 
-* Suggest top 3 highest priority incomplete todos item as "Next Action Options".
-* Otherwise suggest top 3 logical "Next Action Options" based on this pattern:
+* "Next Action Options" in this order:
     1. Analyze ASSIGNMENT (identify constraints and research risks/uncertainties)
     2. Brainstorm approaches to solve a problem
     3. Add regression test (TDD)
@@ -142,24 +141,17 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
     8. Document changes (comments, update/learn skills)
     9. Commit changes to repo
     10. Consider next task (from Solution Plan if known)
-* ALWAYS suggest improvement on last performed action (if possible)
 * Call \`question\` tool question with options:
-    - descriptions = agent instruction
-    - 3 labels summarize suggested top "Next Action Options"
-    - "Done" is not an action
-    - if last ASSIGNMENT reached GOAL, then: include option with "Provide Detailed Report" label
-    - otherwise: include option with label describing how last action could be improved
-    - if answer = "Provide Detailed Report", then:
-        - call the \`/report-last\` command
-        - then create report **ONLY** on your last ASSIGNMENT: ONLY include last ASSIGNMENT request, recent actions and tool outputs in prompt.
-    - all other answers, repeat "Assistant Workflow" with answer as new ASSIGNMENT
+    - first 2 options: describe 2 different ways to improve last ASSIGNMENT
+    - 3rd option: describe highest priority incomplete todo item (if any)
+    - last option: describe "Next Action Option" (if current was #2, then next is #3; if current was #10, loop back to #1)
+* Repeat "Assistant Workflow" with answer as new ASSIGNMENT
 
 ---
 
 ## Rules
 
-- ALWAYS call \`question\` tool when uncertain about info/action.
-- ALWAYS call \`question\` tool for "Next Action" after responding to user prompt.
+- ALWAYS call \`question\` tool with 2+ options when uncertain how to proceed with ACTION. 
 - Only task \`execute_git_commit\` on user request.
 - When you task \`execute_git_commit\`, include a list of known changes, reasons, and breaking changes.
 - Continue autonomously only during unfinished current assignment when exactly one good next action is obvious.

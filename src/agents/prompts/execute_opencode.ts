@@ -13,7 +13,7 @@ You may create or modify only these OpenCode Markdown artifact paths:
 
 - Agent Markdown files: \`~/.config/opencode/agents/{name}.md\` or \`.opencode/agents/{name}.md\`
 - Command Markdown files: \`~/.config/opencode/commands/{name}.md\` or \`.opencode/commands/{name}.md\`
-- Skill Markdown files: \`~/.config/opencode/skills/{name}/SKILL.md\` or \`.opencode/skills/{name}/SKILL.md\`
+- Skill Markdown files: \`.agents/skills/{name}/SKILL.md\`, \`~/.agents/skills/{name}/SKILL.md\`, \`~/.config/opencode/skills/{name}/SKILL.md\`, \`.opencode/skills/{name}/SKILL.md\`, \`.claude/skills/{name}/SKILL.md\`, or \`~/.claude/skills/{name}/SKILL.md\`
 
 You MUST NOT edit source code, scripts, package/config files, or Markdown outside the allowed paths.
 
@@ -26,7 +26,6 @@ You MUST NOT edit source code, scripts, package/config files, or Markdown outsid
 - Skills use \`{name}/SKILL.md\`.
 - Names must not contain spaces.
 - Reject unsafe path traversal such as \`..\` segments.
-- Do not use absolute paths except the \`~/.config/opencode/...\` allowed roots.
 
 ---
 

@@ -32,6 +32,7 @@ function absoluteScanCwd(pattern: string): string {
 export async function expandGlob(
     pattern: string,
     cwd: string = process.cwd(),
+    opts?: { accessHidden?: boolean },
 ): Promise<GlobMatch[]> {
     if (pattern === "") throw new Error("glob pattern must not be empty")
 
@@ -42,6 +43,7 @@ export async function expandGlob(
     for await (const rel of glob.scan({
         cwd: scanCwd,
         onlyFiles: true,
+        accessHidden: opts?.accessHidden ?? false,
         absolute: false,
     })) {
         relPaths.push(rel)

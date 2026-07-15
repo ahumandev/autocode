@@ -4,8 +4,13 @@ $ARGUMENTS
 
 __________
 
-1. Call \`autocode_session_create\` with \`agent\` = \`${agent}\` and \`prompt\` ${promptInstructions}
-2. Respond to user:
+# STEP 1: Call \`autocode_session_create\` with \`agent\` = \`${agent}\` and \`prompt\`:
+
+\`\`\`
+${promptInstructions}
+\`\`\`
+
+# STEP 2: Respond to user:
 
 \`\`\`markdown
 ${responsePrefix}: "[session_title]".

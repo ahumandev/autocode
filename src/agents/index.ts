@@ -274,6 +274,7 @@ const baseAgents: AgentMap = {
             autocode_job_status: "allow",
             autocode_sandbox_create: "ask",
             autocode_sandbox_delete: "allow",
+            autocode_session_create: "allow",
             doom_loop: "ask",
             question: "allow",
             skill: {
@@ -306,6 +307,7 @@ const baseAgents: AgentMap = {
             "*": "deny",
             autocode_agent_swap: "allow",
             autocode_job_status: "allow",
+            autocode_session_create: "allow",
             skill: {
                 "learned-permissions": "allow"
             },
@@ -325,7 +327,7 @@ const baseAgents: AgentMap = {
 
     design: {
         color: colorReadOnlyInteractiveOrchestrator,
-        description: "Design solutions to problems.",
+        description: "Design solutions.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -363,9 +365,9 @@ const baseAgents: AgentMap = {
             "*": "deny",
             "autocode_config_*": "allow",
             "autocode_md_*": "allow",
-            "autocode_session_create": "ask",
             apply_patch: "allow",
             autocode_agent_swap: "allow",
+            autocode_session_create: "allow",
             doom_loop: "ask",
             edit: "allow",
             external_directory: "ask",

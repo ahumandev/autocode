@@ -60,7 +60,7 @@ export function createAutocodeMdFrontmatterReadTool(): ReturnType<typeof tool> {
             }
 
             const cwd = context.directory ?? process.cwd()
-            const matches = await expandGlob(String(args.file_path_glob), cwd)
+            const matches = await expandGlob(String(args.file_path_glob), cwd, { accessHidden: true })
             if (matches.length === 0) {
                 return createRetryResponse(failedAction, new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")
             }

@@ -20,13 +20,10 @@ import { newAutoCommandTemplate } from "./new-auto"
 import { newDesignCommandTemplate } from "./new-design"
 import { newResearchCommandTemplate } from "./new-research"
 import { newTroubleshootCommandTemplate } from "./new-troubleshoot"
-import { planCommandTemplate } from "./plan"
-import { refactorCommandTemplate } from "./refactor"
 import { repeatAsMdCommandTemplate } from "./repeat-as-md"
 import { repeatAsWikiCommandTemplate } from "./repeat-as-wiki"
-import { reportLastCommandTemplate } from "./report-last"
-import { reportSessionCommandTemplate } from "./report-session"
 import { testsCommandTemplate } from "./tests"
+import { reportCommandTemplate } from "./report"
 
 /**
  * Command definitions for the Autocode plugin.
@@ -216,52 +213,33 @@ Report to user:
     "install": installCommand,
 
     "new-assist": {
-        agent: "temp_session",
         description: "Assist task execution in new session.",
         subtask: false,
         template: newAssistCommandTemplate,
     },
 
     "new-auto": {
-        agent: "temp_session",
         description: "Autonomously execute task in new session.",
         subtask: false,
         template: newAutoCommandTemplate,
     },
 
     "new-design": {
-        agent: "temp_session",
         description: "Design solutions in new session.",
         subtask: false,
         template: newDesignCommandTemplate,
     },
 
     "new-research": {
-        agent: "temp_session",
-        description: "Research topic in new session that produces a research report.",
+        description: "Research topic in new session.",
         subtask: false,
         template: newResearchCommandTemplate,
     },
 
     "new-troubleshoot": {
-        agent: "temp_session",
         description: "Troubleshoot issue in new session.",
         subtask: false,
         template: newTroubleshootCommandTemplate,
-    },
-
-    "plan": {
-        agent: "assist",
-        description: "Summarize and revise current plan",
-        subtask: false,
-        template: planCommandTemplate,
-    },
-
-    "refactor": {
-        agent: "auto_refactor",
-        description: "Safely refactor focused code",
-        subtask: false,
-        template: refactorCommandTemplate,
     },
 
     "repeat-as-md": {
@@ -276,16 +254,10 @@ Report to user:
         template: repeatAsWikiCommandTemplate,
     },
 
-    "report-last": {
-        description: "Provide detailed report of last task.",
+    "report": {
+        description: "Summarize session as report.",
         subtask: false,
-        template: reportLastCommandTemplate,
-    },
-
-    "report-session": {
-        description: "Provide detailed report of entire session.",
-        subtask: false,
-        template: reportSessionCommandTemplate,
+        template: reportCommandTemplate,
     },
 
     "resume": {
