@@ -1,4 +1,5 @@
 import { Glob } from "bun"
+import { existsSync, statSync } from "node:fs"
 import { isAbsolute, relative, resolve } from "path"
 
 export interface GlobMatch {
@@ -31,10 +32,22 @@ function absoluteScanCwd(pattern: string): string {
  */
 export async function expandGlob(
     pattern: string,
-    cwd: string = process.cwd(),
+    cwd: string,
     opts?: { accessHidden?: boolean },
 ): Promise<GlobMatch[]> {
     if (pattern === "") throw new Error("glob pattern must not be empty")
+
+    // Short-circuit absolute paths without glob metacharacters: Bun's Glob
+    // emits scanCwd-relative paths, which never match an absolute literal.
+    // Mirror the onlyFiles: true semantic of the normal scan path so callers
+    // (e.g. file readers) never receive directories or symlinks-to-dirs.
+    if (isAbsolute(pattern) && !GLOB_META.test(pattern)) {
+        if (!existsSync(pattern)) return []
+        if (!statSync(pattern).isFile()) return []
+        const relToCwd = relative(cwd, pattern)
+        const outsideCwd = relToCwd === "" || relToCwd.startsWith("..") || isAbsolute(relToCwd)
+        return [{ key: outsideCwd ? pattern : relToCwd, absolute: pattern }]
+    }
 
     const scanCwd = isAbsolute(pattern) ? absoluteScanCwd(pattern) : cwd
 
@@ -66,7 +79,7 @@ export async function expandGlob(
 }
 
 /** Returns true if absolute path is inside cwd. */
-export function isInsideCwd(absolute: string, cwd: string = process.cwd()): boolean {
+export function isInsideCwd(absolute: string, cwd: string): boolean {
     const rel = relative(cwd, absolute)
     return rel !== "" && !rel.startsWith("..")
 }

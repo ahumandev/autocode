@@ -241,4 +241,11 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
     expect(out.failedAction).toBe("Read configuration file");
     expect(out.file_paths).toBeUndefined();
   });
+
+  it("throws when context.directory is missing", async () => {
+    const tool = createAutocodeConfigReadTool();
+    await expect(
+      tool.execute({ file_path_glob: "*.json" } as never, createToolContext({ directory: "" })),
+    ).rejects.toThrow(/autocode_config_read.*context\.directory/);
+  });
 });

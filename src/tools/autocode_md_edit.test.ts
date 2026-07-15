@@ -25,7 +25,7 @@ describe("autocode_md_edit", () => {
         return p
     }
     const replace = (p: string, args: Record<string, unknown>) =>
-        tool.execute({ file_path: p, ...args } as never, createToolContext()).then((s) => JSON.parse(s as string))
+        tool.execute({ file_path: p, ...args } as never, createToolContext({ directory: dir })).then((s) => JSON.parse(s as string))
 
     test("rename only changes heading text", async () => {
         const p = write("r1.md", ["# Old", "", "old text"])

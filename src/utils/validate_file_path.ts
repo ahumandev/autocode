@@ -53,7 +53,7 @@ export async function validateFilePath(
         return { ok: false, response: createRetryResponse(failedAction, new Error(`glob patterns not allowed: ${input}`), "Provide a concrete file_path without wildcard characters (* ? [ ] { }).") }
     }
 
-    const absolutePath = await resolveFilePath(input)
+    const absolutePath = await resolveFilePath(input, options.context?.directory ?? process.cwd())
 
     if (existence !== "off") {
         const isBareFilename = !input.includes("/") && !input.includes("\\")
@@ -67,7 +67,7 @@ export async function validateFilePath(
         }
     }
 
-    const cwd = process.cwd()
+    const cwd = options.context?.directory ?? process.cwd()
     const rel = relative(cwd, absolutePath)
     const isInsideCwd = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel)
 

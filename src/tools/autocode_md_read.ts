@@ -79,7 +79,10 @@ Example:
                 return createRetryResponse("Read md section", new Error(`line_start (${lineStart}) must be <= line_end (${lineEnd})`), "Set line_start <= line_end.")
             }
 
-            const cwd = context.directory ?? process.cwd()
+            if (!context.directory) {
+                throw new Error("autocode_md_read: context.directory (project directory) is required but was not provided by host")
+            }
+            const cwd = context.directory
             const matches = await expandGlob(String(args.file_path_glob), cwd, { accessHidden: true })
             if (matches.length === 0) {
                 return createRetryResponse("Read md section", new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")

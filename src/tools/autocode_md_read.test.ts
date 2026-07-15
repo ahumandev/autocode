@@ -243,6 +243,13 @@ describe("autocode_md_read", () => {
         }
     })
 
+    test("throws when context.directory is missing", async () => {
+        const toolInstance = createAutocodeMdReadTool()
+        await expect(
+            toolInstance.execute({ file_path_glob: "*.md" } as never, createToolContext({ directory: "" })),
+        ).rejects.toThrow(/autocode_md_read.*context\.directory/)
+    })
+
     test("multi-file: file with line_start > its lineCount is skipped, others included", async () => {
         write("small.md", ["# S", "", "s"])
         write("big.md", ["# A", "", "intro", "", "## A1", "", "a1 text", "", "## A2", "", "a2 text"])

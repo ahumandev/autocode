@@ -19,8 +19,7 @@ import { readdir, realpath, stat } from "node:fs/promises"
  * concrete path. The function never throws for a missing file and never returns
  * `undefined`.
  */
-export async function resolveFilePath(input: string): Promise<string> {
-    const cwd = process.cwd()
+export async function resolveFilePath(input: string, cwd: string): Promise<string> {
     if (input === "") return path.resolve(cwd, "")
 
     const cwdCandidate = path.resolve(cwd, input)

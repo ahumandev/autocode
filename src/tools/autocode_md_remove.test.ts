@@ -25,7 +25,7 @@ describe("autocode_md_remove", () => {
         return p
     }
     const remove = (p: string, args: Record<string, unknown>) =>
-        tool.execute({ file_path: p, ...args } as never, createToolContext()).then((s) => JSON.parse(s as string))
+        tool.execute({ file_path: p, ...args } as never, createToolContext({ directory: dir })).then((s) => JSON.parse(s as string))
 
     test("leaf removal: section with no children is gone, rest intact", async () => {
         const p = write("leaf.md", ["# A", "", "a text", "", "## B", "", "b text"])

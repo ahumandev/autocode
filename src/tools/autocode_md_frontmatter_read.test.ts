@@ -119,6 +119,14 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         expect(result.file_paths["big.md"].nodes_total).toBe(6)
     })
 
+    test("throws when context.directory is missing", async () => {
+        useTempCwd()
+        const tool = createAutocodeMdFrontmatterReadTool()
+        await expect(
+            tool.execute({ file_path_glob: "*.md" } as never, createToolContext({ directory: "" })),
+        ).rejects.toThrow(/autocode_md_frontmatter_read.*context\.directory/)
+    })
+
     test("max_keys applies globally across multiple files", async () => {
         const dir = useTempCwd()
         writeFileSync(`${dir}/a.md`, "---\nx: 1\ny: 2\n---\nbody")
