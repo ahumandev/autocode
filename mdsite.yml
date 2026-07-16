@@ -1,9 +1,9 @@
 features:
-  bibleTooltips: false
+  bible-tooltips: false
   footer:
     - GitHub: https://github.com/ahumandev/autocode
     - NPM: https://www.npmjs.com/@ahumandev/autocode
-  sourceEdit: https://github.com/ahumandev/autocode/blob/main/
+  source-edit: https://github.com/ahumandev/autocode/blob/main/
 menu:
   - Quick Start: index
   - configuration
