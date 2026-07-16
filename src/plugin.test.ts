@@ -118,7 +118,6 @@ describe("autocode plugin config", () => {
             expect(cfg.command?.["job-execute-auto"]?.agent).toBe("design")
             expect(cfg.command?.["job-execute-assist"]?.template).toContain("autocode_job_execute")
             expect(cfg.agent?.assist?.model).toBe("user-model")
-            expect(cfg.agent?.assist?.description).toBe("Assist with task executions.")
             expect(cfg.agent?.assist?.variant).toBe("balanced-variant")
             expect((cfg.agent?.assist as Record<string, unknown>).tier).toBeUndefined()
             expect(cfg.agent?.design?.model).toBe("smart-model")
