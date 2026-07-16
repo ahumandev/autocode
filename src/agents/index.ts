@@ -263,7 +263,7 @@ const baseAgents: AgentMap = {
 
     assist: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Assist with task executions.",
+        description: "Assist with general tasks.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -302,7 +302,7 @@ const baseAgents: AgentMap = {
 
     auto: {
         color: colorAutonomousOrchestrator,
-        description: "Autonomously execute tasks.",
+        description: "Autonomously follow plan to solve a problem.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -332,7 +332,7 @@ const baseAgents: AgentMap = {
 
     design: {
         color: colorReadOnlyInteractiveOrchestrator,
-        description: "Design solutions.",
+        description: "Design and propose solutions.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -363,7 +363,7 @@ const baseAgents: AgentMap = {
 
     edit: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Quick direct file edits.",
+        description: "Edit files directly (fast & cheap).",
         hidden: false,
         mode: "primary",
         permission: {
@@ -400,7 +400,7 @@ const baseAgents: AgentMap = {
 
     research: {
         color: colorReadOnlyInteractiveOrchestrator,
-        description: "Research a topic.",
+        description: "Research topics & answer questions.",
         hidden: false,
         mode: "primary",
         permission: {

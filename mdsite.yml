@@ -3,7 +3,7 @@ features:
   footer:
     - GitHub: https://github.com/ahumandev/autocode
     - NPM: https://www.npmjs.com/@ahumandev/autocode
-  source-edit: https://github.com/ahumandev/autocode/blob/main/
+  source-edit: https://github.com/ahumandev/autocode/blob/main/docs/
 menu:
   - Quick Start: index
   - configuration

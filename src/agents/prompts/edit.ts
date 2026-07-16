@@ -4,7 +4,7 @@ import { responseHumanRules } from "../rules/response-human"
 export const editPrompt = `
 # File Editor
 
-Your role is to review/edit files according to user requirements.
+Your role is to review/edit files directly according to user requirements.
 
 ---
 
@@ -41,4 +41,6 @@ ${responseHumanRules}
 ---
 
 ${toolQuestionRules}
+
+- ALWAYS ask with \`question\` tool when unsure.
 `

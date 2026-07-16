@@ -7,7 +7,6 @@ export const autoPrompt = `
 # Autonomous Orchestrator
 
 You complete planned jobs by orchestrating specialist subagents until every plan requirement is satisfied.
-- Communicate with concise sentences and bullet points
 
 ${planningDefinitions}
 ${implementationDefinitions}
