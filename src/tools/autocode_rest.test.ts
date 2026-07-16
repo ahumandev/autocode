@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { resetRetryCounts } from "@/utils/tools"
-import { createAutocodeRestResponseEvalTool, createAutocodeRestResponseGrepTool, createAutocodeRestResponseReadTool, createAutocodeRestTool } from "./autocode_rest"
+import { createAutocodeRestTool } from "./autocode_rest"
 import { createToolContext } from "./test_context"
 
 type ParsedError = {
@@ -15,15 +15,6 @@ type SessionRecord = {
     id?: string
     parentID?: string | null
     title?: string | null
-}
-
-type CacheRecord = {
-    url: string
-    method: string
-    status_code: number
-    headers: Record<string, string>
-    body: string
-    created_at: string
 }
 
 function createMissingError(): NodeJS.ErrnoException {
@@ -93,10 +84,11 @@ function createMemoryRestFileSystem() {
         return content
     }
 
-    async function writeFile(filePath: string, content: string): Promise<void> {
+    async function writeFile(filePath: string, content: string | Buffer | Uint8Array): Promise<void> {
         const normalizedPath = normalize(filePath)
         ensureDirectory(path.dirname(normalizedPath))
-        files.set(normalizedPath, content)
+        const stored = typeof content === "string" ? content : content.toString()
+        files.set(normalizedPath, stored)
     }
 
     async function stat(targetPath: string): Promise<{ mtimeMs: number }> {
@@ -165,20 +157,6 @@ async function seedCurrentJobSession(fileSystem: ReturnType<typeof createMemoryR
     await fileSystem.seedFile("/workspace/.agents/jobs/drafts/my_job/session.yml", "session_id: session-1\n")
 }
 
-async function seedCachedResponse(fileSystem: ReturnType<typeof createMemoryRestFileSystem>, responseName: string, cache: Partial<CacheRecord> = {}): Promise<void> {
-    await seedCurrentJobSession(fileSystem)
-    await fileSystem.mkdir("/workspace/.agents/jobs/drafts/my_job/rest", { recursive: true })
-    await fileSystem.writeFile(`/workspace/.agents/jobs/drafts/my_job/rest/${responseName}`, JSON.stringify({
-        url: "http://example.com/api",
-        method: "GET",
-        status_code: 200,
-        headers: { "Content-Type": "application/json" },
-        body: "",
-        created_at: "2026-06-15T00:00:00.000Z",
-        ...cache,
-    }, null, 2))
-}
-
 async function withFixedDate<T>(isoDate: string, fn: () => Promise<T>): Promise<T> {
     const RealDate = Date
     const fixedMs = new RealDate(isoDate).valueOf()
@@ -212,7 +190,7 @@ describe("autocode_rest tools", () => {
         globalThis.fetch = originalFetch
     })
 
-    test("validates method and protocol, overrides duplicate query params, and serializes headers", async () => {
+    test("validates method and protocol and serializes headers", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const client = createSessionClient()
         const tool = createAutocodeRestTool(client, fileSystem)
@@ -242,224 +220,76 @@ describe("autocode_rest tools", () => {
             })
         }) as unknown as typeof fetch
 
-        const parsed = parseResult<{ body: string, full_response: boolean, headers: Record<string, string>, status_code: number, truncated: boolean }>(await tool.execute({
+        const parsed = parseResult<{ response_body: string, response_body_file_path: string, response_headers: Record<string, string>, status_code: number, response_id: string, response_time: number }>(await tool.execute({
             url: "http://example.com/path?a=old&keep=1",
             method: "post",
             headers: { "X-Bool": true, "X-Number": 42 },
-            query: { a: "new", b: ["x", "y"] },
         } as never, createToolContext()))
 
         expect(requests).toHaveLength(1)
-        expect(requests[0]?.url.search).toBe("?keep=1&a=new&b=x&b=y")
-        expect(requests[0]?.url.searchParams.getAll("a")).toEqual(["new"])
-        expect(requests[0]?.url.searchParams.getAll("b")).toEqual(["x", "y"])
+        expect(requests[0]?.url.search).toBe("?a=old&keep=1")
         expect(requests[0]?.init?.method).toBe("POST")
         expect(requests[0]?.init?.headers).toEqual({ "X-Bool": "true", "X-Number": "42" })
-        expect(parsed).toEqual({
-            status_code: 201,
-            headers: {
-                "content-type": "text/plain",
-                "x-bool": "true",
-                "x-number": "42",
-            },
-            body: "ok",
-            full_response: true,
-            truncated: false,
+        expect(parsed.status_code).toBe(201)
+        expect(parsed.response_headers).toEqual({
+            "content-type": "text/plain",
+            "x-bool": "true",
+            "x-number": "42",
         })
+        expect(parsed.response_body).toBe("ok")
+        expect(parsed.response_body_file_path).toBeTruthy()
+        expect(parsed.response_id).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
+        expect(typeof parsed.response_time).toBe("number")
+        expect(parsed.response_time).toBeGreaterThanOrEqual(0)
     })
 
-    test("ignores excerpt_size and still truncates to 400 chars", async () => {
+    test("saves body to file always, omits inline response_body when large, uses collision suffix", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        const longBody = "x".repeat(500)
-
-        await seedCurrentJobSession(fileSystem)
-        globalThis.fetch = (async () => new Response(longBody, { status: 200 })) as unknown as typeof fetch
-
-        const parsed = parseResult<{ body: string, full_response: boolean, truncated: boolean }>(await tool.execute({
-            url: "http://example.com/long",
-            method: "GET",
-            excerpt_size: 10,
-        } as never, createToolContext()))
-
-        expect(parsed.body).toHaveLength(400)
-        expect(parsed.full_response).toBe(false)
-        expect(parsed.truncated).toBe(true)
-    })
-
-    test("returns full 400-char body without cache and caches truncated larger bodies with stable naming and collision suffix", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        const exactBody = "a".repeat(400)
-        const longBody = "b".repeat(401)
+        const smallBody = "hello world"
+        const longBody = "b".repeat(500)
 
         await seedCurrentJobSession(fileSystem)
 
-        globalThis.fetch = (async () => new Response(exactBody, { status: 200, headers: { "Content-Type": "text/plain" } })) as unknown as typeof fetch
+        globalThis.fetch = (async () => new Response(smallBody, { status: 200, headers: { "Content-Type": "text/plain" } })) as unknown as typeof fetch
         const exactResult = parseResult<Record<string, unknown>>(await tool.execute({
             url: "http://example.com/exact",
             method: "GET",
         } as never, createToolContext()))
 
-        expect(exactResult.body).toBe(exactBody)
-        expect(exactResult.full_response).toBe(true)
-        expect(exactResult.truncated).toBe(false)
-        expect(exactResult.response_name).toBeUndefined()
-        expect(exactResult.job_name).toBeUndefined()
-        expect(fileSystem.listFiles()).toEqual(["/workspace/.agents/jobs/drafts/my_job/session.yml"])
+        expect(exactResult.response_body).toBe(smallBody)
+        expect(exactResult.response_body_file_path).toBeTruthy()
+        expect(String(exactResult.response_id)).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
+        expect(typeof exactResult.response_time).toBe("number")
 
         await withFixedDate("2026-06-15T12:34:56.789Z", async () => {
             globalThis.fetch = (async () => new Response(longBody, { status: 401, headers: { "X-Test": "value" } })) as unknown as typeof fetch
             const firstLarge = parseResult<Record<string, unknown>>(await tool.execute({
-                url: "http://example.com/api/v1?q=hidden",
+                url: "http://example.com/api/v1",
                 method: "GET",
             } as never, createToolContext()))
 
-            expect(String(firstLarge.body)).toBe(longBody.slice(0, 400))
-            expect(firstLarge.full_response).toBe(false)
-            expect(firstLarge.truncated).toBe(true)
-            expect(firstLarge.job_name).toBe("my_job")
-            expect(firstLarge.guidance).toBe("Body truncated and cached. Use autocode_rest_response_read, autocode_rest_grep, or autocode_rest_response_eval with response_name.")
-            expect(firstLarge.response_name).toMatch(/^26-06-15_12-34-56-789_GET_http_example\.com_/)
-            expect(String(firstLarge.response_name)).toContain("_GET_http_example.com_")
-            expect(String(firstLarge.response_name)).toContain("_^api^v1")
-            expect(String(firstLarge.response_name)).not.toContain("hidden")
+            expect(firstLarge.response_body).toBeUndefined()
+            expect(firstLarge.response_body_file_path).toBeTruthy()
+            expect(String(firstLarge.response_id)).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
 
-            const cachedFirst = JSON.parse(fileSystem.getFile(`/workspace/.agents/jobs/drafts/my_job/rest/${String(firstLarge.response_name)}`) ?? "null") as CacheRecord
-            expect(cachedFirst.body).toBe(longBody)
-            expect(cachedFirst.url).toBe("http://example.com/api/v1?q=hidden")
+            const firstBodyFilePath = String(firstLarge.response_body_file_path)
+            const firstAbsolute = path.isAbsolute(firstBodyFilePath) ? firstBodyFilePath : path.join(process.cwd(), firstBodyFilePath)
+            expect(fileSystem.getFile(firstAbsolute)).toBe(longBody)
 
             globalThis.fetch = (async () => new Response("c".repeat(500), { status: 500 })) as unknown as typeof fetch
             const secondLarge = parseResult<Record<string, unknown>>(await tool.execute({
-                url: "http://example.com/api/v1?q=other",
+                url: "http://example.com/api/v1",
                 method: "GET",
             } as never, createToolContext()))
 
-            expect(String(secondLarge.response_name)).toContain("_GET_http_example.com_")
-            expect(String(secondLarge.response_name)).toContain("_^api^v1")
-            expect(String(secondLarge.response_name)).toMatch(/_2\.json$/)
+            expect(secondLarge.response_id).toBe(firstLarge.response_id)
+            const secondBodyFilePath = String(secondLarge.response_body_file_path)
+            expect(secondBodyFilePath).not.toBe(firstBodyFilePath)
+            expect(secondBodyFilePath).toContain("_2.")
+            const secondAbsolute = path.isAbsolute(secondBodyFilePath) ? secondBodyFilePath : path.join(process.cwd(), secondBodyFilePath)
+            expect(fileSystem.getFile(secondAbsolute)).toBe("c".repeat(500))
         })
-    })
-
-    test("caches long response filename with credential password host port and encoded path", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-
-        await seedCurrentJobSession(fileSystem)
-
-        await withFixedDate("2026-06-15T12:34:56.789Z", async () => {
-            globalThis.fetch = (async () => new Response("x".repeat(401), { status: 200 })) as unknown as typeof fetch
-
-            const result = parseResult<Record<string, unknown>>(await tool.execute({
-                url: "http://username:password@subdomain.host:8000/api/v1",
-                method: "GET",
-            } as never, createToolContext()))
-
-            expect(result.response_name).toMatch(/^26-06-15_12-34-56-789_GET_http_username-cGFzc3dvcmQ=@subdomain\.host-8000_\^api\^v1\.json$/)
-            expect(String(result.response_name)).toContain("username-cGFzc3dvcmQ=@subdomain.host-8000")
-            expect(String(result.response_name)).not.toContain(":8000")
-            expect(String(result.response_name)).toContain("^api^v1")
-        })
-    })
-
-    test("encodes credential password with standard base64 padding in cache filename", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        const expected = Buffer.from("password", "utf8").toString("base64")
-
-        await seedCurrentJobSession(fileSystem)
-
-        expect(expected).toBe("cGFzc3dvcmQ=")
-
-        await withFixedDate("2026-06-15T12:34:56.789Z", async () => {
-            globalThis.fetch = (async () => new Response("x".repeat(401), { status: 200 })) as unknown as typeof fetch
-
-            const result = parseResult<Record<string, unknown>>(await tool.execute({
-                url: "http://username:password@example.com/api",
-                method: "GET",
-            } as never, createToolContext()))
-
-            expect(String(result.response_name)).toContain(`username-${expected}@example.com`)
-            expect(String(result.response_name)).not.toContain("username-cGFzc3dvcmQ@example.com")
-            expect(String(result.response_name)).not.toContain("password@example.com")
-        })
-    })
-
-    test("replaces explicit port colon with hyphen in cache filename host segment", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-
-        await seedCurrentJobSession(fileSystem)
-
-        await withFixedDate("2026-06-15T12:34:56.789Z", async () => {
-            globalThis.fetch = (async () => new Response("x".repeat(401), { status: 200 })) as unknown as typeof fetch
-
-            const result = parseResult<Record<string, unknown>>(await tool.execute({
-                url: "http://example.com:8000/api",
-                method: "GET",
-            } as never, createToolContext()))
-            const responseName = String(result.response_name)
-            const hostSegment = responseName.split("_GET_http_")[1]?.split("_^api")[0]
-
-            expect(responseName).toContain("_GET_http_example.com-8000_")
-            expect(responseName).not.toContain(":8000")
-            expect(String(hostSegment)).not.toContain(":")
-        })
-    })
-
-    test("converts password base64 slash to underscore without bang sanitizing credential segment", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        const password = "࿿a"
-        const encoded = Buffer.from(password, "utf8").toString("base64")
-        const expectedPassword = encoded.replaceAll("/", "_")
-
-        await seedCurrentJobSession(fileSystem)
-
-        expect(encoded).toContain("/")
-        expect(encoded).toContain("+")
-        expect(encoded.endsWith("==")).toBe(true)
-
-        await withFixedDate("2026-06-15T12:34:56.789Z", async () => {
-            globalThis.fetch = (async () => new Response("x".repeat(401), { status: 200 })) as unknown as typeof fetch
-
-            const result = parseResult<Record<string, unknown>>(await tool.execute({
-                url: `http://username:${encodeURIComponent(password)}@example.com/api`,
-                method: "GET",
-            } as never, createToolContext()))
-            const responseName = String(result.response_name)
-            const hostSegment = responseName.split("_GET_http_")[1]?.split("_^api")[0]
-
-            expect(responseName).toContain(`username-${expectedPassword}@example.com`)
-            expect(String(hostSegment)).not.toContain("!")
-            expect(responseName).not.toContain(encoded)
-            expect(responseName).toContain("+")
-            expect(responseName).toContain("==")
-        })
-    })
-
-    test("returns retry json on timeout with longer-timeout guidance", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-
-        await seedCurrentJobSession(fileSystem)
-        globalThis.fetch = ((_: URL | RequestInfo, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener("abort", () => {
-                const error = new Error("aborted")
-                error.name = "AbortError"
-                reject(error)
-            }, { once: true })
-        })) as unknown as typeof fetch
-
-        const parsed = parseError(await tool.execute({
-            url: "http://example.com/slow",
-            method: "GET",
-            timeout: 5,
-        } as never, createToolContext()))
-
-        expect(parsed.failedAction).toBe("autocode_rest")
-        expect(parsed.error).toContain("Request timed out after 5ms")
-        expect(parsed.instruction).toContain("longer timeout")
     })
 
     test("decodes non-utf8 bytes with replacement chars", async () => {
@@ -467,165 +297,121 @@ describe("autocode_rest tools", () => {
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
 
         await seedCurrentJobSession(fileSystem)
-        globalThis.fetch = (async () => new Response(new Uint8Array([0xff, 0xfe, 65]), { status: 200 })) as unknown as typeof fetch
+        globalThis.fetch = (async () => new Response(new Uint8Array([0xff, 0xfe, 65]), { status: 200, headers: { "content-type": "text/plain" } })) as unknown as typeof fetch
 
-        const parsed = parseResult<{ body: string, full_response: boolean, truncated: boolean }>(await tool.execute({
+        const parsed = parseResult<{ response_body: string, response_body_file_path: string, response_id: string, response_time: number }>(await tool.execute({
             url: "http://example.com/binary",
             method: "GET",
         } as never, createToolContext()))
 
-        expect(parsed.body).toContain("�")
-        expect(parsed.body.endsWith("A")).toBe(true)
-        expect(parsed.full_response).toBe(true)
-        expect(parsed.truncated).toBe(false)
+        expect(parsed.response_body).toContain("�")
+        expect(parsed.response_body.endsWith("A")).toBe(true)
+        expect(parsed.response_body_file_path).toBeTruthy()
+        expect(parsed.response_id).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
+        expect(typeof parsed.response_time).toBe("number")
+        expect(parsed.response_time).toBeGreaterThanOrEqual(0)
     })
 
-    test("reads cached body lines and headers with paging", async () => {
+    test("returns timed_out json with actual response_time when request exceeds timeout", async () => {
         const fileSystem = createMemoryRestFileSystem()
-        const bodyReadTool = createAutocodeRestResponseReadTool(createSessionClient(), fileSystem)
-
-        await seedCachedResponse(fileSystem, "cached.json", {
-            headers: { "X-Test": "alpha\nbeta" },
-            body: "line 1\nline 2\nline 3\nline 4",
-        })
-
-        const bodyResult = parseResult<{ lines: Array<{ line: number, text: string }>, offset: number, total_lines: number, source: string }>(await bodyReadTool.execute({
-            response_name: "cached.json",
-            offset: 2,
-            limit: 2,
-        } as never, createToolContext()))
-
-        expect(bodyResult.source).toBe("body")
-        expect(bodyResult.offset).toBe(2)
-        expect(bodyResult.total_lines).toBe(4)
-        expect(bodyResult.lines).toEqual([
-            { line: 2, text: "line 2" },
-            { line: 3, text: "line 3" },
-        ])
-
-        const headerResult = parseResult<{ lines: Array<{ line: number, text: string }>, source: string }>(await bodyReadTool.execute({
-            response_name: "cached.json",
-            header: "x-test",
-        } as never, createToolContext()))
-
-        expect(headerResult.source).toBe("X-Test")
-        expect(headerResult.lines).toEqual([
-            { line: 1, text: "alpha" },
-            { line: 2, text: "beta" },
-        ])
-    })
-
-    test("retries on invalid read paging, missing response, and traversal", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestResponseReadTool(createSessionClient(), fileSystem)
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
 
         await seedCurrentJobSession(fileSystem)
 
-        const invalidPaging = parseError(await tool.execute({ response_name: "cached.json", offset: 0, limit: 1 } as never, createToolContext()))
-        expect(invalidPaging.failedAction).toBe("autocode_rest_response_read")
-        expect(invalidPaging.error).toContain("offset and limit must be positive integers")
+        let abortReceived: Error | undefined
+        globalThis.fetch = ((_input: unknown, init?: { signal?: AbortSignal }) => {
+            return new Promise((_resolve, reject) => {
+                const signal = init?.signal
+                if (!signal) {
+                    reject(new Error("no signal"))
+                    return
+                }
+                if (signal.aborted) {
+                    reject(new DOMException("aborted", "AbortError"))
+                    return
+                }
+                signal.addEventListener("abort", () => {
+                    const err = new Error("aborted")
+                    err.name = "AbortError"
+                    abortReceived = err
+                    reject(err)
+                })
+            })
+        }) as unknown as typeof fetch
 
-        const missingResponse = parseError(await tool.execute({ response_name: "missing.json" } as never, createToolContext()))
-        expect(missingResponse.error).toContain("Cached response not found")
-
-        const traversal = parseError(await tool.execute({ response_name: "../x" } as never, createToolContext()))
-        expect(traversal.error).toContain("Unsafe response_name")
-    })
-
-    test("greps cached body and returns line, column, and match counts", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestResponseGrepTool(createSessionClient(), fileSystem)
-
-        await seedCachedResponse(fileSystem, "grep.json", {
-            body: "zero\nalpha beta\nbeta",
-        })
-
-        const matches = parseResult<{ match_count: number, matches: Array<{ column: number, line: number, text: string }>, source: string }>(await tool.execute({
-            response_name: "grep.json",
-            pattern: "beta",
+        const result = parseResult<Record<string, unknown>>(await tool.execute({
+            url: "http://example.com/slow",
+            method: "GET",
+            timeout: 50,
         } as never, createToolContext()))
 
-        expect(matches.source).toBe("body")
-        expect(matches.match_count).toBe(2)
-        expect(matches.matches).toEqual([
-            { line: 2, column: 7, text: "alpha beta" },
-            { line: 3, column: 1, text: "beta" },
-        ])
-
-        const noMatches = parseResult<{ match_count: number, matches: unknown[] }>(await tool.execute({
-            response_name: "grep.json",
-            pattern: "gamma",
-        } as never, createToolContext()))
-
-        expect(noMatches.match_count).toBe(0)
-        expect(noMatches.matches).toEqual([])
+        expect(result.timed_out).toBe(true)
+        expect(result.timeout_ms).toBe(50)
+        expect(typeof result.response_time).toBe("number")
+        expect(result.response_time).toBeGreaterThanOrEqual(50)
+        expect(typeof result.response_id).toBe("string")
+        expect(String(result.response_id)).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
+        expect(result.status_code).toBeUndefined()
+        expect(result.response_body).toBeUndefined()
+        expect(abortReceived).toBeDefined()
+        expect(abortReceived?.name).toBe("AbortError")
     })
 
-    test("retries on invalid grep regex, missing response, and traversal", async () => {
+    test("auto-creates assist job dir when no planned job matches the session title", async () => {
         const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestResponseGrepTool(createSessionClient(), fileSystem)
+        const tool = createAutocodeRestTool(createSessionClient({ "session-1": { title: "My REST Query" } }), fileSystem)
+
+        globalThis.fetch = (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch
+
+        const parsed = parseResult<{ response_body: string, response_body_file_path: string, status_code: number, response_id: string, response_time: number }>(await tool.execute({
+            url: "http://example.com/api",
+            method: "GET",
+        } as never, createToolContext()))
+
+        expect(parsed.status_code).toBe(200)
+        expect(parsed.response_body).toBe("ok")
+        expect(parsed.response_body_file_path).toBeTruthy()
+        expect(parsed.response_id).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
+        expect(typeof parsed.response_time).toBe("number")
+
+        const jobDir = "/workspace/.agents/jobs/assist/my_rest_query"
+        expect(fileSystem.getFile(`${jobDir}/session.yml`)).toBe("session_id: session-1\n")
+        await expect(fileSystem.stat(`${jobDir}/rest`)).resolves.toEqual({ mtimeMs: 1 })
+    })
+
+    test("still errors when session title yields empty slug", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient({ "session-1": { title: "!!!" } }), fileSystem)
+
+        const errored = parseError(await tool.execute({
+            url: "http://example.com/api",
+            method: "GET",
+        } as never, createToolContext()))
+
+        expect(errored.failedAction).toBe("autocode_rest")
+        expect(errored.error).toContain("No active planned job context was found for current session.")
+
+        await expect(fileSystem.stat("/workspace/.agents/jobs/assist")).rejects.toMatchObject({ code: "ENOENT" })
+    })
+
+    test("does not auto-create assist dir when an existing planned job is resolved", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
 
         await seedCurrentJobSession(fileSystem)
-        await seedCachedResponse(fileSystem, "grep.json", { body: "alpha" })
+        globalThis.fetch = (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch
 
-        const invalidRegex = parseError(await tool.execute({ response_name: "grep.json", pattern: "[" } as never, createToolContext()))
-        expect(invalidRegex.failedAction).toBe("autocode_rest_grep")
-        expect(invalidRegex.instruction).toContain("valid JavaScript regular expression")
-
-        const missingResponse = parseError(await tool.execute({ response_name: "missing.json", pattern: "alpha" } as never, createToolContext()))
-        expect(missingResponse.error).toContain("Cached response not found")
-
-        const traversal = parseError(await tool.execute({ response_name: "../x", pattern: "alpha" } as never, createToolContext()))
-        expect(traversal.error).toContain("Unsafe response_name")
-    })
-
-    test("evaluates cached json paths for objects, arrays, and missing values", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestResponseEvalTool(createSessionClient(), fileSystem)
-
-        await seedCachedResponse(fileSystem, "eval.json", {
-            body: JSON.stringify({ alpha: { beta: [{ id: 7 }] }, list: ["x", "y"] }),
-        })
-
-        const objectPath = parseResult<{ response_name: string, eval: string, found: boolean, value: unknown }>(await tool.execute({
-            response_name: "eval.json",
-            eval: "alpha.beta[0].id",
+        const parsed = parseResult<{ status_code: number, response_id: string, response_time: number }>(await tool.execute({
+            url: "http://example.com/api",
+            method: "GET",
         } as never, createToolContext()))
-        expect(objectPath).toEqual({ response_name: "eval.json", eval: "alpha.beta[0].id", found: true, value: 7 })
 
-        const arrayPath = parseResult<{ response_name: string, eval: string, found: boolean, value: unknown }>(await tool.execute({
-            response_name: "eval.json",
-            eval: "list[1]",
-        } as never, createToolContext()))
-        expect(arrayPath).toEqual({ response_name: "eval.json", eval: "list[1]", found: true, value: "y" })
-
-        const missingPath = parseResult<{ response_name: string, eval: string, found: boolean }>(await tool.execute({
-            response_name: "eval.json",
-            eval: "alpha.beta[1]",
-        } as never, createToolContext()))
-        expect(missingPath).toEqual({ response_name: "eval.json", eval: "alpha.beta[1]", found: false })
-    })
-
-    test("retries on invalid cached json, invalid eval, missing response, and traversal", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestResponseEvalTool(createSessionClient(), fileSystem)
-
-        await seedCurrentJobSession(fileSystem)
-        await seedCachedResponse(fileSystem, "text.json", { body: "not json" })
-        await seedCachedResponse(fileSystem, "json.json", { body: JSON.stringify({ alpha: 1 }) })
-
-        const invalidJson = parseError(await tool.execute({ response_name: "text.json", eval: "alpha" } as never, createToolContext()))
-        expect(invalidJson.failedAction).toBe("autocode_rest_response_eval")
-        expect(invalidJson.instruction).toContain("non-JSON cached bodies")
-
-        const invalidEval = parseError(await tool.execute({ response_name: "json.json", eval: "alpha..beta" } as never, createToolContext()))
-        expect(invalidEval.error).toContain("Invalid eval expression")
-        expect(invalidEval.instruction).toContain("Use only dots, identifiers, and numeric bracket indexes")
-
-        const missingResponse = parseError(await tool.execute({ response_name: "missing.json", eval: "alpha" } as never, createToolContext()))
-        expect(missingResponse.error).toContain("Cached response not found")
-
-        const traversal = parseError(await tool.execute({ response_name: "../x", eval: "alpha" } as never, createToolContext()))
-        expect(traversal.error).toContain("Unsafe response_name")
+        expect(parsed.status_code).toBe(200)
+        expect(parsed.response_id).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
+        expect(typeof parsed.response_time).toBe("number")
+        const allFiles = fileSystem.listFiles()
+        expect(allFiles).toContain("/workspace/.agents/jobs/drafts/my_job/session.yml")
+        expect(allFiles.some(f => f.includes("/assist/"))).toBe(false)
+        await expect(fileSystem.stat("/workspace/.agents/jobs/assist")).rejects.toMatchObject({ code: "ENOENT" })
     })
 })

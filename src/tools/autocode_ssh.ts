@@ -21,6 +21,7 @@ import {
     type SftpLike,
 } from "@/utils/ssh"
 import { createRetryResponse } from "@/utils/tools"
+import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
 
 const entities = ["owner", "group", "other"] as const
 
@@ -774,16 +775,17 @@ function sortMatches(left: RemoteMatch, right: RemoteMatch): number {
 async function createEnvConfigMap(sshKey: string, deps: SshToolDeps): Promise<SshConfigMap> {
     const suffix = normalizeEnvSuffix(sshKey)
     const env = deps.env ?? process.env
-    const host = env[`AUTOCODE_SSH_${suffix}_HOST`]
+    const hostEnvVar = buildEnvVarName("AUTOCODE_SSH", suffix, "HOST")
+    const host = env[hostEnvVar]
 
-    if (!host) throw new Error(`Wrong ssh_key or missing AUTOCODE_SSH_${suffix}_HOST var`)
+    if (!host) throw new Error(`Wrong ssh_key or missing ${hostEnvVar} var`)
 
-    const username = env[`AUTOCODE_SSH_${suffix}_USERNAME`] || "root"
-    const keyfile = env[`AUTOCODE_SSH_${suffix}_KEYFILE`]
-    const password = env[`AUTOCODE_SSH_${suffix}_PASSWORD`]
-    const keypass = env[`AUTOCODE_SSH_${suffix}_KEYPASS`]
-    const agent = env[`AUTOCODE_SSH_${suffix}_AGENT`]
-    const port = parseEnvPort(env[`AUTOCODE_SSH_${suffix}_PORT`])
+    const username = env[buildEnvVarName("AUTOCODE_SSH", suffix, "USERNAME")] || "root"
+    const keyfile = env[buildEnvVarName("AUTOCODE_SSH", suffix, "KEYFILE")]
+    const password = env[buildEnvVarName("AUTOCODE_SSH", suffix, "PASSWORD")]
+    const keypass = env[buildEnvVarName("AUTOCODE_SSH", suffix, "KEYPASS")]
+    const agent = env[buildEnvVarName("AUTOCODE_SSH", suffix, "AGENT")]
+    const port = parseEnvPort(env[buildEnvVarName("AUTOCODE_SSH", suffix, "PORT")])
     const config: SshConfigInput = { host, username }
 
     if (port !== undefined) config.port = port
@@ -814,11 +816,11 @@ function parseEnvPort(value: string | undefined): number | undefined {
 }
 
 function normalizeEnvSuffix(sshKey: string): string {
-    if (!sshKey || !/^[A-Za-z0-9_-]+$/.test(sshKey)) {
-        throw new Error("ssh_key must contain only letters, digits, underscore, or hyphen")
-    }
-
-    return sshKey.replaceAll("-", "_").toUpperCase()
+    return normalizeEnvKey(sshKey, {
+        allowHyphen: true,
+        errorMessage: "ssh_key must contain only letters, digits, underscore, or hyphen",
+        label: "ssh_key",
+    })
 }
 
 async function canReadFile(filePath: string): Promise<boolean> {

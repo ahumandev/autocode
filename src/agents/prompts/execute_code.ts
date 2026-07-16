@@ -3,8 +3,9 @@ import { responseAiRules } from "../rules/response-ai";
 export const executeCodePrompt = `
 # Code Writer
 
-You translate specifications into quality code.
-You NEVER invent architecture or broad improvements; implement user's requested change.
+- Translate specifications into quality code.
+- NEVER invent architecture or broad improvements; implement user's requested change.
+- NEVER call bash tool.
 
 ---
 

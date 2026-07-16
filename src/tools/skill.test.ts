@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
-import { join } from "path"
+import { dirname, join } from "path"
 import {
     activeContextIncludesMarkerHash,
     buildAutocodeSkillLoadHash,
     buildAutocodeSkillLoadIdentity,
     buildAutocodeSkillLoadMarker,
+    buildAutocodeSkillReadLoadIdentity,
+    buildAutocodeSkillReadLoadMarker,
     clearAutocodeSkillLoadLiveCacheForTest,
+    createSkillReadTool,
     createSkillTool,
 } from "./skill"
 import { createToolContext } from "./test_context"
@@ -59,7 +62,13 @@ function withTempSkillRoots<T>(fn: (roots: { root: string, configHome: string, w
 }
 
 function parseToolResult(result: string | { output: string }): JsonObject {
-    return JSON.parse(typeof result === "string" ? result : result.output) as JsonObject
+    const raw = typeof result === "string" ? result : result.output
+    try {
+        return JSON.parse(raw) as JsonObject
+    }
+    catch {
+        return { output: raw }
+    }
 }
 
 function expectExactKeys(result: JsonObject, keys: string[]): void {
@@ -72,10 +81,8 @@ function expectLegacyLoadFieldsAbsent(result: JsonObject): void {
     }
 }
 
-function expectLoadedResultShape(result: JsonObject, name: string, directory: string): void {
-    expectExactKeys(result, ["name", "directory", "output"])
-    expect(result.name).toBe(name)
-    expect(result.directory).toBe(directory)
+function expectLoadedResultShape(result: JsonObject, name: string): void {
+    expectExactKeys(result, ["output"])
     expect(result.output).toEqual(expect.stringContaining("skill"))
     expect(result.output).toEqual(expect.stringContaining("hash="))
     expect(result.output).toEqual(expect.stringContaining(`<skill_content name="${name}">`))
@@ -84,11 +91,9 @@ function expectLoadedResultShape(result: JsonObject, name: string, directory: st
     expectLegacyLoadFieldsAbsent(result)
 }
 
-function expectSkippedResultShape(result: JsonObject, directory: string, name = "code-typescript"): void {
-    expectExactKeys(result, ["name", "directory"])
-    expect(result.name).toBe(name)
-    expect(result.directory).toBe(directory)
-    expect(result).not.toHaveProperty("output")
+function expectSkippedResultShape(result: JsonObject): void {
+    expectExactKeys(result, ["output"])
+    expect(result.output).toBe("")
     expectLegacyLoadFieldsAbsent(result)
 }
 
@@ -165,6 +170,50 @@ async function executeSkillAlias(worktree: string, client: OpencodeClient | unde
     return parseToolResult(result)
 }
 
+function writeGeneratedSkillFile(configHome: string, name: string, relativePath: string, content: string): string {
+    const dir = writeGeneratedSkill(configHome, name)
+    const filePath = join(dir, relativePath)
+    mkdirSync(dirname(filePath), { recursive: true })
+    writeFileSync(filePath, content)
+    return filePath
+}
+
+async function executeSkillRead(
+    worktree: string,
+    client: OpencodeClient | undefined = undefined,
+    args: Record<string, unknown> = { name: "code-typescript", filePath: "reference.md" },
+    agent = "pair",
+    sessionID: string | null = "session-1",
+): Promise<JsonObject> {
+    const tool = createSkillReadTool(client)
+    const result = await tool.execute(args as never, createToolContext({
+        agent,
+        directory: worktree,
+        worktree,
+        sessionID: sessionID === null ? undefined : sessionID,
+    }))
+
+    return parseToolResult(result)
+}
+
+function expectSkillReadLoadedResult(result: JsonObject, absolutePath: string): void {
+    expectExactKeys(result, ["output"])
+    expect(result.output).toEqual(expect.stringContaining("skill_read"))
+    expect(result.output).toEqual(expect.stringContaining("hash="))
+    expect(result.output).toEqual(expect.stringContaining(`<skill_file path="file://${absolutePath}">`))
+}
+
+function expectSkillReadSkippedResult(result: JsonObject): void {
+    expectExactKeys(result, ["output"])
+    expect(result.output).toBe("")
+}
+
+function extractSkillReadMarker(output: unknown): string {
+    const match = String(output).match(/<!-- skill_read identity=[^\n]+ hash=[a-f0-9]+ -->/)
+    expect(match).not.toBeNull()
+    return match?.[0] ?? ""
+}
+
 function createClient(overrides: ActiveContextClient = {}): OpencodeClient {
     return overrides as unknown as OpencodeClient
 }
@@ -215,9 +264,8 @@ describe("skill tool", () => {
 
             const result = await executeSkillLoad(worktree)
 
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("Generated TypeScript guidance.")
-            expect(result.output).toContain(`Base directory for this skill: file://${directory}`)
         })
     })
 
@@ -227,7 +275,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillAlias(worktree)
 
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("Generated TypeScript guidance.")
             expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
         })
@@ -239,7 +287,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillAlias(worktree, undefined, { name: "a" })
 
-            expectLoadedResultShape(result, "a", directory)
+            expectLoadedResultShape(result, "a")
             expect(result.output).toContain("Local project skill A guidance.")
             expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
         })
@@ -251,7 +299,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-pair" })
 
-            expectLoadedResultShape(result, "learned-corrections-pair", directory)
+            expectLoadedResultShape(result, "learned-corrections-pair")
             expect(result.output).toContain("Learned correction guidance.")
             expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
         })
@@ -263,7 +311,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-os" }, "execute_os")
 
-            expectLoadedResultShape(result, "learned-corrections-os", directory)
+            expectLoadedResultShape(result, "learned-corrections-os")
             expect(result.output).toContain("Learned os correction guidance.")
             expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
         })
@@ -276,7 +324,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillLoad(worktree, undefined, { name: "a" })
 
-            expectLoadedResultShape(result, "a", directory)
+            expectLoadedResultShape(result, "a")
             expect(result.output).toContain("Generated skill A guidance.")
             expect(result.output).not.toContain("Project skill A guidance must not load.")
         })
@@ -300,7 +348,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillLoad(worktree, undefined, { name: "code-typescript" }, "../pair")
 
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("Generated TypeScript guidance.")
         })
     })
@@ -323,7 +371,7 @@ describe("skill tool", () => {
             clearAutocodeSkillLoadLiveCacheForTest()
             const result = await executeSkillLoad(worktree, client)
 
-            expectSkippedResultShape(result, directory)
+            expectSkippedResultShape(result)
             expect(activeContextCalls).toEqual([{ path: { id: "session-1" }, query: { directory: worktree } }])
             expectMarkerSafe(marker, [root, configHome, worktree])
         })
@@ -354,7 +402,7 @@ describe("skill tool", () => {
             clearAutocodeSkillLoadLiveCacheForTest()
             const result = await executeSkillLoad(worktree, client)
 
-            expectSkippedResultShape(result, directory)
+            expectSkippedResultShape(result)
             expect(contextCalls).toEqual([{ sessionID: "session-1" }])
             expectMarkerSafe(marker, [root, configHome, worktree])
         })
@@ -377,7 +425,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillLoad(worktree, client)
 
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("Generated TypeScript guidance after v2 miss.")
             expect(contextCalls).toEqual([{ sessionID: "session-1" }])
         })
@@ -409,7 +457,7 @@ describe("skill tool", () => {
             clearAutocodeSkillLoadLiveCacheForTest()
             const result = await executeSkillLoad(worktree, client)
 
-            expectSkippedResultShape(result, directory)
+            expectSkippedResultShape(result)
             expect(calls).toEqual(["v2", "legacy"])
         })
     })
@@ -427,7 +475,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillLoad(worktree, client)
 
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("Generated TypeScript guidance after compaction.")
         })
     })
@@ -448,8 +496,8 @@ describe("skill tool", () => {
             const loaded = await executeSkillLoad(worktree, client)
             const cached = await executeSkillLoad(worktree, client)
 
-            expectLoadedResultShape(loaded, "code-typescript", directory)
-            expectSkippedResultShape(cached, directory, "code-typescript")
+            expectLoadedResultShape(loaded, "code-typescript")
+            expectSkippedResultShape(cached)
             expect(activeContextCalls).toEqual([{ path: { id: "session-1" }, query: { directory: worktree } }])
         })
     })
@@ -468,8 +516,8 @@ describe("skill tool", () => {
             const firstSession = await executeSkillLoad(worktree, client, { name: "code-typescript" }, "pair", "session-1")
             const secondSession = await executeSkillLoad(worktree, client, { name: "code-typescript" }, "pair", "session-2")
 
-            expectLoadedResultShape(firstSession, "code-typescript", directory)
-            expectLoadedResultShape(secondSession, "code-typescript", directory)
+            expectLoadedResultShape(firstSession, "code-typescript")
+            expectLoadedResultShape(secondSession, "code-typescript")
         })
     })
 
@@ -488,7 +536,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillLoad(worktree, client)
 
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
             expect(extractHash(result.output)).not.toBe(extractHash(oldResult.output))
             expect(result.output).toContain("New generated guidance.")
         })
@@ -501,8 +549,8 @@ describe("skill tool", () => {
             const first = await executeSkillLoad(worktree, undefined, { name: "code-typescript" }, "pair", null)
             const second = await executeSkillLoad(worktree, undefined, { name: "code-typescript" }, "pair", null)
 
-            expectLoadedResultShape(first, "code-typescript", join(configHome, "skills", "autocode", "code-typescript"))
-            expectLoadedResultShape(second, "code-typescript", join(configHome, "skills", "autocode", "code-typescript"))
+            expectLoadedResultShape(first, "code-typescript")
+            expectLoadedResultShape(second, "code-typescript")
         })
     })
 
@@ -516,8 +564,8 @@ describe("skill tool", () => {
             clearAutocodeSkillLoadLiveCacheForTest()
             const throwingResult = await executeSkillLoad(worktree, throwingClient)
 
-            expectLoadedResultShape(missingResult, "code-typescript", directory)
-            expectLoadedResultShape(throwingResult, "code-typescript", directory)
+            expectLoadedResultShape(missingResult, "code-typescript")
+            expectLoadedResultShape(throwingResult, "code-typescript")
         })
     })
 
@@ -546,7 +594,7 @@ describe("skill tool", () => {
             clearAutocodeSkillLoadLiveCacheForTest()
             const result = await executeSkillLoad(worktree, client)
 
-            expectSkippedResultShape(result, directory)
+            expectSkippedResultShape(result)
             expect(requests).toEqual([`http://opencode.test/api/session/session-1/context?directory=${encodeURIComponent(worktree)}`])
         })
     })
@@ -558,7 +606,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillLoad(worktree, client)
 
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
         })
     })
 
@@ -582,7 +630,7 @@ describe("skill tool", () => {
             clearAutocodeSkillLoadLiveCacheForTest()
             const result = await executeSkillLoad(worktree, client)
 
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
             expect(activeContextCalls).toEqual([{ path: { id: "session-1" }, query: { directory: worktree } }])
         })
     })
@@ -605,7 +653,7 @@ describe("skill tool", () => {
             const result = await executeSkillLoad(worktree, client)
 
             expect(extractHash(result.output)).not.toBe(extractHash(oldResult.output))
-            expectLoadedResultShape(result, "code-typescript", directory)
+            expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("New generated guidance.")
             expect(result.output).not.toContain("Old generated guidance.")
             expect(activeContextCalls).toEqual([{ path: { id: "session-1" }, query: { directory: worktree } }])
@@ -620,7 +668,7 @@ describe("skill tool", () => {
 
             const result = await executeSkillLoad(worktree, undefined, { name: "standalone" })
 
-            expectLoadedResultShape(result, "standalone", join(configHome, "skills", "autocode"))
+            expectLoadedResultShape(result, "standalone")
             expect(result.output).toContain("Standalone guidance.")
         })
     })
@@ -643,5 +691,154 @@ describe("skill tool", () => {
             expect(result.error).toBe("Unable to load skill a")
             expect(String(result.error)).not.toContain("Generated skill not found")
         })
+    })
+})
+
+describe("skill_read tool", () => {
+    beforeEach(() => {
+        clearAutocodeSkillLoadLiveCacheForTest()
+    })
+
+    test("reads file relative to SKILL.md location", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            const directory = writeGeneratedSkill(configHome, "code-typescript")
+            const absolutePath = writeGeneratedSkillFile(configHome, "code-typescript", "reference.md", "Reference notes.\nLine two.")
+
+            const result = await executeSkillRead(worktree)
+
+            expectSkillReadLoadedResult(result, absolutePath)
+            expect(String(result.output)).toContain("Reference notes.")
+            expect(String(result.output)).toContain("Line two.")
+            expect(String(result.output)).toContain(`file://${absolutePath}`)
+            expect(directory).toBeTruthy()
+        })
+    })
+
+    test("reads nested file path", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            const absolutePath = writeGeneratedSkillFile(configHome, "code-typescript", "scripts/run.sh", "#!/bin/sh\necho hi")
+
+            const result = await executeSkillRead(worktree, undefined, { name: "code-typescript", filePath: "scripts/run.sh" })
+
+            expectSkillReadLoadedResult(result, absolutePath)
+            expect(String(result.output)).toContain("#!/bin/sh")
+            expect(String(result.output)).toContain("echo hi")
+        })
+    })
+
+    test("aborts when skill not found", async () => {
+        await withTempSkillRoots(async ({ worktree }) => {
+            const result = await executeSkillRead(worktree, undefined, { name: "missing-skill", filePath: "reference.md" })
+
+            expect(result.failedAction).toBe("read skill file")
+            expect(result.error).toBe("Unable to load skill missing-skill")
+            expect(String(result.instruction)).toContain("Immediately ABORT")
+        })
+    })
+
+    test("aborts when file not found", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            writeGeneratedSkill(configHome, "code-typescript")
+
+            const result = await executeSkillRead(worktree, undefined, { name: "code-typescript", filePath: "nope.md" })
+
+            expect(result.failedAction).toBe("read skill file")
+            expect(String(result.error)).toContain("File not found")
+        })
+    })
+
+    test("aborts when file is too large", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            const absolutePath = writeGeneratedSkillFile(configHome, "code-typescript", "big.txt", "a".repeat(40_000))
+
+            const result = await executeSkillRead(worktree, undefined, { name: "code-typescript", filePath: "big.txt" })
+
+            expect(result.failedAction).toBe("read skill file")
+            expect(String(result.error)).toContain("File is too large")
+            expect(String(result.error)).toContain(absolutePath)
+            expect(String(result.error)).toContain("40000")
+        })
+    })
+
+    test("aborts on path traversal outside skill directory", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            writeGeneratedSkill(configHome, "code-typescript")
+
+            const result = await executeSkillRead(worktree, undefined, { name: "code-typescript", filePath: "../../evil.txt" })
+
+            expect(result.failedAction).toBe("read skill file")
+            expect(String(result.error)).toContain("resolves outside the skill directory")
+        })
+    })
+
+    test("skips duplicate read via live dedupe cache", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            const absolutePath = writeGeneratedSkillFile(configHome, "code-typescript", "reference.md", "Reference notes.\nLine two.")
+
+            const first = await executeSkillRead(worktree)
+            const second = await executeSkillRead(worktree)
+
+            expectSkillReadLoadedResult(first, absolutePath)
+            expectSkillReadSkippedResult(second)
+        })
+    })
+
+    test("skips duplicate read via active context marker", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            const absolutePath = writeGeneratedSkillFile(configHome, "code-typescript", "reference.md", "Reference notes.\nLine two.")
+            const loaded = await executeSkillRead(worktree)
+            const marker = extractSkillReadMarker(loaded.output)
+            const activeContextCalls: unknown[] = []
+            const client = createClient({
+                session: {
+                    async activeContext(args) {
+                        activeContextCalls.push(args)
+                        return { messages: [{ content: [`already loaded ${marker}`] }] }
+                    },
+                },
+            })
+
+            clearAutocodeSkillLoadLiveCacheForTest()
+            const result = await executeSkillRead(worktree, client)
+
+            expectSkillReadSkippedResult(result)
+            expect(activeContextCalls).toEqual([{ path: { id: "session-1" }, query: { directory: worktree } }])
+        })
+    })
+
+    test("rejects missing filePath argument", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            writeGeneratedSkill(configHome, "code-typescript")
+
+            const result = await executeSkillRead(worktree, undefined, { name: "code-typescript" })
+
+            expect(String(result.error)).toContain("Invalid filePath")
+        })
+    })
+
+    test("returns content verbatim without trimming", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            const absolutePath = writeGeneratedSkillFile(configHome, "code-typescript", "reference.md", "  keep spaces  \n\n")
+
+            const result = await executeSkillRead(worktree)
+
+            expectSkillReadLoadedResult(result, absolutePath)
+            expect(String(result.output)).toContain("  keep spaces  ")
+            expect(String(result.output)).toContain("\n\n")
+        })
+    })
+
+    test("identity, hash, and marker are stable for file reads", () => {
+        const identity = buildAutocodeSkillReadLoadIdentity("code-typescript", "reference.md")
+        const payload = { content: "Reference notes." }
+        const sameHash = buildAutocodeSkillLoadHash(identity, payload)
+        const changedHash = buildAutocodeSkillLoadHash(identity, { ...payload, content: "Changed." })
+        const marker = buildAutocodeSkillReadLoadMarker(identity, sameHash)
+
+        expect(buildAutocodeSkillReadLoadIdentity("code-typescript", "reference.md")).toBe(identity)
+        expect(buildAutocodeSkillLoadHash(identity, payload)).toBe(sameHash)
+        expect(buildAutocodeSkillReadLoadMarker(identity, sameHash)).toBe(marker)
+        expect(changedHash).not.toBe(sameHash)
+        expect(identity).toMatch(/^skill_read:code-typescript:reference\.md$/)
     })
 })

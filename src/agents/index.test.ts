@@ -9,7 +9,7 @@ function permissionRule(permission: AutocodeAgentConfig["permission"], key: stri
 }
 
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]
-const executeRestToolNames = ["autocode_rest", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_rest_response_read"]
+const executeRestToolNames = ["autocode_rest"]
 const executeOpencodeAllowedPermissionKeys = ["autocode_config_*", "autocode_md_*"]
 const executeOpencodeForbiddenToolKeys = ["apply_patch", "bash", "execute", "patch", "task", "write"]
 const executeOpencodeAllowedSkillNames = ["author-agent", "author-command", "author-skill", "author-rules"]
@@ -157,13 +157,8 @@ describe("agent policies", () => {
         }
         expect(permissionRule(agents.execute_rest?.permission, "doom_loop")).toBeUndefined()
         expect(agents.execute_rest?.prompt).toContain("autocode_rest")
-        expect(agents.execute_rest?.prompt).toContain("autocode_rest_response_read")
-        expect(agents.execute_rest?.prompt).toContain("autocode_rest_grep")
-        expect(agents.execute_rest?.prompt).toContain("autocode_rest_response_eval")
         expect(agents.execute_rest?.prompt).toContain("GET, POST, PUT, PATCH, DELETE")
-        expect(agents.execute_rest?.prompt).toContain("Values in `query` map override same query keys already in URL")
-        expect(agents.execute_rest?.prompt).toContain("truncated: true")
-        expect(agents.execute_rest?.prompt).toContain("full_response: false")
+        expect(agents.execute_rest?.prompt).toContain("response_id")
         expect(agents.execute_rest?.prompt).toContain("Never dump full raw REST result unless user specifically asks")
         expect(agents.execute_rest?.prompt).toContain("Caveman English")
         expect(agents.execute_rest?.prompt).toContain("ask user confirmation")
@@ -241,27 +236,13 @@ describe("agent policies", () => {
         expect(prompt).toContain("You MUST NOT edit source code, scripts, package/config files, or Markdown outside the allowed paths")
     })
 
-    test("execute_rest prompt examples use strict JSON object text", () => {
+    test("execute_rest prompt covers main tool and follow-up saved-response tools", () => {
         const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
         const prompt = String(agents.execute_rest?.prompt ?? "")
-        const examplesMatch: RegExpMatchArray | null = prompt.match(/### Examples([\s\S]+?)## Follow-up tools for saved responses/)
-        const examplesSection = examplesMatch?.[1] ?? ""
-        const spans = Array.from(examplesSection.matchAll(/`(\{[^`]+\})`/g), (match): string => match[1]!)
-        const legacyPattern = /[{,]\s*(url|method|query|headers|body|timeout|page|content-type|name|active)\s*:/
 
-        expect(prompt).toContain('{ "url": "https://api.example.com/users", "method": "GET", "query": { "page": "1" }, "timeout": 5000 }')
-        expect(prompt).toContain('{ "url": "https://api.example.com/users", "method": "POST", "headers": { "content-type": "application/json" }, "body": { "name": "Ann" }, "timeout": 5000 }')
-        expect(prompt).toContain('{ "url": "https://api.example.com/users/1", "method": "PUT", "headers": { "content-type": "application/json" }, "body": { "name": "Ann 2" }, "timeout": 5000 }')
-        expect(prompt).toContain('{ "url": "https://api.example.com/users/1", "method": "PATCH", "headers": { "content-type": "application/json" }, "body": { "active": true }, "timeout": 5000 }')
-        expect(prompt).toContain('{ "url": "https://api.example.com/users/1", "method": "DELETE", "timeout": 5000 }')
-        expect(spans).toHaveLength(5)
-
-        const parsedMethods = spans.map((span) => {
-            expect(span).not.toMatch(legacyPattern)
-            return String((JSON.parse(span) as { method?: unknown }).method)
-        })
-
-        expect(parsedMethods).toEqual(["GET", "POST", "PUT", "PATCH", "DELETE"])
+        expect(prompt).toContain("Use `autocode_rest` for GET, POST, PUT, PATCH, DELETE")
+        expect(prompt).not.toContain("`query`")
+        expect(prompt).not.toContain("rest_key")
     })
 
     test("execute_author and query_skills prompt learned skill loading guidance is current", () => {

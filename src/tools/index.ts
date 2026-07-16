@@ -27,17 +27,19 @@ import { createAutocodeKillTool } from "./autocode_kill"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
 import { createAutocodePlanSaveTool } from "./autocode_plan_save"
-import { createAutocodeRestResponseEvalTool, createAutocodeRestResponseGrepTool, createAutocodeRestResponseReadTool, createAutocodeRestTool } from "./autocode_rest"
+import { createAutocodeRestTool } from "./autocode_rest"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 import { createAutocodeSandboxConfigEditTool, createAutocodeSandboxConfigReadTool, createAutocodeSandboxConfigRemoveTool } from "./autocode_sandbox_config_tools"
-import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
 import { createAutocodeSessionContextTool } from "./autocode_session_context"
+import { createAutocodeSkillCreateTool } from "./autocode_skill_create"
+import { createAutocodeSkillWriteTool } from "./autocode_skill_write"
+import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createSkillLearnCorrectionTool, createSkillLearnEnvTool, createSkillLearnPermissionTool, createSkillLearnPreferenceTool } from "./skill_learn"
-import { createSkillTool } from "./skill"
+import { createSkillReadTool, createSkillTool } from "./skill"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
 import { createTaskResumeTool } from "./task_resume"
 
@@ -48,6 +50,7 @@ type ToolRuntime = {
 export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandboxConfig = {}, runtime?: ToolRuntime) {
     return {
         ...createGitTools(),
+
         autocode_agent_execute: createAutocodeAgentExecuteTool(client),
         autocode_agent_swap: createAutocodeAgentSwapTool(client),
         autocode_concept_create: createAutocodeConceptCreateTool(client),
@@ -75,9 +78,6 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_plan_read: createAutocodePlanReadTool(client),
         autocode_plan_save: createAutocodePlanSaveTool(client),
         autocode_rest: createAutocodeRestTool(client),
-        autocode_rest_grep: createAutocodeRestResponseGrepTool(client),
-        autocode_rest_response_eval: createAutocodeRestResponseEvalTool(client),
-        autocode_rest_response_read: createAutocodeRestResponseReadTool(client),
         autocode_sandbox_cli: createAutocodeSandboxCliTool(client),
         autocode_sandbox_config_edit: createAutocodeSandboxConfigEditTool(client),
         autocode_sandbox_config_read: createAutocodeSandboxConfigReadTool(client),
@@ -105,11 +105,14 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool(),
         autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
         skill: createSkillTool(client, undefined, runtime),
+        skill_create: createAutocodeSkillCreateTool(),
         skill_learn_correction: createSkillLearnCorrectionTool(),
         skill_learn_env: createSkillLearnEnvTool(),
         skill_learn_permission: createSkillLearnPermissionTool(),
         skill_learn_preference: createSkillLearnPreferenceTool(),
+        skill_read: createSkillReadTool(client, undefined, runtime),
+        skill_write: createAutocodeSkillWriteTool(),
         task_external: createTaskExternalTool(),
-        task_resume: createTaskResumeTool(client),
+        task_resume: createTaskResumeTool(client),    
     }
 }

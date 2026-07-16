@@ -1,4 +1,5 @@
 import { SQL } from "bun"
+import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
 
 export const DB_KEY_PATTERN = /^[A-Za-z0-9_]+$/
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -77,13 +78,10 @@ type BunSqlClient = {
 }
 
 export function normalizeDbKey(dbKey: string): string {
-    const trimmed = dbKey.trim()
-
-    if (!DB_KEY_PATTERN.test(trimmed)) {
-        throw new Error("Invalid db_key. Use only ASCII letters, digits, and underscores.")
-    }
-
-    return trimmed.toUpperCase()
+    return normalizeEnvKey(dbKey, {
+        errorMessage: "Invalid db_key. Use only ASCII letters, digits, and underscores.",
+        label: "db_key",
+    })
 }
 
 export function getDbEnvVarNames(normalizedDbKey: string): {
@@ -92,9 +90,9 @@ export function getDbEnvVarNames(normalizedDbKey: string): {
     usernameEnvVar: string
 } {
     return {
-        connectionEnvVar: `AUTOCODE_DB_${normalizedDbKey}_CONNECTION`,
-        passwordEnvVar: `AUTOCODE_DB_${normalizedDbKey}_PASSWORD`,
-        usernameEnvVar: `AUTOCODE_DB_${normalizedDbKey}_USERNAME`,
+        connectionEnvVar: buildEnvVarName("AUTOCODE_DB", normalizedDbKey, "CONNECTION"),
+        passwordEnvVar: buildEnvVarName("AUTOCODE_DB", normalizedDbKey, "PASSWORD"),
+        usernameEnvVar: buildEnvVarName("AUTOCODE_DB", normalizedDbKey, "USERNAME"),
     }
 }
 

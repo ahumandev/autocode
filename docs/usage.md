@@ -107,20 +107,6 @@ AutoCode can inspect environment-configured databases through read-only tools an
 - Identifiers must be simple schema, table, or field names.
 - Supported filter operators are `=`, `!=`, `<`, `<=`, `>`, `>=`, `like`, `in`, and `is_null`.
 
-### REST response lookup
-
-AutoCode can also make bounded REST requests and cache long responses for later lookup inside the current job.
-
-- When the response body exceeds 400 characters, AutoCode caches it under the current job `rest/` directory and includes `response_name`, `job_name`, and guidance in the returned output.
-- Cache filename shape: `{timestamp}_{METHOD}_{protocol}_{host-and-credentials}_{encoded-path}.json`.
-- Binary or non-UTF-8 responses are decoded into readable UTF-8 replacement text.
-
-Cached response lookup tools resolve only inside the current job `rest/` directory:
-
-- `autocode_rest_response_read` supports `header`, `offset`, and `limit`.
-- `autocode_rest_grep` supports `header` and `pattern`.
-- `autocode_rest_response_eval` parses cached body JSON and supports only safe path expressions such as `a.b[0]`.
-
 ## See also
 
 - [Configuration](configuration.md) — database and SSH environment variables.

@@ -95,10 +95,9 @@ type ExperimentalContextRequest = {
     sessionID: string
 }
 
-type LoadResult = {
-    name: string
-    directory: string
-    output?: string
+type SkillReadArgs = {
+    name?: unknown
+    filePath?: unknown
 }
 
 type SkillLoadRuntime = {
@@ -113,7 +112,8 @@ type ClientFetchConfig = {
 
 const defaultFileSystem: FileSystem = { readFile, readdir }
 const safeIdentityPrefix = "skill"
-const FILE_LIMIT = 10
+const safeSkillReadPrefix = "skill_read"
+const SKILL_READ_FILE_LIMIT_CHARS = 40_000
 const LIVE_DEDUPE_CACHE_TTL_MS = 30 * 60 * 1000
 const LIVE_DEDUPE_CACHE_MAX_ENTRIES = 256
 const liveDedupeCache = new Map<string, { expiresAt: number, lastAccessed: number }>()
@@ -200,6 +200,39 @@ function validateSkillLoadArgs(args: SkillLoadArgs): { name: string } | { error:
     }
 
     return { name: args.name.trim() }
+}
+
+function validateSkillReadArgs(args: SkillReadArgs): { name: string, filePath: string } | { error: string, instruction: string } {
+    const unexpectedArgs = Object.keys(args).filter((key) => key !== "name" && key !== "filePath")
+    if (unexpectedArgs.length > 0) {
+        return {
+            error: `Unexpected argument(s): ${unexpectedArgs.join(", ")}.`,
+            instruction: "Retry with exactly the name and filePath arguments.",
+        }
+    }
+
+    if (typeof args.name !== "string" || !args.name.trim()) {
+        return {
+            error: "Invalid name. Name must be a non-empty string.",
+            instruction: "Retry with a skill name from the available skills list.",
+        }
+    }
+
+    if (typeof args.filePath !== "string" || !args.filePath.trim()) {
+        return {
+            error: "Invalid filePath. filePath must be a non-empty string.",
+            instruction: "Retry with a file path relative to the skill's SKILL.md location.",
+        }
+    }
+
+    return { name: args.name.trim(), filePath: args.filePath.trim() }
+}
+
+function isPathWithinSkillDirectory(absolutePath: string, skillDirectory: string): boolean {
+    const normalizedDirectory = path.resolve(skillDirectory)
+    const normalizedPath = path.resolve(absolutePath)
+    const directoryWithSeparator = normalizedDirectory.endsWith(path.sep) ? normalizedDirectory : normalizedDirectory + path.sep
+    return normalizedPath === normalizedDirectory || normalizedPath.startsWith(directoryWithSeparator)
 }
 
 function parseSkillMarkdown(filePath: string, source: string, inferredName?: string): LoadedSkill | undefined {
@@ -319,6 +352,14 @@ export function buildAutocodeSkillLoadMarker(identity: string, hash: string): st
     return `<!-- ${safeIdentityPrefix} identity=${identity} hash=${hash} -->`
 }
 
+export function buildAutocodeSkillReadLoadIdentity(name: string, filePath: string): string {
+    return `${safeSkillReadPrefix}:${encodeURIComponent(name)}:${encodeURIComponent(filePath)}`
+}
+
+export function buildAutocodeSkillReadLoadMarker(identity: string, hash: string): string {
+    return `<!-- ${safeSkillReadPrefix} identity=${identity} hash=${hash} -->`
+}
+
 export function activeContextIncludesMarkerHash(value: unknown, marker: string, hash: string): boolean {
     const seen = new WeakSet<object>()
 
@@ -396,55 +437,21 @@ async function fetchActiveContextDirect(client: OptionalActiveContextClient, con
     return contentType.includes("application/json") ? response.json() : response.text()
 }
 
-async function listSkillFiles(fileSystem: FileSystem, skill: LoadedSkill): Promise<string[]> {
-    if (path.basename(skill.location) !== "SKILL.md") {
-        return []
-    }
-
-    async function walk(directory: string): Promise<string[]> {
-        const entries = await fileSystem.readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
-            if (isMissingFile(error)) {
-                return []
-            }
-
-            throw error
-        })
-        const files: string[] = []
-        for (const entry of entries) {
-            const entryPath = path.join(directory, entry.name)
-            if (entry.isDirectory()) {
-                files.push(...await walk(entryPath))
-            }
-            else if (entry.isFile()) {
-                files.push(entryPath)
-            }
-        }
-
-        return files
-    }
-
-    return (await walk(skill.directory))
-        .filter((file) => path.basename(file) !== "SKILL.md")
-        .sort()
-        .slice(0, FILE_LIMIT)
-}
-
-function renderSkillContent(marker: string, skill: LoadedSkill, files: readonly string[]): string {
+function renderSkillContent(marker: string, skill: LoadedSkill): string {
     return [
         marker,
         `<skill_content name="${skill.name}">`,
-        `# Skill: ${skill.name}`,
-        "",
         skill.content.trim(),
-        "",
-        `Base directory for this skill: ${pathToFileURL(skill.directory).href}`,
-        "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
-        "Note: file list is sampled.",
-        "",
-        "<skill_files>",
-        ...files.map((file) => `<file>${file}</file>`),
-        "</skill_files>",
         "</skill_content>",
+    ].join("\n")
+}
+
+function renderSkillReadContent(marker: string, content: string, absolutePath: string): string {
+    return [
+        marker,
+        `<skill_file path="${pathToFileURL(absolutePath).href}">`,
+        content,
+        "</skill_file>",
     ].join("\n")
 }
 
@@ -512,9 +519,9 @@ async function readActiveContext(client: OpencodeClient | undefined, context: Sk
 
 export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem, runtime?: SkillLoadRuntime): ReturnType<typeof tool> {
     return tool({
-        description: "Load specialized skill when task matches one of available skills. Use skill tool to read skill's instructions, resources, workflow guidance and references to scripts, files, etc. in the same directory as the skill.",
+        description: "Load skill when its description matches current conditions: task/query/instruction or required resource.",
         args: {
-            name: tool.schema.string().describe("name of skill from available skills list"),
+            name: tool.schema.string().describe("Exact skill name from skill list."),
         },
         async execute(args, context) {
             const validatedArgs = validateSkillLoadArgs(args)
@@ -535,31 +542,85 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
                 const checkedCache = checkLiveDedupeCache(skillContext, identity, hash)
 
                 if (checkedCache.hit) {
-                    return JSON.stringify({
-                        name: skill.name,
-                        directory: skill.directory,
-                    } satisfies LoadResult, null, 2)
+                    return ""
                 }
 
                 const activeContext = await readActiveContext(client, skillContext, marker, hash, runtime)
 
                 if (activeContext.found) {
-                    return JSON.stringify({
-                        name: skill.name,
-                        directory: skill.directory,
-                    } satisfies LoadResult, null, 2)
+                    return ""
                 }
 
-                const files = await listSkillFiles(fileSystem, skill)
                 storeLiveDedupeCache(skillContext, identity, hash, checkedCache)
-                return JSON.stringify({
-                    name: skill.name,
-                    directory: skill.directory,
-                    output: renderSkillContent(marker, skill, files),
-                } satisfies LoadResult, null, 2)
+                return renderSkillContent(marker, skill)
             }
             catch (error) {
                 return createAbortResponse("load skill", error)
+            }
+        },
+    })
+}
+
+export function createSkillReadTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem, runtime?: SkillLoadRuntime): ReturnType<typeof tool> {
+    return tool({
+        description: "Load referenced (md linked) file from skill content.",
+        args: {
+            name: tool.schema.string().describe("Name of skill that contains referenced file."),
+            filePath: tool.schema.string().describe("Relative file path of reference exactly as per md link in skill content. Example: If skill contains `[NPM](ref/npm.md)`, then filePath is `ref/npm.md`"),
+        },
+        async execute(args, context) {
+            const validatedArgs = validateSkillReadArgs(args)
+            if ("error" in validatedArgs) {
+                return createRetryResponse("read skill file", validatedArgs.error, validatedArgs.instruction)
+            }
+
+            const skillContext = context as SkillLoadContext
+            try {
+                const skill = await loadSkill(fileSystem, skillContext, validatedArgs.name)
+                if (skill === undefined) {
+                    return createAbortResponse("read skill file", buildSkillNotFoundError(validatedArgs.name))
+                }
+
+                const absolutePath = path.resolve(skill.directory, validatedArgs.filePath)
+                if (!isPathWithinSkillDirectory(absolutePath, skill.directory)) {
+                    return createAbortResponse("read skill file", `File path "${validatedArgs.filePath}" resolves outside the skill directory.`)
+                }
+
+                let fileContent: string
+                try {
+                    fileContent = await fileSystem.readFile(absolutePath, "utf8")
+                }
+                catch (error) {
+                    if (isMissingFile(error)) {
+                        return createAbortResponse("read skill file", `File not found: ${validatedArgs.filePath} (resolved to ${absolutePath}).`)
+                    }
+                    throw error
+                }
+
+                if (fileContent.length >= SKILL_READ_FILE_LIMIT_CHARS) {
+                    return createAbortResponse("read skill file", `File is too large: ${fileContent.length} characters (limit is ${SKILL_READ_FILE_LIMIT_CHARS}). Absolute path: ${absolutePath}`)
+                }
+
+                const identity = buildAutocodeSkillReadLoadIdentity(skill.name, validatedArgs.filePath)
+                const hash = buildAutocodeSkillLoadHash(identity, { content: fileContent })
+                const marker = buildAutocodeSkillReadLoadMarker(identity, hash)
+                const checkedCache = checkLiveDedupeCache(skillContext, identity, hash)
+
+                if (checkedCache.hit) {
+                    return ""
+                }
+
+                const activeContext = await readActiveContext(client, skillContext, marker, hash, runtime)
+
+                if (activeContext.found) {
+                    return ""
+                }
+
+                storeLiveDedupeCache(skillContext, identity, hash, checkedCache)
+                return renderSkillReadContent(marker, fileContent, absolutePath)
+            }
+            catch (error) {
+                return createAbortResponse("read skill file", error)
             }
         },
     })

@@ -450,7 +450,7 @@ describe("auto resume wiring", () => {
         const skillLearnPreference = tools.skill_learn_preference as unknown as { description: string, args: Record<string, unknown> }
         const skill = tools.skill as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_kill", "autocode_rest", "autocode_rest_response_read", "autocode_rest_grep", "autocode_rest_response_eval", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_read", "autocode_md_edit", "autocode_md_remove", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn_correction", "skill_learn_env", "skill_learn_permission", "skill_learn_preference", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_read", "autocode_md_edit", "autocode_md_remove", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn_correction", "skill_learn_env", "skill_learn_permission", "skill_learn_preference", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
         expect(tools.skill).toBeDefined()
         expect(Object.keys(tools)).not.toContain("skill_learn")
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
@@ -1215,9 +1215,6 @@ describe("autocode_plan_save tool", () => {
             "autocode_db_schemas",
             "autocode_dependencies",
             "autocode_rest",
-            "autocode_rest_grep",
-            "autocode_rest_response_eval",
-            "autocode_rest_response_read",
             "autocode_sandbox_cli",
             "autocode_sandbox_config_edit",
             "autocode_sandbox_config_read",
@@ -1231,6 +1228,8 @@ describe("autocode_plan_save tool", () => {
             "autocode_sandbox_read",
             "autocode_session_context",
             "autocode_session_create",
+            "skill_create",
+            "skill_write",
             "autocode_ssh_command",
             "autocode_ssh_config_read",
             "autocode_ssh_config_edit",
@@ -1248,6 +1247,7 @@ describe("autocode_plan_save tool", () => {
             "skill_learn_env",
             "skill_learn_permission",
             "skill_learn_preference",
+            "skill_read",
             "git_add",
             "git_branch",
             "git_checkout",
@@ -1330,9 +1330,6 @@ describe("autocode_plan_save tool", () => {
         expect(plugin.tool?.autocode_db_tables).toBeDefined()
         expect(plugin.tool?.autocode_dependencies).toBeDefined()
         expect(plugin.tool?.autocode_rest).toBeDefined()
-        expect(plugin.tool?.autocode_rest_response_read).toBeDefined()
-        expect(plugin.tool?.autocode_rest_grep).toBeDefined()
-        expect(plugin.tool?.autocode_rest_response_eval).toBeDefined()
         expect(toolSurfaceText(plugin.tool?.autocode_dependencies)).toContain("Detect Autocode runtime dependencies")
         expect(plugin.tool?.autocode_revise_job).toBeUndefined()
         expect(plugin.tool?.autocode_feedback).toBeUndefined()
@@ -1402,22 +1399,16 @@ describe("autocode_plan_save tool", () => {
         expect(executeRestAgent.tier).toBeUndefined()
         expect(getAgentField(cfg, "execute_rest", "temperature")).toBe(0.1)
         expect(String(executeRestAgent.prompt)).toContain("autocode_rest")
-        expect(String(executeRestAgent.prompt)).toContain("autocode_rest_response_read")
-        expect(String(executeRestAgent.prompt)).toContain("autocode_rest_grep")
-        expect(String(executeRestAgent.prompt)).toContain("autocode_rest_response_eval")
         expect(String(executeRestAgent.prompt)).toContain("GET, POST, PUT, PATCH, DELETE")
-        expect(String(executeRestAgent.prompt)).toContain("Values in `query` map override same query keys already in URL")
-        expect(String(executeRestAgent.prompt)).toContain("truncated: true")
         expect(String(executeRestAgent.prompt)).toContain("Never dump full raw REST result unless user specifically asks")
         expect(String(executeRestAgent.prompt)).toContain("Do not leak sensitive headers or body unless user explicitly requested")
         expect(String(executeRestAgent.prompt)).toContain("ask user confirmation")
         expect(String(executeRestAgent.prompt)).toContain("Caveman English")
+        expect(String(executeRestAgent.prompt)).not.toContain("`query`")
+        expect(String(executeRestAgent.prompt)).not.toContain("rest_key")
         expect(executeRestAgent.permission).toEqual(expect.objectContaining({
             "*": "deny",
             autocode_rest: "allow",
-            autocode_rest_grep: "allow",
-            autocode_rest_response_eval: "allow",
-            autocode_rest_response_read: "allow",
             external_directory: expect.objectContaining({ "*": "deny" }),
         }))
         expect(getPermissionRule(cfg.agent.execute_rest?.permission, "session")).toBeUndefined()
