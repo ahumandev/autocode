@@ -44,13 +44,47 @@ function emitHeading(h: MdHeading, model: MdModel, out: string[], overrides: Own
     }
 }
 
+const strayHeadingPattern = /^#{1,6}[ \t]*$/
+
+function escapeForRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function sanitizeSerializedBody(body: string, newline: string): string {
+    const lines = body.split(newline)
+    const kept: string[] = []
+    let inFence = false
+    let fenceChar = ""
+    for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+            const f = trimmed.slice(0, 3)
+            if (!inFence) {
+                inFence = true
+                fenceChar = f
+            } else if (f === fenceChar) {
+                inFence = false
+                fenceChar = ""
+            }
+            kept.push(line)
+            continue
+        }
+        if (!inFence && strayHeadingPattern.test(line)) continue
+        kept.push(line)
+    }
+    let out = kept.join(newline)
+    const tripleBlank = new RegExp("(?:" + escapeForRegex(newline) + "){3,}", "g")
+    out = out.replace(tripleBlank, newline + newline)
+    return out
+}
+
 export function serializeTree(model: MdModel, overrides?: OwnTextOverrides): string {
     const out: string[] = []
     for (const r of model.roots) {
         if (out.length > 0) out.push("")
         emitHeading(r, model, out, overrides)
     }
-    let body = out.join(model.newline)
+    let body = sanitizeSerializedBody(out.join(model.newline), model.newline)
     if (body !== "" && !body.endsWith(model.newline)) body += model.newline
     return body
 }
