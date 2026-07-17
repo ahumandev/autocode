@@ -519,7 +519,7 @@ async function readActiveContext(client: OpencodeClient | undefined, context: Sk
 
 export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem, runtime?: SkillLoadRuntime): ReturnType<typeof tool> {
     return tool({
-        description: "Load skill when its description matches current conditions: task/query/instruction or required resource.",
+        description: "Note skill list. ALWAYS *BEFORE* doing anything: check if any skill description matches current task or is needed. When skill description matches: load that skill immediately with matching name.",
         args: {
             name: tool.schema.string().describe("Exact skill name from skill list."),
         },

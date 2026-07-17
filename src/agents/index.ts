@@ -1,5 +1,6 @@
 import type { AgentConfig } from "@opencode-ai/sdk/v2"
-import type { ExternalDirectoryRules, ModelTier, PermissionAction } from "@/config"
+import type { ExternalDirectoryRules, ModelTier, PermissionAction, SkillCategory } from "@/config"
+import type { ExternalSkill } from "../utils/external"
 import { assistBrowserPrompt } from "./prompts/assist_browser";
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
 import { assistPrompt } from "./prompts/assist";
@@ -53,176 +54,20 @@ type AutocodePermissionRule = PermissionAction | PermissionTargetRules
 type AutocodeTaskPermissionRules = Record<string, AutocodePermissionRule>
 type AutocodePermissionObject = {
     task?: PermissionAction | AutocodeTaskPermissionRules
+    skill?: PermissionAction | Record<string, PermissionAction>
     [key: string]: AutocodePermissionRule | AutocodeTaskPermissionRules | undefined
 }
 export type AutocodeAgentConfig = Omit<AgentConfig, "permission"> & { permission?: PermissionAction | AutocodePermissionObject, tier?: ModelTier }
-type AgentConfigWithTier = AutocodeAgentConfig
-type AgentMap = Record<string, AgentConfigWithTier>
+type AgentMap = Record<string, AutocodeAgentConfig>
 type PermissionObject = AutocodePermissionObject
 type SandboxPlatformPolicyOptions = NodeJS.Platform | SandboxPlatformSupportOptions
-
-const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"] as const
-
-function hasAskCapableQuestionPermission(permission: AutocodeAgentConfig["permission"]): boolean {
-    if (!permission || typeof permission === "string") {
-        return false
-    }
-
-    return permission.question === "ask" || permission.question === "allow"
-}
 
 const sandboxCopyTargetPermission: PermissionTargetRules = {
     sandbox_target: "allow",
     local_target: "allow",
 }
 
-function isPermissionAction(action: unknown): action is PermissionAction {
-    return action === "allow" || action === "ask" || action === "deny"
-}
-
-function normalizePermissionAction(action: PermissionAction, canAsk: boolean): PermissionAction {
-    if (action === "ask" && !canAsk) {
-        return "deny"
-    }
-
-    return action
-}
-
-function createExternalPermissionRules(source: unknown, canAsk: boolean): Record<string, PermissionAction> {
-    if (isPermissionAction(source)) {
-        return { "*": normalizePermissionAction(source, canAsk) }
-    }
-
-    if (!source || typeof source === "string") {
-        return { "*": "deny" }
-    }
-
-    const rules: Record<string, PermissionAction> = {}
-    for (const [pattern, action] of Object.entries(source as Record<string, unknown>)) {
-        if (isPermissionAction(action)) {
-            rules[pattern] = normalizePermissionAction(action, canAsk)
-        }
-    }
-
-    if (!hasPermissionRule(rules, "*")) {
-        rules["*"] = "deny"
-    }
-
-    return rules
-}
-
-function applyExternalDirectoryOverrides(
-    rules: Record<string, PermissionAction>,
-    externalDirectories: ExternalDirectoryRules,
-    canAsk: boolean,
-): Record<string, PermissionAction> {
-    return {
-        ...rules,
-        ...Object.fromEntries(Object.entries(externalDirectories).map(([pattern, action]) => [
-            pattern,
-            normalizePermissionAction(action, canAsk),
-        ])),
-    }
-}
-
-function hasPermissionRule(permission: PermissionObject, key: string): boolean {
-    return Object.prototype.hasOwnProperty.call(permission, key)
-}
-
-function hasSandboxPermissionRule(permission: PermissionObject): boolean {
-    return sandboxToolPermissionKeys.some((key) => hasPermissionRule(permission, key))
-        || Object.entries(permission).some(([key, action]) => isPermissionAction(action)
-            && action !== "deny"
-            && sandboxToolPermissionKeys.some((toolKey) => matchesPermissionWildcard(key, toolKey)))
-}
-
-function matchesPermissionWildcard(pattern: string, key: string): boolean {
-    if (!pattern.includes("*")) {
-        return false
-    }
-
-    const escapedPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")
-    return new RegExp(`^${escapedPattern}$`).test(key)
-}
-
-export function applyExternalDirectoryPolicy(
-    agents: AgentMap,
-    externalDirectories: ExternalDirectoryRules = {},
-): AgentMap {
-    return Object.fromEntries(Object.entries(agents).map(([agentName, agent]) => {
-        if (!agent.permission || typeof agent.permission === "string") {
-            return [agentName, agent]
-        }
-
-        const canAsk = hasAskCapableQuestionPermission(agent.permission)
-        const permission: PermissionObject = { ...agent.permission }
-        const externalDirectorySource = hasPermissionRule(permission, "external_directory")
-            ? permission.external_directory
-            : permission.task_external
-        const hadTaskExternal = hasPermissionRule(permission, "task_external")
-
-        permission.external_directory = applyExternalDirectoryOverrides(
-            createExternalPermissionRules(externalDirectorySource, canAsk),
-            externalDirectories,
-            canAsk,
-        )
-
-        if (hadTaskExternal) {
-            permission.task_external = applyExternalDirectoryOverrides(
-                createExternalPermissionRules(permission.task_external, canAsk),
-                externalDirectories,
-                canAsk,
-            )
-        }
-
-        return [agentName, { ...agent, permission }]
-    }))
-}
-
-export function applySandboxPlatformPolicy(agents: AgentMap, options: SandboxPlatformPolicyOptions = {}): AgentMap {
-    if (isSandboxPlatformSupported(normalizeSandboxPlatformPolicyOptions(options))) return agents
-
-    return Object.fromEntries(Object.entries(agents).map(([agentName, agent]) => {
-        const agentWithDisable = agentName === "execute_sandbox" ? { ...agent, disable: true } : agent
-        if (!agentWithDisable.permission) {
-            return [agentName, agentWithDisable]
-        }
-
-        if (typeof agentWithDisable.permission === "string") {
-            if (!isPermissionAction(agentWithDisable.permission) || agentWithDisable.permission === "deny") return [agentName, agentWithDisable]
-            return [agentName, { ...agentWithDisable, permission: createSandboxDeniedPermission({ "*": agentWithDisable.permission }) }]
-        }
-
-        const permission: PermissionObject = { ...agentWithDisable.permission }
-        const exposesSandboxTools = hasSandboxPermissionRule(permission)
-        if (!exposesSandboxTools) return [agentName, agentWithDisable]
-
-        return [agentName, { ...agentWithDisable, permission: createSandboxDeniedPermission(permission) }]
-    }))
-}
-
-function normalizeSandboxPlatformPolicyOptions(options: SandboxPlatformPolicyOptions): SandboxPlatformSupportOptions {
-    return typeof options === "string" ? { platform: options } : options
-}
-
-function createSandboxDeniedPermission(permission: PermissionObject): PermissionObject {
-    for (const key of sandboxToolPermissionKeys) {
-        permission[key] = "deny"
-    }
-
-    return permission
-}
-
-function applyBundledAgentPolicy(
-    agents: AgentMap,
-    externalDirectories: ExternalDirectoryRules,
-    sandboxSupportOverride?: SandboxPlatformSupportOptions,
-): AgentMap {
-    return applySandboxPlatformPolicy(
-        applyExternalDirectoryPolicy(agents, externalDirectories),
-        sandboxSupportOverride ?? {},
-    )
-}
+const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"] as const
 
 const colorAutonomousOrchestrator = "#AA0000"
 const colorWritableInteractiveOrchestrator = "#00AA00"
@@ -230,6 +75,13 @@ const colorReadOnlyInteractiveOrchestrator = "#0000AA"
 const colorWritableWorker = "#AA8300"
 const colorReadOnlyWorker = "#00AAAA"
 const colorDocumentWorker = "#AA00AA"
+
+const CATEGORY_AGENTS: Record<SkillCategory, string[]> = {
+    bash: ["execute_os", "execute_script"],
+    code: ["execute_code"],
+    design: ["assist", "auto", "design"],
+    test: ["auto_test"],
+}
 
 const baseAgents: AgentMap = {
 
@@ -280,7 +132,8 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "git-commit": "allow",
-                "learned-permissions": "allow"
+                "learned-permissions": "allow",
+                "primary-manual": "allow"
             },
             "skill_learn_*": "allow",
             task: {
@@ -314,7 +167,8 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "git-commit": "allow",
-                "learned-permissions": "allow"
+                "learned-permissions": "allow",
+                "primary-manual": "allow"
             },
             "skill_learn_*": "allow",
             task: {
@@ -827,8 +681,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "author-skill": "allow"
             },
-            skill_read: "allow",
-            skill_write: "allow",
+            "skill_*": "allow",
         },
         prompt: documentConventionsPrompt,
         temperature: 0.3,
@@ -851,8 +704,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "author-skill": "allow"
             },
-            skill_read: "allow",
-            skill_write: "allow",
+            "skill_*": "allow",
         },
         prompt: documentCodePrompt,
         temperature: 0.3,
@@ -902,8 +754,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "author-skill": "allow"
             },
-            skill_read: "allow",
-            skill_write: "allow",
+            "skill_*": "allow",
         },
         prompt: documentInstallPrompt,
         temperature: 0.3,
@@ -926,8 +777,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "author-skill": "allow"
             },
-            skill_read: "allow",
-            skill_write: "allow",
+            "skill_*": "allow",
         },
         prompt: String(documentPrdPrompt),
         temperature: 0.3,
@@ -950,8 +800,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "author-skill": "allow"
             },
-            skill_read: "allow",
-            skill_write: "allow",
+            "skill_*": "allow",
         },
         prompt: documentUxPrompt,
         temperature: 0.3,
@@ -1084,7 +933,7 @@ const baseAgents: AgentMap = {
 
     execute_os: {
         color: colorWritableWorker,
-        description: "task execute_os to copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests.",
+        description: "task execute_os to copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests. NOT for source code editing!",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1520,11 +1369,196 @@ const baseAgents: AgentMap = {
 
 }
 
+function hasAskCapableQuestionPermission(permission: AutocodeAgentConfig["permission"]): boolean {
+    if (!permission || typeof permission === "string") {
+        return false
+    }
+
+    return permission.question === "ask" || permission.question === "allow"
+}
+
+function isPermissionAction(action: unknown): action is PermissionAction {
+    return action === "allow" || action === "ask" || action === "deny"
+}
+
+function normalizePermissionAction(action: PermissionAction, canAsk: boolean): PermissionAction {
+    if (action === "ask" && !canAsk) {
+        return "deny"
+    }
+
+    return action
+}
+
+function createExternalPermissionRules(source: unknown, canAsk: boolean): Record<string, PermissionAction> {
+    if (isPermissionAction(source)) {
+        return { "*": normalizePermissionAction(source, canAsk) }
+    }
+
+    if (!source || typeof source === "string") {
+        return { "*": "deny" }
+    }
+
+    const rules: Record<string, PermissionAction> = {}
+    for (const [pattern, action] of Object.entries(source as Record<string, unknown>)) {
+        if (isPermissionAction(action)) {
+            rules[pattern] = normalizePermissionAction(action, canAsk)
+        }
+    }
+
+    if (!hasPermissionRule(rules, "*")) {
+        rules["*"] = "deny"
+    }
+
+    return rules
+}
+
+function applyExternalDirectoryOverrides(
+    rules: Record<string, PermissionAction>,
+    externalDirectories: ExternalDirectoryRules,
+    canAsk: boolean,
+): Record<string, PermissionAction> {
+    return {
+        ...rules,
+        ...Object.fromEntries(Object.entries(externalDirectories).map(([pattern, action]) => [
+            pattern,
+            normalizePermissionAction(action, canAsk),
+        ])),
+    }
+}
+
+function hasPermissionRule(permission: PermissionObject, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(permission, key)
+}
+
+function hasSandboxPermissionRule(permission: PermissionObject): boolean {
+    return sandboxToolPermissionKeys.some((key) => hasPermissionRule(permission, key))
+        || Object.entries(permission).some(([key, action]) => isPermissionAction(action)
+            && action !== "deny"
+            && sandboxToolPermissionKeys.some((toolKey) => matchesPermissionWildcard(key, toolKey)))
+}
+
+function matchesPermissionWildcard(pattern: string, key: string): boolean {
+    if (!pattern.includes("*")) {
+        return false
+    }
+
+    const escapedPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")
+    return new RegExp(`^${escapedPattern}$`).test(key)
+}
+
+export function applyExternalDirectoryPolicy(
+    agents: AgentMap,
+    externalDirectories: ExternalDirectoryRules = {},
+): AgentMap {
+    return Object.fromEntries(Object.entries(agents).map(([agentName, agent]) => {
+        if (!agent.permission || typeof agent.permission === "string") {
+            return [agentName, agent]
+        }
+
+        const canAsk = hasAskCapableQuestionPermission(agent.permission)
+        const permission: PermissionObject = { ...agent.permission }
+        const externalDirectorySource = hasPermissionRule(permission, "external_directory")
+            ? permission.external_directory
+            : permission.task_external
+        const hadTaskExternal = hasPermissionRule(permission, "task_external")
+
+        permission.external_directory = applyExternalDirectoryOverrides(
+            createExternalPermissionRules(externalDirectorySource, canAsk),
+            externalDirectories,
+            canAsk,
+        )
+
+        if (hadTaskExternal) {
+            permission.task_external = applyExternalDirectoryOverrides(
+                createExternalPermissionRules(permission.task_external, canAsk),
+                externalDirectories,
+                canAsk,
+            )
+        }
+
+        return [agentName, { ...agent, permission }]
+    }))
+}
+
+export function applySandboxPlatformPolicy(agents: AgentMap, options: SandboxPlatformPolicyOptions = {}): AgentMap {
+    if (isSandboxPlatformSupported(normalizeSandboxPlatformPolicyOptions(options))) return agents
+
+    return Object.fromEntries(Object.entries(agents).map(([agentName, agent]) => {
+        const agentWithDisable = agentName === "execute_sandbox" ? { ...agent, disable: true } : agent
+        if (!agentWithDisable.permission) {
+            return [agentName, agentWithDisable]
+        }
+
+        if (typeof agentWithDisable.permission === "string") {
+            if (!isPermissionAction(agentWithDisable.permission) || agentWithDisable.permission === "deny") return [agentName, agentWithDisable]
+            return [agentName, { ...agentWithDisable, permission: createSandboxDeniedPermission({ "*": agentWithDisable.permission }) }]
+        }
+
+        const permission: PermissionObject = { ...agentWithDisable.permission }
+        const exposesSandboxTools = hasSandboxPermissionRule(permission)
+        if (!exposesSandboxTools) return [agentName, agentWithDisable]
+
+        return [agentName, { ...agentWithDisable, permission: createSandboxDeniedPermission(permission) }]
+    }))
+}
+
+function normalizeSandboxPlatformPolicyOptions(options: SandboxPlatformPolicyOptions): SandboxPlatformSupportOptions {
+    return typeof options === "string" ? { platform: options } : options
+}
+
+function createSandboxDeniedPermission(permission: PermissionObject): PermissionObject {
+    for (const key of sandboxToolPermissionKeys) {
+        permission[key] = "deny"
+    }
+
+    return permission
+}
+
+function applyBundledAgentPolicy(
+    agents: AgentMap,
+    externalDirectories: ExternalDirectoryRules,
+    sandboxSupportOverride?: SandboxPlatformSupportOptions,
+): AgentMap {
+    return applySandboxPlatformPolicy(
+        applyExternalDirectoryPolicy(agents, externalDirectories),
+        sandboxSupportOverride ?? {},
+    )
+}
+
+export function injectExternalSkillPermissions(agents: AgentMap, externalSkills: ExternalSkill[]): void {
+    for (const { category, skillName } of externalSkills) {
+        const targetAgentNames = CATEGORY_AGENTS[category]
+        if (targetAgentNames === undefined) {
+            continue
+        }
+
+        for (const agentName of targetAgentNames) {
+            const agent = agents[agentName]
+            if (agent === undefined) {
+                continue
+            }
+
+            agent.permission = agent.permission ?? {}
+            const permission = agent.permission
+            if (typeof permission !== "string") {
+                if (typeof permission.skill === "string" || permission.skill === undefined) {
+                    permission.skill = { [skillName]: "allow" }
+                } else {
+                    permission.skill = { ...permission.skill, [skillName]: "allow" }
+                }
+            }
+        }
+    }
+}
+
 export function buildAgents(
     externalDirectories: ExternalDirectoryRules = {},
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
+    externalSkills: ExternalSkill[] = [],
 ): AgentMap {
-    return applyBundledAgentPolicy(baseAgents, externalDirectories, sandboxSupportOverride)
+    const agents = applyBundledAgentPolicy(baseAgents, externalDirectories, sandboxSupportOverride)
+    injectExternalSkillPermissions(agents, externalSkills)
+    return agents
 }
 
 export function getAgentPermission(agentName: string, externalDirectories: ExternalDirectoryRules = {}): AutocodeAgentConfig["permission"] {

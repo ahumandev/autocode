@@ -1,11 +1,9 @@
 ---
 name: author-readme
-description: Use `author-readme` to get "README.md Format" when reviewing/writing or updating README.md files.
+description: Use `author-readme` skill when reviewing/editing README.md files.
 ---
 
-# README.md Format
-
-- README.md must be written for humans in professional, user-manual style natural language 
+- README.md written for humans in professional, user-manual style natural language 
 - Use full sentences except diagrams and listing items like features
 - Use British English by default (unless specified otherwise)
 - Assume user has limited technical knowledge, but understand technical terminology (no need to explain basic technical terms like "docker", "compile", "proxy", etc.)
@@ -24,6 +22,7 @@ description: Use `author-readme` to get "README.md Format" when reviewing/writin
 - Specify a language for every fenced code block, for example `bash`, `json`, `yaml`, `sql`, `text`, or `mermaid`.
 - Do not use trailing spaces.
 - Use hyphens for unordered lists.
+- MUST use README.md Layout
 
 ## README.md Layout
 
@@ -185,6 +184,7 @@ Replace placeholders in README.md as follows:
     - Only include this section if production deployment is different from [LOCAL SETUP STEPS]
 
 ## Rules for Updates
+
 - If current README.md already follows this layout, only update outdated or missing sections
 - If current README.md already exist, but in different format:
     1. Identify critical info to keep

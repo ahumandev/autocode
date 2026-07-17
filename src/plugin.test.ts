@@ -76,7 +76,7 @@ describe("autocode plugin config", () => {
             },
         }))
 
-        await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+        await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root, AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1" }, async () => {
             const cfg: PluginConfig = {
                 agent: {
                     assist: {

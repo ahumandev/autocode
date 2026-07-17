@@ -1,0 +1,26 @@
+{
+    "autocode": {
+        "skills": {
+            "bash": [
+                "https://github.com/github/awesome-copilot/blob/main/skills/create-spring-boot-kotlin-project/SKILL.md",
+                "https://github.com/github/awesome-copilot/blob/main/skills/drawio/SKILL.md"
+            ],
+            "code": [
+                "https://github.com/angular/skills",
+                "https://github.com/antfu/skills/blob/main/skills/nitro/SKILL.md",
+                "https://github.com/antfu/skills/blob/main/skills/nuxt/SKILL.md",
+                "https://github.com/pedronauck/skills/blob/main/skills/mine/tailwindcss/SKILL.md",
+                "https://github.com/pedronauck/skills/blob/main/skills/mine/ui-craft/SKILL.md",
+                "https://github.com/vuejs-ai/skills/blob/main/skills/vue-best-practices/SKILL.md"
+            ],
+            "design": [
+                "https://github.com/mattpocock/skills/blob/main/skills/engineering/codebase-design/SKILL.md"
+            ],
+            "test": [
+                "https://github.com/github/awesome-copilot/blob/main/skills/java-junit/SKILL.md",
+                "https://github.com/github/awesome-copilot/blob/main/skills/javascript-typescript-jest/SKILL.md",
+                "https://github.com/antfu/skills/blob/main/skills/vitest/SKILL.md"
+            ]
+        }
+    }
+}

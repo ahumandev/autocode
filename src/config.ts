@@ -2,9 +2,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
 import { homedir } from "os"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "path"
 
+import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json" }
+
 const MODEL_TIERS = ["cheap", "fast", "balanced", "smart"] as const
 const PERMISSION_ACTIONS = ["ask", "allow", "deny"] as const
 const SANDBOX_SYNC_METHODS = ["auto", "overlayfs", "reflink", "copy"] as const
+const SKILL_CATEGORIES: readonly SkillCategory[] = ["bash", "code", "design", "test"]
 
 export type ModelTier = (typeof MODEL_TIERS)[number]
 export type TierConfig = { model?: string; variant?: string }
@@ -16,6 +19,9 @@ export type AutocodeSandboxConfig = {
     distro_cache_path?: string
     distro_expire?: string | number
 }
+
+export type SkillCategory = "bash" | "code" | "design" | "test"
+export type SkillsConfig = Partial<Record<SkillCategory, string[]>>
 
 export interface ConfigFileSystem {
     readFileSync(path: string, encoding: "utf-8"): string
@@ -34,13 +40,14 @@ const defaultFs: ConfigFileSystem = {
     },
 }
 
-const DEFAULT_AUTOCODE_CONFIG = "{}\n"
+const DEFAULT_AUTOCODE_CONFIG = JSON.stringify(defaultAutocodeConfig, null, 4) + "\n"
 
 type AutocodeJsoncNew = {
     autocode?: {
         tier?: unknown
         tiers?: Record<string, unknown>
         sandbox?: unknown
+        skills?: unknown
     }
     permission?: {
         external_directory?: unknown
@@ -60,6 +67,7 @@ type ParsedAutocodeConfig = {
     legacyTiers?: Partial<Record<ModelTier, TierConfig>>
     externalDirectories?: ExternalDirectoryRules
     sandbox?: AutocodeSandboxConfig
+    skills?: SkillsConfig
 }
 
 function stripJsoncComments(raw: string): string {
@@ -152,6 +160,28 @@ function collectSandboxConfig(value: unknown): AutocodeSandboxConfig | undefined
     return Object.keys(result).length > 0 ? result : undefined
 }
 
+function collectSkills(value: unknown): SkillsConfig | undefined {
+    if (value === undefined) return undefined
+    if (!isRecord(value)) {
+        console.warn(`autocode: invalid skills config (expected object, got ${Array.isArray(value) ? "array" : typeof value})`)
+        return undefined
+    }
+    const known = new Set<string>(SKILL_CATEGORIES)
+    const result: SkillsConfig = {}
+    let hasAny = false
+    for (const key of Object.keys(value)) {
+        if (!known.has(key)) {
+            console.warn(`autocode: ignoring unknown skills category "${key}"`)
+            continue
+        }
+        const list = value[key]
+        if (!Array.isArray(list)) continue
+        result[key as SkillCategory] = list as string[]
+        hasAny = true
+    }
+    return hasAny ? result : undefined
+}
+
 function mergeTierMaps(base: Record<string, unknown>, next: Record<string, unknown>): Record<string, unknown> {
     const merged: Record<string, unknown> = { ...base }
 
@@ -191,8 +221,9 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
     const ac = parsed?.autocode
     const externalDirectories = collectExternalDirectories(parsed.permission?.external_directory)
     const sandbox = collectSandboxConfig(ac?.sandbox)
+    const skills = collectSkills(ac?.skills)
 
-    if (!ac) return { externalDirectories, sandbox }
+    if (!ac) return { externalDirectories, sandbox, skills }
 
     if (isRecord(ac.tiers)) {
         return {
@@ -200,11 +231,12 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
             tiers: ac.tiers,
             externalDirectories,
             sandbox,
+            skills,
         }
     }
 
     if (typeof ac.tier === "string") {
-        return { tier: ac.tier, externalDirectories, sandbox }
+        return { tier: ac.tier, externalDirectories, sandbox, skills }
     }
 
     // legacy shape: autocode.model.<tier> + optional autocode.variant.<tier>
@@ -216,10 +248,10 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
                 result[tier] = { model, variant: ac.variant?.[tier] }
             }
         }
-        return { legacyTiers: result, externalDirectories, sandbox }
+        return { legacyTiers: result, externalDirectories, sandbox, skills }
     }
 
-    return { externalDirectories, sandbox }
+    return { externalDirectories, sandbox, skills }
 }
 
 function addCandidate(candidates: string[], path: string): void {
@@ -283,11 +315,12 @@ export async function loadAutocodeConfig(
     worktree: string,
     directory: string,
     fs: ConfigFileSystem = defaultFs,
-): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig }> {
+): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined }> {
     const globalConfigPath = join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode", "autocode.jsonc")
     const candidates: string[] = []
 
     // global defaults
+    const globalExisted = existsSync(globalConfigPath)
     fs.ensureFileSync(globalConfigPath, DEFAULT_AUTOCODE_CONFIG)
     addCandidate(candidates, globalConfigPath)
 
@@ -299,6 +332,7 @@ export async function loadAutocodeConfig(
     let availableTiers: Record<string, unknown> = {}
     let externalDirectories: ExternalDirectoryRules = {}
     let sandbox: AutocodeSandboxConfig = {}
+    let skills: SkillsConfig | undefined
     for (const path of candidates) {
         let raw: string
         try {
@@ -317,8 +351,35 @@ export async function loadAutocodeConfig(
         if (parsed.sandbox) {
             sandbox = { ...sandbox, ...parsed.sandbox }
         }
+        if (parsed.skills) {
+            skills = { ...(skills ?? {}), ...parsed.skills }
+        }
         tiers = { ...tiers, ...resolveTiers(parsed, availableTiers) }
     }
 
-    return { tiers, externalDirectories, sandbox }
+    // Idempotent skill seeding: when global config exists but `autocode.skills` key is
+    // entirely absent, inject the default skills block. Missing file is already handled
+    // by ensureFileSync + the candidate loop above.
+    if (globalExisted) {
+        try {
+            const raw = fs.readFileSync(globalConfigPath, "utf-8")
+            const parsed = JSON.parse(stripJsoncComments(raw)) as { autocode?: Record<string, unknown> }
+            const ac = parsed.autocode
+            if (isRecord(parsed) && ac && !("skills" in ac)) {
+                const defaultSkills = JSON.parse(stripJsoncComments(DEFAULT_AUTOCODE_CONFIG)).autocode?.skills
+                if (!isRecord(ac)) {
+                    parsed.autocode = { skills: defaultSkills }
+                } else {
+                    ac.skills = defaultSkills
+                }
+                writeFileSync(globalConfigPath, JSON.stringify(parsed, null, 4))
+                const seeded = collectSkills(ac.skills)
+                if (seeded) skills = { ...(skills ?? {}), ...seeded }
+            }
+        } catch (err) {
+            console.error(`autocode: failed to seed default skills: ${(err as Error).message}`)
+        }
+    }
+
+    return { tiers, externalDirectories, sandbox, skills }
 }
