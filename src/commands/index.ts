@@ -115,7 +115,6 @@ export const commands: CommandMap = {
     "autocode-install": installCommand,
 
     "autocode-version": {
-        agent: "temp_output",
         description: "Output AutoCode plugin version.",
         subtask: false,
         template: `

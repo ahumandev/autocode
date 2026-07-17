@@ -426,7 +426,7 @@ const baseAgents: AgentMap = {
 
     assist_browser: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Handle interactive browser automation tasks: Have browser access that can fill forms, submit, save, upload, and pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so the tab and login session are not re-discovered.",
+        description: "task assist_browser with interactive browser automation tasks. It browser than can: access that can fill forms, submit, save, upload, pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so tab and login session are not re-discovered.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -448,7 +448,7 @@ const baseAgents: AgentMap = {
 
     assist_git_conflict: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Resolve git merge conflicts.",
+        description: "task assist_git_conflict to resolve git merge conflicts.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -489,7 +489,7 @@ const baseAgents: AgentMap = {
 
     assist_troubleshoot: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Troubleshoot assignment obstacles.",
+        description: "task assist_troubleshoot to troubleshoot ASSIGNMENT obstacles.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -531,7 +531,7 @@ const baseAgents: AgentMap = {
 
     auto_design: {
         color: colorAutonomousOrchestrator,
-        description: "Research and redesign failed PROPOSALS.",
+        description: "task auto_design to redesign failed PROPOSALS.",
         hidden: false,
         mode: "subagent",
         permission: {
@@ -553,7 +553,7 @@ const baseAgents: AgentMap = {
 
     auto_feature: {
         color: colorAutonomousOrchestrator,
-        description: "Create new project features: Implement new API's, classes, components, css styles, packages, scripts, templates, webpages",
+        description: "task auto_feature to create new project features: Implement new API's, classes, components, css styles, packages, scripts, templates, webpages",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -587,7 +587,7 @@ const baseAgents: AgentMap = {
 
     auto_general: {
         color: colorAutonomousOrchestrator,
-        description: "Fallback to `auto_general` when no specialized subagent clearly fits task.",
+        description: "Only fallback to auto_general as last resort when no specialized subagent clearly fits task.",
         hidden: true,
         mode: "all",
         permission: {
@@ -616,7 +616,7 @@ const baseAgents: AgentMap = {
 
     auto_refactor: {
         color: colorAutonomousOrchestrator,
-        description: "Upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability.",
+        description: "task auto_refactor to upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -648,7 +648,7 @@ const baseAgents: AgentMap = {
 
     auto_research: {
         color: colorAutonomousOrchestrator,
-        description: "Answer complex questions like research topics, architectural overview, code flow across multiple files, consolidating data from multiple sources, compare specs with implementation",
+        description: "task auto_research to answer complex questions like research topics, architectural overview, code flow across multiple files, consolidating data from multiple sources, compare specs with implementation",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -666,7 +666,7 @@ const baseAgents: AgentMap = {
 
     auto_review_api: {
         color: colorAutonomousOrchestrator,
-        description: "Review API changes: check endpoints, run tests, fix failures, and confirm API requirements are met",
+        description: "task auto_review_api to review API changes: check endpoints, run tests, fix failures, and confirm API requirements are met",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -694,7 +694,7 @@ const baseAgents: AgentMap = {
 
     auto_review_ui: {
         color: colorAutonomousOrchestrator,
-        description: "Review UI changes: run application, inspect UI, run tests, and confirm UI requirements are met",
+        description: "task auto_review_ui to review UI changes: run application, inspect UI, run tests, and confirm UI requirements are met",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -722,7 +722,7 @@ const baseAgents: AgentMap = {
 
     auto_test: {
         color: colorAutonomousOrchestrator,
-        description: "Write or fix tests and, when explicitly needed, targeted code/config support for passing verification",
+        description: "task auto_test to write or fix tests and, when explicitly needed, targeted code/config support for passing verification",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -754,7 +754,7 @@ const baseAgents: AgentMap = {
 
     auto_troubleshoot: {
         color: colorAutonomousOrchestrator,
-        description: "Troubleshoot obstacles, bugs and issues",
+        description: "task auto_troubleshoot to troubleshoot obstacles, bugs and issues.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -793,7 +793,7 @@ const baseAgents: AgentMap = {
 
     document_agents: {
         color: colorDocumentWorker,
-        description: "Convert latest `README.md` to `AGENTS.md`.",
+        description: "task document_agents to convert latest `README.md` to `AGENTS.md`.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -813,7 +813,7 @@ const baseAgents: AgentMap = {
 
     document_conventions: {
         color: colorDocumentWorker,
-        description: "Document naming conventions and project terminology.",
+        description: "task document_agents to document naming conventions and project terminology.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -837,7 +837,7 @@ const baseAgents: AgentMap = {
 
     document_code: {
         color: colorDocumentWorker,
-        description: "Document technical architecture and design decisions or source code/config locations.",
+        description: "task document_agents to document technical architecture and design decisions or source code/config locations.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -861,7 +861,7 @@ const baseAgents: AgentMap = {
 
     document_env: {
         color: colorDocumentWorker,
-        description: "Document related project to current project.",
+        description: "task document_agents to document related project to current project.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -889,7 +889,7 @@ const baseAgents: AgentMap = {
 
     document_install: {
         color: colorDocumentWorker,
-        description: "Document project installation and usage guide.",
+        description: "task document_agents to document project installation and usage guide.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -912,7 +912,7 @@ const baseAgents: AgentMap = {
 
     document_prd: {
         color: colorDocumentWorker,
-        description: "Document product requirements and user roles.",
+        description: "task document_agents to document product requirements and user roles.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -936,7 +936,7 @@ const baseAgents: AgentMap = {
 
     document_ux: {
         color: colorDocumentWorker,
-        description: "Document UX flows, navigation, and styling patterns",
+        description: "task document_agents to document UX flows, navigation, and styling patterns",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -962,7 +962,7 @@ const baseAgents: AgentMap = {
 
     execute_author: {
         color: colorWritableWorker,
-        description: "Create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials) or argentic instructions (like commands, prompts, skills or plans); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
+        description: "task execute_author to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials) or argentic instructions (like commands, prompts, skills or plans); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -981,7 +981,7 @@ const baseAgents: AgentMap = {
 
     execute_code: {
         color: colorWritableWorker,
-        description: "Update the codebase with code, permanent project scripts, config, and templates; NEVER write md files; NEVER run tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
+        description: "task execute_code to update the codebase with code, permanent project scripts, config, and templates; NEVER write md files; NEVER run tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1007,7 +1007,7 @@ const baseAgents: AgentMap = {
 
     execute_config: {
         color: colorWritableWorker,
-        description: "Create or update configs or data files: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; It NEVER edit source code.",
+        description: "task execute_config to create or update configs or data files: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; It NEVER edit source code.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1020,7 +1020,7 @@ const baseAgents: AgentMap = {
 
     execute_debug: {
         color: colorWritableWorker,
-        description: "Debug code flow leading to symptoms of reproducible bug as evidence of cause; Prompt must include bug symptoms and bug reproduction steps.",
+        description: "task execute_debug to debug code flow leading to symptoms of reproducible bug as evidence of cause; Prompt must include bug symptoms and bug reproduction steps.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1038,7 +1038,7 @@ const baseAgents: AgentMap = {
 
     execute_document: {
         color: colorDocumentWorker,
-        description: "Update `AGENTS.md`, `README.md`, subagent skill files, remember architectural/design decisions or specs.",
+        description: "task execute_document to update `AGENTS.md`, `README.md`, subagent skill files, remember architectural/design decisions or specs.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1062,7 +1062,7 @@ const baseAgents: AgentMap = {
 
     execute_excel: {
         color: colorWritableWorker,
-        description: "Handle excel workbook manipulations and data validation.",
+        description: "task execute_excel with excel related tasks like workbook manipulations and data validation.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1084,7 +1084,7 @@ const baseAgents: AgentMap = {
 
     execute_os: {
         color: colorWritableWorker,
-        description: "Copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests.",
+        description: "task execute_os to copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1116,7 +1116,7 @@ const baseAgents: AgentMap = {
 
     execute_opencode: {
         color: colorWritableWorker,
-        description: "Create or update OpenCode agent, command, skill and AGENTS.md files only.",
+        description: "task execute_opencode to create or update OpenCode agent, command, skill and AGENTS.md files only.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1137,7 +1137,7 @@ const baseAgents: AgentMap = {
 
     execute_rest: {
         color: colorReadOnlyWorker,
-        description: "Make REST/API requests on HTTP/HTTPS endpoints.",
+        description: "task execute_rest to make REST/API requests on HTTP/HTTPS endpoints.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1161,7 +1161,7 @@ const baseAgents: AgentMap = {
 
     execute_sandbox: {
         color: colorWritableWorker,
-        description: "Execute single CLI commands in sandbox environment; First create sandbox with `autocode_sandbox_create`, then you run multiple `execute_sandbox` tasks but you MUST include same `sandbox_name` in every `task` prompt",
+        description: "task execute_sandbox to execute CLI commands in sandbox environment; First create sandbox with `autocode_sandbox_create`, then you run multiple `execute_sandbox` tasks but you MUST include same `sandbox_name` in every `task` prompt",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1192,7 +1192,7 @@ const baseAgents: AgentMap = {
 
     execute_script: {
         color: colorWritableWorker,
-        description: "Execute repetitive actions, data/document/media conversions, generate/render content, utilize scriptable libraries/utils via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
+        description: "task execute_script to execute repetitive actions, data/document/media conversions, generate/render content, utilize scriptable libraries/utils via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1232,7 +1232,7 @@ const baseAgents: AgentMap = {
 
     execute_ssh: {
         color: colorWritableWorker,
-        description: "Access remote SSH/SFTP servers to execute remote commands or search/read/write remote files.",
+        description: "task execute_ssh to access remote SSH/SFTP servers to execute remote commands or search/read/write remote files.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -1258,7 +1258,7 @@ const baseAgents: AgentMap = {
 
     query_autocode: {
         color: colorReadOnlyWorker,
-        description: "OpenCode or AutoCode documentation queries or configuration advisor.",
+        description: "task query_autocode for OpenCode or AutoCode documentation or configuration related queries or advise.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1282,7 +1282,7 @@ const baseAgents: AgentMap = {
 
     query_browser: {
         color: colorReadOnlyWorker,
-        description: "Frontend development & testing - Debug, test and verify YOUR RUNNING APPLICATION: inspect UI behaviour, DOM elements, read console logs, analyze network requests, click UI elements, test performance and automate frontend testing. NOT for online research nor internet searches.",
+        description: "task query_browser to handle frontend ui testing with real browser. It can Debug, test and verify YOUR RUNNING APPLICATION: inspect UI behaviour, DOM elements, read console logs, analyze network requests, click UI elements, test performance and automate frontend testing. NOT for online research nor internet searches.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1300,7 +1300,7 @@ const baseAgents: AgentMap = {
 
     query_code: {
         color: colorReadOnlyWorker,
-        description: "Find or summarize: source code, scripts or codebase; NEVER query md content; NEVER to return full file content",
+        description: "task query_code to find or summarize: source code, scripts or codebase; NEVER query md content; NEVER to return full file content",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1323,7 +1323,7 @@ const baseAgents: AgentMap = {
 
     query_db: {
         color: colorReadOnlyWorker,
-        description: "Inspect environment-configured databases in read-only mode using Autocode DB tools",
+        description: "task query_db to inspect environment-configured databases in read-only mode using Autocode DB tools",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1339,7 +1339,7 @@ const baseAgents: AgentMap = {
 
     query_excel: {
         color: colorReadOnlyWorker,
-        description: "Handle Excel workbook manipulations or data retrievals",
+        description: "task query_excel to read excel files.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1356,7 +1356,7 @@ const baseAgents: AgentMap = {
 
     query_git: {
         color: colorReadOnlyWorker,
-        description: "Git repo inspection (status, diff, log, show), recent project file changes, file history",
+        description: "task query_git to inspect Git repos (status, diff, log, show), recent project file changes, file history.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1377,7 +1377,7 @@ const baseAgents: AgentMap = {
 
     query_os: {
         color: colorReadOnlyWorker,
-        description: "Find local host hardware, software, system, network, service, process, or OS-related information, versions, help-command info, status, or configurations.",
+        description: "task query_os to find OS provided info like: local host hardware, software, system, network, service, process, versions, help-command info, status.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1406,7 +1406,7 @@ const baseAgents: AgentMap = {
 
     query_skills: {
         color: colorReadOnlyWorker,
-        description: "Ask questions about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
+        description: "task query_skills to ask questions about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1428,7 +1428,7 @@ const baseAgents: AgentMap = {
 
     query_ssh: {
         color: colorReadOnlyWorker,
-        description: "Access remote SSH/SFTP servers to execute remote commands or search/read/write remote files.",
+        description: "task query_ssh to find on remote SSH/SFTP servers: files, configuration, process status, etc.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1455,7 +1455,7 @@ const baseAgents: AgentMap = {
 
     query_text: {
         color: colorReadOnlyWorker,
-        description: "Find/read/summarize: config file values, md content, md front-matter, articles/document sections, yaml files, json files, templates, assets, resources; NEVER to return full file content.",
+        description: "task query_text to find/read/summarize: config file values, md content, md front-matter, articles/document sections, yaml files, json files, templates, assets, resources; NEVER to return full file content.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1474,7 +1474,7 @@ const baseAgents: AgentMap = {
 
     query_web: {
         color: colorReadOnlyWorker,
-        description: "Search and read public ONLINE web sources: documentation, articles, forums, GitHub, news, framework API/SDKs, public repo examples",
+        description: "task query_web to search and read public ONLINE web sources: documentation, articles, forums, GitHub, news, framework API/SDKs, public repo examples",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1490,20 +1490,6 @@ const baseAgents: AgentMap = {
     },
 
     // Temporary agents: execute 1 task then move out of the way so that original agent can continue
-
-    temp_output: {
-        color: colorReadOnlyWorker,
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_session_context: "allow",
-        },
-        prompt: "---",
-        temperature: 0,
-        tier: "fast",
-    },
-
 
     temp_session: {
         color: colorWritableWorker,

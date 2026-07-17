@@ -1372,7 +1372,6 @@ describe("autocode_plan_save tool", () => {
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_status")).toBe("allow")
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_auto_start")).toBeUndefined()
         expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_plan_save")).toBeUndefined()
-        expect(getPermissionRule(cfg.agent.temp_output?.permission, "autocode_session_context")).toBe("allow")
         expect(Object.keys(cfg.agent).filter((name) => name.startsWith("auto-") || name.startsWith("assist-"))).toEqual([])
         expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
         expect(cfg.agent.design?.prompt).toContain("autocode_plan_save")
