@@ -126,7 +126,6 @@ describe("agent policies", () => {
         expect(agents.assist?.mode).toBe("primary")
         expect(agents.auto?.mode).toBe("primary")
         expect(agents.execute_sandbox?.mode).toBe("subagent")
-        expect(agents.temp_session?.permission).toEqual(expect.objectContaining({ autocode_session_create: "allow" }))
         expect(permissionRule(agents.design?.permission, "external_directory")).toEqual(expect.objectContaining({
             "*": "ask",
             "/configured/*": "allow",

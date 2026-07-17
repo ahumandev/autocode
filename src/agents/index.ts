@@ -1491,19 +1491,6 @@ const baseAgents: AgentMap = {
 
     // Temporary agents: execute 1 task then move out of the way so that original agent can continue
 
-    temp_session: {
-        color: colorWritableWorker,
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_session_create: "allow",
-        },
-        prompt: "---",
-        temperature: 0.5,
-        tier: "fast",
-    },
-
     temp_review_reject: {
         color: colorWritableWorker,
         hidden: true,
