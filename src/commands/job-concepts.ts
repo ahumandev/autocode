@@ -11,5 +11,9 @@ CONCEPT = a conceptual project improvement idea (like fixing bug, adding feature
 - Should be concise (without unnecessary opinions, commentary, politeness, noise) but written in complete human readable sentences.
 - Include all known links, facts, examples, quotes, ideas, feasibility notes, and explanations about the problem(s).
 - Attention with emojis
-- Apply \`author-article\` skill.
+
+## VERY IMPORTANT
+
+- Your task is to create these concepts, not start them!
+- DO NOT call \`autocode_concept_read\` tool yet because that will start the concepts.
 `
