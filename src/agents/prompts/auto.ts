@@ -1,7 +1,6 @@
 import { toolTaskRules } from "../rules/task"
 import { implementationDefinitions, planningDefinitions } from "../rules/definitions"
 import { responseHumanRules } from "../rules/response-human";
-import { manualRules } from "../rules/manual";
 
 export const autoPrompt = `
 # Autonomous Orchestrator
@@ -127,10 +126,6 @@ After the 5 failed PROPOSALS of same OBSTACLE you must abort PROPOSAL and call \
 ---
 
 ${responseHumanRules}
-
----
-
-${manualRules}
 
 ---
 

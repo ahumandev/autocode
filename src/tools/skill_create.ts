@@ -37,7 +37,7 @@ function buildSkillContent(name: string, description: string): string {
 
 export function createAutocodeSkillCreateTool(fileSystem: FileSystem = defaultFileSystem) {
     return tool({
-        description: "Create skill file.",
+        description: "Create main skill file (SKILL.md) that agent will load with skill tool. NOT for creating reference files.",
         args: {
             name: tool.schema.string().describe("Skill name: 4 words max, alpha-numeric and hyphens only."),
             description: tool.schema.string().describe("Skill trigger. ONLY text LLM reads to decide load skill - bad description = skill never triggers. Minimal Caveman English words, max 100 words."),

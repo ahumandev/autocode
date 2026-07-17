@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
-import { createAutocodeSkillWriteTool } from "./autocode_skill_write"
+import { createSkillWriteTool } from "./skill_write"
 import { createToolContext } from "./test_context"
 import { resetRetryCounts } from "@/utils/tools"
 
@@ -27,7 +27,7 @@ function parseToolResult(result: string | { output: string }): ToolResult {
 }
 
 async function executeWrite(root: string, args: Record<string, unknown>): Promise<ToolResult> {
-    const tool = createAutocodeSkillWriteTool()
+    const tool = createSkillWriteTool()
     const result = await tool.execute(args as never, createToolContext({
         directory: root,
         worktree: root,

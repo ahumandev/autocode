@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
+import { formatJobSessionTitle } from "@/utils/jobs"
 import { createAutocodeMdEditTool } from "./autocode_md_edit"
 import { createToolContext } from "./test_context"
 
@@ -127,12 +128,14 @@ describe("autocode_md_edit", () => {
         expect(readFileSync(p, "utf8")).toBe(before)
     })
 
-    test("omit current_anchor with heading creates a new root section", async () => {
+    test("omit current_anchor with heading creates H2 child under last H1", async () => {
         const p = write("r12.md", ["# Top", "", "top text", "", "## One", "", "one text", "", "## Two", "", "two text"])
         const r = await replace(p, { heading: "Added" })
         const f = readFileSync(p, "utf8")
-        expect(f).toContain("# Added")
-        expect(r.outline.added).toBeDefined()
+        expect(f).toMatch(/^## Added$/m)
+        expect(f).not.toMatch(/^# Added$/m)
+        expect(r.outline.top).toBeDefined()
+        expect(r.outline.top.added).toBeDefined()
     })
 
     test("omit current_anchor without heading returns error and leaves file unchanged", async () => {
@@ -155,23 +158,23 @@ describe("autocode_md_edit", () => {
         expect(f).toContain("one text")
     })
 
-    test("current_anchor=[root] with empty content removes preamble but preserves headings", async () => {
+    test("current_anchor=[root] with empty content preserves preamble", async () => {
         const p = write("r15.md", ["old preamble", "", "# Top", "", "top text", "", "## One", "", "one text"])
         await replace(p, { current_anchor: "[root]", content: "" })
         const f = readFileSync(p, "utf8")
-        expect(f).not.toContain("old preamble")
+        expect(f).toContain("old preamble")
         expect(f).toContain("# Top")
         expect(f).toContain("top text")
         expect(f).toContain("## One")
         expect(f).toContain("one text")
     })
 
-    test("current_anchor=[root] with content key omitted removes preamble and preserves headings", async () => {
+    test("current_anchor=[root] with content omitted preserves preamble", async () => {
         const p = write("top-omit.md", ["old preamble line", "", "# Heading", "", "heading body"])
         const r = await replace(p, { current_anchor: "[root]" })
         expect(r.failedAction).toBeUndefined()
         const f = readFileSync(p, "utf8")
-        expect(f).not.toContain("old preamble line")
+        expect(f).toContain("old preamble line")
         expect(f).toMatch(/^# Heading$/m)
         expect(f).toContain("heading body")
     })
@@ -184,21 +187,186 @@ describe("autocode_md_edit", () => {
         expect(f).not.toMatch(/^## Nested$/m)
     })
 
-    test("parent_anchor=\"\" moves section to root H1 level", async () => {
+    test("parent_anchor=\"\" keeps same parent (no move)", async () => {
         const p = write("r17.md", ["# Top", "", "top text", "", "## One", "", "one text", "", "## Nested", "", "nested text"])
         await replace(p, { current_anchor: "nested", parent_anchor: "" })
         const f = readFileSync(p, "utf8")
-        expect(f).toMatch(/^# Nested$/m)
-        expect(f).not.toMatch(/^## Nested$/m)
+        expect(f).toMatch(/^## Nested$/m)
+        expect(f).not.toMatch(/^# Nested$/m)
     })
 
     test("creates a new file when file_path does not exist", async () => {
         const p = join(dir, "nonexistent.md")
         const r = await replace(p, { heading: "Created", content: "fresh body text" })
         const f = readFileSync(p, "utf8")
-        expect(f).toContain("# Created")
+        expect(f).toMatch(/^# Nonexistent$/m)
+        expect(f).toMatch(/^## Created$/m)
         expect(f).toContain("fresh body text")
         expect(r).toHaveProperty("file_path", p)
-        expect(r.outline.created).toBeDefined()
+        expect(r.outline.nonexistent).toBeDefined()
+        expect(r.outline.nonexistent.created).toBeDefined()
+    })
+
+    test("create with no H1 in file creates placeholder H1 from filename and new section as H2 child", async () => {
+        const p = write("blank-page.md", [""])
+        const expectedTitle = formatJobSessionTitle("blank_page")
+        const r = await replace(p, { heading: "Subsection", content: "body text" })
+        const f = readFileSync(p, "utf8")
+        expect(f).toMatch(new RegExp(`^# ${expectedTitle.replace(/ /g, " ")}$`, "m"))
+        expect(f).toMatch(/^## Subsection$/m)
+        expect(f).toContain("body text")
+        expect(r.outline["blank-page"]).toBeDefined()
+        expect(r.outline["blank-page"].subsection).toBeDefined()
+    })
+
+    test("create defaults parent to last H1 when multiple H1s present", async () => {
+        const p = write("multi-h1.md", [
+            "# First",
+            "",
+            "first text",
+            "",
+            "# Second",
+            "",
+            "second text",
+        ])
+        const r = await replace(p, { heading: "New H2", content: "new text" })
+        const f = readFileSync(p, "utf8")
+        expect(f).toContain("# First")
+        expect(f).toContain("first text")
+        expect(f).toContain("# Second")
+        expect(f).toContain("second text")
+        expect(f).toMatch(/^## New H2$/m)
+        expect(f).toContain("new text")
+        const idxSecondBody = f.indexOf("second text")
+        const idxNewH2 = f.indexOf("## New H2")
+        expect(idxNewH2).toBeGreaterThan(idxSecondBody)
+        expect(r.outline.second["new-h2"]).toBeDefined()
+    })
+
+    test("edit with parent_anchor=\"\" keeps same parent no move", async () => {
+        const p = write("no-move.md", [
+            "# Parent",
+            "",
+            "parent text",
+            "",
+            "## Nested",
+            "",
+            "nested text",
+        ])
+        const before = readFileSync(p, "utf8")
+        const r = await replace(p, { current_anchor: "nested", parent_anchor: "" })
+        expect(r.failedAction).toBeUndefined()
+        const after = readFileSync(p, "utf8")
+        expect(after).toBe(before)
+    })
+
+    test("index < -1 returns error and leaves file unchanged", async () => {
+        const p = write("bad-index.md", ["# A", "", "a text"])
+        const before = readFileSync(p, "utf8")
+        const r = await replace(p, { current_anchor: "a", index: -2 })
+        expect(r.failedAction).toBe("autocode_md_edit")
+        expect(r.instruction).toContain("index")
+        expect(readFileSync(p, "utf8")).toBe(before)
+    })
+
+    describe("blank-line rule (exactly 1 empty line at section boundaries)", () => {
+        const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        const assertBoundary = (content: string, left: string, right: string): void => {
+            const l = escapeRe(left)
+            const r = escapeRe(right)
+            expect(content).toMatch(new RegExp(`${l}\\n\\n${r}`))
+            expect(content).not.toMatch(new RegExp(`${l}\\n\\n\\n${r}`))
+            expect(content).not.toMatch(new RegExp(`${l}\\n${r}`))
+        }
+        const assertNoTrailingBlank = (content: string): void => {
+            expect(content).not.toMatch(/\n\n$/)
+            expect(content).toMatch(/\n$/)
+        }
+
+        test("heading→content on CREATE (empty file, parent=[root])", async () => {
+            const p = join(dir, "bl-h1-content.md")
+            const r = await replace(p, { heading: "Title", content: "Body", parent_anchor: "[root]" })
+            expect(r.failedAction).toBeUndefined()
+            const f = readFileSync(p, "utf8")
+            assertBoundary(f, "# Title", "Body")
+            assertNoTrailingBlank(f)
+        })
+
+        test("content→next sibling heading on CREATE under existing parent", async () => {
+            const p = write("bl-sibling.md", ["# Root", "", "Root body"])
+            const r = await replace(p, { heading: "Sub", content: "Sub body", parent_anchor: "Root" })
+            expect(r.failedAction).toBeUndefined()
+            const f = readFileSync(p, "utf8")
+            assertBoundary(f, "Root body", "## Sub")
+            assertNoTrailingBlank(f)
+        })
+
+        test("content→next ancestor heading", async () => {
+            const p = write("bl-ancestor.md", ["# A", "", "Abody", "", "## B", "", "Bbody"])
+            const r = await replace(p, { heading: "C", content: "Cbody", parent_anchor: "[root]" })
+            expect(r.failedAction).toBeUndefined()
+            const f = readFileSync(p, "utf8")
+            assertBoundary(f, "Bbody", "# C")
+            assertNoTrailingBlank(f)
+        })
+
+        test("heading with no content → child heading", async () => {
+            const p = join(dir, "bl-no-content.md")
+            const r1 = await replace(p, { heading: "Parent", parent_anchor: "[root]" })
+            expect(r1.failedAction).toBeUndefined()
+            const r2 = await replace(p, { heading: "Child", content: "Child body", parent_anchor: "Parent" })
+            expect(r2.failedAction).toBeUndefined()
+            const f = readFileSync(p, "utf8")
+            assertBoundary(f, "# Parent", "## Child")
+            assertNoTrailingBlank(f)
+        })
+
+        test("root→next root heading (multiple H1s)", async () => {
+            const p = write("bl-h1-h1.md", ["# First", "", "First body"])
+            const r = await replace(p, { heading: "Second", content: "Second body", parent_anchor: "[root]" })
+            expect(r.failedAction).toBeUndefined()
+            const f = readFileSync(p, "utf8")
+            assertBoundary(f, "First body", "# Second")
+            assertNoTrailingBlank(f)
+        })
+
+        test("preamble→first heading via [root]", async () => {
+            const p = write("bl-preamble.md", ["old preamble", "", "# Heading", "", "heading body"])
+            const r = await replace(p, { current_anchor: "[root]", content: "Preamble text" })
+            expect(r.failedAction).toBeUndefined()
+            const f = readFileSync(p, "utf8")
+            assertBoundary(f, "Preamble text", "# Heading")
+            assertNoTrailingBlank(f)
+        })
+
+        test("frontmatter→body", async () => {
+            const p = write("bl-frontmatter.md", ["---", "title: X", "---"])
+            const r = await replace(p, { heading: "Title", content: "Body", parent_anchor: "[root]" })
+            expect(r.failedAction).toBeUndefined()
+            const f = readFileSync(p, "utf8")
+            assertBoundary(f, "---", "# Title")
+            assertNoTrailingBlank(f)
+        })
+
+        test("round-trip preservation: no-op edit leaves file unchanged with blank line preserved", async () => {
+            const p = write("bl-roundtrip.md", ["# Title", "", "Body text", ""])
+            const before = readFileSync(p, "utf8")
+            const r = await replace(p, { current_anchor: "Title" })
+            expect(r.failedAction).toBeUndefined()
+            const after = readFileSync(p, "utf8")
+            expect(after).toBe(before)
+            assertBoundary(after, "# Title", "Body text")
+            assertNoTrailingBlank(after)
+        })
+
+        test("no doubled blank lines after rewrite", async () => {
+            const p = write("bl-no-double.md", ["# T", "", "B"])
+            const r = await replace(p, { current_anchor: "T", content: "B" })
+            expect(r.failedAction).toBeUndefined()
+            const f = readFileSync(p, "utf8")
+            expect(f).not.toMatch(/B\n\n\n/)
+            assertBoundary(f, "# T", "B")
+            assertNoTrailingBlank(f)
+        })
     })
 })

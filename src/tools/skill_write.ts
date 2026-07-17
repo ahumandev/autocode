@@ -11,18 +11,17 @@ type FileSystem = {
 
 const defaultFileSystem: FileSystem = { mkdir, writeFile }
 
-export function createAutocodeSkillWriteTool(fileSystem: FileSystem = defaultFileSystem) {
+export function createSkillWriteTool(fileSystem: FileSystem = defaultFileSystem) {
     return tool({
-        description:
-            "Write referenced file inside skill directory. Use for templates, scripts, configs, and other files linked from SKILL.md.",
+        description: "Call skill_write to write file referenced by skill like templates, scripts, configs, extra md details to keep main SKILL.md lean. NOT for creating main skill (SKILL.md) file.",
         args: {
             skill_name: tool.schema
                 .string()
-                .describe("Skill name that contains reference md links in SKILL.md content."),
+                .describe("Skill name that contains reference links in skill content."),
             skill_link: tool.schema
                 .string()
                 .describe(
-                    "Relative file path from SKILL.md matching link in SKILL.md content. Example: reference/template.xml",
+                    "Relative file path matching link in SKILL.md content exactly. Example: reference/template.xml",
                 ),
             content: tool.schema.string().describe("Text file content to write."),
         },

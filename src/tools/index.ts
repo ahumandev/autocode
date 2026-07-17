@@ -34,8 +34,8 @@ import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 import { createAutocodeSandboxConfigEditTool, createAutocodeSandboxConfigReadTool, createAutocodeSandboxConfigRemoveTool } from "./autocode_sandbox_config_tools"
 import { createAutocodeSessionContextTool } from "./autocode_session_context"
-import { createAutocodeSkillCreateTool } from "./autocode_skill_create"
-import { createAutocodeSkillWriteTool } from "./autocode_skill_write"
+import { createAutocodeSkillCreateTool } from "./skill_create"
+import { createSkillWriteTool } from "./skill_write"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createSkillLearnCorrectionTool, createSkillLearnEnvTool, createSkillLearnPermissionTool, createSkillLearnPreferenceTool } from "./skill_learn"
@@ -111,7 +111,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         skill_learn_permission: createSkillLearnPermissionTool(),
         skill_learn_preference: createSkillLearnPreferenceTool(),
         skill_read: createSkillReadTool(client, undefined, runtime),
-        skill_write: createAutocodeSkillWriteTool(),
+        skill_write: createSkillWriteTool(),
         task_external: createTaskExternalTool(),
         task_resume: createTaskResumeTool(client),    
     }

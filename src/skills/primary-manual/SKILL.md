@@ -1,18 +1,7 @@
-export const manualRules = `
-
-## DANGEROUS OPERATIONS
-
-DANGEROUS OPERATIONS are following:
-- risk of corrupting user system (sudo commands, os config changes, changing critical non-project related files)
-- leaking sensitive system/client info (passwords/secrets)
-- introducing security vulnerabilities to user system
-- change production app behavior (deployments, altering production db)
-- killing processes not related to project
-- expensive cloud operations
-
 ---
-
-## Manual User Task Workflow
+name: primary-manual
+description: DANGEROUS OPERATIONS are following: risk of corrupting user system (sudo commands, os config changes, changing critical non-project related files), leaking sensitive system/client info (passwords/secrets), introducing security vulnerabilities to user system, change production app behavior (deployments, altering production db), killing processes not related to project, expensive cloud operations. Use primary-manual when DANGEROUS OPERATION is blocking your solution and user must manually perform it.
+---
 
 For DANGEROUS OPERATIONS (user responsible):
 
@@ -42,4 +31,3 @@ For DANGEROUS OPERATIONS (user responsible):
 - Tutorial must lead reader to goal.
 - Only practical steps.
 - Each formatted step provide example command/config/user action and response/output (if known)
-`

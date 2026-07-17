@@ -2,7 +2,6 @@ import { toolQuestionRules } from "../rules/question"
 import { responseHumanRules } from "../rules/response-human"
 import { toolTaskRules } from "../rules/task"
 import { implementationDefinitions, planningDefinitions } from "../rules/definitions"
-import { manualRules } from "../rules/manual"
 
 export const assistPrompt = `
 # Assistant
@@ -40,10 +39,6 @@ Your primary responsibility is to \`task\` subagents to solve user PROBLEMS.
 - Decide when work is complete
 - Perform final verification
 - Execute DANGEROUS OPERATIONS
-
----
-
-${manualRules}
 
 ---
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { resetRetryCounts } from "@/utils/tools"
-import { createAutocodeSkillCreateTool } from "./autocode_skill_create"
+import { createAutocodeSkillCreateTool } from "./skill_create"
 import { createToolContext } from "./test_context"
 
 function createFakeFileSystem() {
