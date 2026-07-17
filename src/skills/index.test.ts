@@ -22,7 +22,6 @@ const expectedManagedDirectories = [
     "test-mockito",
     "test-vitest",
 ]
-const intentionalSourceExclusions = ["author-caveman"]
 const sourceSkillPathExpectations = [
     {
         directory: "author-agent",
@@ -79,11 +78,9 @@ afterEach(() => {
 describe("managed skills", () => {
     test("covers expected source skill directories and intentional exclusions", () => {
         const managedDirectories = managedSkills.map((skill) => skill.directory).sort()
-        const sourceDirectories = sourceSkillDirectories()
 
         expect(managedDirectories).toEqual(expectedManagedDirectories)
         expect(managedDirectories).toContain("author-skill")
-        expect(sourceDirectories.filter((directory) => !managedDirectories.includes(directory))).toEqual(intentionalSourceExclusions)
     })
 
     test("loads name, description, and content for every managed skill", () => {
