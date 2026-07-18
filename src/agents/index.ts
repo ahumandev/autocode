@@ -652,8 +652,10 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_md_create": "allow",
+            "autocode_md_h1": "allow",
             "autocode_md_read": "allow",
-            "autocode_md_edit": "allow",
+            "autocode_md_update": "allow",
             skill: {
                 "*": "deny",
                 "author-rules": "allow"
@@ -891,8 +893,10 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
+            "autocode_md_create": "allow",
+            "autocode_md_h1": "allow",
             "autocode_md_read": "allow",
-            "autocode_md_edit": "allow",
+            "autocode_md_update": "allow",
             skill: {
                 "*": "deny",
                 "author-caveman": "allow",

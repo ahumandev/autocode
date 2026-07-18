@@ -9,7 +9,9 @@ import { createAutocodeConfigReadTool } from "./autocode_config_read"
 import { createAutocodeConfigEditTool } from "./autocode_config_edit"
 import { createAutocodeConfigRemoveTool } from "./autocode_config_remove"
 import { createAutocodeMdReadTool } from "./autocode_md_read"
-import { createAutocodeMdEditTool } from "./autocode_md_edit"
+import { createAutocodeMdCreateTool } from "./autocode_md_create"
+import { createAutocodeMdH1Tool } from "./autocode_md_h1"
+import { createAutocodeMdUpdateTool } from "./autocode_md_update"
 import { createAutocodeMdRemoveTool } from "./autocode_md_remove"
 import { createAutocodeMdFrontmatterReadTool } from "./autocode_md_frontmatter_read"
 import { createAutocodeMdFrontmatterEditTool } from "./autocode_md_frontmatter_edit"
@@ -70,11 +72,13 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_job_status: createAutocodeJobStatusTool(client),
         autocode_kill: createAutocodeKillTool(),
         autocode_logo_find: createAutocodeLogoFindTool(),
-        autocode_md_edit: createAutocodeMdEditTool(),
+        autocode_md_create: createAutocodeMdCreateTool(),
         autocode_md_frontmatter_edit: createAutocodeMdFrontmatterEditTool(),
         autocode_md_frontmatter_read: createAutocodeMdFrontmatterReadTool(),
+        autocode_md_h1: createAutocodeMdH1Tool(),
         autocode_md_read: createAutocodeMdReadTool(),
         autocode_md_remove: createAutocodeMdRemoveTool(),
+        autocode_md_update: createAutocodeMdUpdateTool(),
         autocode_plan_read: createAutocodePlanReadTool(client),
         autocode_plan_save: createAutocodePlanSaveTool(client),
         autocode_rest: createAutocodeRestTool(client),

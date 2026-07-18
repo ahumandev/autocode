@@ -26,13 +26,18 @@ Load a matching native skill when useful, but use \`skill\` for learned skills o
 
 Avoid reading too much unnecessary md text by following MD_READ USAGE rules.
 
-Find file path and anchor of section to read/edit/remove.
+Call \`autocode_md_read\` (max_content_chars=0) to discover file path and outline (section anchors).
 
 ### Step 4: Edit MD
 
-- Both cases set \`current_anchor\` = anchor of Step 4.
-- Review both tool output to check if md structure is as expected.
-- Output as expected? No more reviews required, proceed with Step 6.
+Pick tool by action:
+
+- Set/replace article preamble / title / intro paragraphs → \`autocode_md_h1\`
+- Create section → \`autocode_md_create\`
+- Update section by anchor (rename, edit, move, reorder) → \`autocode_md_update\`.
+- Remove section by anchor → \`autocode_md_remove\`.
+
+After tool runs, review returned \`outline\` to verify md structure.
 
 ---
 

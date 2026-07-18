@@ -450,7 +450,7 @@ describe("auto resume wiring", () => {
         const skillLearnPreference = tools.skill_learn_preference as unknown as { description: string, args: Record<string, unknown> }
         const skill = tools.skill as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_read", "autocode_md_edit", "autocode_md_remove", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn_correction", "skill_learn_env", "skill_learn_permission", "skill_learn_preference", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_create", "autocode_md_h1", "autocode_md_read", "autocode_md_remove", "autocode_md_update", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn_correction", "skill_learn_env", "skill_learn_permission", "skill_learn_preference", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
         expect(tools.skill).toBeDefined()
         expect(Object.keys(tools)).not.toContain("skill_learn")
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
@@ -1196,9 +1196,11 @@ describe("autocode_plan_save tool", () => {
             "autocode_config_read",
             "autocode_config_edit",
             "autocode_config_remove",
+            "autocode_md_create",
+            "autocode_md_h1",
             "autocode_md_read",
-            "autocode_md_edit",
             "autocode_md_remove",
+            "autocode_md_update",
             "autocode_md_frontmatter_read",
             "autocode_md_frontmatter_edit",
             "autocode_plan_read",

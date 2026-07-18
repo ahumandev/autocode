@@ -11,7 +11,7 @@ export function createAutocodeMdReadTool(): ReturnType<typeof tool> {
     return tool({
         description: `Grep find content in md files or read markdown files by glob search pattern.
         
-## MD_READ USAGE:
+## autocode_md_read USAGE:
 
 ALWAYS avoid reading too much md text!
 
@@ -23,19 +23,19 @@ ALWAYS avoid reading too much md text!
 2. Call \`autocode_md_read\` with \`max_content_chars=0\` (and filters if known) → You only receive headings, anchors, and line numbers without body content.
 3. No anchors? → Drop/Widen filters and try again.
 4. To many anchors (5+)? → Add/Narrow filters and try again.
-5. < 5 results? → Call \`autocode_md_read\` with same args except max_content_char_size = 4000 to preview content.
-6. Content truncated? → Call \`autocode_md_read\` with more strict filters and larger max_content_char_size
+5. < 5 results? → Call \`autocode_md_read\` with same args except max_content_chars = 4000 to preview content.
+6. Content truncated? → Call \`autocode_md_read\` with more strict filters and larger max_content_chars
 7. Found content? → Use anchor in followup \`autocode_md_*\` tools
 
-## MD_READ OUTPUT:
+## autocode_md_read OUTPUT:
 
 Returns JSON: \`{ file_paths: { [fileKey: string]: Section[] } }\`. Each Section has:
 
 1. \`heading\` (string): heading title text.
-2. \`anchor\` (string): GitHub MD anchor (lowercase, dashes); reusable as \`current_anchor\` / \`parent_anchor\` in \`autocode_md_edit\` and similar md tools.
+2. \`anchor\` (string): GitHub MD anchor (lowercase, dashes).
 3. \`line\` (number): 1-based start line of section heading in the md file.
-4. \`index\` (number): sibling position under same parent. 0=first, 1=second, N=Nth. Copy this value directly into \`autocode_md_edit\`'s \`index\` arg. Pass -1 in edit to mean "last".
-5. \`content\` (string, optional): own-text body (excludes sub-section content); present only when \`max_content_chars > 0\`.
+4. \`index\` (number): sibling position under same parent.
+5. \`content\` (string, optional): content text (excludes subsections); Truncated content replaced by "...".
 
 Example:
 \`\`\`json
