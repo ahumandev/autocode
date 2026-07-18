@@ -1,18 +1,13 @@
-import type { MdHeading, MdModel } from "./markdown"
-import { ownText, parseMarkdown } from "./markdown"
+import type { MdHeading, MdModel, OwnTextOverrides } from "./markdown"
+import { ownText } from "./markdown"
+
+// Re-export parser-adjacent helpers (now defined in markdown.ts for co-location with parseMarkdown).
+export { normalizeContentBlock, adjustLevels, parseContentBlocks } from "./markdown"
+export type { OwnTextOverrides, ContentBlocks } from "./markdown"
 
 export function makeHeadingLine(title: string, level: number): string {
     const safeLevel = Math.max(1, Math.min(6, level))
     return `${"#".repeat(safeLevel)} ${title}`
-}
-
-export function normalizeContentBlock(text: string): string {
-    return text.replace(/\r\n/g, "\n").trim()
-}
-
-export function adjustLevels(h: MdHeading, delta: number): void {
-    h.level = Math.max(1, Math.min(6, h.level + delta))
-    for (const c of h.children) adjustLevels(c, delta)
 }
 
 export function isDescendant(candidate: MdHeading, ancestor: MdHeading): boolean {
@@ -23,8 +18,6 @@ export function isDescendant(candidate: MdHeading, ancestor: MdHeading): boolean
     }
     return false
 }
-
-export type OwnTextOverrides = Map<MdHeading, string>
 
 export function getOwnText(model: MdModel, h: MdHeading, overrides?: OwnTextOverrides): string {
     if (overrides && overrides.has(h)) return overrides.get(h)!
@@ -95,43 +88,4 @@ export function clampIndex(index: number | undefined, defaultIndex: number, leng
     if (idx < 0) return 0
     if (idx > length) return length
     return idx
-}
-
-export interface ContentBlocks {
-    intro: string
-    children: MdHeading[]
-    overrides: OwnTextOverrides
-}
-
-function reparentHeading(h: MdHeading, newParent: MdHeading | null): void {
-    h.parent = newParent
-    for (const c of h.children) reparentHeading(c, h)
-}
-
-export function parseContentBlocks(content: string, newSectionLevel: number): ContentBlocks {
-    const normalized = normalizeContentBlock(content)
-    if (normalized === "") {
-        return { intro: "", children: [], overrides: new Map() }
-    }
-    // append newline so parseMarkdown's body parsing has stable boundaries
-    const contentModel = parseMarkdown(normalized + "\n")
-    if (contentModel.roots.length === 0) {
-        return { intro: normalized, children: [], overrides: new Map() }
-    }
-    // intro = content preamble (text before first content heading)
-    const firstStart = contentModel.roots[0].start
-    const introEndLine = Math.max(contentModel.bodyStartLine, firstStart) - 1
-    const introLines = contentModel.lines.slice(contentModel.bodyStartLine - 1, introEndLine)
-    const intro = introLines.join(contentModel.newline).trim()
-    // rebase levels: topmost content heading becomes (newSectionLevel + 1)
-    const topLevel = contentModel.roots.reduce((min, h) => h.level < min ? h.level : min, 6)
-    const delta = (newSectionLevel + 1) - topLevel
-    for (const r of contentModel.roots) {
-        reparentHeading(r, null)
-        adjustLevels(r, delta)
-    }
-    // overrides for each imported heading so serializeTree can fetch their body text
-    const overrides: OwnTextOverrides = new Map()
-    for (const h of contentModel.headings) overrides.set(h, ownText(contentModel, h))
-    return { intro, children: contentModel.roots, overrides }
 }
