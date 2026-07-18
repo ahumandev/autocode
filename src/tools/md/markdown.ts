@@ -183,17 +183,6 @@ function sliceLines(model: MdModel, fromLine: number, toLine: number): string {
     return parts.join(model.newline).trim()
 }
 
-function endOfFirstParagraphBlock(model: MdModel, fromLine: number, toLine: number): number {
-    let i = fromLine
-    while (i <= toLine && (model.lines[i - 1] ?? "").trim() === "") i++
-    if (i > toLine) return toLine
-    const start = i
-    while (i <= toLine && (model.lines[i - 1] ?? "").trim() !== "") i++
-    const lastNonBlank = i - 1
-    if (lastNonBlank === toLine) return toLine
-    return lastNonBlank
-}
-
 interface OwnResult {
     text: string
     ownEnd: number
@@ -201,12 +190,7 @@ interface OwnResult {
 
 function computeOwn(model: MdModel, h: MdHeading): OwnResult {
     if (h.children.length === 0) {
-        let ownEnd = h.spanEnd
-        if (h.parent !== null && h.parent.children[h.parent.children.length - 1] === h) {
-            const fb = endOfFirstParagraphBlock(model, h.headerEnd, h.spanEnd)
-            if (fb < h.spanEnd) ownEnd = fb
-        }
-        return { text: sliceLines(model, h.headerEnd, ownEnd), ownEnd }
+        return { text: sliceLines(model, h.headerEnd, h.spanEnd), ownEnd: h.spanEnd }
     }
     const intro = sliceLines(model, h.headerEnd, h.children[0].start - 1)
     const lastChild = h.children[h.children.length - 1]

@@ -326,7 +326,12 @@ async function loadSkillsFromRoot(fileSystem: FileSystem, root: string, inferNes
 
 async function loadSkill(fileSystem: FileSystem, context: SkillLoadContext, name: string): Promise<LoadedSkill | undefined> {
     const roots = [
+        // Narrow autocode root first so loose .md files at its root are collected.
         { path: path.resolve(getGeneratedSkillsRoot()), inferNestedNames: false },
+        // Search the parent of all plugin skill installs so ANY plugin's skills
+        // (e.g. ~/.agents/skills/autocode/..., ~/.agents/skills/<other-plugin>/...) are loadable.
+        // Permission filtering stays in the framework's permission.skill block.
+        { path: path.dirname(path.resolve(getGeneratedSkillsRoot())), inferNestedNames: true },
         { path: path.resolve(resolveAgentsStorageRoot(context), ".agents", "skills"), inferNestedNames: true },
         { path: path.resolve(resolveAgentsStorageRoot(context), ".opencode", "skills"), inferNestedNames: false },
     ]

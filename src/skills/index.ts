@@ -23,6 +23,7 @@ const managedSkillDirectories = [
     "code-typescript",
     "execute-sandbox",
     "git-commit",
+    "primary-manual",
     "test-jest",
     "test-junit",
     "test-mockito",
