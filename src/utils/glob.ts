@@ -56,7 +56,7 @@ export async function expandGlob(
     for await (const rel of glob.scan({
         cwd: scanCwd,
         onlyFiles: true,
-        accessHidden: opts?.accessHidden ?? false,
+        dot: opts?.accessHidden ?? false,
         absolute: false,
     })) {
         relPaths.push(rel)

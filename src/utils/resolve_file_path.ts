@@ -1,6 +1,8 @@
 import path from "node:path"
 import { readdir, realpath, stat } from "node:fs/promises"
 
+const SKIP_DIR_NAMES = new Set(["node_modules", ".git", ".hg", ".svn", "dist", "build", ".next", ".cache", "coverage", ".turbo"])
+
 /**
  * Resolves a user-supplied file reference against the current working directory
  * using a 3-step strategy:
@@ -19,7 +21,11 @@ import { readdir, realpath, stat } from "node:fs/promises"
  * concrete path. The function never throws for a missing file and never returns
  * `undefined`.
  */
-export async function resolveFilePath(input: string, cwd: string): Promise<string> {
+export async function resolveFilePath(
+    input: string,
+    cwd: string,
+    opts?: { searchSubdirs?: boolean },
+): Promise<string> {
     if (input === "") return path.resolve(cwd, "")
 
     const cwdCandidate = path.resolve(cwd, input)
@@ -33,6 +39,8 @@ export async function resolveFilePath(input: string, cwd: string): Promise<strin
 
     const hasSeparator = input.includes(path.sep) || input.includes("/")
     if (hasSeparator) return path.resolve(input)
+
+    if (opts?.searchSubdirs === false) return cwdCandidate
 
     const found = await bfsFindFilename(cwd, input, 7)
     if (found !== undefined) return found
@@ -91,6 +99,7 @@ export async function bfsFindFilename(
 
         for (const entry of entries) {
             if (!entry.isSymbolicLink() && !entry.isDirectory()) continue
+            if (SKIP_DIR_NAMES.has(entry.name)) continue
 
             const childPath = path.join(dir, entry.name)
             let realChild: string
