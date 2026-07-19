@@ -35,6 +35,7 @@ describe("buildAgents with external skills", () => {
             "learned-corrections-os": "allow",
             "learned-env": "allow",
             "learned-permissions": "allow",
+            "skill-write": "allow"
         })
     })
 

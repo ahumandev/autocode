@@ -3,10 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { join } from "path"
 import { tmpdir } from "os"
 import {
-    createSkillLearnCorrectionTool,
-    createSkillLearnEnvTool,
-    createSkillLearnPermissionTool,
-    createSkillLearnPreferenceTool,
+    createSkillLearnTool,
     validateSkillLearnArgs,
 } from "./skill_learn"
 import { createToolContext } from "./test_context"
@@ -31,17 +28,17 @@ function parseToolResult(result: string | { output: string }): ToolResult {
     }
 }
 
-type SubjectName = "corrections" | "env" | "permissions" | "preferences"
+type SubjectDir = "corrections" | "env" | "permissions" | "preferences"
 
-function learnedSkillFile(root: string, subject: SubjectName, dirName: string): string {
+function learnedSkillFile(root: string, subject: SubjectDir, dirName: string): string {
     return join(root, ".agents", "skills", `learned-${subject}`, dirName, "SKILL.md")
 }
 
-function learnedSkillDir(root: string, subject: SubjectName): string {
+function learnedSkillDir(root: string, subject: SubjectDir): string {
     return join(root, ".agents", "skills", `learned-${subject}`)
 }
 
-function listLearnedDirs(root: string, subject: SubjectName): string[] {
+function listLearnedDirs(root: string, subject: SubjectDir): string[] {
     const dir = learnedSkillDir(root, subject)
     if (!existsSync(dir)) return []
     return readdirSync(dir, { withFileTypes: true })
@@ -50,22 +47,12 @@ function listLearnedDirs(root: string, subject: SubjectName): string[] {
         .sort()
 }
 
-function executeCorrectionTool(root: string, args: Record<string, unknown>): Promise<ToolResult> {
-    const tool = createSkillLearnCorrectionTool()
-    return tool.execute(args as never, createToolContext({
-        agent: "pair",
-        directory: root,
-        worktree: root,
-    })).then((result) => parseToolResult(result as never))
-}
-
 function executeTool(
-    factory: typeof createSkillLearnCorrectionTool,
     root: string,
     args: Record<string, unknown>,
     agent = "pair",
 ): Promise<ToolResult> {
-    const tool = factory()
+    const tool = createSkillLearnTool()
     return tool.execute(args as never, createToolContext({
         agent,
         directory: root,
@@ -73,9 +60,48 @@ function executeTool(
     })).then((result) => parseToolResult(result as never))
 }
 
+function executeCorrectionTool(root: string, args: Record<string, unknown>): Promise<ToolResult> {
+    return executeTool(root, { category: "correction", ...args })
+}
+
 const DEFAULT_DESCRIPTION = "Mistake was corrected by using bounded search."
 
 describe("skill_learn tool validation", () => {
+    test("rejects missing category", async () => {
+        await withTempDir(async (root) => {
+            const result = await executeTool(root, {
+                name: "Title",
+                content: "- Content.",
+                description: DEFAULT_DESCRIPTION,
+            })
+
+            expect(result).toMatchObject({
+                failedAction: "learn skill",
+                error: "Invalid category: \"undefined\". Must be one of: correction, env, permission, preference.",
+                instruction: "Retry with a valid category argument.",
+            })
+            expect(existsSync(join(root, ".agents"))).toBe(false)
+        })
+    })
+
+    test("rejects invalid category value", async () => {
+        await withTempDir(async (root) => {
+            const result = await executeTool(root, {
+                category: "other",
+                name: "Title",
+                content: "- Content.",
+                description: DEFAULT_DESCRIPTION,
+            })
+
+            expect(result).toMatchObject({
+                failedAction: "learn skill",
+                error: "Invalid category: \"other\". Must be one of: correction, env, permission, preference.",
+                instruction: "Retry with a valid category argument.",
+            })
+            expect(existsSync(join(root, ".agents"))).toBe(false)
+        })
+    })
+
     test("rejects subject argument without creating files", async () => {
         await withTempDir(async (root) => {
             const result = await executeCorrectionTool(root, {
@@ -88,59 +114,43 @@ describe("skill_learn tool validation", () => {
             expect(result).toEqual({
                 failedAction: "learn skill",
                 error: "Unexpected argument(s): subject.",
-                instruction: "Retry with name, content, and description arguments.",
+                instruction: "Retry with category, name, content, description, and optional key arguments.",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
     })
 
-    test("rejects ssh_key on non-env tool as unexpected argument", async () => {
+    test("rejects non-string key without creating files", async () => {
         await withTempDir(async (root) => {
-            const result = await executeCorrectionTool(root, {
+            const result = await executeTool(root, {
+                category: "env",
                 name: "Title",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
-                ssh_key: "Prod-Key",
+                key: 123,
             })
 
             expect(result).toEqual({
                 failedAction: "learn skill",
-                error: "Unexpected argument(s): ssh_key.",
-                instruction: "Retry with name, content, and description arguments.",
+                error: "Invalid key. Key must be a string when provided.",
+                instruction: "Retry with key omitted, blank, or using letters, numbers, underscores, or hyphens.",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
     })
 
-    test("rejects non-string ssh_key on env tool without creating files", async () => {
+    test("rejects unsafe key without creating files", async () => {
         await withTempDir(async (root) => {
-            const result = await executeTool(createSkillLearnEnvTool, root, {
+            const result = await executeTool(root, {
+                category: "env",
                 name: "Title",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
-                ssh_key: 123,
-            })
-
-            expect(result).toEqual({
-                failedAction: "learn skill",
-                error: "Invalid ssh_key. SSH key must be a string when provided.",
-                instruction: "Retry with ssh_key omitted, blank, or using letters, numbers, underscores, or hyphens.",
-            })
-            expect(existsSync(join(root, ".agents"))).toBe(false)
-        })
-    })
-
-    test("rejects unsafe ssh_key on env tool without creating files", async () => {
-        await withTempDir(async (root) => {
-            const result = await executeTool(createSkillLearnEnvTool, root, {
-                name: "Title",
-                content: "- Content.",
-                description: DEFAULT_DESCRIPTION,
-                ssh_key: "../pair",
+                key: "../pair",
             })
 
             expect(result).toMatchObject({
-                error: "Unsafe ssh_key: ../pair",
+                error: "Unsafe key: ../pair",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
@@ -252,7 +262,7 @@ describe("skill_learn per-item directory", () => {
             })
 
             expect(result).toBe("OK")
-            const expectedDir = "learned-corrections-avoid-re-render"
+            const expectedDir = "learned-correction-avoid-re-render"
             const filePath = learnedSkillFile(root, "corrections", expectedDir)
 
             expect(existsSync(filePath)).toBe(true)
@@ -273,13 +283,14 @@ describe("skill_learn per-item directory", () => {
         })
     })
 
-    test("env tool writes per-item dir with ssh_key segment in dir name", async () => {
+    test("env tool writes per-item dir with key segment in dir name", async () => {
         await withTempDir(async (root) => {
-            const result = await executeTool(createSkillLearnEnvTool, root, {
+            const result = await executeTool(root, {
+                category: "env",
                 name: "Remote host A",
                 content: "- Remote detail.",
                 description: "Use this skill when SSH-ing into prod host A.",
-                ssh_key: "Prod-Key",
+                key: "Prod-Key",
             })
 
             expect(result).toBe("OK")
@@ -295,9 +306,10 @@ describe("skill_learn per-item directory", () => {
         })
     })
 
-    test("env tool without ssh_key omits ssh segment from dir name", async () => {
+    test("env tool without key omits key segment from dir name", async () => {
         await withTempDir(async (root) => {
-            const result = await executeTool(createSkillLearnEnvTool, root, {
+            const result = await executeTool(root, {
+                category: "env",
                 name: "Local dev",
                 content: "- Local detail.",
                 description: "Use this skill when local dev env limited.",
@@ -306,6 +318,22 @@ describe("skill_learn per-item directory", () => {
             expect(result).toBe("OK")
             const expectedDir = "learned-env-local-dev"
             expect(existsSync(learnedSkillFile(root, "env", expectedDir))).toBe(true)
+        })
+    })
+
+    test("accepts key for non-env category", async () => {
+        await withTempDir(async (root) => {
+            const result = await executeCorrectionTool(root, {
+                name: "Remote fix",
+                content: "- Fixed remote issue.",
+                description: "Use this skill when fixing remote host issue.",
+                key: "host-a",
+            })
+
+            expect(result).toBe("OK")
+            const expectedDir = "learned-correction-host-a-remote-fix"
+            expect(existsSync(learnedSkillFile(root, "corrections", expectedDir))).toBe(true)
+            expect(listLearnedDirs(root, "corrections")).toEqual([expectedDir])
         })
     })
 
@@ -320,7 +348,7 @@ describe("skill_learn per-item directory", () => {
 
             expect(result).toBe("OK")
             const truncated = "a".repeat(40)
-            const expectedDir = `learned-corrections-${truncated}`
+            const expectedDir = `learned-correction-${truncated}`
 
             expect(listLearnedDirs(root, "corrections")).toEqual([expectedDir])
             expect(existsSync(learnedSkillFile(root, "corrections", expectedDir))).toBe(true)
@@ -336,7 +364,7 @@ describe("skill_learn per-item directory", () => {
             })
 
             expect(result).toBe("OK")
-            const expectedDir = "learned-corrections-untitled"
+            const expectedDir = "learned-correction-untitled"
 
             expect(listLearnedDirs(root, "corrections")).toEqual([expectedDir])
         })
@@ -358,7 +386,7 @@ describe("skill_learn per-item directory", () => {
             expect(first).toBe("OK")
             expect(second).toBe("OK")
 
-            const skillDir = "learned-corrections-avoid-re-render"
+            const skillDir = "learned-correction-avoid-re-render"
             expect(listLearnedDirs(root, "corrections")).toEqual([skillDir])
             const filePath = learnedSkillFile(root, "corrections", skillDir)
             expect(existsSync(filePath)).toBe(true)
@@ -378,7 +406,7 @@ describe("skill_learn per-item directory", () => {
                 description,
             })
 
-            const dirName = "learned-corrections-trigger-title"
+            const dirName = "learned-correction-trigger-title"
             const content = readFileSync(learnedSkillFile(root, "corrections", dirName), "utf8")
 
             expect(content).toContain(`name: ${dirName}`)
@@ -401,8 +429,8 @@ describe("skill_learn per-item directory", () => {
 
             const dirs = listLearnedDirs(root, "corrections")
             expect(dirs).toEqual([
-                "learned-corrections-first",
-                "learned-corrections-second",
+                "learned-correction-first",
+                "learned-correction-second",
             ])
             for (const dir of dirs) {
                 const content = readFileSync(learnedSkillFile(root, "corrections", dir), "utf8")
@@ -412,9 +440,10 @@ describe("skill_learn per-item directory", () => {
         })
     })
 
-    test("permission tool writes per-item permission skill dir", async () => {
+    test("permission category writes per-item permission skill dir", async () => {
         await withTempDir(async (root) => {
-            const result = await executeTool(createSkillLearnPermissionTool, root, {
+            const result = await executeTool(root, {
+                category: "permission",
                 name: "Safe delete",
                 content: "- Safe action.",
                 description: "Use this skill when deleting files manually.",
@@ -422,14 +451,15 @@ describe("skill_learn per-item directory", () => {
 
             expect(result).toBe("OK")
             expect(listLearnedDirs(root, "permissions")).toEqual([
-                "learned-permissions-safe-delete",
+                "learned-permission-safe-delete",
             ])
         })
     })
 
-    test("preference tool writes per-item preference skill dir", async () => {
+    test("preference category writes per-item preference skill dir", async () => {
         await withTempDir(async (root) => {
-            const result = await executeTool(createSkillLearnPreferenceTool, root, {
+            const result = await executeTool(root, {
+                category: "preference",
                 name: "Prefer tabs",
                 content: "- Use tabs.",
                 description: "Use this skill when a reviewer complains about indentation.",
@@ -437,33 +467,36 @@ describe("skill_learn per-item directory", () => {
 
             expect(result).toBe("OK")
             expect(listLearnedDirs(root, "preferences")).toEqual([
-                "learned-preferences-prefer-tabs",
+                "learned-preference-prefer-tabs",
             ])
         })
     })
 
     test("validateSkillLearnArgs trims name, content, and description", () => {
         const result = validateSkillLearnArgs({
+            category: "correction",
             name: " Spaced Name ",
             content: "\n- Body.\n",
             description: " Trigger here ",
         })
         expect(result).toEqual({
+            category: "correction",
             name: "Spaced Name",
             content: "- Body.",
             description: "Trigger here",
-            sshKey: undefined,
+            key: undefined,
         })
     })
 
-    test("validateSkillLearnArgs normalizes ssh_key to lowercased trim", () => {
+    test("validateSkillLearnArgs normalizes key to lowercased trim", () => {
         const result = validateSkillLearnArgs({
+            category: "env",
             name: "Title",
             content: "- Body.",
             description: "Trigger.",
-            ssh_key: "  Prod-Key  ",
-        }, true)
-        expect(result).toMatchObject({ sshKey: "prod-key" })
+            key: "  Prod-Key  ",
+        })
+        expect(result).toMatchObject({ key: "prod-key" })
     })
 })
 
@@ -516,7 +549,7 @@ describe("skill_learn optional description when skill exists", () => {
             })
             expect(first).toBe("OK")
 
-            const skillDir = "learned-corrections-double-hook"
+            const skillDir = "learned-correction-double-hook"
             const filePath = learnedSkillFile(root, "corrections", skillDir)
 
             // Second call: omit description, update content only.
@@ -540,11 +573,11 @@ describe("skill_learn optional description when skill exists", () => {
 
     test("existing skill with no frontmatter description returns retry error", async () => {
         await withTempDir(async (root) => {
-            const skillDir = join(root, ".agents", "skills", "learned-corrections", "learned-corrections-no-desc")
+            const skillDir = join(root, ".agents", "skills", "learned-corrections", "learned-correction-no-desc")
             mkdirSync(skillDir, { recursive: true })
             writeFileSync(join(skillDir, "SKILL.md"), [
                 "---",
-                "name: learned-corrections-no-desc",
+                "name: learned-correction-no-desc",
                 "---",
                 "",
                 "- Body without description.",
@@ -572,7 +605,7 @@ describe("skill_learn optional description when skill exists", () => {
                 description: DEFAULT_DESCRIPTION,
             })
 
-            const skillDir = "learned-corrections-separator-test"
+            const skillDir = "learned-correction-separator-test"
             const filePath = learnedSkillFile(root, "corrections", skillDir)
             const content = readFileSync(filePath, "utf8")
 

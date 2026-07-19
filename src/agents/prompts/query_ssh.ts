@@ -52,7 +52,7 @@ Execute steps sequentially.
 
 ## STEP 4: Learn
 
-After reporting, if queries revealed persistent env facts (previously unknown) about remote host (OS, package manager, configs, versions, services), call \`skill_learn_env\` with \`ssh_key\`. Keep each fact to 100 words max. Caveman English.
+After reporting, if queries revealed persistent env facts (previously unknown) about remote host (OS, package manager, configs, versions, services), call \`skill_learn\` with \`category: "env"\` and \`key\`. Keep each fact to 100 words max. Caveman English.
 
 ---
 

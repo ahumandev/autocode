@@ -42,7 +42,7 @@ import { createSkillEditReferenceTool } from "./skill_edit_reference"
 import { createSkillReadReferenceTool } from "./skill_read_reference"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
-import { createSkillLearnCorrectionTool, createSkillLearnEnvTool, createSkillLearnPermissionTool, createSkillLearnPreferenceTool } from "./skill_learn"
+import { createSkillLearnTool } from "./skill_learn"
 import { createSkillTool } from "./skill"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
 import { createTaskResumeTool } from "./task_resume"
@@ -112,10 +112,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
         skill: createSkillTool(client, undefined, runtime),
         skill_edit: createAutocodeSkillEditTool(),
-        skill_learn_correction: createSkillLearnCorrectionTool(),
-        skill_learn_env: createSkillLearnEnvTool(),
-        skill_learn_permission: createSkillLearnPermissionTool(),
-        skill_learn_preference: createSkillLearnPreferenceTool(),
+        skill_learn: createSkillLearnTool(),
         skill_read: createAutocodeSkillReadTool(),
         skill_edit_reference: createSkillEditReferenceTool(),
         skill_read_reference: createSkillReadReferenceTool(),

@@ -7,9 +7,16 @@ import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 const triggerDescriptionArg = "Trigger description of: situations, symptoms, task that should make agent recall this skill. Use `skill-write` skill to see correct format."
 
-const learnedSkillBaseSubjects = ["corrections", "env", "permissions", "preferences"] as const
+const learnedSkillBaseSubjects = ["correction", "env", "permission", "preference"] as const
 
 export type LearnedSkillSubject = typeof learnedSkillBaseSubjects[number]
+
+const subjectDirName: Record<LearnedSkillSubject, string> = {
+    correction: "corrections",
+    env: "env",
+    permission: "permissions",
+    preference: "preferences",
+}
 
 type FileSystem = {
     mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
@@ -17,17 +24,19 @@ type FileSystem = {
 }
 
 type SkillLearnArgs = {
+    category?: unknown
     name?: unknown
     content?: unknown
     description?: unknown
-    ssh_key?: unknown
+    key?: unknown
 }
 
 type ValidatedSkillLearnArgs = {
+    category: LearnedSkillSubject
     name: string
     content: string
     description: string
-    sshKey?: string
+    key?: string
 }
 
 type SkillLearnContext = {
@@ -62,16 +71,16 @@ function sanitizeLearnedName(name: string): string {
     return collapsed || "untitled"
 }
 
-function sanitizeLearnedSshKey(sshKey: string): string {
-    const lowered = sshKey.toLowerCase().trim()
+function sanitizeLearnedKey(key: string): string {
+    const lowered = key.toLowerCase().trim()
     const stripped = lowered.replace(/[^a-z0-9-]/g, "-")
     return stripped.replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "")
 }
 
-function buildLearnedSkillName(subject: LearnedSkillSubject, topic: string, sshKey?: string): string {
-    const sanitizedSshKey = sshKey !== undefined && sshKey !== "" ? sanitizeLearnedSshKey(sshKey) : ""
-    const sshSegment = subject === "env" && sanitizedSshKey !== "" ? `-${sanitizedSshKey}` : ""
-    return `learned-${subject}${sshSegment}-${topic}`
+function buildLearnedSkillName(subject: LearnedSkillSubject, topic: string, key?: string): string {
+    const sanitizedKey = key !== undefined && key !== "" ? sanitizeLearnedKey(key) : ""
+    const keySegment = sanitizedKey !== "" ? `-${sanitizedKey}` : ""
+    return `learned-${subject}${keySegment}-${topic}`
 }
 
 function buildLearnedFrontmatter(skillName: string, description: string): string {
@@ -98,13 +107,13 @@ function computeLearnedSkillPaths(
     context: SkillLearnContext,
     subject: LearnedSkillSubject,
     name: string,
-    sshKey?: string,
+    key?: string,
 ): { skillDir: string, skillFilePath: string, skillDirName: string } {
     const agentsRoot = path.join(resolveAgentsStorageRoot(context), ".agents")
     const skillsRoot = path.resolve(agentsRoot, "skills")
     const topic = sanitizeLearnedName(name)
-    const skillDirName = buildLearnedSkillName(subject, topic, sshKey)
-    const skillDir = path.resolve(skillsRoot, `learned-${subject}`, skillDirName)
+    const skillDirName = buildLearnedSkillName(subject, topic, key)
+    const skillDir = path.resolve(skillsRoot, `learned-${subjectDirName[subject]}`, skillDirName)
     return {
         skillDir,
         skillFilePath: path.join(skillDir, "SKILL.md"),
@@ -133,9 +142,9 @@ async function writeLearnedSkillDir(
     name: string,
     content: string,
     description: string,
-    sshKey?: string
+    key?: string
 ): Promise<string> {
-    const { skillDir, skillFilePath, skillDirName } = computeLearnedSkillPaths(context, subject, name, sshKey)
+    const { skillDir, skillFilePath, skillDirName } = computeLearnedSkillPaths(context, subject, name, key)
 
     const relativePath = path.relative(
         path.resolve(resolveAgentsStorageRoot(context), ".agents", "skills"),
@@ -156,7 +165,6 @@ async function writeLearnedSkillDir(
 }
 
 type ValidateSkillLearnOptions = {
-    subject?: LearnedSkillSubject
     context?: SkillLearnContext
 }
 
@@ -165,21 +173,22 @@ type DescriptionResolution = { ok: true, value: string } | { ok: false, error: s
 function resolveDescription(
     args: SkillLearnArgs,
     options: ValidateSkillLearnOptions | undefined,
+    subject: LearnedSkillSubject,
     trimmedName: string,
-    sshKey: string | undefined,
+    key: string | undefined,
 ): DescriptionResolution {
     const rawDescription = typeof args.description === "string" ? args.description : ""
     const trimmedDescription = rawDescription.trim()
 
     if (!trimmedDescription) {
-        if (!options?.subject || !options?.context) {
+        if (!options?.context) {
             return {
                 ok: false,
                 error: "Invalid description. Description must be non-empty and contain no newline or control characters.",
                 instruction: "Retry with a trigger description on one line that describes when to use this skill.",
             }
         }
-        const { skillFilePath } = computeLearnedSkillPaths(options.context, options.subject, trimmedName, sshKey)
+        const { skillFilePath } = computeLearnedSkillPaths(options.context, subject, trimmedName, key)
         const existing = readExistingSkillDescription(skillFilePath)
         if (existing === undefined) {
             return {
@@ -210,32 +219,37 @@ function resolveDescription(
 
 export function validateSkillLearnArgs(
     args: SkillLearnArgs,
-    allowSshKey = false,
     options?: ValidateSkillLearnOptions,
 ): ValidatedSkillLearnArgs | { error: string, instruction: string } {
-    const allowedArgs = allowSshKey ? ["name", "content", "description", "ssh_key"] : ["name", "content", "description"]
-    const unexpectedArgs = Object.keys(args).filter((key) => !allowedArgs.includes(key))
+    if (typeof args.category !== "string" || !learnedSkillBaseSubjects.includes(args.category as LearnedSkillSubject)) {
+        return {
+            error: `Invalid category: "${String(args.category)}". Must be one of: correction, env, permission, preference.`,
+            instruction: "Retry with a valid category argument.",
+        }
+    }
+    const category = args.category as LearnedSkillSubject
+
+    const allowedArgs = ["category", "name", "content", "description", "key"]
+    const unexpectedArgs = Object.keys(args).filter((argKey) => !allowedArgs.includes(argKey))
     if (unexpectedArgs.length > 0) {
         return {
             error: `Unexpected argument(s): ${unexpectedArgs.join(", ")}.`,
-            instruction: allowSshKey
-                ? "Retry with name, content, description, and optional ssh_key arguments."
-                : "Retry with name, content, and description arguments.",
+            instruction: "Retry with category, name, content, description, and optional key arguments.",
         }
     }
 
-    if (allowSshKey && args.ssh_key !== undefined && typeof args.ssh_key !== "string") {
+    if (args.key !== undefined && typeof args.key !== "string") {
         return {
-            error: "Invalid ssh_key. SSH key must be a string when provided.",
-            instruction: "Retry with ssh_key omitted, blank, or using letters, numbers, underscores, or hyphens.",
+            error: "Invalid key. Key must be a string when provided.",
+            instruction: "Retry with key omitted, blank, or using letters, numbers, underscores, or hyphens.",
         }
     }
 
-    const sshKey = allowSshKey && typeof args.ssh_key === "string" && args.ssh_key.trim() ? args.ssh_key.trim().toLowerCase() : undefined
-    if (sshKey !== undefined && !isSafePathIdentifier(sshKey)) {
+    const key = typeof args.key === "string" && args.key.trim() ? args.key.trim().toLowerCase() : undefined
+    if (key !== undefined && !isSafePathIdentifier(key)) {
         return {
-            error: `Unsafe ssh_key: ${args.ssh_key}`,
-            instruction: "Retry with ssh_key using letters, numbers, underscores, or hyphens.",
+            error: `Unsafe key: ${args.key}`,
+            instruction: "Retry with key using letters, numbers, underscores, or hyphens.",
         }
     }
 
@@ -247,7 +261,7 @@ export function validateSkillLearnArgs(
     }
 
     const trimmedName = args.name.trim()
-    const descriptionResult = resolveDescription(args, options, trimmedName, sshKey)
+    const descriptionResult = resolveDescription(args, options, category, trimmedName, key)
     if (!descriptionResult.ok) {
         return { error: descriptionResult.error, instruction: descriptionResult.instruction }
     }
@@ -260,34 +274,28 @@ export function validateSkillLearnArgs(
     }
 
     return {
+        category,
         name: trimmedName,
         content: args.content.trim(),
         description: descriptionResult.value,
-        sshKey,
+        key,
     }
 }
 
-const skillLearnDescriptions = {
-    corrections: "mistake was self corrected: `subject` = correction, `content` = summarize mistake + correction steps or lessons learned.",
-    env: "unusual capability / limitation found in local dev environment: `subject` = environment, `content` = non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.",
-    permissions: "user says manual task was safe / warn about unsafe task / insist task must be manual: `subject` = permissions, `content` = which actions are safe and which are dangerous, including safe passwords.",
-    preferences: "user set permanent (words like \"always\", \"never\", \"remember\" or CAPITAL LETTERS AND !!!) preferences: `subject` = preferences, `content` = complaint / preference / permanent rule like programming patterns, file organization, naming conventions, editing style, etc.",
-} satisfies Record<LearnedSkillSubject, string>
-
-function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fileSystem: FileSystem = defaultFileSystem, allowSshKey = false): ReturnType<typeof tool> {
+export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
     const args = {
+        category: tool.schema.string().describe("One of: correction, env, permission, preference. Picks which kind of lesson to remember."),
         name: tool.schema.string().describe("Short name used to derive the skill file slug."),
         content: tool.schema.string().describe("Summary of what was learned in Caveman English."),
-        description: tool.schema.string().describe(triggerDescriptionArg),
-        ...(allowSshKey ? { ssh_key: tool.schema.string().optional().describe("Only if skill relate to remote SFTP/SSH env with known ssh_key, otherwise omit.") } : {}),
+        description: tool.schema.string().optional().describe(triggerDescriptionArg),
+        key: tool.schema.string().optional().describe("Optional identifier to namespace this skill, e.g. SSH host key for env facts."),
     }
 
     return tool({
-        description: `Call \`${toolName}\` to remember when ${skillLearnDescriptions[subject]} Call same name again with same name to UPDATE an outdated skill.`,
+        description: "Call `skill_learn` to remember a persistent lesson. `category`: correction (mistake self-corrected) | env (dev environment fact/limitation) | permission (manual task safe/unsafe) | preference (user's permanent rule). Pass `key` to namespace by host or similar identifier. Call again with same `category`+`name` to UPDATE an outdated skill.",
         args,
         async execute(args, context) {
-            const validatedArgs = validateSkillLearnArgs(args, allowSshKey, {
-                subject,
+            const validatedArgs = validateSkillLearnArgs(args, {
                 context: context as SkillLearnContext,
             })
             if ("error" in validatedArgs) {
@@ -298,11 +306,11 @@ function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fi
                 await writeLearnedSkillDir(
                     fileSystem,
                     context as SkillLearnContext,
-                    subject,
+                    validatedArgs.category,
                     validatedArgs.name,
                     validatedArgs.content,
                     validatedArgs.description,
-                    validatedArgs.sshKey
+                    validatedArgs.key
                 )
 
                 return "OK"
@@ -312,20 +320,4 @@ function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fi
             }
         },
     })
-}
-
-export function createSkillLearnCorrectionTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
-    return createSkillLearnTool("skill_learn_correction", "corrections", fileSystem)
-}
-
-export function createSkillLearnEnvTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
-    return createSkillLearnTool("skill_learn_env", "env", fileSystem, true)
-}
-
-export function createSkillLearnPermissionTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
-    return createSkillLearnTool("skill_learn_permission", "permissions", fileSystem)
-}
-
-export function createSkillLearnPreferenceTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
-    return createSkillLearnTool("skill_learn_preference", "preferences", fileSystem)
 }

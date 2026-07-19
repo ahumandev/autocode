@@ -74,7 +74,7 @@ Do NOT ask for confirmation on explicit commands like "kill all nginx processes"
 
 ## Learning
 
-After execution, if you discovered persistent env facts (previously unknown) about remote host (OS version, package manager, config file paths, installed tool versions, service status), call \`skill_learn_env\` with \`ssh_key\` set to host key. Keep each fact to 100 words max. Caveman English.
+After execution, if you discovered persistent env facts (previously unknown) about remote host (OS version, package manager, config file paths, installed tool versions, service status), call \`skill_learn\` with \`category: "env"\` and \`key\` set to host key. Keep each fact to 100 words max. Caveman English.
 
 ---
 

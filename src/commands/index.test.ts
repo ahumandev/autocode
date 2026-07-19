@@ -252,10 +252,7 @@ describe("commands", () => {
         expect(template).toContain("env")
         expect(template).toContain("permission")
         expect(template).toContain("preference")
-        expect(template).toContain("`skill_learn_correction`")
-        expect(template).toContain("`skill_learn_env`")
-        expect(template).toContain("`skill_learn_permission`")
-        expect(template).toContain("`skill_learn_preference`")
+        expect(template).toContain("`skill_learn`")
         // Skip empty categories
         expect(template).toMatch(/skip.*categor/i)
         // $ARGUMENTS placeholder
