@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from "fs"
+import { existsSync, readFileSync, type Dirent } from "fs"
 import { mkdir, readdir, rm, writeFile } from "fs/promises"
 import { homedir } from "os"
 import path from "path"
 import { fileURLToPath } from "url"
+import { isMissingFile } from "@/utils/jobs"
 
 export type ManagedSkillDefinition = {
     name: string
@@ -119,6 +120,59 @@ export async function ensureGeneratedSkills(): Promise<string> {
     )
 
     return generatedSkillsRoot
+}
+
+const LEARNED_SKILL_CATEGORIES = ["corrections", "env", "permissions", "preferences"] as const
+const LEARNED_DEFAULT_MAX = 10
+
+function learnedTimestampRegex(category: string): RegExp {
+    return new RegExp(`^learned-${category}-(\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2})`)
+}
+
+export async function cleanupLearnedSkills(agentsRoot: string, max: number): Promise<void> {
+    const effectiveMax = Number.isInteger(max) && max > 0 ? max : LEARNED_DEFAULT_MAX
+    const skillsRoot = path.join(agentsRoot, ".agents", "skills")
+
+    for (const category of LEARNED_SKILL_CATEGORIES) {
+        const categoryDir = path.join(skillsRoot, `learned-${category}`)
+        try {
+            let entries: Dirent[]
+            try {
+                entries = await readdir(categoryDir, { withFileTypes: true })
+            } catch (err) {
+                if (isMissingFile(err)) continue // no-op: category dir does not exist; never create
+                console.warn(`autocode: cleanup learned skills: failed to read ${categoryDir}: ${(err as Error).message}`)
+                continue
+            }
+
+            const pattern = learnedTimestampRegex(category)
+            const matches: Array<{ dir: string; timestamp: string }> = []
+            for (const entry of entries) {
+                if (!entry.isDirectory()) continue
+                const match = entry.name.match(pattern)
+                if (!match) continue // skills without timestamp prefix are NEVER deleted
+                matches.push({ dir: entry.name, timestamp: match[1] })
+            }
+
+            // Sort DESC by (timestamp, full dir name) — newest first, alpha-larger first on ties.
+            matches.sort((a, b) => {
+                if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? 1 : -1
+                return a.dir < b.dir ? 1 : -1
+            })
+
+            const stale = matches.slice(effectiveMax)
+            if (stale.length === 0) continue
+            await Promise.all(stale.map(async (entry) => {
+                try {
+                    await rm(path.join(categoryDir, entry.dir), { recursive: true, force: true })
+                } catch (err) {
+                    console.warn(`autocode: cleanup learned skills: failed to remove ${entry.dir}: ${(err as Error).message}`)
+                }
+            }))
+        } catch (err) {
+            console.warn(`autocode: cleanup learned skills: error for category ${category}: ${(err as Error).message}`)
+        }
+    }
 }
 
 export function injectGeneratedSkillsPath(paths: string[] | undefined, generatedPath: string): string[] {

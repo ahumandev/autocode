@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs"
 import { mkdtemp } from "fs/promises"
 import { tmpdir } from "os"
 import path from "path"
-import { ensureGeneratedSkills, getGeneratedSkillsRoot, managedSkills } from "./index"
+import { cleanupLearnedSkills, ensureGeneratedSkills, getGeneratedSkillsRoot, managedSkills } from "./index"
 
 const expectedManagedDirectories = [
     "author-agent",
@@ -125,6 +125,144 @@ describe("managed skills", () => {
                 expect(generatedContent.startsWith(`---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n\n`)).toBe(true)
                 expect(generatedContent).toContain(skill.content)
             }
+        })
+    })
+})
+
+describe("cleanupLearnedSkills", () => {
+    async function withTempSkillRoot<T>(fn: (agentsRoot: string) => Promise<T>): Promise<T> {
+        const agentsRoot = await mkdtemp(path.join(tmpdir(), "autocode-cleanup-"))
+
+        try {
+            return await fn(agentsRoot)
+        } finally {
+            rmSync(agentsRoot, { recursive: true, force: true })
+        }
+    }
+
+    function makeLearnedSkill(agentsRoot: string, category: string, dirName: string): string {
+        const dir = path.join(agentsRoot, ".agents", "skills", `learned-${category}`, dirName)
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(path.join(dir, "SKILL.md"), `---\nname: ${dirName}\ndescription: x\n---\n\n## T\n\n- L\n\n----------\n`)
+        return dir
+    }
+
+    test("keeps newest N skills and deletes the rest when over max", async () => {
+        await withTempSkillRoot(async (agentsRoot) => {
+            // Create t1..t5 ascending by timestamp; expect t3, t4, t5 to remain (newest 3).
+            const timestamps = [
+                "26-01-01-00-00-00",
+                "26-01-02-00-00-00",
+                "26-01-03-00-00-00",
+                "26-01-04-00-00-00",
+                "26-01-05-00-00-00",
+            ]
+            const expectedKept = timestamps.slice(2).map((ts) => `learned-corrections-${ts}-topic`)
+            for (const ts of timestamps) {
+                makeLearnedSkill(agentsRoot, "corrections", `learned-corrections-${ts}-topic`)
+            }
+
+            await cleanupLearnedSkills(agentsRoot, 3)
+
+            const remaining = readdirSync(path.join(agentsRoot, ".agents", "skills", "learned-corrections"), { withFileTypes: true })
+                .filter((e) => e.isDirectory())
+                .map((e) => e.name)
+                .sort()
+            expect(remaining).toEqual(expectedKept)
+        })
+    })
+
+    test("default max=10 keeps all skills when fewer than 10 exist", async () => {
+        await withTempSkillRoot(async (agentsRoot) => {
+            for (let i = 1; i <= 8; i++) {
+                const ts = `26-01-${String(i).padStart(2, "0")}-00-00-00`
+                makeLearnedSkill(agentsRoot, "env", `learned-env-${ts}-item`)
+            }
+
+            await cleanupLearnedSkills(agentsRoot, 10)
+
+            const remaining = readdirSync(path.join(agentsRoot, ".agents", "skills", "learned-env"), { withFileTypes: true })
+                .filter((e) => e.isDirectory())
+                .map((e) => e.name)
+                .sort()
+            expect(remaining.length).toBe(8)
+        })
+    })
+
+    test("does not touch legacy skills root single-file dirs (no learned-<category> parent)", async () => {
+        await withTempSkillRoot(async (agentsRoot) => {
+            // Legacy pre-rewrite shape: dir directly under skills root.
+            const legacyDir = path.join(agentsRoot, ".agents", "skills", "learned-corrections-pair")
+            mkdirSync(legacyDir, { recursive: true })
+            writeFileSync(path.join(legacyDir, "SKILL.md"), "---\nname: legacy\n---\n# Legacy\n")
+
+            await cleanupLearnedSkills(agentsRoot, 0)
+
+            expect(existsSync(path.join(legacyDir, "SKILL.md"))).toBe(true)
+        })
+    })
+})
+
+describe("cleanupLearnedSkills additional cases", () => {
+    async function withTempSkillRoot<T>(fn: (agentsRoot: string) => Promise<T>): Promise<T> {
+        const agentsRoot = await mkdtemp(path.join(tmpdir(), "autocode-cleanup2-"))
+        try {
+            return await fn(agentsRoot)
+        } finally {
+            rmSync(agentsRoot, { recursive: true, force: true })
+        }
+    }
+
+    function makeLearnedSkill(agentsRoot: string, category: string, dirName: string): string {
+        const dir = path.join(agentsRoot, ".agents", "skills", `learned-${category}`, dirName)
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(path.join(dir, "SKILL.md"), `---\nname: ${dirName}\ndescription: x\n---\n\n## T\n\n- L\n\n----------\n`)
+        return dir
+    }
+
+    test("skips non-matching entries under learned-<category>/ without deleting them", async () => {
+        await withTempSkillRoot(async (agentsRoot) => {
+            makeLearnedSkill(agentsRoot, "corrections", "learned-corrections-26-01-05-00-00-00-latest")
+            makeLearnedSkill(agentsRoot, "corrections", "learned-corrections-26-01-01-00-00-00-oldest")
+            makeLearnedSkill(agentsRoot, "corrections", "random-no-timestamp-dir")
+
+            await cleanupLearnedSkills(agentsRoot, 1)
+
+            const remaining = readdirSync(path.join(agentsRoot, ".agents", "skills", "learned-corrections"), { withFileTypes: true })
+                .filter((e) => e.isDirectory())
+                .map((e) => e.name)
+                .sort()
+            expect(remaining).toContain("learned-corrections-26-01-05-00-00-00-latest")
+            expect(remaining).toContain("random-no-timestamp-dir")
+            expect(remaining).not.toContain("learned-corrections-26-01-01-00-00-00-oldest")
+        })
+    })
+
+    test("does not create learned-<category> dir when missing (no-op)", async () => {
+        await withTempSkillRoot(async (agentsRoot) => {
+            expect(existsSync(path.join(agentsRoot, ".agents", "skills", "learned-permissions"))).toBe(false)
+
+            await cleanupLearnedSkills(agentsRoot, 3)
+
+            expect(existsSync(path.join(agentsRoot, ".agents", "skills", "learned-permissions"))).toBe(false)
+        })
+    })
+
+    test("falls back to default max when max is invalid and never throws", async () => {
+        await withTempSkillRoot(async (agentsRoot) => {
+            for (let i = 1; i <= 12; i++) {
+                const ts = `26-01-${String(i).padStart(2, "0")}-00-00-00`
+                makeLearnedSkill(agentsRoot, "env", `learned-env-${ts}-item`)
+            }
+
+            await expect(cleanupLearnedSkills(agentsRoot, "oops" as never)).resolves.toBeUndefined()
+
+            const remaining = readdirSync(path.join(agentsRoot, ".agents", "skills", "learned-env"), { withFileTypes: true })
+                .filter((e) => e.isDirectory())
+                .map((e) => e.name)
+                .sort()
+            // Invalid max falls back to 10; only oldest 2 should be removed when 12 were created.
+            expect(remaining.length).toBe(10)
         })
     })
 })

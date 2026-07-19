@@ -17,12 +17,14 @@ type FileSystem = {
 type SkillLearnArgs = {
     title?: unknown
     content?: unknown
+    description?: unknown
     ssh_key?: unknown
 }
 
 type ValidatedSkillLearnArgs = {
     title: string
     content: string
+    description: string
     sshKey?: string
 }
 
@@ -32,11 +34,7 @@ type SkillLearnContext = {
     worktree: string
 }
 
-const maxLearnedSkillLines = 100
 const safePathIdentifierPattern = /^[A-Za-z0-9_-]+$/
-const primaryLearnedCorrectionAgentName = "primary"
-// Keep in sync with primary-mode agents in src/agents/index.ts without importing agent config here.
-const primaryAgentNames = new Set(["assist", "auto", "design", "research"])
 
 const defaultFileSystem: FileSystem = {
     mkdir,
@@ -52,124 +50,122 @@ function hasControlCharacter(value: string): boolean {
     return /[\u0000-\u001f\u007f]/.test(value)
 }
 
-function buildSkillName(subject: LearnedSkillSubject, agentName?: string, sshKey?: string): string {
-    const skillDirectory = learnedSkillDirectory(subject, sshKey)
-    if (subject === "corrections" && agentName !== undefined) {
-        return `${skillDirectory}-${agentName}`
+function formatLearnedTimestamp(date: Date): string {
+    const yy = String(date.getFullYear() % 100).padStart(2, "0")
+    const mm = String(date.getMonth() + 1).padStart(2, "0")
+    const dd = String(date.getDate()).padStart(2, "0")
+    const hh = String(date.getHours()).padStart(2, "0")
+    const mi = String(date.getMinutes()).padStart(2, "0")
+    const ss = String(date.getSeconds()).padStart(2, "0")
+    return `${yy}-${mm}-${dd}-${hh}-${mi}-${ss}`
+}
+
+function sanitizeLearnedTopic(title: string): string {
+    const lowered = title.toLowerCase().replace(/\s+/g, "-")
+    const stripped = lowered.replace(/[^a-z0-9-]/g, "")
+    let collapsed = stripped.replace(/-{2,}/g, "-")
+    if (collapsed.length > 40) {
+        collapsed = collapsed.slice(0, 40)
     }
-
-    return agentName === undefined ? skillDirectory : `${skillDirectory}/${agentName}`
+    collapsed = collapsed.replace(/^-+|-+$/g, "")
+    return collapsed || "untitled"
 }
 
-function buildSkillDescription(subject: LearnedSkillSubject, sshKey?: string): string {
-    if (subject === "env" && sshKey !== undefined) {
-        return `Use \`${learnedSkillDirectory(subject, sshKey)}\` skill to find related external projects on remote SSH server intended for SSH key ${sshKey.toUpperCase()} or recall its limitations/setup.`
-    }
-
-    const descriptions = {
-        corrections: "Use this skill to design/apply project changes.",
-        env: "Use `learned-env` skill to run commands in local dev environment.",
-        permissions: "Use `learned-permissions` skill to check if task is safe or DANGEROUS OPERATION.",
-        preferences: "Use `learned-preferences` skill to design/apply code/config changes.",
-    } satisfies Record<LearnedSkillSubject, string>
-
-    return descriptions[subject]
+function sanitizeLearnedSshKey(sshKey: string): string {
+    const lowered = sshKey.toLowerCase().trim()
+    const stripped = lowered.replace(/[^a-z0-9-]/g, "-")
+    return stripped.replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "")
 }
 
-function learnedCorrectionAgentSuffix(agentName: string): string {
-    return agentName.split("_").at(-1) ?? agentName
+function buildLearnedSkillName(subject: LearnedSkillSubject, timestamp: string, topic: string, sshKey?: string): string {
+    const sanitizedSshKey = sshKey !== undefined && sshKey !== "" ? sanitizeLearnedSshKey(sshKey) : ""
+    const sshSegment = subject === "env" && sanitizedSshKey !== "" ? `-${sanitizedSshKey}` : ""
+    return `learned-${subject}-${timestamp}${sshSegment}-${topic}`
 }
 
-function learnedSkillDirectory(subject: LearnedSkillSubject, sshKey?: string): string {
-    return subject === "env" && sshKey !== undefined ? `learned-env-${sshKey}` : `learned-${subject}`
-}
-
-function buildFrontmatter(subject: LearnedSkillSubject, agentName?: string, sshKey?: string): string {
+function buildLearnedFrontmatter(skillName: string, description: string): string {
     return [
         "---",
-        `name: ${buildSkillName(subject, agentName, sshKey)}`,
-        `description: ${buildSkillDescription(subject, sshKey)}`,
+        `name: ${skillName}`,
+        `description: ${description}`,
         "---",
     ].join("\n")
 }
 
-function countMarkdownLines(content: string): number {
-    if (!content) {
-        return 0
-    }
-
-    const normalized = content.endsWith("\n") ? content.slice(0, -1) : content
-    return normalized ? normalized.split(/\r?\n/).length : 0
+function buildLearnedSkillBody(title: string, content: string): string {
+    return `## ${title}\n\n${content}\n\n----------\n`
 }
 
-function findFrontmatterEnd(lines: string[]): number {
-    if (lines[0] !== "---") {
-        return -1
+async function pathExists(fileSystem: FileSystem, filePath: string): Promise<boolean> {
+    try {
+        await fileSystem.readFile(filePath, "utf8")
+        return true
     }
-
-    const end = lines.findIndex((line, index) => index > 0 && line === "---")
-    return end >= 0 ? end : -1
-}
-
-function getSectionStartIndexes(lines: string[], frontmatterEnd: number): number[] {
-    return lines.reduce<number[]>((indexes, line, index) => {
-        if (index > frontmatterEnd && line.startsWith("## ")) {
-            indexes.push(index)
+    catch (error) {
+        if (isMissingFile(error)) {
+            return false
         }
-
-        return indexes
-    }, [])
+        throw error
+    }
 }
 
-function ensureFrontmatter(content: string, subject: LearnedSkillSubject, agentName?: string, sshKey?: string): string {
-    const frontmatter = buildFrontmatter(subject, agentName, sshKey)
-    if (!content.trim()) {
-        return frontmatter
+async function resolveUniqueLearnedSkillDir(skillsRoot: string, subject: LearnedSkillSubject, baseName: string, fileSystem: FileSystem): Promise<string> {
+    let candidate = path.resolve(skillsRoot, `learned-${subject}`, baseName)
+    if (!(await pathExists(fileSystem, path.join(candidate, "SKILL.md")))) {
+        return candidate
     }
 
-    const lines = content.split(/\r?\n/)
-    if (findFrontmatterEnd(lines) >= 0) {
-        return content.trimEnd()
+    let counter = 2
+    while (true) {
+        candidate = path.resolve(skillsRoot, `learned-${subject}`, `${baseName}-${counter}`)
+        if (!(await pathExists(fileSystem, path.join(candidate, "SKILL.md")))) {
+            return candidate
+        }
+        counter += 1
     }
-
-    return `${frontmatter}\n\n${content.trimEnd()}`
 }
 
-function appendLearnedSection(content: string, title: string, learnedContent: string): string {
-    return `${content.trimEnd()}\n\n## ${title}\n\n${learnedContent}\n\n----------\n`
-}
+async function writeLearnedSkillDir(
+    fileSystem: FileSystem,
+    context: SkillLearnContext,
+    subject: LearnedSkillSubject,
+    title: string,
+    content: string,
+    description: string,
+    sshKey?: string
+): Promise<string> {
+    const agentsRoot = path.join(resolveAgentsStorageRoot(context), ".agents")
+    const skillsRoot = path.resolve(agentsRoot, "skills")
+    const timestamp = formatLearnedTimestamp(new Date())
+    const topic = sanitizeLearnedTopic(title)
+    const baseName = buildLearnedSkillName(subject, timestamp, topic, sshKey)
+    const skillDir = await resolveUniqueLearnedSkillDir(skillsRoot, subject, baseName, fileSystem)
 
-export function pruneEldestLearnedSection(content: string, maxLines: number = maxLearnedSkillLines): { content: string, pruned: boolean, lineCount: number } {
-    const lineCount = countMarkdownLines(content)
-    if (lineCount <= maxLines) {
-        return { content, pruned: false, lineCount }
+    const relativePath = path.relative(skillsRoot, skillDir)
+    if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+        throw new Error(`Invalid learned skill path for ${baseName}`)
     }
 
-    const lines = content.split(/\r?\n/)
-    const frontmatterEnd = findFrontmatterEnd(lines)
-    const sectionStartIndexes = getSectionStartIndexes(lines, frontmatterEnd)
-    const firstSectionStart = sectionStartIndexes[0]
-    if (firstSectionStart === undefined) {
-        return { content, pruned: false, lineCount }
-    }
+    const skillName = path.basename(skillDir)
+    const frontmatter = buildLearnedFrontmatter(skillName, description)
+    const body = buildLearnedSkillBody(title, content)
+    const fileContent = `${frontmatter}\n\n${body}`
 
-    const secondSectionStart = sectionStartIndexes[1] ?? lines.length
-    const nextLines = [
-        ...lines.slice(0, firstSectionStart),
-        ...lines.slice(secondSectionStart),
-    ]
-    const nextContent = `${nextLines.join("\n").trimEnd()}\n`
+    await fileSystem.mkdir(skillDir, { recursive: true })
+    await fileSystem.writeFile(path.join(skillDir, "SKILL.md"), fileContent)
 
-    return { content: nextContent, pruned: true, lineCount: countMarkdownLines(nextContent) }
+    return path.join(skillDir, "SKILL.md")
 }
 
 export function validateSkillLearnArgs(args: SkillLearnArgs, allowSshKey = false): ValidatedSkillLearnArgs | { error: string, instruction: string } {
-    const allowedArgs = allowSshKey ? ["title", "content", "ssh_key"] : ["title", "content"]
+    const allowedArgs = allowSshKey ? ["title", "content", "description", "ssh_key"] : ["title", "content", "description"]
     const unexpectedArgs = Object.keys(args).filter((key) => !allowedArgs.includes(key))
     if (unexpectedArgs.length > 0) {
         return {
             error: `Unexpected argument(s): ${unexpectedArgs.join(", ")}.`,
-            instruction: allowSshKey ? "Retry with title, content, and optional ssh_key arguments." : "Retry with exactly title and content arguments.",
+            instruction: allowSshKey
+                ? "Retry with title, content, description, and optional ssh_key arguments."
+                : "Retry with title, content, and description arguments.",
         }
     }
 
@@ -195,6 +191,13 @@ export function validateSkillLearnArgs(args: SkillLearnArgs, allowSshKey = false
         }
     }
 
+    if (typeof args.description !== "string" || !args.description.trim() || hasControlCharacter(args.description)) {
+        return {
+            error: "Invalid description. Description must be non-empty and contain no newline or control characters.",
+            instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+        }
+    }
+
     if (typeof args.content !== "string" || !args.content.trim()) {
         return {
             error: "Invalid content. Content must be non-empty.",
@@ -205,77 +208,8 @@ export function validateSkillLearnArgs(args: SkillLearnArgs, allowSshKey = false
     return {
         title: args.title.trim(),
         content: args.content.trim(),
+        description: args.description.trim(),
         sshKey,
-    }
-}
-
-function validateAgentName(agent: unknown): string | { error: string, instruction: string } {
-    if (typeof agent !== "string" || !agent.trim()) {
-        return {
-            error: "Missing current agent name.",
-            instruction: "Retry only when tool context has a current agent name.",
-        }
-    }
-
-    const agentName = agent.trim()
-    if (!isSafePathIdentifier(agentName)) {
-        return {
-            error: `Unsafe current agent name: ${agentName}`,
-            instruction: "Retry only with a current agent name using letters, numbers, underscores, or hyphens.",
-        }
-    }
-
-    return agentName
-}
-
-function resolveLearnedSkillAgentName(subject: LearnedSkillSubject, shared: boolean, agent: unknown): string | undefined | { error: string, instruction: string } {
-    if (shared) {
-        return undefined
-    }
-
-    const validatedAgentName = validateAgentName(agent)
-    if (typeof validatedAgentName !== "string") {
-        return validatedAgentName
-    }
-
-    if (subject === "corrections" && primaryAgentNames.has(validatedAgentName)) {
-        return primaryLearnedCorrectionAgentName
-    }
-
-    if (subject === "corrections") {
-        return learnedCorrectionAgentSuffix(validatedAgentName)
-    }
-
-    return validatedAgentName
-}
-
-function resolveSkillFilePath(context: SkillLearnContext, subject: LearnedSkillSubject, agentName?: string, sshKey?: string): { filePath: string, skillsRoot: string } {
-    const agentsRoot = path.join(resolveAgentsStorageRoot(context), ".agents")
-    const skillsRoot = path.resolve(agentsRoot, "skills")
-    const skillDirectory = learnedSkillDirectory(subject, sshKey)
-    const skillPathParts = subject === "corrections" && agentName !== undefined
-        ? [`${skillDirectory}-${agentName}`, "SKILL.md"]
-        : agentName === undefined ? [skillDirectory, "SKILL.md"] : [skillDirectory, agentName, "SKILL.md"]
-    const filePath = path.resolve(skillsRoot, ...skillPathParts)
-    const relativePath = path.relative(skillsRoot, filePath)
-
-    if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-        throw new Error(`Invalid learned skill path for ${buildSkillName(subject, agentName, sshKey)}`)
-    }
-
-    return { filePath, skillsRoot }
-}
-
-async function readExistingSkill(fileSystem: FileSystem, filePath: string): Promise<string> {
-    try {
-        return await fileSystem.readFile(filePath, "utf8")
-    }
-    catch (error) {
-        if (isMissingFile(error)) {
-            return ""
-        }
-
-        throw error
     }
 }
 
@@ -286,10 +220,13 @@ const skillLearnDescriptions = {
     preferences: "ASSIGNMENT/job is complete but reviewer complaint about implementation/report: `subject` = preferences, `content` = reviewer preferences like programming patterns, file organization, naming conventions, etc.",
 } satisfies Record<LearnedSkillSubject, string>
 
-function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fileSystem: FileSystem = defaultFileSystem, shared = false, allowSshKey = false): ReturnType<typeof tool> {
+const triggerDescriptionArg = "Write a trigger description: describe the situations, symptoms, or task types that should make an agent recall this skill. Focus on WHEN to use it, not a summary of the content."
+
+function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fileSystem: FileSystem = defaultFileSystem, allowSshKey = false): ReturnType<typeof tool> {
     const args = {
         title: tool.schema.string().describe("Short markdown heading for content."),
         content: tool.schema.string().describe("Summary of what was learned in Caveman English."),
+        description: tool.schema.string().describe(triggerDescriptionArg),
         ...(allowSshKey ? { ssh_key: tool.schema.string().optional().describe("Omit for local env; otherwise SFTP/SSH key name for remote env.") } : {}),
     }
 
@@ -302,22 +239,16 @@ function createSkillLearnTool(toolName: string, subject: LearnedSkillSubject, fi
                 return createRetryResponse("learn skill", validatedArgs.error, validatedArgs.instruction)
             }
 
-            const agentName = resolveLearnedSkillAgentName(subject, shared, (context as SkillLearnContext).agent)
-            if (agentName !== undefined && typeof agentName !== "string") {
-                return createRetryResponse("learn skill", agentName.error, agentName.instruction)
-            }
-
             try {
-                const { filePath } = resolveSkillFilePath(context, subject, agentName, validatedArgs.sshKey)
-                await fileSystem.mkdir(path.dirname(filePath), { recursive: true })
-                const existingContent = await readExistingSkill(fileSystem, filePath)
-                const nextContent = appendLearnedSection(
-                    ensureFrontmatter(existingContent, subject, agentName, validatedArgs.sshKey),
+                await writeLearnedSkillDir(
+                    fileSystem,
+                    context as SkillLearnContext,
+                    subject,
                     validatedArgs.title,
-                    validatedArgs.content
+                    validatedArgs.content,
+                    validatedArgs.description,
+                    validatedArgs.sshKey
                 )
-                const pruned = pruneEldestLearnedSection(nextContent)
-                await fileSystem.writeFile(filePath, pruned.content)
 
                 return "OK"
             }
@@ -333,13 +264,13 @@ export function createSkillLearnCorrectionTool(fileSystem: FileSystem = defaultF
 }
 
 export function createSkillLearnEnvTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
-    return createSkillLearnTool("skill_learn_env", "env", fileSystem, true, true)
+    return createSkillLearnTool("skill_learn_env", "env", fileSystem, true)
 }
 
 export function createSkillLearnPermissionTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
-    return createSkillLearnTool("skill_learn_permission", "permissions", fileSystem, true)
+    return createSkillLearnTool("skill_learn_permission", "permissions", fileSystem)
 }
 
 export function createSkillLearnPreferenceTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
-    return createSkillLearnTool("skill_learn_preference", "preferences", fileSystem, true)
+    return createSkillLearnTool("skill_learn_preference", "preferences", fileSystem)
 }

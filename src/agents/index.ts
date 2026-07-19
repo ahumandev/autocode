@@ -263,6 +263,7 @@ const baseAgents: AgentMap = {
             doom_loop: "ask",
             external_directory: "ask",
             question: "allow",
+            "skill_learn_*": "allow",
             task: {
                 "*": "deny",
                 "query*": "allow",

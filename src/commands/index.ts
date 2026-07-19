@@ -15,6 +15,7 @@ import { jobExecuteCommandTemplate } from "./job-execute"
 import { jobExecuteAssistCommandTemplate } from "./job-execute_assist"
 import { jobExecuteAutoCommandTemplate } from "./job-execute_auto"
 import { jobReviewCommitCommandTemplate } from "./job-review-commit"
+import { learnCommand } from "./learn"
 import { newAssistCommandTemplate } from "./new-assist"
 import { newAutoCommandTemplate } from "./new-auto"
 import { newDesignCommandTemplate } from "./new-design"
@@ -239,6 +240,8 @@ Report to user:
         subtask: false,
         template: newTroubleshootCommandTemplate,
     },
+
+    "learn": learnCommand,
 
     "repeat-as-md": {
         description: "Repeat the last response inside a fenced Markdown code block.",

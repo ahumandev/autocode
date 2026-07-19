@@ -4,6 +4,7 @@ import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { fixCommandTemplate } from "./fix"
 import { commands } from "./index"
+import { learnCommand } from "./learn"
 import { testsCommandTemplate } from "./tests"
 
 describe("commands", () => {
@@ -38,6 +39,7 @@ describe("commands", () => {
             "new-design",
             "new-research",
             "new-troubleshoot",
+            "learn",
             "repeat-as-md",
             "repeat-as-wiki",
             "report",
@@ -237,5 +239,26 @@ describe("commands", () => {
         expect(command?.template).toContain("Repeat your last response wrapped in markdown codeblock")
         expect(command?.template).toContain("Last response goes here")
         expect(command?.template).not.toContain("fenced Markdown code block")
+    })
+
+    test("registers learn command under assist with required reflection template", () => {
+        expect(commands.learn).toEqual(learnCommand)
+        expect(commands.learn?.agent).toBeUndefined()
+        expect(commands.learn?.subtask).toBe(false)
+
+        const template = commands.learn?.template ?? ""
+        // Categorize into correction/env/permission/preference
+        expect(template).toContain("correction")
+        expect(template).toContain("env")
+        expect(template).toContain("permission")
+        expect(template).toContain("preference")
+        expect(template).toContain("`skill_learn_correction`")
+        expect(template).toContain("`skill_learn_env`")
+        expect(template).toContain("`skill_learn_permission`")
+        expect(template).toContain("`skill_learn_preference`")
+        // Skip empty categories
+        expect(template).toMatch(/skip.*categor/i)
+        // $ARGUMENTS placeholder
+        expect(template).toContain("$ARGUMENTS")
     })
 })

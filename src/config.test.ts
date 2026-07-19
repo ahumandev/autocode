@@ -532,3 +532,61 @@ describe("agent workflow wiring", () => {
         expect(agents.ask).toBeUndefined()
     })
 })
+
+describe("learned config", () => {
+    test("freshly created global config file contains learned default max=10", async () => {
+        const files: Record<string, string> = {}
+        const createdPaths: string[] = []
+
+        await loadAutocodeConfig("/wt", "/wt", makeFs(files, createdPaths))
+
+        expect(createdPaths).toEqual([globalAutocodeConfigPath()])
+        const content = files[globalAutocodeConfigPath()]
+        expect(content).toContain('"learned"')
+        expect(content).toContain('"max": 10')
+    })
+
+    test("loadAutocodeConfig returns learned.max from local config", async () => {
+        const fs = makeFs({
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: {
+                    learned: { max: 3 },
+                },
+            }),
+        })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.learned).toEqual({ max: 3 })
+    })
+
+    test("loadAutocodeConfig falls back to default max=10 when max is invalid", async () => {
+        for (const invalid of ["oops", 0, -2, 2.5, null]) {
+            const fs = makeFs({
+                "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                    autocode: {
+                        learned: { max: invalid },
+                    },
+                }),
+            })
+
+            const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+            expect(result.learned).toEqual({ max: 10 })
+        }
+    })
+
+    test("loadAutocodeConfig omits learned when absent from any config (uses default)", async () => {
+        const fs = makeFs({
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: {
+                    sandbox: { sync_method: "copy" },
+                },
+            }),
+        })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.learned).toEqual({ max: 10 })
+    })
+})

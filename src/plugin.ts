@@ -5,10 +5,11 @@ import { collectExternalDirectories, loadAutocodeConfig, mergeExternalDirectoryR
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { commands } from "./commands"
 import { createAgentSwitchBackHook } from "./hooks/agent_switch_back"
-import { ensureGeneratedSkills, injectGeneratedSkillsPath } from "./skills"
+import { cleanupLearnedSkills, ensureGeneratedSkills, injectGeneratedSkillsPath } from "./skills"
 import { createTools } from "./tools"
 import { createSkillLogger } from "./utils/logger"
 import { bootstrapExternalSkills, type ExternalSkill } from "./utils/external"
+import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 type PluginAgentConfig = AutocodeAgentConfig
@@ -49,6 +50,14 @@ function preparePluginAgentsAfterOverrides(
 
 async function mergeConfig(cfg: Config, input: PluginInputWithSandboxSupportOverride): Promise<void> {
     const generatedSkillsPath = await ensureGeneratedSkills()
+
+    try {
+        const cleanupConfig = await loadAutocodeConfig(input.worktree, input.directory)
+        const agentsRoot = resolveAgentsStorageRoot({ worktree: input.worktree, directory: input.directory })
+        await cleanupLearnedSkills(agentsRoot, cleanupConfig.learned.max ?? 10)
+    } catch (err) {
+        console.warn(`autocode: cleanup learned skills failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
 
     cfg.skills = cfg.skills ?? {}
     cfg.skills.paths = injectGeneratedSkillsPath(cfg.skills.paths, generatedSkillsPath)

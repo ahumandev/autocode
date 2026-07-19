@@ -23,6 +23,9 @@ export type AutocodeSandboxConfig = {
 export type SkillCategory = "bash" | "code" | "design" | "test"
 export type SkillsConfig = Partial<Record<SkillCategory, string[]>>
 
+export type LearnedConfig = { max?: number }
+const DEFAULT_LEARNED_MAX = 10
+
 export interface ConfigFileSystem {
     readFileSync(path: string, encoding: "utf-8"): string
     ensureFileSync(path: string, contents: string): void
@@ -40,7 +43,18 @@ const defaultFs: ConfigFileSystem = {
     },
 }
 
-const DEFAULT_AUTOCODE_CONFIG = JSON.stringify(defaultAutocodeConfig, null, 4) + "\n"
+const DEFAULT_AUTOCODE_CONFIG =
+    JSON.stringify(
+        {
+            ...defaultAutocodeConfig,
+            autocode: {
+                ...defaultAutocodeConfig.autocode,
+                learned: { max: DEFAULT_LEARNED_MAX },
+            },
+        },
+        null,
+        4,
+    ) + "\n"
 
 type AutocodeJsoncNew = {
     autocode?: {
@@ -48,6 +62,7 @@ type AutocodeJsoncNew = {
         tiers?: Record<string, unknown>
         sandbox?: unknown
         skills?: unknown
+        learned?: unknown
     }
     permission?: {
         external_directory?: unknown
@@ -68,6 +83,7 @@ type ParsedAutocodeConfig = {
     externalDirectories?: ExternalDirectoryRules
     sandbox?: AutocodeSandboxConfig
     skills?: SkillsConfig
+    learned?: LearnedConfig
 }
 
 function stripJsoncComments(raw: string): string {
@@ -182,6 +198,27 @@ function collectSkills(value: unknown): SkillsConfig | undefined {
     return hasAny ? result : undefined
 }
 
+function collectLearned(value: unknown): LearnedConfig | undefined {
+    if (value === undefined) return undefined
+    if (!isRecord(value)) {
+        console.warn(`autocode: invalid learned config (expected object, got ${Array.isArray(value) ? "array" : typeof value})`)
+        return undefined
+    }
+    const result: LearnedConfig = {}
+    if ("max" in value) {
+        const max = value.max
+        if (typeof max !== "number" || !Number.isFinite(max) || !Number.isInteger(max) || max <= 0) {
+            console.warn(
+                `autocode: invalid learned.max (expected positive integer, got ${JSON.stringify(max)}); falling back to ${DEFAULT_LEARNED_MAX}`,
+            )
+            result.max = DEFAULT_LEARNED_MAX
+        } else {
+            result.max = max
+        }
+    }
+    return Object.keys(result).length > 0 ? result : undefined
+}
+
 function mergeTierMaps(base: Record<string, unknown>, next: Record<string, unknown>): Record<string, unknown> {
     const merged: Record<string, unknown> = { ...base }
 
@@ -222,8 +259,9 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
     const externalDirectories = collectExternalDirectories(parsed.permission?.external_directory)
     const sandbox = collectSandboxConfig(ac?.sandbox)
     const skills = collectSkills(ac?.skills)
+    const learned = collectLearned(ac?.learned)
 
-    if (!ac) return { externalDirectories, sandbox, skills }
+    if (!ac) return { externalDirectories, sandbox, skills, learned }
 
     if (isRecord(ac.tiers)) {
         return {
@@ -232,11 +270,12 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
             externalDirectories,
             sandbox,
             skills,
+            learned,
         }
     }
 
     if (typeof ac.tier === "string") {
-        return { tier: ac.tier, externalDirectories, sandbox, skills }
+        return { tier: ac.tier, externalDirectories, sandbox, skills, learned }
     }
 
     // legacy shape: autocode.model.<tier> + optional autocode.variant.<tier>
@@ -248,10 +287,10 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
                 result[tier] = { model, variant: ac.variant?.[tier] }
             }
         }
-        return { legacyTiers: result, externalDirectories, sandbox, skills }
+        return { legacyTiers: result, externalDirectories, sandbox, skills, learned }
     }
 
-    return { externalDirectories, sandbox, skills }
+    return { externalDirectories, sandbox, skills, learned }
 }
 
 function addCandidate(candidates: string[], path: string): void {
@@ -315,7 +354,7 @@ export async function loadAutocodeConfig(
     worktree: string,
     directory: string,
     fs: ConfigFileSystem = defaultFs,
-): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined }> {
+): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined, learned: LearnedConfig }> {
     const globalConfigPath = join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode", "autocode.jsonc")
     const candidates: string[] = []
 
@@ -333,6 +372,7 @@ export async function loadAutocodeConfig(
     let externalDirectories: ExternalDirectoryRules = {}
     let sandbox: AutocodeSandboxConfig = {}
     let skills: SkillsConfig | undefined
+    let learned: LearnedConfig = { max: DEFAULT_LEARNED_MAX }
     for (const path of candidates) {
         let raw: string
         try {
@@ -353,6 +393,9 @@ export async function loadAutocodeConfig(
         }
         if (parsed.skills) {
             skills = { ...(skills ?? {}), ...parsed.skills }
+        }
+        if (parsed.learned) {
+            learned = { ...learned, ...parsed.learned }
         }
         tiers = { ...tiers, ...resolveTiers(parsed, availableTiers) }
     }
@@ -381,5 +424,5 @@ export async function loadAutocodeConfig(
         }
     }
 
-    return { tiers, externalDirectories, sandbox, skills }
+    return { tiers, externalDirectories, sandbox, skills, learned }
 }
