@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, type Dirent } from "fs"
-import { mkdir, readdir, rm, writeFile } from "fs/promises"
+import { mkdir, readdir, rm, stat, writeFile } from "fs/promises"
 import { homedir } from "os"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -18,13 +18,13 @@ const managedSkillDirectories = [
     "author-command",
     "author-readme",
     "author-rules",
-    "author-skill",
     "code-java",
     "code-rest",
     "code-typescript",
     "execute-sandbox",
     "git-commit",
     "primary-manual",
+    "skill-write",
     "test-jest",
     "test-junit",
     "test-mockito",
@@ -125,10 +125,6 @@ export async function ensureGeneratedSkills(): Promise<string> {
 const LEARNED_SKILL_CATEGORIES = ["corrections", "env", "permissions", "preferences"] as const
 const LEARNED_DEFAULT_MAX = 10
 
-function learnedTimestampRegex(category: string): RegExp {
-    return new RegExp(`^learned-${category}-(\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2})`)
-}
-
 export async function cleanupLearnedSkills(agentsRoot: string, max: number): Promise<void> {
     const effectiveMax = Number.isInteger(max) && max > 0 ? max : LEARNED_DEFAULT_MAX
     const skillsRoot = path.join(agentsRoot, ".agents", "skills")
@@ -145,22 +141,29 @@ export async function cleanupLearnedSkills(agentsRoot: string, max: number): Pro
                 continue
             }
 
-            const pattern = learnedTimestampRegex(category)
-            const matches: Array<{ dir: string; timestamp: string }> = []
+            const skillStats: Array<{ dir: string; mtimeMs: number }> = []
             for (const entry of entries) {
                 if (!entry.isDirectory()) continue
-                const match = entry.name.match(pattern)
-                if (!match) continue // skills without timestamp prefix are NEVER deleted
-                matches.push({ dir: entry.name, timestamp: match[1] })
+                const skillFile = path.join(categoryDir, entry.name, "SKILL.md")
+                try {
+                    const stats = await stat(skillFile)
+                    skillStats.push({ dir: entry.name, mtimeMs: stats.mtimeMs })
+                } catch (err) {
+                    if (!isMissingFile(err)) {
+                        console.warn(`autocode: cleanup learned skills: failed to stat ${skillFile}: ${(err as Error).message}`)
+                    }
+                    // skip dirs without SKILL.md or with stat errors; never delete them
+                    continue
+                }
             }
 
-            // Sort DESC by (timestamp, full dir name) — newest first, alpha-larger first on ties.
-            matches.sort((a, b) => {
-                if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? 1 : -1
+            // Sort DESC by (mtimeMs, full dir name) — newest first, alpha-larger first on ties.
+            skillStats.sort((a, b) => {
+                if (a.mtimeMs !== b.mtimeMs) return a.mtimeMs < b.mtimeMs ? 1 : -1
                 return a.dir < b.dir ? 1 : -1
             })
 
-            const stale = matches.slice(effectiveMax)
+            const stale = skillStats.slice(effectiveMax)
             if (stale.length === 0) continue
             await Promise.all(stale.map(async (entry) => {
                 try {

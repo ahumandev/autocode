@@ -31,15 +31,15 @@ ALWAYS avoid reading too much md text!
 
 Returns JSON: \`{ file_paths: { [fileKey: string]: Section[] } }\`. Each Section has:
 
-1. \`heading\` (string): heading title text.
-2. \`anchor\` (string): GitHub MD anchor (lowercase, dashes).
-3. \`line\` (number): 1-based start line of section heading in the md file.
+1. \`anchor\` (string): GitHub MD anchor (lowercase, dashes).
+2. \`line_of_heading\` (number): 1-based start line of section heading in the md file.
+3. \`line_count\` (number): total lines from heading line up to (not including) the first subsection heading. If section has no subsections, returns lines from heading to end of file.
 4. \`index\` (number): sibling position under same parent.
 5. \`content\` (string, optional): content text (excludes subsections); Truncated content replaced by "...".
 
 Example:
 \`\`\`json
-{ "file_paths": { "docs/api.md": [{ "heading": "Auth", "anchor": "auth", "line": 12, "index": 0 }] } }
+{ "file_paths": { "docs/api.md": [{ "anchor": "auth", "line_of_heading": 12, "line_count": 4, "index": 0 }] } }
 \`\`\`
 `,
         args: {
@@ -130,16 +130,16 @@ Example:
 
             const maxContentChars = args.max_content_chars ?? DEFAULT_MAX_CONTENT_CHARS
 
-            const file_paths: Record<string, { heading: string; anchor: string; line: number; index: number; content?: string }[]> = {}
+            const file_paths: Record<string, { anchor: string; line_of_heading: number; line_count: number; index: number; content?: string }[]> = {}
             if (maxContentChars <= 0) {
                 for (const { key, model, filtered } of collected) {
                     const shown = filtered.slice(0, maxKeys)
                     file_paths[key] = shown.map((h) => {
                         const siblingList = h.parent ? h.parent.children : model.roots
                         return {
-                            heading: h.title,
                             anchor: h.referenceId,
-                            line: h.start,
+                            line_of_heading: h.start,
+                            line_count: h.children.length > 0 ? h.children[0].start - h.start : model.lineCount - h.start + 1,
                             index: siblingList.indexOf(h),
                         }
                     })
@@ -148,9 +148,9 @@ Example:
                 // Pass 1: flatten all shown sections across files into one list (file then heading order preserved).
                 type Section = {
                     key: string
-                    heading: string
                     anchor: string
-                    line: number
+                    line_of_heading: number
+                    line_count: number
                     index: number
                     full: string
                     final: string
@@ -163,9 +163,9 @@ Example:
                         const siblingList = h.parent ? h.parent.children : model.roots
                         sections.push({
                             key,
-                            heading: h.title,
                             anchor: h.referenceId,
-                            line: h.start,
+                            line_of_heading: h.start,
+                            line_count: h.children.length > 0 ? h.children[0].start - h.start : model.lineCount - h.start + 1,
                             index: siblingList.indexOf(h),
                             full: ownText(model, h),
                             final: "",
@@ -211,9 +211,9 @@ Example:
                     for (const s of sections) {
                         if (!file_paths[s.key]) file_paths[s.key] = []
                         file_paths[s.key].push({
-                            heading: s.heading,
                             anchor: s.anchor,
-                            line: s.line,
+                            line_of_heading: s.line_of_heading,
+                            line_count: s.line_count,
                             index: s.index,
                             content: s.final,
                         })

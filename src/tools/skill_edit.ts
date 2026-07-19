@@ -13,51 +13,34 @@ const defaultFileSystem: FileSystem = { mkdir, writeFile }
 
 const MAX_LINES = 500
 
-function buildSkillContent(name: string, description: string): string {
-    return [
-        "---",
-        `name: ${name}`,
-        `description: ${description}`,
-        "---",
-        "",
-        "# [ACTION]",
-        "",
-        "[TRIGGER]",
-        "",
-        "---",
-        "",
-        "[CONTENT]",
-        "",
-        "---",
-        "",
-        "[RULES]",
-        "",
-    ].join("\n")
-}
-
-export function createAutocodeSkillCreateTool(fileSystem: FileSystem = defaultFileSystem) {
+export function createAutocodeSkillEditTool(fileSystem: FileSystem = defaultFileSystem) {
     return tool({
-        description: "Create main skill file (SKILL.md) that agent will load with skill tool. NOT for creating reference files.",
+        description: "Edit main skill file (SKILL.md) body that agent loads via skill tool. Overwrites existing. NOT for reference files.",
         args: {
             name: tool.schema.string().describe("Skill name: 4 words max, alpha-numeric and hyphens only."),
-            description: tool.schema.string().describe("Skill trigger. ONLY text LLM reads to decide load skill - bad description = skill never triggers. Minimal Caveman English words, max 100 words."),
+            description: tool.schema.string().describe("Trigger description of: situations, symptoms, task that should make agent recall this skill. Use `skill-write` skill to see correct format."),
+            content: tool.schema.string().describe("Content in Caveman English. Use `skill-write` skill to see correct format."),
         },
         async execute(args, context) {
             const name = args.name.trim()
             const description = args.description.trim()
+            const content = args.content.trim()
 
             if (!name) {
-                return createRetryResponse("create skill", "Missing skill name.", "Provide a skill name.")
+                return createRetryResponse("edit skill", "Missing skill name.", "Provide a skill name.")
             }
             if (!description) {
-                return createRetryResponse("create skill", "Missing skill description.", "Provide a skill description (trigger).")
+                return createRetryResponse("edit skill", "Missing skill description.", "Provide a skill description (trigger).")
+            }
+            if (!content) {
+                return createRetryResponse("edit skill", "Missing skill content.", "Provide a SKILL.md body content.")
             }
 
-            const content = buildSkillContent(name, description)
+            const fileContent = `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}\n`
 
-            if (content.split("\n").length > MAX_LINES) {
+            if (fileContent.split("\n").length > MAX_LINES) {
                 return createRetryResponse(
-                    "create skill",
+                    "edit skill",
                     `Skill exceeds ${MAX_LINES} lines.`,
                     "Reduce skill content length.",
                 )
@@ -69,9 +52,9 @@ export function createAutocodeSkillCreateTool(fileSystem: FileSystem = defaultFi
 
             try {
                 await fileSystem.mkdir(skillDir, { recursive: true })
-                await fileSystem.writeFile(skillFilePath, content)
+                await fileSystem.writeFile(skillFilePath, fileContent)
             } catch (error) {
-                return createAbortResponse("create skill", error)
+                return createAbortResponse("edit skill", error)
             }
 
             return path.relative(storageRoot, skillFilePath)

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
@@ -13,10 +13,6 @@ import { createToolContext } from "./test_context"
 
 type ToolResult = string | Record<string, unknown>
 
-const FIXED_TIME = new Date("2026-07-18T14:05:09")
-
-const originalNow = Date.now
-
 function withTempDir<T>(fn: (root: string) => Promise<T>): Promise<T> {
     const root = mkdtempSync(join(tmpdir(), "autocode-skill-learn-"))
 
@@ -24,11 +20,6 @@ function withTempDir<T>(fn: (root: string) => Promise<T>): Promise<T> {
         rmSync(root, { recursive: true, force: true })
     })
 }
-
-afterEach(() => {
-    setSystemTime(new Date())
-    ;(globalThis as { Date: typeof Date }).Date.now = originalNow as never
-})
 
 function parseToolResult(result: string | { output: string }): ToolResult {
     const output = typeof result === "string" ? result : result.output
@@ -89,7 +80,7 @@ describe("skill_learn tool validation", () => {
         await withTempDir(async (root) => {
             const result = await executeCorrectionTool(root, {
                 subject: "other",
-                title: "Title",
+                name: "Title",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
             })
@@ -97,7 +88,7 @@ describe("skill_learn tool validation", () => {
             expect(result).toEqual({
                 failedAction: "learn skill",
                 error: "Unexpected argument(s): subject.",
-                instruction: "Retry with title, content, and description arguments.",
+                instruction: "Retry with name, content, and description arguments.",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
@@ -106,7 +97,7 @@ describe("skill_learn tool validation", () => {
     test("rejects ssh_key on non-env tool as unexpected argument", async () => {
         await withTempDir(async (root) => {
             const result = await executeCorrectionTool(root, {
-                title: "Title",
+                name: "Title",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
                 ssh_key: "Prod-Key",
@@ -115,7 +106,7 @@ describe("skill_learn tool validation", () => {
             expect(result).toEqual({
                 failedAction: "learn skill",
                 error: "Unexpected argument(s): ssh_key.",
-                instruction: "Retry with title, content, and description arguments.",
+                instruction: "Retry with name, content, and description arguments.",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
@@ -124,7 +115,7 @@ describe("skill_learn tool validation", () => {
     test("rejects non-string ssh_key on env tool without creating files", async () => {
         await withTempDir(async (root) => {
             const result = await executeTool(createSkillLearnEnvTool, root, {
-                title: "Title",
+                name: "Title",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
                 ssh_key: 123,
@@ -142,7 +133,7 @@ describe("skill_learn tool validation", () => {
     test("rejects unsafe ssh_key on env tool without creating files", async () => {
         await withTempDir(async (root) => {
             const result = await executeTool(createSkillLearnEnvTool, root, {
-                title: "Title",
+                name: "Title",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
                 ssh_key: "../pair",
@@ -155,49 +146,44 @@ describe("skill_learn tool validation", () => {
         })
     })
 
-    test("validates title without creating files", async () => {
+    test("validates name without creating files", async () => {
         await withTempDir(async (root) => {
-            const emptyTitle = await executeCorrectionTool(root, {
-                title: " ",
+            const emptyName = await executeCorrectionTool(root, {
+                name: " ",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
             })
-            const multilineTitle = await executeCorrectionTool(root, {
-                title: "Bad\nTitle",
+            const multilineName = await executeCorrectionTool(root, {
+                name: "Bad\nName",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
             })
 
-            expect(emptyTitle).toMatchObject({
-                error: "Invalid title. Title must be non-empty and contain no newline or control characters.",
+            expect(emptyName).toMatchObject({
+                error: "Invalid name. Name must be non-empty and contain no newline or control characters.",
             })
-            expect(multilineTitle).toMatchObject({
-                error: "Invalid title. Title must be non-empty and contain no newline or control characters.",
+            expect(multilineName).toMatchObject({
+                error: "Invalid name. Name must be non-empty and contain no newline or control characters.",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
     })
 
-    test("rejects missing or invalid description without creating files", async () => {
+    test("rejects missing or blank description without creating files", async () => {
         await withTempDir(async (root) => {
             const missingDescription = await executeCorrectionTool(root, {
-                title: "Title",
+                name: "Title",
                 content: "- Content.",
             })
             const blankDescription = await executeCorrectionTool(root, {
-                title: "Title",
+                name: "Title",
                 content: "- Content.",
                 description: "   ",
             })
-            const multilineDescription = await executeCorrectionTool(root, {
-                title: "Title",
-                content: "- Content.",
-                description: "Bad\nDescription",
-            })
 
-            for (const result of [missingDescription, blankDescription, multilineDescription]) {
+            for (const result of [missingDescription, blankDescription]) {
                 expect(result).toMatchObject({
-                    error: "Invalid description. Description must be non-empty and contain no newline or control characters.",
+                    error: "description required for new skill",
                     instruction: "Retry with a trigger description on one line that describes when to use this skill.",
                 })
             }
@@ -205,10 +191,26 @@ describe("skill_learn tool validation", () => {
         })
     })
 
+    test("rejects description with control characters without creating files", async () => {
+        await withTempDir(async (root) => {
+            const multilineDescription = await executeCorrectionTool(root, {
+                name: "Title",
+                content: "- Content.",
+                description: "Bad\nDescription",
+            })
+
+            expect(multilineDescription).toMatchObject({
+                error: "Invalid description. Description must be non-empty and contain no newline or control characters.",
+                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+            })
+            expect(existsSync(join(root, ".agents"))).toBe(false)
+        })
+    })
+
     test("rejects empty content without creating files", async () => {
         await withTempDir(async (root) => {
             const emptyContent = await executeCorrectionTool(root, {
-                title: "Title",
+                name: "Title",
                 content: " ",
                 description: DEFAULT_DESCRIPTION,
             })
@@ -227,7 +229,7 @@ describe("skill_learn tool validation", () => {
             writeFileSync(join(root, ".agents"), "not a directory")
 
             const result = await executeCorrectionTool(root, {
-                title: "Title",
+                name: "Title",
                 content: "- Content.",
                 description: DEFAULT_DESCRIPTION,
             })
@@ -243,15 +245,14 @@ describe("skill_learn tool validation", () => {
 describe("skill_learn per-item directory", () => {
     test("creates a per-item learned-corrections dir with frontmatter and body", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const result = await executeCorrectionTool(root, {
-                title: "Avoid re-render",
+                name: "Avoid re-render",
                 content: "- Wrap component in useMemo.",
                 description: "Use this skill when a component re-renders unnecessarily.",
             })
 
             expect(result).toBe("OK")
-            const expectedDir = "learned-corrections-26-07-18-14-05-09-avoid-re-render"
+            const expectedDir = "learned-corrections-avoid-re-render"
             const filePath = learnedSkillFile(root, "corrections", expectedDir)
 
             expect(existsSync(filePath)).toBe(true)
@@ -261,11 +262,11 @@ describe("skill_learn per-item directory", () => {
                 "description: Use this skill when a component re-renders unnecessarily.",
                 "---",
                 "",
-                "## Avoid re-render",
-                "",
                 "- Wrap component in useMemo.",
                 "",
-                "----------",
+                "---",
+                "",
+                `Content outdated? Call \`skill_learn\` with name=\`${expectedDir}\` to correct.`,
                 "",
             ].join("\n"))
             expect(listLearnedDirs(root, "corrections")).toEqual([expectedDir])
@@ -274,86 +275,82 @@ describe("skill_learn per-item directory", () => {
 
     test("env tool writes per-item dir with ssh_key segment in dir name", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const result = await executeTool(createSkillLearnEnvTool, root, {
-                title: "Remote host A",
+                name: "Remote host A",
                 content: "- Remote detail.",
                 description: "Use this skill when SSH-ing into prod host A.",
                 ssh_key: "Prod-Key",
             })
 
             expect(result).toBe("OK")
-            const expectedDir = "learned-env-26-07-18-14-05-09-prod-key-remote-host-a"
+            const expectedDir = "learned-env-prod-key-remote-host-a"
             const filePath = learnedSkillFile(root, "env", expectedDir)
 
             expect(existsSync(filePath)).toBe(true)
             const content = readFileSync(filePath, "utf8")
             expect(content).toContain(`name: ${expectedDir}`)
-            expect(content).toContain("## Remote host A")
+            expect(content).not.toMatch(/^## /m)
+            expect(content.endsWith(`- Remote detail.\n\n---\n\nContent outdated? Call \`skill_learn\` with name=\`${expectedDir}\` to correct.\n`)).toBe(true)
             expect(listLearnedDirs(root, "env")).toEqual([expectedDir])
         })
     })
 
     test("env tool without ssh_key omits ssh segment from dir name", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const result = await executeTool(createSkillLearnEnvTool, root, {
-                title: "Local dev",
+                name: "Local dev",
                 content: "- Local detail.",
                 description: "Use this skill when local dev env limited.",
             })
 
             expect(result).toBe("OK")
-            const expectedDir = "learned-env-26-07-18-14-05-09-local-dev"
+            const expectedDir = "learned-env-local-dev"
             expect(existsSync(learnedSkillFile(root, "env", expectedDir))).toBe(true)
         })
     })
 
-    test("truncates topic to 40 chars when title is long", async () => {
+    test("truncates topic to 40 chars when name is long", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const longTopic = "a".repeat(60)
             const result = await executeCorrectionTool(root, {
-                title: longTopic,
+                name: longTopic,
                 content: "- Long content.",
                 description: DEFAULT_DESCRIPTION,
             })
 
             expect(result).toBe("OK")
             const truncated = "a".repeat(40)
-            const expectedDir = `learned-corrections-26-07-18-14-05-09-${truncated}`
+            const expectedDir = `learned-corrections-${truncated}`
 
             expect(listLearnedDirs(root, "corrections")).toEqual([expectedDir])
             expect(existsSync(learnedSkillFile(root, "corrections", expectedDir))).toBe(true)
         })
     })
 
-    test("falls back to untitled topic for non-alphanumeric title", async () => {
+    test("falls back to untitled topic for non-alphanumeric name", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const result = await executeCorrectionTool(root, {
-                title: "!!!",
+                name: "!!!",
                 content: "- No usable chars.",
                 description: DEFAULT_DESCRIPTION,
             })
 
             expect(result).toBe("OK")
-            const expectedDir = "learned-corrections-26-07-18-14-05-09-untitled"
+            const expectedDir = "learned-corrections-untitled"
 
             expect(listLearnedDirs(root, "corrections")).toEqual([expectedDir])
         })
     })
 
-    test("suffixed -2 when same second same title is invoked twice", async () => {
+    test("calling twice with same name overwrites (updates) existing skill", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const first = await executeCorrectionTool(root, {
-                title: "Avoid re-render",
+                name: "Avoid re-render",
                 content: "- First call.",
                 description: DEFAULT_DESCRIPTION,
             })
             const second = await executeCorrectionTool(root, {
-                title: "Avoid re-render",
+                name: "Avoid re-render",
                 content: "- Second call.",
                 description: DEFAULT_DESCRIPTION,
             })
@@ -361,27 +358,27 @@ describe("skill_learn per-item directory", () => {
             expect(first).toBe("OK")
             expect(second).toBe("OK")
 
-            const baseDir = "learned-corrections-26-07-18-14-05-09-avoid-re-render"
-            const suffixedDir = `${baseDir}-2`
-
-            expect(listLearnedDirs(root, "corrections")).toEqual([baseDir, suffixedDir])
-            expect(existsSync(learnedSkillFile(root, "corrections", baseDir))).toBe(true)
-            expect(existsSync(learnedSkillFile(root, "corrections", suffixedDir))).toBe(true)
-            expect(readFileSync(learnedSkillFile(root, "corrections", suffixedDir), "utf8")).toContain("name: learned-corrections-26-07-18-14-05-09-avoid-re-render-2")
+            const skillDir = "learned-corrections-avoid-re-render"
+            expect(listLearnedDirs(root, "corrections")).toEqual([skillDir])
+            const filePath = learnedSkillFile(root, "corrections", skillDir)
+            expect(existsSync(filePath)).toBe(true)
+            const fileContent = readFileSync(filePath, "utf8")
+            expect(fileContent).toContain("- Second call.")
+            expect(fileContent).not.toContain("- First call.")
+            expect(fileContent).toContain(`name: ${skillDir}`)
         })
     })
 
     test("frontmatter description equals argument verbatim and name equals dir basename", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const description = "Trigger-focused when X then Y."
             await executeCorrectionTool(root, {
-                title: "Trigger title",
+                name: "Trigger title",
                 content: "- Lesson.",
                 description,
             })
 
-            const dirName = "learned-corrections-26-07-18-14-05-09-trigger-title"
+            const dirName = "learned-corrections-trigger-title"
             const content = readFileSync(learnedSkillFile(root, "corrections", dirName), "utf8")
 
             expect(content).toContain(`name: ${dirName}`)
@@ -391,72 +388,68 @@ describe("skill_learn per-item directory", () => {
 
     test("does not append or prune — each invocation writes a single isolated section", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             await executeCorrectionTool(root, {
-                title: "First",
+                name: "First",
                 content: "- First.",
                 description: DEFAULT_DESCRIPTION,
             })
             await executeCorrectionTool(root, {
-                title: "Second",
+                name: "Second",
                 content: "- Second.",
                 description: DEFAULT_DESCRIPTION,
             })
 
             const dirs = listLearnedDirs(root, "corrections")
             expect(dirs).toEqual([
-                "learned-corrections-26-07-18-14-05-09-first",
-                "learned-corrections-26-07-18-14-05-09-second",
+                "learned-corrections-first",
+                "learned-corrections-second",
             ])
             for (const dir of dirs) {
                 const content = readFileSync(learnedSkillFile(root, "corrections", dir), "utf8")
-                const sectionCount = (content.match(/^## /gm) ?? []).length
-                expect(sectionCount).toBe(1)
-                expect(content.endsWith("----------\n")).toBe(true)
+                expect(content).not.toMatch(/^## /m)
+                expect(content.endsWith(`Content outdated? Call \`skill_learn\` with name=\`${dir}\` to correct.\n`)).toBe(true)
             }
         })
     })
 
     test("permission tool writes per-item permission skill dir", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const result = await executeTool(createSkillLearnPermissionTool, root, {
-                title: "Safe delete",
+                name: "Safe delete",
                 content: "- Safe action.",
                 description: "Use this skill when deleting files manually.",
             })
 
             expect(result).toBe("OK")
             expect(listLearnedDirs(root, "permissions")).toEqual([
-                "learned-permissions-26-07-18-14-05-09-safe-delete",
+                "learned-permissions-safe-delete",
             ])
         })
     })
 
     test("preference tool writes per-item preference skill dir", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             const result = await executeTool(createSkillLearnPreferenceTool, root, {
-                title: "Prefer tabs",
+                name: "Prefer tabs",
                 content: "- Use tabs.",
                 description: "Use this skill when a reviewer complains about indentation.",
             })
 
             expect(result).toBe("OK")
             expect(listLearnedDirs(root, "preferences")).toEqual([
-                "learned-preferences-26-07-18-14-05-09-prefer-tabs",
+                "learned-preferences-prefer-tabs",
             ])
         })
     })
 
-    test("validateSkillLearnArgs trims title, content, and description", () => {
+    test("validateSkillLearnArgs trims name, content, and description", () => {
         const result = validateSkillLearnArgs({
-            title: " Spaced Title ",
+            name: " Spaced Name ",
             content: "\n- Body.\n",
             description: " Trigger here ",
         })
         expect(result).toEqual({
-            title: "Spaced Title",
+            name: "Spaced Name",
             content: "- Body.",
             description: "Trigger here",
             sshKey: undefined,
@@ -465,7 +458,7 @@ describe("skill_learn per-item directory", () => {
 
     test("validateSkillLearnArgs normalizes ssh_key to lowercased trim", () => {
         const result = validateSkillLearnArgs({
-            title: "Title",
+            name: "Title",
             content: "- Body.",
             description: "Trigger.",
             ssh_key: "  Prod-Key  ",
@@ -477,13 +470,12 @@ describe("skill_learn per-item directory", () => {
 describe("skill_learn old-format legacy dirs not touched", () => {
     test("legacy learned-corrections-pair skill dir at skills root remains after cleanup", async () => {
         await withTempDir(async (root) => {
-            setSystemTime(FIXED_TIME)
             // Simulate legacy pre-rewrite shape: single skill dir at skills root.
             const legacyDir = join(root, ".agents", "skills", "learned-corrections-pair")
             mkdirSync(legacyDir, { recursive: true })
             writeFileSync(join(legacyDir, "SKILL.md"), "---\nname: legacy\n---\n# Legacy\n")
             await executeCorrectionTool(root, {
-                title: "New lesson",
+                name: "New lesson",
                 content: "- New.",
                 description: DEFAULT_DESCRIPTION,
             })
@@ -493,6 +485,99 @@ describe("skill_learn old-format legacy dirs not touched", () => {
                 "learned-corrections",
                 "learned-corrections-pair",
             ])
+        })
+    })
+})
+
+describe("skill_learn optional description when skill exists", () => {
+    test("new skill missing description returns retry error", async () => {
+        await withTempDir(async (root) => {
+            const result = await executeCorrectionTool(root, {
+                name: "Brand new skill",
+                content: "- Fresh content.",
+            })
+
+            expect(result).toMatchObject({
+                failedAction: "learn skill",
+                error: "description required for new skill",
+                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+            })
+            expect(existsSync(join(root, ".agents"))).toBe(false)
+        })
+    })
+
+    test("existing skill with description omitted keeps old description and updates body", async () => {
+        await withTempDir(async (root) => {
+            const originalDescription = "Use this skill when a hook fires twice."
+            const first = await executeCorrectionTool(root, {
+                name: "Double hook",
+                content: "- First content.",
+                description: originalDescription,
+            })
+            expect(first).toBe("OK")
+
+            const skillDir = "learned-corrections-double-hook"
+            const filePath = learnedSkillFile(root, "corrections", skillDir)
+
+            // Second call: omit description, update content only.
+            const second = await executeCorrectionTool(root, {
+                name: "Double hook",
+                content: "- Updated content.",
+            })
+            expect(second).toBe("OK")
+
+            const fileContent = readFileSync(filePath, "utf8")
+            // Old description preserved from existing file.
+            expect(fileContent).toContain(`description: ${originalDescription}`)
+            // Body content updated.
+            expect(fileContent).toContain("- Updated content.")
+            expect(fileContent).not.toContain("- First content.")
+            // Outdated instruction present.
+            expect(fileContent).toContain(`Content outdated? Call \`skill_learn\` with name=\`${skillDir}\` to correct.`)
+            expect(listLearnedDirs(root, "corrections")).toEqual([skillDir])
+        })
+    })
+
+    test("existing skill with no frontmatter description returns retry error", async () => {
+        await withTempDir(async (root) => {
+            const skillDir = join(root, ".agents", "skills", "learned-corrections", "learned-corrections-no-desc")
+            mkdirSync(skillDir, { recursive: true })
+            writeFileSync(join(skillDir, "SKILL.md"), [
+                "---",
+                "name: learned-corrections-no-desc",
+                "---",
+                "",
+                "- Body without description.",
+                "",
+            ].join("\n"))
+
+            const result = await executeCorrectionTool(root, {
+                name: "No desc",
+                content: "- Updated body.",
+            })
+
+            expect(result).toMatchObject({
+                failedAction: "learn skill",
+                error: "Existing skill has no description in frontmatter.",
+                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+            })
+        })
+    })
+
+    test("body includes Content outdated instruction line and dash separator", async () => {
+        await withTempDir(async (root) => {
+            await executeCorrectionTool(root, {
+                name: "Separator test",
+                content: "- Body line.",
+                description: DEFAULT_DESCRIPTION,
+            })
+
+            const skillDir = "learned-corrections-separator-test"
+            const filePath = learnedSkillFile(root, "corrections", skillDir)
+            const content = readFileSync(filePath, "utf8")
+
+            expect(content).toContain("\n---\n")
+            expect(content).toContain(`Content outdated? Call \`skill_learn\` with name=\`${skillDir}\` to correct.`)
         })
     })
 })

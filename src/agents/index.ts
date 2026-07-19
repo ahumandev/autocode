@@ -48,6 +48,7 @@ import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
 import { executeConfigPrompt } from "./prompts/execute_config";
+import { write } from "bun";
 
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules
@@ -132,10 +133,11 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "git-commit": "allow",
-                "learned-permissions": "allow",
-                "primary-manual": "allow"
+                "learned-permissions*": "allow",
+                "primary-manual*": "allow",
+                "skill-write": "allow"
             },
-            "skill_learn_*": "allow",
+            skill_learn: "allow",
             task: {
                 "*": "allow",
                 "auto*": "deny",
@@ -167,10 +169,12 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "git-commit": "allow",
-                "learned-permissions": "allow",
-                "primary-manual": "allow"
+                "learned-permissions*": "allow",
+                "primary-manual": "allow",
+                "skill-write": "allow"
             },
-            "skill_learn_*": "allow",
+            skill_learn: "allow",
+            skill_read_reference: "allow",
             task: {
                 "*": "deny",
                 "auto_*": "allow",
@@ -201,7 +205,11 @@ const baseAgents: AgentMap = {
             doom_loop: "ask",
             external_directory: "ask",
             question: "allow",
-            "skill_learn_*": "allow",
+            skill: {
+                "*": "deny",
+                "skill-write": "allow",
+            },
+            skill_learn: "allow",
             task: {
                 "*": "deny",
                 "query*": "allow",
@@ -244,9 +252,10 @@ const baseAgents: AgentMap = {
                 "code*": "allow",
                 "design*": "allow",
                 "git-commit": "allow",
-                "learned-preferences": "allow"
+                "learned-preferences*": "allow",
+                "skill-write": "allow"
             },
-            "skill_learn_*": "allow"
+            "skill_learn": "allow"
         },
         prompt: editPrompt,
         tier: "balanced"
@@ -263,7 +272,11 @@ const baseAgents: AgentMap = {
             doom_loop: "ask",
             external_directory: "ask",
             question: "allow",
-            "skill_learn_*": "allow",
+            skill: {
+                "*": "deny",
+                "skill-write": "allow"
+            },
+            skill_learn: "allow",
             task: {
                 "*": "deny",
                 "query*": "allow",
@@ -294,6 +307,7 @@ const baseAgents: AgentMap = {
                 "execute-ux": "allow",
             },
             skill_read: "allow",
+            skill_read_reference: "allow",
             "todo*": "allow",
         },
         prompt: assistBrowserPrompt,
@@ -324,6 +338,7 @@ const baseAgents: AgentMap = {
                 "execute*": "allow",
             },
             skill_read: "allow",
+            skill_read_reference: "allow",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -360,10 +375,12 @@ const baseAgents: AgentMap = {
                 "execute*": "allow",
                 "learned-corrections-troubleshoot": "allow",
                 "learned-env": "allow",
+                "skill-write": "allow"
             },
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -422,6 +439,7 @@ const baseAgents: AgentMap = {
                 "learned-preferences": "allow"
             },
             skill_read: "allow",
+            skill_read_reference: "allow",
             task: {
                 "*": "deny",
                 auto_test: "allow",
@@ -485,6 +503,7 @@ const baseAgents: AgentMap = {
                 "learned-preferences": "allow"
             },
             skill_read: "allow",
+            skill_read_reference: "allow",
             task: {
                 "*": "deny",
                 auto_troubleshoot: "allow",
@@ -592,6 +611,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn_correction: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -621,10 +641,12 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "learned-corrections-troubleshoot": "allow",
                 "learned-env": "allow",
+                "skill-write": "allow"
             },
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -662,6 +684,7 @@ const baseAgents: AgentMap = {
                 "author-rules": "allow"
             },
             skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: documentAgentsPrompt,
         temperature: 0.3,
@@ -682,9 +705,11 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-skill": "allow"
+                "skill_write": "allow"
             },
-            "skill_*": "allow",
+            "skill_edit*": "allow",
+            skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: documentConventionsPrompt,
         temperature: 0.3,
@@ -705,9 +730,11 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-skill": "allow"
+                "skill_write": "allow"
             },
-            "skill_*": "allow",
+            "skill_edit*": "allow",
+            skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: documentCodePrompt,
         temperature: 0.3,
@@ -726,11 +753,13 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "learned-env*": "allow"
+                "learned-env*": "allow",
+                "skill_write": "allow"
             },
             skill_learn_env: "allow",
+            "skill_edit*": "allow",
             skill_read: "allow",
-            skill_write: "allow",
+            skill_read_reference: "allow",
             task: {
                 "*": "deny",
                 query_os: "allow",
@@ -755,9 +784,11 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-skill": "allow"
+                "skill_write": "allow"
             },
-            "skill_*": "allow",
+            "skill_edit*": "allow",
+            skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: documentInstallPrompt,
         temperature: 0.3,
@@ -778,9 +809,11 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-skill": "allow"
+                "skill_write": "allow"
             },
-            "skill_*": "allow",
+            "skill_edit*": "allow",
+            skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: String(documentPrdPrompt),
         temperature: 0.3,
@@ -801,9 +834,11 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "author-skill": "allow"
+                "skill_write": "allow"
             },
-            "skill_*": "allow",
+            "skill_edit*": "allow",
+            skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: documentUxPrompt,
         temperature: 0.3,
@@ -814,17 +849,15 @@ const baseAgents: AgentMap = {
 
     execute_author: {
         color: colorWritableWorker,
-        description: "task execute_author to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials) or argentic instructions (like commands, prompts, skills or plans); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
+        description: "task execute_author to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
         mode: "subagent",
         permission: {
             "*": "deny",
             "autocode_md_*": "allow",
-            autocode_logo_find: "allow",
             skill: {
                 "*": "deny",
                 "author*": "allow",
             },
-            skill_read: "allow",
         },
         prompt: executeAuthorPrompt,
         temperature: 0.5,
@@ -851,6 +884,7 @@ const baseAgents: AgentMap = {
                 "learned-preferences": "allow"
             },
             skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: executeCodePrompt,
         temperature: 0.3,
@@ -962,6 +996,7 @@ const baseAgents: AgentMap = {
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: executeOsPrompt,
         temperature: 0.1,
@@ -978,7 +1013,7 @@ const baseAgents: AgentMap = {
             "autocode_md_*": "allow",
             skill: {
                 "*": "deny",
-                "author-skill": "allow",
+                "skill-write": "allow",
                 "author-agent": "allow",
                 "author-command": "allow",
                 "author-rules": "allow",
@@ -1007,6 +1042,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn_correction: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: executeRestPrompt,
         temperature: 0.1,
@@ -1037,6 +1073,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn_correction: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
             "todo*": "allow",
         },
         prompt: executeOsPrompt,
@@ -1076,6 +1113,7 @@ const baseAgents: AgentMap = {
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
             "todo*": "allow",
             webfetch: "allow",
         },
@@ -1101,6 +1139,7 @@ const baseAgents: AgentMap = {
             skill_learn_correction: "allow",
             skill_learn_env: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
             "todo*": "allow",
         },
         prompt: executeSshPrompt,
@@ -1124,7 +1163,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "author-agent": "allow",
                 "author-command": "allow",
-                "author-skill": "allow",
+                "skill-write": "allow",
             },
             webfetch: "allow",
             "websearch*": "allow",
@@ -1147,6 +1186,7 @@ const baseAgents: AgentMap = {
                 "execute-ux": "allow",
             },
             skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: queryBrowserPrompt,
         tier: "fast",
@@ -1169,6 +1209,7 @@ const baseAgents: AgentMap = {
                 "execute*": "allow",
             },
             skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: queryCodePrompt,
         temperature: 0.3,
@@ -1252,6 +1293,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn_env: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: queryOsPrompt,
         temperature: 0.1,
@@ -1301,6 +1343,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn_env: "allow",
             skill_read: "allow",
+            skill_read_reference: "allow",
         },
         prompt: querySshPrompt,
         temperature: 0.1,

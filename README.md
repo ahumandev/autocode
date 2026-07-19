@@ -17,13 +17,14 @@ No special UI required. AutoCode runs in OpenCode, keeps progress in version-con
 - 🧠 **Design** — brainstorm options, study feasibility, compare approaches, and report pros, cons, and risks before implementation starts.
 - 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
 - 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
+- 📚 **Self-learning memory** — auto capture corrections, environment quirks, permissions, and user preferences as skills for future sessions.
 - ⚠️ **Safe hand-offs** — provide a thorough manual task tutorial when an operation is unsafe.
 - ⚡ **Token-optimized workflows** — smart orchestrators delegate to faster specialists to improve performance and reduce token use.
 - 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
 - 🧪 **Sandboxed execution** — run supported risky commands in Linux bubblewrap sandboxes when the host supports user namespaces.
 - 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in other directories after permission checks.
 - 🔐 **SSH tool suite** — run remote commands and manage files through environment-keyed tools.
-- 🧹 **Agent cleanup** — Agents remove temporary files and stop stray processes they started after debugging.
+- 🧹 **Agent cleanup** — agents remove temporary files and stop stray processes they started after debugging.
 
 ## Installation
 
@@ -88,6 +89,7 @@ flowchart TD
 
 - [Configuration](docs/configuration.md) — config locations, keys, model tiers, and DB/SSH environment variables.
 - [Usage](docs/usage.md) — more details on how to use AutoCode.
+- [Self Learned Skills](docs/skill.md) — reusable guidance files that extend AutoCode behavior.
 - [Terminology](docs/terminology.md) — glossary of AutoCode concepts.
 
 ## Development

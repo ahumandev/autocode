@@ -20,7 +20,7 @@ Document related project to current project.
         - .agents/skills/design-prd/SKILL.md
         - AGENTS.md
         - README.md
-5. **Learn** by calling \`autocode_learn_env\` to add docs summary of scan results (max 100 words per project written in Caveman English, including relative path to external project)
+5. **Learn** by calling \`skill_learn_env\` to add docs summary of scan results (max 100 words per project written in Caveman English, including relative path to external project)
 6. **Report** summary of docs of all known externally integrated projects
 
 ---

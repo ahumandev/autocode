@@ -14,14 +14,15 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 
 | Key                                  | Type             | Description                                                                                                                        | Default                                          |
 | ------------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `autocode.learned.max`               | integer          | Limits how many learned skills are kept per category before oldest are pruned.                                                     | `10`                                             |
+| `autocode.sandbox.sync_method`       | string           | Sandbox sync strategy. Valid values are `auto`, `overlayfs`, `reflink`, and `copy`.                                                | Unset.                                           |
+| `autocode.sandbox.distro.cache_path` | string           | Optional sandbox distribution cache path.                                                                                          | Unset.                                           |
+| `autocode.sandbox.distro.expire`     | string or number | Optional sandbox distribution expiry value.                                                                                        | Unset.                                           |
 | `autocode.tier`                      | string           | Selects a named tier set from `autocode.tiers`.                                                                                    | No selected set.                                 |
 | `autocode.tiers`                     | object           | Either a direct map of `cheap`, `fast`, `balanced`, and `smart` tier settings, or a map of named tier sets containing those tiers. | No overrides.                                    |
 | `autocode.tiers.<tier>.model`        | string           | Optional model override for a tier.                                                                                                | Uses the agent or OpenCode default when omitted. |
 | `autocode.tiers.<tier>.variant`      | string           | Optional variant override for a tier.                                                                                              | Uses the agent or OpenCode default when omitted. |
 | `permission.external_directory`      | object or string | Path-pattern permissions for external-directory access. Values are `allow`, `ask`, or `deny`.                                      | `{}`                                             |
-| `autocode.sandbox.sync_method`       | string           | Sandbox sync strategy. Valid values are `auto`, `overlayfs`, `reflink`, and `copy`.                                                | Unset.                                           |
-| `autocode.sandbox.distro.cache_path` | string           | Optional sandbox distribution cache path.                                                                                          | Unset.                                           |
-| `autocode.sandbox.distro.expire`     | string or number | Optional sandbox distribution expiry value.                                                                                        | Unset.                                           |
 
 Recognised model tiers are `cheap`, `fast`, `balanced`, and `smart`. The `cheap` tier is also used as the `small_model` fallback for OpenCode title generation and compaction when OpenCode has no explicit `small_model`.
 
@@ -47,8 +48,14 @@ For example:
       "zai": {
         "smart":    { "model": "zai/glm-5.2", "variant": "high" },
         "balanced": { "model": "zai/glm-5.2", "variant": "medium" },
-        "fast":     { "model": "zai/glm-5-turbo", "variant": "low" },
-        "cheap":    { "model": "zai/glm-4.7", "variant": "low" }
+        "fast":     { "model": "zai/glm-4.7", "variant": "low" },
+        "cheap":    { "model": "zai/glm-4.7-flash", "variant": "low" }
+      },
+      "zai-coding-plan": {
+        "smart":    { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
+        "balanced": { "model": "zai-coding-plan/glm-5.2", "variant": "medium" },
+        "fast":     { "model": "zai-coding-plan/glm-4.7", "variant": "low" },
+        "cheap":    { "model": "zai-coding-plan/glm-4.5-air", "variant": "low" }
       }
     }
   },
@@ -64,6 +71,31 @@ For example:
 OpenCode applies a last-matching-rule-wins model to external-directory permissions. Place broad defaults first and more specific overrides later.
 
 See [OpenCode Go documentation](https://opencode.ai/docs/go#endpoints) for supported model names.
+
+#### Learned skills
+
+`autocode.learned.max` caps how many learned skills AutoCode retains in each `learned-{category}/` directory. Each category is pruned independently:
+
+- `corrections`
+- `env`
+- `permissions`
+- `preferences`
+
+Pruning is count-based, not time-based: there is no TTL or expiry window. It runs once per plugin startup, not on every skill write. Within each category AutoCode keeps the `max` newest skills and removes the rest. "Newest" is determined by the `SKILL.md` modification time; ties are broken by directory name in descending order. Pruned skills are removed entirely with `rm -rf`. Re-learning an existing skill refreshes its `SKILL.md` mtime, so it survives longer.
+
+Only `Number.isInteger(max) && max > 0` overrides the default. Missing, zero, negative, or non-integer values fall back to `10`.
+
+For example:
+
+```jsonc
+{
+  "autocode": {
+    "learned": {
+      "max": 25
+    }
+  }
+}
+```
 
 ### Database environment variables
 

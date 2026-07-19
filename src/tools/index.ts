@@ -36,12 +36,14 @@ import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 import { createAutocodeSandboxConfigEditTool, createAutocodeSandboxConfigReadTool, createAutocodeSandboxConfigRemoveTool } from "./autocode_sandbox_config_tools"
 import { createAutocodeSessionContextTool } from "./autocode_session_context"
-import { createAutocodeSkillCreateTool } from "./skill_create"
-import { createSkillWriteTool } from "./skill_write"
+import { createAutocodeSkillEditTool } from "./skill_edit"
+import { createAutocodeSkillReadTool } from "./skill_read"
+import { createSkillEditReferenceTool } from "./skill_edit_reference"
+import { createSkillReadReferenceTool } from "./skill_read_reference"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createSkillLearnCorrectionTool, createSkillLearnEnvTool, createSkillLearnPermissionTool, createSkillLearnPreferenceTool } from "./skill_learn"
-import { createSkillReadTool, createSkillTool } from "./skill"
+import { createSkillTool } from "./skill"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
 import { createTaskResumeTool } from "./task_resume"
 
@@ -109,13 +111,14 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool(),
         autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
         skill: createSkillTool(client, undefined, runtime),
-        skill_create: createAutocodeSkillCreateTool(),
+        skill_edit: createAutocodeSkillEditTool(),
         skill_learn_correction: createSkillLearnCorrectionTool(),
         skill_learn_env: createSkillLearnEnvTool(),
         skill_learn_permission: createSkillLearnPermissionTool(),
         skill_learn_preference: createSkillLearnPreferenceTool(),
-        skill_read: createSkillReadTool(client, undefined, runtime),
-        skill_write: createSkillWriteTool(),
+        skill_read: createAutocodeSkillReadTool(),
+        skill_edit_reference: createSkillEditReferenceTool(),
+        skill_read_reference: createSkillReadReferenceTool(),
         task_external: createTaskExternalTool(),
         task_resume: createTaskResumeTool(client),    
     }

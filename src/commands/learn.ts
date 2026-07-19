@@ -14,7 +14,7 @@ export const learnCommand = {
    - **preference** (reviewer/user preference discovered, typically after a complaint or correction) → call \`skill_learn_preference\`
 3. For EACH identified lesson, call matching \`skill_learn_*\` tool.
 4. Skip categories that have no lessons. Do NOT force \`skill_learn_*\` calls.
-5. Avoid duplicates: No repeating of existing skills in skill list. Session may contain previous skill_learn tool calls. No repeating of same info to learn.
+5. Avoid duplicates: Session may contain previous skill_learn tool calls. Reuse of same name to replace outdated skills. NEVER create duplicate skills!
 6. See <user-guidance> block below. If not empty: target that topic to learn from session.
 7. Do NOT create/edit any project files. Only call \`skill_learn_*\` tools if needed.
 

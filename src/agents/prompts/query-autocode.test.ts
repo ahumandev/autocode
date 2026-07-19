@@ -144,8 +144,8 @@ describe("queryAutocodePrompt", () => {
 
     test("requires exact authoring skills for advice", () => {
         expectPromptContainsAll([
-            "Use exact authoring skills for advice: author-skill for skills, author-agent for agents, author-command for commands.",
-            "author-skill for skills",
+            "Use exact authoring skills for advice: skill-write for skills, author-agent for agents, author-command for commands.",
+            "skill-write for skills",
             "author-agent for agents",
             "author-command for commands",
         ])

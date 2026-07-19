@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
-import { createSkillWriteTool } from "./skill_write"
+import { createSkillEditReferenceTool } from "./skill_edit_reference"
 import { createToolContext } from "./test_context"
 import { resetRetryCounts } from "@/utils/tools"
 
 type ToolResult = string | Record<string, unknown>
 
 function withTempDir<T>(fn: (root: string) => Promise<T>): Promise<T> {
-    const root = mkdtempSync(join(tmpdir(), "autocode-skill-write-"))
+    const root = mkdtempSync(join(tmpdir(), "autocode-skill-edit-reference-"))
 
     return fn(root).finally(() => {
         rmSync(root, { recursive: true, force: true })
@@ -27,7 +27,7 @@ function parseToolResult(result: string | { output: string }): ToolResult {
 }
 
 async function executeWrite(root: string, args: Record<string, unknown>): Promise<ToolResult> {
-    const tool = createSkillWriteTool()
+    const tool = createSkillEditReferenceTool()
     const result = await tool.execute(args as never, createToolContext({
         directory: root,
         worktree: root,
@@ -44,7 +44,7 @@ beforeEach(() => {
     resetRetryCounts()
 })
 
-describe("skill_write", () => {
+describe("skill_edit_reference", () => {
     test("writes file at skill root", async () => {
         await withTempDir(async (root) => {
             const result = await executeWrite(root, {
@@ -53,7 +53,7 @@ describe("skill_write", () => {
                 content: "hello world",
             })
 
-            expect(result).toBe(join(".agents", "skills", "my-skill", "template.xml"))
+            expect(result).toBe("OK")
 
             const filePath = skillFile(root, "my-skill", "template.xml")
             expect(existsSync(filePath)).toBe(true)
@@ -69,7 +69,7 @@ describe("skill_write", () => {
                 content: "<xml/>",
             })
 
-            expect(result).toBe(join(".agents", "skills", "example-skill", "reference", "template.xml"))
+            expect(result).toBe("OK")
 
             const filePath = skillFile(root, "example-skill", "reference/template.xml")
             expect(existsSync(filePath)).toBe(true)
@@ -219,7 +219,7 @@ describe("skill_write", () => {
                 content: "<x/>",
             })
 
-            expect(result).toBe(join(".agents", "skills", "norm-skill", "reference", "template.xml"))
+            expect(result).toBe("OK")
             expect(existsSync(skillFile(root, "norm-skill", "reference/template.xml"))).toBe(true)
         })
     })
@@ -257,7 +257,7 @@ describe("skill_write", () => {
                 content: "---\nname: meta-skill\ndescription: test\n---\n",
             })
 
-            expect(result).toBe(join(".agents", "skills", "meta-skill", "SKILL.md"))
+            expect(result).toBe("OK")
             const filePath = skillFile(root, "meta-skill", "SKILL.md")
             expect(existsSync(filePath)).toBe(true)
             expect(readFileSync(filePath, "utf8")).toContain("name: meta-skill")

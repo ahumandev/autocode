@@ -39,18 +39,21 @@ describe("autocode_md_read", () => {
         const entry = out.file_paths["doc.md"]
         expect(Array.isArray(entry)).toBe(true)
         expect(entry.length).toBe(3)
-        const byAnchor: Record<string, { heading: string; line: number }> = {}
+        const byAnchor: Record<string, { line_of_heading: number; line_count: number }> = {}
         for (const e of entry) {
-            expect(e.heading).toBeDefined()
             expect(e.anchor).toBeDefined()
-            expect(typeof e.line).toBe("number")
+            expect(typeof e.line_of_heading).toBe("number")
+            expect(typeof e.line_count).toBe("number")
             expect((e as Record<string, unknown>).content).toBeUndefined()
-            byAnchor[e.anchor] = { heading: e.heading, line: e.line }
+            byAnchor[e.anchor] = { line_of_heading: e.line_of_heading, line_count: e.line_count }
         }
         expect(Object.keys(byAnchor).sort()).toEqual(["a", "a1", "a2"])
-        expect(byAnchor["a"].heading).toBe("A")
-        expect(byAnchor["a1"].heading).toBe("A1")
-        expect(byAnchor["a2"].heading).toBe("A2")
+        expect(byAnchor["a"].line_of_heading).toBe(1)
+        expect(byAnchor["a"].line_count).toBe(4)
+        expect(byAnchor["a1"].line_of_heading).toBe(5)
+        expect(byAnchor["a1"].line_count).toBe(7)
+        expect(byAnchor["a2"].line_of_heading).toBe(9)
+        expect(byAnchor["a2"].line_count).toBe(3)
         expect((entry[0] as Record<string, unknown>).nodes_shown).toBeUndefined()
         expect((entry[0] as Record<string, unknown>).nodes_total).toBeUndefined()
     })
@@ -64,8 +67,8 @@ describe("autocode_md_read", () => {
         expect(entry.length).toBe(1)
         const e = entry[0]
         expect(e.anchor).toBe("a1")
-        expect(e.heading).toBe("A1")
-        expect(typeof e.line).toBe("number")
+        expect(e.line_of_heading).toBe(5)
+        expect(e.line_count).toBe(7)
         expect(e.content).toBe("a1 text")
     })
 
@@ -74,17 +77,19 @@ describe("autocode_md_read", () => {
         const out = await read("b.md")
         const entry = out.file_paths["b.md"]
         expect(entry.length).toBe(2)
-        const byAnchor: Record<string, string> = {}
+        const byAnchor: Record<string, { line_of_heading: number; line_count: number }> = {}
         for (const e of entry) {
-            expect(e.heading).toBeDefined()
             expect(e.anchor).toBeDefined()
-            expect(typeof e.line).toBe("number")
+            expect(typeof e.line_of_heading).toBe("number")
+            expect(typeof e.line_count).toBe("number")
             expect((e as Record<string, unknown>).content).toBeUndefined()
-            byAnchor[e.anchor] = e.heading
+            byAnchor[e.anchor] = { line_of_heading: e.line_of_heading, line_count: e.line_count }
         }
         expect(Object.keys(byAnchor).sort()).toEqual(["a", "b"])
-        expect(byAnchor["a"]).toBe("A")
-        expect(byAnchor["b"]).toBe("B")
+        expect(byAnchor["a"].line_of_heading).toBe(1)
+        expect(byAnchor["a"].line_count).toBe(4)
+        expect(byAnchor["b"].line_of_heading).toBe(5)
+        expect(byAnchor["b"].line_count).toBe(3)
     })
 
     test("duplicate headers get GitHub-style -1,-2 suffix as anchor (multiple -> outline only)", async () => {

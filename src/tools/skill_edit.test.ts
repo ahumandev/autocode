@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { resetRetryCounts } from "@/utils/tools"
-import { createAutocodeSkillCreateTool } from "./skill_create"
+import { createAutocodeSkillEditTool } from "./skill_edit"
 import { createToolContext } from "./test_context"
 
 function createFakeFileSystem() {
@@ -18,17 +18,17 @@ function createFakeFileSystem() {
     }
 }
 
-describe("skill_create", () => {
+describe("skill_edit", () => {
     afterEach(() => {
         resetRetryCounts()
     })
 
     test("creates SKILL.md and returns relative path", async () => {
         const fs = createFakeFileSystem()
-        const skillTool = createAutocodeSkillCreateTool(fs)
+        const skillTool = createAutocodeSkillEditTool(fs)
 
         const result = await skillTool.execute(
-            { name: "code-typescript", description: "Use code-typescript when writing TS." } as never,
+            { name: "code-typescript", description: "Use code-typescript when writing TS.", content: "# Steps\nDo thing." } as never,
             createToolContext({ directory: "/workspace", worktree: "/workspace" }),
         )
 
@@ -37,26 +37,37 @@ describe("skill_create", () => {
         const content = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
         expect(content).toContain("name: code-typescript")
         expect(content).toContain("description: Use code-typescript when writing TS.")
+        expect(content).toContain("# Steps\nDo thing.")
     })
 
     test("returns retry when name is blank", async () => {
-        const skillTool = createAutocodeSkillCreateTool(createFakeFileSystem())
+        const skillTool = createAutocodeSkillEditTool(createFakeFileSystem())
         const result = await skillTool.execute(
-            { name: "   ", description: "trigger" } as never,
+            { name: "   ", description: "trigger", content: "body" } as never,
             createToolContext(),
         )
         const parsed = JSON.parse(result as string)
-        expect(parsed.failedAction).toBe("create skill")
+        expect(parsed.failedAction).toBe("edit skill")
     })
 
     test("returns retry when description is blank", async () => {
-        const skillTool = createAutocodeSkillCreateTool(createFakeFileSystem())
+        const skillTool = createAutocodeSkillEditTool(createFakeFileSystem())
         const result = await skillTool.execute(
-            { name: "code-foo", description: "" } as never,
+            { name: "code-foo", description: "", content: "body" } as never,
             createToolContext(),
         )
         const parsed = JSON.parse(result as string)
-        expect(parsed.failedAction).toBe("create skill")
+        expect(parsed.failedAction).toBe("edit skill")
+    })
+
+    test("returns retry when content is blank", async () => {
+        const skillTool = createAutocodeSkillEditTool(createFakeFileSystem())
+        const result = await skillTool.execute(
+            { name: "code-foo", description: "trigger", content: "   " } as never,
+            createToolContext(),
+        )
+        const parsed = JSON.parse(result as string)
+        expect(parsed.failedAction).toBe("edit skill")
     })
 
     test("returns abort when writeFile fails", async () => {
@@ -64,12 +75,12 @@ describe("skill_create", () => {
             mkdir: async () => undefined,
             writeFile: async () => { throw new Error("disk full") },
         }
-        const skillTool = createAutocodeSkillCreateTool(failingFs)
+        const skillTool = createAutocodeSkillEditTool(failingFs)
         const result = await skillTool.execute(
-            { name: "code-foo", description: "trigger" } as never,
+            { name: "code-foo", description: "trigger", content: "body" } as never,
             createToolContext(),
         )
         const parsed = JSON.parse(result as string)
-        expect(parsed.failedAction).toBe("create skill")
+        expect(parsed.failedAction).toBe("edit skill")
     })
 })

@@ -11,9 +11,9 @@ type FileSystem = {
 
 const defaultFileSystem: FileSystem = { mkdir, writeFile }
 
-export function createSkillWriteTool(fileSystem: FileSystem = defaultFileSystem) {
+export function createSkillEditReferenceTool(fileSystem: FileSystem = defaultFileSystem) {
     return tool({
-        description: "Call skill_write to write file referenced by skill like templates, scripts, configs, extra md details to keep main SKILL.md lean. NOT for creating main skill (SKILL.md) file.",
+        description: "Call skill_edit_reference to edit file referenced by skill like templates, scripts, configs, extra md details to keep main SKILL.md lean. NOT for creating main skill (SKILL.md) file.",
         args: {
             skill_name: tool.schema
                 .string()
@@ -71,7 +71,7 @@ export function createSkillWriteTool(fileSystem: FileSystem = defaultFileSystem)
                 return createAbortResponse("write skill file", error)
             }
 
-            return path.relative(storageRoot, targetFilePath)
+            return "OK"
         },
     })
 }

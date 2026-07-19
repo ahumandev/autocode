@@ -50,6 +50,10 @@ Execute steps sequentially.
     - If info is not available, report it to user
 3. Only provide answer to user request in Caveman English - no extra commentary
 
+## STEP 4: Learn
+
+After reporting, if queries revealed persistent env facts (previously unknown) about remote host (OS, package manager, configs, versions, services), call \`skill_learn_env\` with \`ssh_key\`. Keep each fact to 100 words max. Caveman English.
+
 ---
 
 ${responseAiRules}

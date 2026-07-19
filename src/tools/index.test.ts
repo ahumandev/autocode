@@ -609,13 +609,13 @@ describe("auto resume wiring", () => {
         expect(sandboxGrep.description).toContain("Search")
         expect(sandboxRead.description).toContain("Read")
         expect(sandboxCopy.description).toContain("Copy")
-        expect(Object.keys(skillLearnCorrection.args)).toEqual(["title", "content", "description"])
-        expect(Object.keys(skillLearnEnv.args)).toEqual(["title", "content", "description", "ssh_key"])
-        expect(Object.keys(skillLearnPermission.args)).toEqual(["title", "content", "description"])
-        expect(Object.keys(skillLearnPreference.args)).toEqual(["title", "content", "description"])
-        expect(skillLearnCorrection.description).toContain("mistake was corrected")
+        expect(Object.keys(skillLearnCorrection.args)).toEqual(["name", "content", "description"])
+        expect(Object.keys(skillLearnEnv.args)).toEqual(["name", "content", "description", "ssh_key"])
+        expect(Object.keys(skillLearnPermission.args)).toEqual(["name", "content", "description"])
+        expect(Object.keys(skillLearnPreference.args)).toEqual(["name", "content", "description"])
+        expect(skillLearnCorrection.description).toContain("mistake was self corrected")
         expect(skillLearnEnv.description).toContain("local dev environment")
-        expect(skillLearnPreference.description).toContain("reviewer complaint")
+        expect(skillLearnPreference.description).toContain("permanent")
         expect(skill.description).toContain("skill")
         expect(Object.keys(skill.args)).toEqual(["name"])
         expect(Object.keys(skill.args)).not.toContain("subjects")
@@ -1414,8 +1414,9 @@ describe("autocode_plan_save tool", () => {
                     "autocode_sandbox_read",
                     "autocode_session_context",
                     "autocode_session_create",
-                    "skill_create",
-                    "skill_write",
+                    "skill_edit",
+                    "skill_edit_reference",
+                    "skill_read_reference",
                     "autocode_ssh_command",
                     "autocode_ssh_config_read",
                     "autocode_ssh_config_edit",
@@ -1492,10 +1493,10 @@ describe("autocode_plan_save tool", () => {
                 expect(plugin.tool?.skill_learn_env).toBeDefined()
                 expect(plugin.tool?.skill_learn_permission).toBeDefined()
                 expect(plugin.tool?.skill_learn_preference).toBeDefined()
-                expect(Object.keys((plugin.tool?.skill_learn_correction as unknown as { args: Record<string, unknown> }).args)).toEqual(["title", "content", "description"])
-                expect(Object.keys((plugin.tool?.skill_learn_env as unknown as { args: Record<string, unknown> }).args)).toEqual(["title", "content", "description", "ssh_key"])
-                expect(Object.keys((plugin.tool?.skill_learn_permission as unknown as { args: Record<string, unknown> }).args)).toEqual(["title", "content", "description"])
-                expect(Object.keys((plugin.tool?.skill_learn_preference as unknown as { args: Record<string, unknown> }).args)).toEqual(["title", "content", "description"])
+                expect(Object.keys((plugin.tool?.skill_learn_correction as unknown as { args: Record<string, unknown> }).args)).toEqual(["name", "content", "description"])
+                expect(Object.keys((plugin.tool?.skill_learn_env as unknown as { args: Record<string, unknown> }).args)).toEqual(["name", "content", "description", "ssh_key"])
+                expect(Object.keys((plugin.tool?.skill_learn_permission as unknown as { args: Record<string, unknown> }).args)).toEqual(["name", "content", "description"])
+                expect(Object.keys((plugin.tool?.skill_learn_preference as unknown as { args: Record<string, unknown> }).args)).toEqual(["name", "content", "description"])
                 expect(plugin.tool?.skill).toBeDefined()
                 expect(Object.keys((plugin.tool?.skill as unknown as { args: Record<string, unknown> }).args)).toEqual(["name"])
                 expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
@@ -1532,7 +1533,7 @@ describe("autocode_plan_save tool", () => {
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_plan_save")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo_find")).toBe("allow")
+                expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo_find")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_agent_swap")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_session_create")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo")).toBeUndefined()

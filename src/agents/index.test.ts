@@ -12,10 +12,10 @@ const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "au
 const executeRestToolNames = ["autocode_rest"]
 const executeOpencodeAllowedPermissionKeys = ["autocode_config_*", "autocode_md_*"]
 const executeOpencodeForbiddenToolKeys = ["apply_patch", "bash", "execute", "patch", "task", "write"]
-const executeOpencodeAllowedSkillNames = ["author-agent", "author-command", "author-skill", "author-rules"]
+const executeOpencodeAllowedSkillNames = ["author-agent", "author-command", "skill-write", "author-rules"]
 const queryAutocodeAllowedPermissionKeys = ["autocode_config_read", "autocode_md_read", "autocode_md_frontmatter_read", "webfetch", "websearch*"]
 const queryAutocodeForbiddenWritePermissionKeys = ["apply_patch", "bash", "edit", "execute", "patch", "task", "task_external", "write"]
-const queryAutocodeAllowedSkillNames = ["author-agent", "author-command", "author-skill"]
+const queryAutocodeAllowedSkillNames = ["author-agent", "author-command", "skill-write"]
 
 describe("agent policies", () => {
     test("applies external-directory rules to external_directory and task_external permissions", () => {

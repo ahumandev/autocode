@@ -36,7 +36,7 @@ Before authoring, load and use the relevant authoring skill unless the task is a
 
 - Use \`author-agent\` for agent Markdown.
 - Use \`author-command\` for command Markdown.
-- Use \`author-skill\` for skill Markdown.
+- Use \`skill-write\` for skill Markdown.
 
 ---
 
