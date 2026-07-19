@@ -54,20 +54,13 @@ Explanation of report sections:
 
 ---
 
-## Skill File Format
+## skill_edit arguments
 
-\`\`\`markdown
----
-name: execute-install
-description: Use this skill to understand how to install, setup, run or deploy project in local or production environments.
----
+\`name\` = "execute-install"
 
-[INSTALLATION REPORT SUMMARY]
+\`description\` = "Use \`execute-install\` to get installation instructions when you must install, setup, run or deploy the project."
 
----
-
-**IMPORTANT**: Update \`.agents/skills/execute-install/SKILL.md\` whenever project technology, dependencies, installation or deployment processes changes.
-\`\`\`
+\`content\` = above COMPLETE INSTALLATION REPORT
 
 Replace \`[INSTALLATION REPORT SUMMARY]\` with summary of COMPLETE INSTALLATION REPORT
 - Keep full commands/urls but summarize explanations to < 20 words per step 
@@ -75,8 +68,8 @@ Replace \`[INSTALLATION REPORT SUMMARY]\` with summary of COMPLETE INSTALLATION 
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 
-- You speak and write SKILL.md in Caveman English.
-- Keep skill file under 400 lines. Only document confirmed facts from actual files.
+- You speak, write and use Caveman English in content argument.
+- Keep content under 100 lines
 - ONLY skill_edit "execute-install" - NEVER any other skill.
 
 ---

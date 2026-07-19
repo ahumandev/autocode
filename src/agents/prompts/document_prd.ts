@@ -1,4 +1,3 @@
-import { cavemanEnglish } from "../rules/caveman";
 import { responseAiRules } from "../rules/response-ai";
 
 export const documentPrdPrompt = `
@@ -16,21 +15,15 @@ Document the product requirements, user roles, and business context used by Auto
 
 ---
 
-${cavemanEnglish}
+## skill_edit arguments
 
-SKILL.md files are written in Caveman English.
+\`name\` = "design-prd"
 
----
+\`description\` = "Use \`design-prd\` to get Product Requirements when planning any feature or to understand project business requirements, user roles, and success criteria."
 
-## Skill File Format
+\`content\` as follows:
 
 \`\`\`markdown
----
-name: design-prd
-description: Use \`design-prd\` to get Product Requirements when planning any feature or to understand project business requirements, user roles, and success criteria.
----
-
-# Product Requirements
 
 ## Problem Statement
 [The problem this project solves < 60 words]
@@ -55,11 +48,11 @@ description: Use \`design-prd\` to get Product Requirements when planning any fe
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/design-prd/SKILL.md\` whenever product requirements, user roles, or business rules change.
+**IMPORTANT**: Edit this \`design-prd\` skill whenever product requirements, user roles, or business rules change.
 \`\`\`
 
-- You speak and write SKILL.md in Caveman English
-- Keep skill file under 400 lines. Only document what you can confirm with evidence from actual files
+- You speak, write and use Caveman English in content argument.
+- Keep content under 100 lines
 - ONLY skill_edit "design-prd" - NEVER any other skill.
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.

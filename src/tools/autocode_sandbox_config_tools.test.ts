@@ -270,9 +270,8 @@ describe("createAutocodeSandboxConfigReadTool", () => {
         const fileEntry = result.file_paths["app.json"] as { key_paths: Record<string, string>, nodes_shown: number, nodes_total: number }
         expect(fileEntry.key_paths["server.port"]).toBe("3000")
         expect(fileEntry.key_paths["server.host"]).toBe("x")
-        expect(typeof fileEntry.nodes_shown).toBe("number")
-        expect(typeof fileEntry.nodes_total).toBe("number")
-        expect(fileEntry.nodes_shown).toBeGreaterThan(0)
+        expect(fileEntry.nodes_shown).toBe(2)
+        expect(fileEntry.nodes_total).toBe(2)
     }))
 
     test("key_path drills into a specific subtree", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {

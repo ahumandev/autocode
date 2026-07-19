@@ -55,9 +55,8 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         expect(result.file_paths["a.md"].key_paths["title"]).toBe("A")
         expect(result.file_paths["a.md"].key_paths["author"]).toBe("alice")
         expect(result.file_paths["b.md"].key_paths["title"]).toBe("B")
-        expect(typeof result.file_paths["a.md"].nodes_shown).toBe("number")
-        expect(typeof result.file_paths["a.md"].nodes_total).toBe("number")
-        expect(result.file_paths["a.md"].nodes_shown).toBeGreaterThan(0)
+        expect(result.file_paths["a.md"].nodes_shown).toBe(2)
+        expect(result.file_paths["a.md"].nodes_total).toBe(2)
     })
 
     test("key_regex filters nodes by key segment", async () => {
@@ -102,8 +101,8 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         writeFileSync(`${dir}/vp.md`, "---\na: hello\nb: world\nc: 42\n---\nbody")
         const tool = createAutocodeMdFrontmatterReadTool()
         const result = await execute(tool, { file_path_glob: "vp.md", value_regex: "orld|ello" })
-        // root (object, non-leaf) is included; a and b match; c (42) is excluded
-        expect(result.file_paths["vp.md"].nodes_total).toBe(3)
+        // only leaves are emitted; a and b match; c (42) is excluded
+        expect(result.file_paths["vp.md"].nodes_total).toBe(2)
         expect(result.file_paths["vp.md"].key_paths["a"]).toBe("hello")
         expect(result.file_paths["vp.md"].key_paths["b"]).toBe("world")
         expect(result.file_paths["vp.md"].key_paths["c"]).toBeUndefined()
@@ -115,8 +114,8 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         const tool = createAutocodeMdFrontmatterReadTool()
         const result = await execute(tool, { file_path_glob: "big.md", max_keys: 2 })
         expect(result.file_paths["big.md"].nodes_shown).toBe(2)
-        // root object (path []) is always counted by configRead + 5 leaves = 6
-        expect(result.file_paths["big.md"].nodes_total).toBe(6)
+        // 5 leaves emitted (root parent is no longer counted)
+        expect(result.file_paths["big.md"].nodes_total).toBe(5)
     })
 
     test("throws when context.directory is missing", async () => {
@@ -133,9 +132,9 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         writeFileSync(`${dir}/b.md`, "---\nx: 1\ny: 2\n---\nbody")
         const tool = createAutocodeMdFrontmatterReadTool()
         const result = await execute(tool, { file_path_glob: "*.md", max_keys: 4 })
-        // 2 files x 3 nodes each (root + 2 leaves) = 6 total; global cap shows 4
+        // 2 files x 2 leaves each = 4 total; global cap shows 4
         expect(result.nodes_shown).toBe(4)
-        expect(result.nodes_total).toBe(6)
-        expect(result.truncated).toBe(true)
+        expect(result.nodes_total).toBe(4)
+        expect(result.truncated).toBe(false)
     })
 })

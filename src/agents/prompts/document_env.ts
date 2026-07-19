@@ -27,7 +27,8 @@ Document related project to current project.
 
 ${responseAiRules}
 
-- You speak and write SKILL.md in Caveman English.
+- You speak, write and use Caveman English in content argument.
+- Keep content under 100 lines
 
 ---
 

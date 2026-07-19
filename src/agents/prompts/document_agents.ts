@@ -55,7 +55,7 @@ ${responseAiRules}
 
 ## Rules 
 
-- You speak and write SKILL.md in Caveman English.
+- You speak and write in Caveman English.
 - Only write facts. No guessing. If unclear, remove item or optional section.
 - Only include sections mentioned in "New AGENTS.md Layout". NEVER add other sections.
 - NEVER repeat anything

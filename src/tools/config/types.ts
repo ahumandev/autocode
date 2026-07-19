@@ -50,3 +50,14 @@ export type WriteOptions = {
 export type WriteOutcome = { value: unknown; action: "replace" | "rename" | "create" }
 
 export type RemoveOutcome = { value: unknown; removed: (string | number)[]; parentNow: string | null | Record<string, string | null> }
+
+export type EditOperation =
+    | { kind: "replace"; path: (string | number)[]; value: unknown }
+    | { kind: "create"; path: (string | number)[]; value: unknown; index: number | null }
+    | { kind: "rename"; cur: (string | number)[]; neu: (string | number)[]; content: unknown; hasContent: boolean; index: number | null }
+
+export interface ConfigDocumentEditor {
+    toJS(): unknown
+    apply(op: EditOperation): void
+    toString(): string
+}

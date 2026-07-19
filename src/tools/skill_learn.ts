@@ -341,7 +341,7 @@ export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem)
     const args = {
         category: tool.schema.string().describe("Category identified."),
         name: tool.schema.string().describe("Short name used to derive skill file slug."),
-        content: tool.schema.string().describe("Summary of what was learned in Caveman English."),
+        content: tool.schema.string().describe("Summary of what was learned in Caveman English. Do NOT wrap content in XML tags."),
         description: tool.schema.string().optional().describe(triggerDescriptionArg),
         key: tool.schema.string().optional().describe("Optional identifier to namespace this skill, e.g. ssh_key to specify which remote host env info relates."),
         references: tool.schema.array(tool.schema.object({

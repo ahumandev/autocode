@@ -15,7 +15,7 @@ Then analyze the actual codebase to fill any gaps or verify the merged content.
 
 ## Overall Process
 1. **Analyze** the codebase
-2. **Check & Update**: Call \`skill_read\` and then \`skill_edit\` with name="execute-code"
+2. **Check & Update**: Call \`skill_read\` and then \`skill_edit\` with \`name\`="execute-code"
 3. **Report** back what was documented
 
 ### Security Discover Process
@@ -30,16 +30,15 @@ ${responseAiRules}
 
 ---
 
-## Skill File Format
+## skill_edit arguments
+
+\`name\` = "execute-code"
+
+\`description\` = "Use \`execute-code\` to get "Technical Design" when you must design technical tasks, implement features or refactor code."
+
+\`content\` as follows:
 
 \`\`\`markdown
----
-name: execute-code
-description: Use \`execute-code\` to get "Technical Design" when you must design technical tasks, implement features or refactor code.
----
-
-# Technical Design
-
 ## Architectural Overview
 [High-level description < 60 words]
 
@@ -72,12 +71,12 @@ description: Use \`execute-code\` to get "Technical Design" when you must design
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/execute-code/SKILL.md\` whenever architecture, APIs, data models, security, or integrations change.
+**IMPORTANT**: Edit this \`execute-code\` skill whenever architecture, APIs, data models, security, or integrations change.
 \`\`\`
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 
-- You speak and write SKILL.md in Caveman English.
-- Keep skill file under 400 lines. Only document confirmed facts from actual files.
-- ONLY skill_edit "execute-code" - NEVER any other skill.
+- You speak, write and use Caveman English in content argument.
+- Keep content under 100 lines
+- ONLY call skill_edit with \`name\`="execute-code" - NEVER any other skill name.
 `

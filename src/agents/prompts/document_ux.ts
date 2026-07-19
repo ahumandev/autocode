@@ -29,15 +29,15 @@ ${responseAiRules}
 
 ---
 
-## Skill File Format
+## skill_edit arguments
+
+\`name\` = "execute-ux"
+
+\`description\` = "Use \`execute-ux\` to get UX documentation for frontend web projects."
+
+\`content\` as follows:
 
 \`\`\`markdown
----
-name: execute-ux
-description: Use this skill to understand UI design, interactions, styling conventions, browser navigation and user UX flow rules.
----
-
-# UX & UI Design
 
 ## Persona
 [User type, skill level, tone, environment < 60 words]
@@ -67,11 +67,11 @@ description: Use this skill to understand UI design, interactions, styling conve
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/execute-ux/SKILL.md\` whenever navigation, styling, or UX patterns change.
+**IMPORTANT**: Edit this \`execute-ux\` skill whenever navigation, styling, or UX patterns change.
 \`\`\`
 
-- You speak and write SKILL.md in Caveman English.
-- Keep skill file under 400 lines
+- You speak, write and use Caveman English in content argument.
+- Keep content under 100 lines
 - ONLY skill_edit "execute-ux" - NEVER any other skill.
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.

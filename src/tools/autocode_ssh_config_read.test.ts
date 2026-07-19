@@ -265,8 +265,8 @@ describe("ssh config read adapter", () => {
         const result = await configReadFlow(createRemoteConfigAdapter(sftp), { file_path: "/etc/app.json" })
         const out = parseOut(result)
         expect(out.truncated).toBe(false)
-        expect(out.nodes_total).toBe(4)
-        expect(out.nodes[0].value).toBe("{2 keys}")
+        expect(out.nodes_total).toBe(2)
+        expect(out.nodes[0].value).toBe("8080")
     })
 })
 
@@ -276,8 +276,8 @@ describe("ssh config read tool", () => {
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
         const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
-        expect(out.file_paths["/etc/app.json"].nodes_total).toBe(3)
-        expect(out.file_paths["/etc/app.json"].nodes_shown).toBe(3)
+        expect(out.file_paths["/etc/app.json"].nodes_total).toBe(2)
+        expect(out.file_paths["/etc/app.json"].nodes_shown).toBe(2)
         expect(sftp.readFileCalls).toContain("/etc/app.json")
     })
 
@@ -286,7 +286,7 @@ describe("ssh config read tool", () => {
         const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
         const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json", key_path: "server" }, createToolContext())
         const out = parseOut(result)
-        expect(out.file_paths["/etc/app.json"].nodes_total).toBe(3)
+        expect(out.file_paths["/etc/app.json"].nodes_total).toBe(2)
     })
 
     test("skips markdown files without reading SFTP", async () => {
@@ -316,8 +316,8 @@ describe("ssh config read tool", () => {
         const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths).sort()).toEqual(["/etc/a.json", "/etc/b.json"])
-        expect(out.file_paths["/etc/a.json"].nodes_total).toBe(2)
-        expect(out.file_paths["/etc/b.json"].nodes_total).toBe(2)
+        expect(out.file_paths["/etc/a.json"].nodes_total).toBe(1)
+        expect(out.file_paths["/etc/b.json"].nodes_total).toBe(1)
     })
 
     test("handles literal file pattern with relative key", async () => {
@@ -326,7 +326,7 @@ describe("ssh config read tool", () => {
         const result = await tool.execute({ ssh_key: "dev", file_path_glob: "package.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths)).toEqual(["package.json"])
-        expect(out.file_paths["package.json"].nodes_total).toBe(3)
+        expect(out.file_paths["package.json"].nodes_total).toBe(2)
     })
 
     test("returns retry response when glob matches no files", async () => {
@@ -373,7 +373,7 @@ describe("ssh config read tool", () => {
         const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json", key_path: "server" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths)).toEqual(["/etc/a.json"])
-        expect(out.file_paths["/etc/a.json"].nodes_total).toBe(2)
+        expect(out.file_paths["/etc/a.json"].nodes_total).toBe(1)
     })
 
     test("truncates output to max_keys", async () => {
@@ -384,7 +384,7 @@ describe("ssh config read tool", () => {
         const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json", max_keys: 2 }, createToolContext())
         const out = parseOut(result)
         expect(out.file_paths["/etc/app.json"].nodes_shown).toBe(2)
-        expect(out.file_paths["/etc/app.json"].nodes_total).toBe(5)
+        expect(out.file_paths["/etc/app.json"].nodes_total).toBe(4)
     })
 
     test("applies subkey_regex to filter nodes", async () => {

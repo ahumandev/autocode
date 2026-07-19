@@ -34,15 +34,15 @@ ${responseAiRules}
 
 ---
 
-## Skill File Format
+## skill_edit arguments
+
+\`name\` = "design-conventions"
+
+\`description\` = "Use \`design-conventions\` to get Project Conventions when deciding on name of variable, class, file, system object, label or command or understanding acronyms and project definitions to avoid ambiguous wording."
+
+\`content\` as follows:
 
 \`\`\`markdown
----
-name: design-conventions
-description: Use \`design-conventions\` to get Project Conventions when deciding on name of variable, class, file, system object, label or command or understanding acronyms and project definitions to avoid ambiguous wording. 
----
-
-# Project Conventions
 
 ## Internal Acronyms
 - **[ACRONYM]**: [Full meaning and context < 20 words]
@@ -57,12 +57,12 @@ description: Use \`design-conventions\` to get Project Conventions when deciding
 
 ---
 
-**IMPORTANT**: Update \`.agents/skills/design-conventions/SKILL.md\` whenever new naming conventions or domain terms are introduced.
+**IMPORTANT**: Edit this \`design-conventions\` skillwhenever new naming conventions or domain terms are introduced.
 \`\`\`
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 
-- You speak and write SKILL.md in Caveman English.
-- Keep skill file under 100 lines. Only document confirmed facts from actual files.
+- You speak, write and use Caveman English in content argument.
+- Keep content under 100 lines
 - ONLY skill_edit "design-conventions" - NEVER any other skill.
 `

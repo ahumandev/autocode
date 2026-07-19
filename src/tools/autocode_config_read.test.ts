@@ -41,18 +41,18 @@ describe("config read", () => {
     const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file });
     const out = JSON.parse(res);
     expect(out.truncated).toBe(false);
-    expect(out.nodes_total).toBe(14);
-    expect(out.nodes_shown).toBe(14);
-    expect(out.nodes[0].path).toEqual([]);
-    expect(out.nodes[0].value).toBe("{8 keys}");
+    expect(out.nodes_total).toBe(11);
+    expect(out.nodes_shown).toBe(11);
+    expect(out.nodes[0].path).toEqual(["num"]);
+    expect(out.nodes[0].value).toBe("3");
   });
 
   it("drill-down key_path", async () => {
     const file = await tmpFile(dir, "data.json", DATA);
     const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, key_path: "obj" });
     const out = JSON.parse(res);
-    expect(out.nodes_total).toBe(3);
-    expect(out.nodes[0].value).toBe("{2 keys}");
+    expect(out.nodes_total).toBe(2);
+    expect(out.nodes[0].value).toBe("1");
   });
 
   it("renders number", async () => {
@@ -105,21 +105,21 @@ describe("config read", () => {
     const file = await tmpFile(dir, "data.json", DATA);
     const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, key_path: "obj" });
     const out = JSON.parse(res);
-    expect(out.nodes[0].value).toBe("{2 keys}");
+    expect(out.nodes[0].value).toBe("1");
   });
 
   it("renders array summary", async () => {
     const file = await tmpFile(dir, "data.json", DATA);
     const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, key_path: "arr" });
     const out = JSON.parse(res);
-    expect(out.nodes[0].value).toBe("[3 items]");
+    expect(out.nodes[0].value).toBe("1");
   });
 
   it("subkey_regex filter", async () => {
     const file = await tmpFile(dir, "data2.json", JSON.stringify({ server: { host: "h", port: 8080 }, client: { name: "x" } }));
     const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, subkey_regex: "server" });
     const out = JSON.parse(res);
-    expect(out.nodes_total).toBe(3);
+    expect(out.nodes_total).toBe(2);
     expect(out.nodes.every((n: { path: string[] }) => n.path.some((seg) => seg === "server"))).toBe(true);
   });
 
@@ -127,7 +127,7 @@ describe("config read", () => {
     const file = await tmpFile(dir, "data3.json", JSON.stringify({ a: "hello", b: "world", c: 42 }));
     const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file, value_regex: "ello" });
     const out = JSON.parse(res);
-    expect(out.nodes_total).toBe(2);
+    expect(out.nodes_total).toBe(1);
   });
 
   it("max_keys truncation", async () => {
@@ -136,7 +136,7 @@ describe("config read", () => {
     const out = JSON.parse(res);
     expect(out.truncated).toBe(true);
     expect(out.nodes_shown).toBe(2);
-    expect(out.nodes_total).toBe(6);
+    expect(out.nodes_total).toBe(5);
   });
 
   it("array expansion edge", async () => {
@@ -145,9 +145,9 @@ describe("config read", () => {
     const out = JSON.parse(res);
     expect(out.nodes_shown).toBe(3);
     expect(out.truncated).toBe(true);
-    expect(out.nodes_total).toBe(7);
-    expect(out.nodes[2].path).toEqual(["arr", 0]);
-    expect(out.nodes[2].value).toBe("10");
+    expect(out.nodes_total).toBe(5);
+    expect(out.nodes[0].path).toEqual(["arr", 0]);
+    expect(out.nodes[0].value).toBe("10");
   });
 
   it("refuses markdown", async () => {
@@ -161,7 +161,7 @@ describe("config read", () => {
     const file = await tmpFile(dir, "data.yaml", "server:\n  host: localhost\n  port: 8080\n");
     const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file });
     const out = JSON.parse(res);
-    expect(out.nodes_total).toBe(4);
+    expect(out.nodes_total).toBe(2);
     const portNode = out.nodes.find((n: { path: string[] }) => n.path.length === 2 && n.path[0] === "server" && n.path[1] === "port");
     expect(portNode).toBeDefined();
     expect(portNode.value).toBe("8080");
@@ -171,7 +171,7 @@ describe("config read", () => {
     const file = await tmpFile(dir, ".env", "PORT=8080\nHOST=localhost\n");
     const res = await configReadFlow(createLocalConfigAdapter(), { file_path: file });
     const out = JSON.parse(res);
-    expect(out.nodes_total).toBe(3);
+    expect(out.nodes_total).toBe(2);
     const portNode = out.nodes.find((n: { path: string[] }) => n.path.length === 1 && n.path[0] === "PORT");
     expect(portNode).toBeDefined();
     expect(portNode.value).toBe("8080");
@@ -221,8 +221,8 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
   it("value_regex filters leaves", async () => {
     await tmpFile(toolDir, "vp.json", JSON.stringify({ a: "hello", b: "world", c: 42 }));
     const out = await execute({ file_path_glob: "vp.json", value_regex: "orld|ello" });
-    // root (object, non-leaf) is included; a and b match; c (42) is excluded
-    expect(out.file_paths["vp.json"].nodes_total).toBe(3);
+    // only leaves are emitted; a and b match; c (42) is excluded
+    expect(out.file_paths["vp.json"].nodes_total).toBe(2);
     expect(out.file_paths["vp.json"].key_paths["a"]).toBe("hello");
     expect(out.file_paths["vp.json"].key_paths["b"]).toBe("world");
     expect(out.file_paths["vp.json"].key_paths["c"]).toBeUndefined();
@@ -247,5 +247,19 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
     await expect(
       tool.execute({ file_path_glob: "*.json" } as never, createToolContext({ directory: "" })),
     ).rejects.toThrow(/autocode_config_read.*context\.directory/);
+  });
+
+  it("omits intermediate parent nodes when leaves are listed", async () => {
+    await tmpFile(toolDir, "nested.json", JSON.stringify({ a: { b: true, c: 3 } }));
+    const out = await execute({ file_path_glob: "nested.json" });
+    const entry = out.file_paths["nested.json"];
+    const keyPaths = entry.key_paths;
+    expect(Object.keys(keyPaths).sort()).toEqual(["a.b", "a.c"]);
+    expect(keyPaths["a.b"]).toBe("true");
+    expect(keyPaths["a.c"]).toBe("3");
+    expect(keyPaths[""]).toBeUndefined();
+    expect(keyPaths["a"]).toBeUndefined();
+    expect(entry.nodes_shown).toBe(2);
+    expect(entry.nodes_total).toBe(2);
   });
 });

@@ -4,6 +4,9 @@ import { yamlParser } from "./yaml"
 import { iniParser } from "./ini"
 import { tomlParser } from "./toml"
 import { envParser } from "./env"
+import { createYamlDocumentEditor } from "./yaml"
+import { createJsoncDocumentEditor } from "./json"
+import type { ConfigDocumentEditor, EditOperation } from "./types"
 import type {
     ConfigAdapter,
     ConfigFormatParser,
@@ -126,21 +129,35 @@ function configRead(root: unknown, opts: ReadOptions): ReadResult {
     const subkeyPattern = opts.subkeyPattern
     const valuePattern = opts.valuePattern
 
-    function walk(value: unknown, path: (string | number)[], depth: number): void {
+    function walk(value: unknown, path: (string | number)[], depth: number): boolean {
         const rendered = renderConfigValue(value, opts.maxValueChars)
         const isLeaf = value === null || value === undefined || typeof value !== "object"
         const passSub = !subkeyPattern || path.some((segment) => subkeyPattern.test(String(segment)))
         const passVal = !valuePattern || (isLeaf ? valuePattern.test(leafMatch(value)) : true)
-        if (passSub && passVal) all.push({ path, value: rendered })
-        if (depth >= opts.keyDepth || isLeaf) return
+        const atDepthLimit = depth >= opts.keyDepth
+        const isEmptyContainer = !isLeaf && (Array.isArray(value)
+            ? value.length === 0
+            : Object.keys(value as Record<string, unknown>).length === 0)
+        const isTerminal = isLeaf || atDepthLimit || isEmptyContainer
+        if (isTerminal) {
+            if (passSub && passVal) {
+                all.push({ path, value: rendered })
+                return true
+            }
+            return false
+        }
+        let added = false
         if (Array.isArray(value)) {
-            value.forEach((item, index) => walk(item, [...path, index], depth + 1))
-            return
-        }
-        if (value !== null && typeof value === "object") {
+            value.forEach((item, index) => {
+                if (walk(item, [...path, index], depth + 1)) added = true
+            })
+        } else if (value !== null && typeof value === "object") {
             const obj = value as Record<string, unknown>
-            for (const key of Object.keys(obj)) walk(obj[key], [...path, key], depth + 1)
+            for (const key of Object.keys(obj)) {
+                if (walk(obj[key], [...path, key], depth + 1)) added = true
+            }
         }
+        return added
     }
 
     walk(root, [], 0)
@@ -306,7 +323,7 @@ function renameInPlace(root: unknown, cur: (string | number)[], neu: (string | n
     }
 }
 
-function configEdit(root: unknown, opts: WriteOptions, failedAction: string): RetryResult<WriteOutcome> {
+function decideEdit(root: unknown, opts: WriteOptions, failedAction: string): RetryResult<EditOperation> {
     const cur = opts.currentKey
     const neu = opts.newKey
     const content = opts.content
@@ -328,8 +345,7 @@ function configEdit(root: unknown, opts: WriteOptions, failedAction: string): Re
         if (content === undefined) {
             return err(failedAction, "content required to replace value", "Provide content.")
         }
-        setValueAt(root, cur, resolveContent(content))
-        return { ok: true, value: { value: root, action: "replace" } }
+        return { ok: true, value: { kind: "replace", path: cur, value: resolveContent(content) } }
     }
 
     if (cur === null && neu !== null) {
@@ -343,29 +359,68 @@ function configEdit(root: unknown, opts: WriteOptions, failedAction: string): Re
         if (!validation.ok) {
             return err(failedAction, validation.error ?? "cannot create path", validation.error ?? "Use a creatable path.")
         }
-        insertAt(root, neu, resolveContent(content), newIndex)
-        return { ok: true, value: { value: root, action: "create" } }
+        return { ok: true, value: { kind: "create", path: neu, value: resolveContent(content), index: newIndex } }
     }
 
     if (newExists) {
         return err(failedAction, "new_key already exists", "Use a unique new_key.")
     }
-    const existing = resolvePath(root, cur as (string | number)[]).value
-    const nextValue = content !== undefined ? resolveContent(content) : existing
     const validation = validateCreatable(root, neu as (string | number)[])
     if (!validation.ok) {
         return err(failedAction, validation.error ?? "cannot create path", validation.error ?? "Use a creatable path.")
     }
-    const curParent = (cur as (string | number)[]).slice(0, -1)
-    const neuParent = (neu as (string | number)[]).slice(0, -1)
-    const sameParent = curParent.length === neuParent.length && curParent.every((segment, index) => segment === neuParent[index])
-    if (sameParent) {
-        renameInPlace(root, cur as (string | number)[], neu as (string | number)[], nextValue, newIndex)
-    } else {
-        deleteAt(root, cur as (string | number)[])
-        insertAt(root, neu as (string | number)[], nextValue, newIndex)
+    const hasContent = content !== undefined
+    const resolvedContent = hasContent ? resolveContent(content) : undefined
+    return {
+        ok: true,
+        value: {
+            kind: "rename",
+            cur: cur as (string | number)[],
+            neu: neu as (string | number)[],
+            content: resolvedContent,
+            hasContent,
+            index: newIndex
+        }
     }
-    return { ok: true, value: { value: root, action: "rename" } }
+}
+
+function applyEditToJS(root: unknown, op: EditOperation): void {
+    switch (op.kind) {
+        case "replace":
+            setValueAt(root, op.path, op.value)
+            return
+        case "create":
+            insertAt(root, op.path, op.value, op.index)
+            return
+        case "rename": {
+            const curParent = op.cur.slice(0, -1)
+            const neuParent = op.neu.slice(0, -1)
+            const sameParent = curParent.length === neuParent.length && curParent.every((segment, index) => segment === neuParent[index])
+            const value = op.hasContent ? op.content : resolvePath(root, op.cur).value
+            if (sameParent) {
+                renameInPlace(root, op.cur, op.neu, value, op.index)
+            } else {
+                deleteAt(root, op.cur)
+                insertAt(root, op.neu, value, op.index)
+            }
+            return
+        }
+    }
+}
+
+function actionFromOp(op: EditOperation): WriteOutcome["action"] {
+    switch (op.kind) {
+        case "replace": return "replace"
+        case "create": return "create"
+        case "rename": return "rename"
+    }
+}
+
+function configEdit(root: unknown, opts: WriteOptions, failedAction: string): RetryResult<WriteOutcome> {
+    const decision = decideEdit(root, opts, failedAction)
+    if (!decision.ok) return decision
+    applyEditToJS(root, decision.value)
+    return { ok: true, value: { value: root, action: actionFromOp(decision.value) } }
 }
 
 function configRemove(root: unknown, keyPath: (string | number)[], failedAction: string): RetryResult<RemoveOutcome> {
@@ -438,6 +493,17 @@ async function configReadFlow(adapter: ConfigAdapter, args: any): Promise<string
     })
 }
 
+function getDocumentEditor(mode: ConfigMode, raw: string): ConfigDocumentEditor | null {
+    switch (mode) {
+        case "yaml": return createYamlDocumentEditor(raw)
+        case "json": return createJsoncDocumentEditor(raw)
+        case "ini":
+        case "toml":
+        case "env":
+            return null
+    }
+}
+
 async function configEditFlow(adapter: ConfigAdapter, args: any): Promise<string> {
     const failedAction = "Write configuration file"
     const target = await adapter.validateConfigPath(args.file_path, failedAction)
@@ -448,6 +514,37 @@ async function configEditFlow(adapter: ConfigAdapter, args: any): Promise<string
     } catch (error) {
         return createRetryResponse(failedAction, error, "Ensure the file exists and is readable.")
     }
+    const writeOptions: WriteOptions = {
+        currentKey: parseKeyPath(args.current_key),
+        newKey: parseKeyPath(args.new_key),
+        content: args.content !== undefined ? args.content : undefined,
+        newIndex: typeof args.new_index === "number" ? args.new_index : null,
+        parseStringContent: adapter.parseStringContent !== false
+    }
+    const editor = getDocumentEditor(target.value.mode, raw)
+    if (editor) {
+        let jsView: unknown
+        try {
+            jsView = editor.toJS()
+        } catch (error) {
+            return createRetryResponse(failedAction, error, "Fix the file syntax and retry.")
+        }
+        const decision = decideEdit(jsView, writeOptions, failedAction)
+        if (!decision.ok) return decision.response
+        try {
+            editor.apply(decision.value)
+        } catch (error) {
+            return createRetryResponse(failedAction, error, "Failed to apply edit to document.")
+        }
+        const newRaw = editor.toString()
+        await adapter.write(target.value, newRaw)
+        return JSON.stringify({
+            file_path: args.file_path,
+            action: actionFromOp(decision.value),
+            current_key: args.current_key ?? null,
+            new_key: args.new_key ?? null
+        })
+    }
     const parser = getParser(target.value.mode)
     let value: unknown
     try {
@@ -455,11 +552,7 @@ async function configEditFlow(adapter: ConfigAdapter, args: any): Promise<string
     } catch (error) {
         return createRetryResponse(failedAction, error, "Fix the file syntax and retry.")
     }
-    const currentKey = parseKeyPath(args.current_key)
-    const newKey = parseKeyPath(args.new_key)
-    const content = args.content !== undefined ? args.content : undefined
-    const newIndex = typeof args.new_index === "number" ? args.new_index : null
-    const result = configEdit(value, { currentKey, newKey, content, newIndex, parseStringContent: adapter.parseStringContent !== false }, failedAction)
+    const result = configEdit(value, writeOptions, failedAction)
     if (!result.ok) return result.response
     const newRaw = parser.stringify(result.value.value)
     await adapter.write(target.value, newRaw)

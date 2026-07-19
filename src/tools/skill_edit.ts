@@ -22,11 +22,11 @@ export function createAutocodeSkillEditTool(fileSystem: FileSystem = defaultFile
         args: {
             name: tool.schema.string().describe("Skill name: 4 words max, alpha-numeric and hyphens only."),
             description: tool.schema.string().describe("Trigger description of: situations, symptoms, task that should make agent recall this skill. Use `skill-write` skill to see correct format."),
-            content: tool.schema.string().describe("Content in Caveman English. Use `skill-write` skill to see correct format."),
+            content: tool.schema.string().describe("Content in Caveman English. Use `skill-write` skill to see correct format. Do NOT wrap content in XML tags."),
             references: tool.schema.array(tool.schema.object({
                 description: tool.schema.string().describe("Short reference description, max 10 words"),
                 path: tool.schema.string().describe("Path relative to SKILL.md for this reference file"),
-                content: tool.schema.string().describe("File content. Use \"[delete]\" to delete this reference file and remove its entry"),
+                content: tool.schema.string().describe("File content. Use \"[delete]\" to delete this reference file and remove its entry."),
             })).optional().describe("Optional list of reference files to create/update/delete alongside main SKILL.md"),
         },
         async execute(args, context) {
