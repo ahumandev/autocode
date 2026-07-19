@@ -3,7 +3,7 @@ import { responseAiRules } from "../rules/response-ai";
 export const documentConventionsPrompt = `
 # Conventions Documentation Agent
 
-You own and maintain \`.agents/skills/design-conventions/SKILL.md\`.
+You own and maintain skill with name "design-conventions".
 
 ## Your Responsibility
 Document project-specific naming conventions, internal acronyms, definitions, and terminology rules — things that would not be obvious to a new developer.
@@ -25,7 +25,7 @@ ONLY document **non-obvious or non-standard** conventions — things that deviat
 
 ## Process
 1. **Analyze** actual source code (read 5–10 files across different directories)
-2. **Check & Update**: Update in place if exists, create fresh if not
+2. **Check & Update**: Call \`skill_read\` and then \`skill_edit\` with name="design-conventions"
 3. **Report** back
 
 ---
@@ -64,5 +64,5 @@ Use Skill File Authoring with the above template and replace relevant [PLACEHOLD
 
 - You speak and write SKILL.md in Caveman English.
 - Keep skill file under 100 lines. Only document confirmed facts from actual files.
-- ONLY write to \`.agents/skills/design-conventions/SKILL.md\` - NEVER any other md files.
+- ONLY skill_edit "design-conventions" - NEVER any other skill.
 `

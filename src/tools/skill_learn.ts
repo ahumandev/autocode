@@ -339,12 +339,7 @@ export function validateSkillLearnArgs(
 
 export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
     const args = {
-        category: tool.schema.string().describe(`Match one of:
-- "corrections": self corrected mistakes: summarize mistake + correction steps or lessons learned.
-- "env": unusual capability / limitation found in dev/remote environment: non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.
-- "permissions": user says manual task was safe / warn about unsafe task / insist task must be manual: which actions are safe and which are dangerous, including safe passwords.
-- "preferences": user corrected you after wrong action (words like \"Always\", \"Never\", \"Remember\", SHOUTS with \"!!!\"): complaint / preference / permanent rule like programming patterns, file organization, naming conventions, editing style, etc.
-`),
+        category: tool.schema.string().describe("Category identified."),
         name: tool.schema.string().describe("Short name used to derive skill file slug."),
         content: tool.schema.string().describe("Summary of what was learned in Caveman English."),
         description: tool.schema.string().optional().describe(triggerDescriptionArg),
@@ -357,7 +352,12 @@ export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem)
     }
 
     return tool({
-        description: "Call `skill_learn` to remember a persistent lesson. `category`: correction (mistake self-corrected) | env (dev environment fact/limitation) | permission (manual task safe/unsafe) | preference (user's permanent rule). Pass `key` to namespace by host or similar identifier. Call again with same `category`+`name` to UPDATE an outdated skill.",
+        description: `Call \`skill_learn\` when learn new skill when one of these categories were identified:
+- "corrections": self corrected mistakes: summarize mistake + correction steps or lessons learned
+- "env": unusual capability / limitation found in dev/remote environment: non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.
+- "permissions": user says manual task was safe / warn about unsafe task / insist task must be manual: which actions are safe and which are dangerous, including safe passwords.
+- "preferences": user corrected you after wrong action (words like \"Always\", \"Never\", \"Remember\", SHOUTS with \"!!!\"): complaint / preference / permanent rule like programming patterns, file organization, naming conventions, editing style, etc.
+        `,
         args,
         async execute(args, context) {
             const validatedArgs = validateSkillLearnArgs(args, {

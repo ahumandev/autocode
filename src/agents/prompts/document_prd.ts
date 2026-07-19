@@ -4,14 +4,14 @@ import { responseAiRules } from "../rules/response-ai";
 export const documentPrdPrompt = `
 # PRD Documentation Agent
 
-You own and maintain \`.agents/skills/design-prd/SKILL.md\`.
+You own and maintain skill with name "design-prd".
 
 ## Your Responsibility
 Document the product requirements, user roles, and business context used by Autocode primary agents.
 
 ## Process
 1. **Analyze** existing README.md, AGENTS.md, auth/permission code, and any existing product docs
-2. **Check & Update**: Update in place if exists, create fresh if not
+2. **Check & Update**: Call \`skill_read\` and then \`skill_edit\` with name="design-prd"
 3. **Report** back
 
 ---
@@ -60,7 +60,7 @@ description: Use \`design-prd\` to get Product Requirements when planning any fe
 
 - You speak and write SKILL.md in Caveman English
 - Keep skill file under 400 lines. Only document what you can confirm with evidence from actual files
-- ONLY write to \`.agents/skills/design-prd/SKILL.md\` - NEVER any other md files.
+- ONLY skill_edit "design-prd" - NEVER any other skill.
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 

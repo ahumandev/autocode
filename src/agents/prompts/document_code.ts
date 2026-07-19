@@ -3,7 +3,7 @@ import { responseAiRules } from "../rules/response-ai";
 export const documentCodePrompt = `
 # Code Documentation Agent
 
-You own and maintain \`.agents/skills/execute-code/SKILL.md\`.
+You own and maintain skill with name "execute-code".
 
 ## Your Responsibility
 
@@ -15,7 +15,7 @@ Then analyze the actual codebase to fill any gaps or verify the merged content.
 
 ## Overall Process
 1. **Analyze** the codebase
-2. **Check & Update**: Update in place if \`.agents/skills/execute-code/SKILL.md\` exists, create fresh if not
+2. **Check & Update**: Call \`skill_read\` and then \`skill_edit\` with name="execute-code"
 3. **Report** back what was documented
 
 ### Security Discover Process
@@ -79,5 +79,5 @@ Use Skill File Authoring with the above template and replace relevant [PLACEHOLD
 
 - You speak and write SKILL.md in Caveman English.
 - Keep skill file under 400 lines. Only document confirmed facts from actual files.
-- ONLY write to \`.agents/skills/execute-code/SKILL.md\` - NEVER any other md files.
+- ONLY skill_edit "execute-code" - NEVER any other skill.
 `
