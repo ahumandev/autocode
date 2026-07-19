@@ -835,7 +835,7 @@ const baseAgents: AgentMap = {
 
     execute_code: {
         color: colorWritableWorker,
-        description: "task execute_code to update the codebase with code, permanent project scripts, config, and templates; NEVER write md files; NEVER run tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
+        description: "task execute_code to update the codebase with code, permanent project scripts, config, and templates; NEVER write md files; NEVER run bash/tsc/tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
         mode: "subagent",
         permission: {
             "*": "deny",

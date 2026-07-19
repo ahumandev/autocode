@@ -1,15 +1,18 @@
 import { tool } from "@opencode-ai/plugin"
-import { mkdir, writeFile } from "fs/promises"
+import { mkdir, readFile, rm, writeFile } from "fs/promises"
 import path from "path"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
+import { upsertReferencesSection } from "@/tools/skill_shared"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type FileSystem = {
     mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
     writeFile: (filePath: string, content: string) => Promise<void>
+    readFile: (filePath: string, encoding: "utf8") => Promise<string>
+    rm: (filePath: string, options?: { force?: boolean }) => Promise<void>
 }
 
-const defaultFileSystem: FileSystem = { mkdir, writeFile }
+const defaultFileSystem: FileSystem = { mkdir, writeFile, readFile, rm }
 
 const MAX_LINES = 500
 
@@ -20,6 +23,11 @@ export function createAutocodeSkillEditTool(fileSystem: FileSystem = defaultFile
             name: tool.schema.string().describe("Skill name: 4 words max, alpha-numeric and hyphens only."),
             description: tool.schema.string().describe("Trigger description of: situations, symptoms, task that should make agent recall this skill. Use `skill-write` skill to see correct format."),
             content: tool.schema.string().describe("Content in Caveman English. Use `skill-write` skill to see correct format."),
+            references: tool.schema.array(tool.schema.object({
+                description: tool.schema.string().describe("Short reference description, max 10 words"),
+                path: tool.schema.string().describe("Path relative to SKILL.md for this reference file"),
+                content: tool.schema.string().describe("File content. Use \"[delete]\" to delete this reference file and remove its entry"),
+            })).optional().describe("Optional list of reference files to create/update/delete alongside main SKILL.md"),
         },
         async execute(args, context) {
             const name = args.name.trim()
@@ -52,7 +60,34 @@ export function createAutocodeSkillEditTool(fileSystem: FileSystem = defaultFile
 
             try {
                 await fileSystem.mkdir(skillDir, { recursive: true })
+
+                let previousSkillMd = ""
+                try {
+                    previousSkillMd = await fileSystem.readFile(skillFilePath, "utf8")
+                } catch {
+                    previousSkillMd = ""
+                }
+
                 await fileSystem.writeFile(skillFilePath, fileContent)
+
+                if (args.references && args.references.length > 0) {
+                    const changes: Array<{ path: string, description?: string, deleted: boolean }> = []
+                    for (const reference of args.references) {
+                        const referencePath = reference.path.trim()
+                        const targetFilePath = path.join(skillDir, referencePath)
+                        if (reference.content === "[delete]") {
+                            await fileSystem.rm(targetFilePath, { force: true })
+                            changes.push({ path: referencePath, deleted: true })
+                        } else {
+                            await fileSystem.mkdir(path.dirname(targetFilePath), { recursive: true })
+                            await fileSystem.writeFile(targetFilePath, reference.content)
+                            changes.push({ path: referencePath, description: reference.description.trim(), deleted: false })
+                        }
+                    }
+
+                    const updatedSkillMd = upsertReferencesSection(previousSkillMd || fileContent, changes)
+                    await fileSystem.writeFile(skillFilePath, updatedSkillMd)
+                }
             } catch (error) {
                 return createAbortResponse("edit skill", error)
             }

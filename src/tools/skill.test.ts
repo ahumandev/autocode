@@ -645,4 +645,27 @@ describe("skill tool", () => {
             expect(String(result.error)).not.toContain("Generated skill not found")
         })
     })
+
+    test("reference arg reads a reference file instead of main content", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            const directory = writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
+            mkdirSync(join(directory, "templates"), { recursive: true })
+            writeFileSync(join(directory, "templates", "foo.txt"), "reference content")
+
+            const result = await executeSkillLoad(worktree, undefined, { name: "code-typescript", reference: "templates/foo.txt" })
+
+            expect(result.output).toBe("reference content")
+        })
+    })
+
+    test("reference arg errors when file not found", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
+
+            const result = await executeSkillLoad(worktree, undefined, { name: "code-typescript", reference: "templates/missing.txt" })
+
+            expect(result.failedAction).toBe("load skill")
+            expect(result.error).toContain("File not found")
+        })
+    })
 })

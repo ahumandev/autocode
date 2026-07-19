@@ -1,8 +1,9 @@
 import { tool } from "@opencode-ai/plugin"
 import { existsSync, readFileSync } from "fs"
-import { mkdir, writeFile } from "fs/promises"
+import { mkdir, readFile, rm, writeFile } from "fs/promises"
 import path from "path"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
+import { upsertReferencesSection } from "@/tools/skill_shared"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 const triggerDescriptionArg = "Trigger description of: situations, symptoms, task that should make agent recall this skill. Use `skill-write` skill to see correct format."
@@ -21,6 +22,14 @@ const subjectDirName: Record<LearnedSkillSubject, string> = {
 type FileSystem = {
     mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
     writeFile: (filePath: string, content: string) => Promise<void>
+    readFile: (filePath: string, encoding: "utf8") => Promise<string>
+    rm: (filePath: string, options?: { force?: boolean }) => Promise<void>
+}
+
+type SkillLearnReferenceArg = {
+    description: string
+    path: string
+    content: string
 }
 
 type SkillLearnArgs = {
@@ -29,6 +38,7 @@ type SkillLearnArgs = {
     content?: unknown
     description?: unknown
     key?: unknown
+    references?: unknown
 }
 
 type ValidatedSkillLearnArgs = {
@@ -37,6 +47,7 @@ type ValidatedSkillLearnArgs = {
     content: string
     description: string
     key?: string
+    references?: SkillLearnReferenceArg[]
 }
 
 type SkillLearnContext = {
@@ -50,6 +61,8 @@ const safePathIdentifierPattern = /^[A-Za-z0-9_-]+$/
 const defaultFileSystem: FileSystem = {
     mkdir,
     writeFile,
+    readFile,
+    rm,
 }
 
 export function isSafePathIdentifier(value: string): boolean {
@@ -77,10 +90,23 @@ function sanitizeLearnedKey(key: string): string {
     return stripped.replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "")
 }
 
+function stripRedundantLearnedPrefix(topic: string, subject: LearnedSkillSubject): string {
+    let stripped = topic
+    if (stripped.startsWith("learned-")) {
+        stripped = stripped.slice("learned-".length)
+    }
+    const subjectPrefix = `${subject}-`
+    if (stripped.startsWith(subjectPrefix)) {
+        stripped = stripped.slice(subjectPrefix.length)
+    }
+    return stripped || topic
+}
+
 function buildLearnedSkillName(subject: LearnedSkillSubject, topic: string, key?: string): string {
     const sanitizedKey = key !== undefined && key !== "" ? sanitizeLearnedKey(key) : ""
     const keySegment = sanitizedKey !== "" ? `-${sanitizedKey}` : ""
-    return `learned-${subject}${keySegment}-${topic}`
+    const dedupedTopic = stripRedundantLearnedPrefix(topic, subject)
+    return `learned-${subject}${keySegment}-${dedupedTopic}`
 }
 
 function buildLearnedFrontmatter(skillName: string, description: string): string {
@@ -142,7 +168,8 @@ async function writeLearnedSkillDir(
     name: string,
     content: string,
     description: string,
-    key?: string
+    key?: string,
+    references?: SkillLearnReferenceArg[],
 ): Promise<string> {
     const { skillDir, skillFilePath, skillDirName } = computeLearnedSkillPaths(context, subject, name, key)
 
@@ -159,7 +186,34 @@ async function writeLearnedSkillDir(
     const fileContent = `${frontmatter}\n\n${body}`
 
     await fileSystem.mkdir(skillDir, { recursive: true })
+
+    let previousSkillMd = ""
+    try {
+        previousSkillMd = await fileSystem.readFile(skillFilePath, "utf8")
+    } catch {
+        previousSkillMd = ""
+    }
+
     await fileSystem.writeFile(skillFilePath, fileContent)
+
+    if (references && references.length > 0) {
+        const changes: Array<{ path: string, description?: string, deleted: boolean }> = []
+        for (const reference of references) {
+            const referencePath = reference.path.trim()
+            const targetFilePath = path.join(skillDir, referencePath)
+            if (reference.content === "[delete]") {
+                await fileSystem.rm(targetFilePath, { force: true })
+                changes.push({ path: referencePath, deleted: true })
+            } else {
+                await fileSystem.mkdir(path.dirname(targetFilePath), { recursive: true })
+                await fileSystem.writeFile(targetFilePath, reference.content)
+                changes.push({ path: referencePath, description: reference.description.trim(), deleted: false })
+            }
+        }
+
+        const updatedSkillMd = upsertReferencesSection(previousSkillMd || fileContent, changes)
+        await fileSystem.writeFile(skillFilePath, updatedSkillMd)
+    }
 
     return skillFilePath
 }
@@ -229,12 +283,12 @@ export function validateSkillLearnArgs(
     }
     const category = args.category as LearnedSkillSubject
 
-    const allowedArgs = ["category", "name", "content", "description", "key"]
+    const allowedArgs = ["category", "name", "content", "description", "key", "references"]
     const unexpectedArgs = Object.keys(args).filter((argKey) => !allowedArgs.includes(argKey))
     if (unexpectedArgs.length > 0) {
         return {
             error: `Unexpected argument(s): ${unexpectedArgs.join(", ")}.`,
-            instruction: "Retry with category, name, content, description, and optional key arguments.",
+            instruction: "Retry with category, name, content, description, key, and references arguments.",
         }
     }
 
@@ -279,16 +333,27 @@ export function validateSkillLearnArgs(
         content: args.content.trim(),
         description: descriptionResult.value,
         key,
+        references: args.references as SkillLearnReferenceArg[] | undefined,
     }
 }
 
 export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
     const args = {
-        category: tool.schema.string().describe("One of: correction, env, permission, preference. Picks which kind of lesson to remember."),
-        name: tool.schema.string().describe("Short name used to derive the skill file slug."),
+        category: tool.schema.string().describe(`Match one of:
+- "corrections": self corrected mistakes: summarize mistake + correction steps or lessons learned.
+- "env": unusual capability / limitation found in dev/remote environment: non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.
+- "permissions": user says manual task was safe / warn about unsafe task / insist task must be manual: which actions are safe and which are dangerous, including safe passwords.
+- "preferences": user corrected you after wrong action (words like \"Always\", \"Never\", \"Remember\", SHOUTS with \"!!!\"): complaint / preference / permanent rule like programming patterns, file organization, naming conventions, editing style, etc.
+`),
+        name: tool.schema.string().describe("Short name used to derive skill file slug."),
         content: tool.schema.string().describe("Summary of what was learned in Caveman English."),
         description: tool.schema.string().optional().describe(triggerDescriptionArg),
-        key: tool.schema.string().optional().describe("Optional identifier to namespace this skill, e.g. SSH host key for env facts."),
+        key: tool.schema.string().optional().describe("Optional identifier to namespace this skill, e.g. ssh_key to specify which remote host env info relates."),
+        references: tool.schema.array(tool.schema.object({
+            description: tool.schema.string().describe("Short reference description, max 10 words"),
+            path: tool.schema.string().describe("Path relative from main skill `content` (SKILL.md) to reference file."),
+            content: tool.schema.string().describe("File content. Use \"[delete]\" to delete existing reference file."),
+        })).optional().describe("Optional list of reference files (templates, examples, detailed info) that main skill `content` link to."),
     }
 
     return tool({
@@ -310,7 +375,8 @@ export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem)
                     validatedArgs.name,
                     validatedArgs.content,
                     validatedArgs.description,
-                    validatedArgs.key
+                    validatedArgs.key,
+                    validatedArgs.references
                 )
 
                 return "OK"

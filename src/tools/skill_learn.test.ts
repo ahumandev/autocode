@@ -114,7 +114,7 @@ describe("skill_learn tool validation", () => {
             expect(result).toEqual({
                 failedAction: "learn skill",
                 error: "Unexpected argument(s): subject.",
-                instruction: "Retry with category, name, content, description, and optional key arguments.",
+                instruction: "Retry with category, name, content, description, key, and references arguments.",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
@@ -611,6 +611,57 @@ describe("skill_learn optional description when skill exists", () => {
 
             expect(content).toContain("\n---\n")
             expect(content).toContain(`Content outdated? Call \`skill_learn\` with name=\`${skillDir}\` to correct.`)
+        })
+    })
+
+    test("references creates reference files and a References section", async () => {
+        await withTempDir(async (root) => {
+            await executeCorrectionTool(root, {
+                name: "Ref test",
+                content: "- Body line.",
+                description: DEFAULT_DESCRIPTION,
+                references: [
+                    { description: "Template file", path: "templates/foo.txt", content: "hello" },
+                ],
+            })
+
+            const skillDir = "learned-correction-ref-test"
+            const filePath = learnedSkillFile(root, "corrections", skillDir)
+            const content = readFileSync(filePath, "utf8")
+            const refPath = join(learnedSkillDir(root, "corrections"), skillDir, "templates", "foo.txt")
+
+            expect(readFileSync(refPath, "utf8")).toBe("hello")
+            expect(content).toContain("## References")
+            expect(content).toContain("* [Template file](templates/foo.txt)")
+        })
+    })
+
+    test("references with [delete] removes reference file and entry", async () => {
+        await withTempDir(async (root) => {
+            const skillDir = "learned-correction-ref-del-test"
+            await executeCorrectionTool(root, {
+                name: "Ref del test",
+                content: "- Body line.",
+                description: DEFAULT_DESCRIPTION,
+                references: [
+                    { description: "Template file", path: "templates/foo.txt", content: "hello" },
+                ],
+            })
+
+            await executeCorrectionTool(root, {
+                name: "Ref del test",
+                content: "- Body line.",
+                references: [
+                    { description: "Template file", path: "templates/foo.txt", content: "[delete]" },
+                ],
+            })
+
+            const filePath = learnedSkillFile(root, "corrections", skillDir)
+            const content = readFileSync(filePath, "utf8")
+            const refPath = join(learnedSkillDir(root, "corrections"), skillDir, "templates", "foo.txt")
+
+            expect(existsSync(refPath)).toBe(false)
+            expect(content).not.toContain("## References")
         })
     })
 })

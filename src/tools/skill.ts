@@ -14,6 +14,7 @@ type FileSystem = {
 
 type SkillLoadArgs = {
     name?: unknown
+    reference?: unknown
 }
 
 type SkillLoadContext = {
@@ -175,8 +176,8 @@ function buildSkillNotFoundError(name: string): string {
     return `Unable to load skill ${name}`
 }
 
-function validateSkillLoadArgs(args: SkillLoadArgs): { name: string } | { error: string, instruction: string } {
-    const unexpectedArgs = Object.keys(args).filter((key) => key !== "name")
+function validateSkillLoadArgs(args: SkillLoadArgs): { name: string, reference?: string } | { error: string, instruction: string } {
+    const unexpectedArgs = Object.keys(args).filter((key) => key !== "name" && key !== "reference")
     if (unexpectedArgs.length > 0) {
         return {
             error: `Unexpected argument(s): ${unexpectedArgs.join(", ")}.`,
@@ -191,7 +192,14 @@ function validateSkillLoadArgs(args: SkillLoadArgs): { name: string } | { error:
         }
     }
 
-    return { name: args.name.trim() }
+    if (args.reference !== undefined && (typeof args.reference !== "string" || !args.reference.trim())) {
+        return {
+            error: "Invalid reference. Reference must be a non-empty string when provided.",
+            instruction: "Retry with a valid reference path or omit the reference argument.",
+        }
+    }
+
+    return { name: args.name.trim(), reference: typeof args.reference === "string" ? args.reference.trim() : undefined }
 }
 
 function isPathWithinSkillDirectory(absolutePath: string, skillDirectory: string): boolean {
@@ -476,6 +484,7 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
         description: "Note skill list. ALWAYS *BEFORE* doing anything: check if any skill description matches current task or is needed. When skill description matches: load that skill immediately with matching name.",
         args: {
             name: tool.schema.string().describe("Exact skill name from skill list."),
+            reference: tool.schema.string().optional().describe("Relative file path matching link in SKILL.md content exactly, to read a reference file instead of the main SKILL.md content. Example: reference/template.xml"),
         },
         async execute(args, context) {
             const validatedArgs = validateSkillLoadArgs(args)
@@ -488,6 +497,27 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
                 const skill = await loadSkill(fileSystem, skillContext, validatedArgs.name)
                 if (skill === undefined) {
                     return createAbortResponse("load skill", buildSkillNotFoundError(validatedArgs.name))
+                }
+
+                if (validatedArgs.reference !== undefined) {
+                    const targetFilePath = path.resolve(skill.directory, validatedArgs.reference)
+                    if (!isPathWithinSkillDirectory(targetFilePath, skill.directory)) {
+                        return createRetryResponse(
+                            "load skill",
+                            `Invalid reference: "${validatedArgs.reference}" escapes the skill directory.`,
+                            "Provide a reference path that resolves within the skill directory.",
+                        )
+                    }
+
+                    try {
+                        return await fileSystem.readFile(targetFilePath, "utf8")
+                    }
+                    catch (error) {
+                        if (isMissingFile(error)) {
+                            return createAbortResponse("load skill", `File not found: ${validatedArgs.reference}`)
+                        }
+                        return createAbortResponse("load skill", error)
+                    }
                 }
 
                 const identity = buildAutocodeSkillLoadIdentity(skill.name)

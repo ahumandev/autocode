@@ -24,18 +24,16 @@ export const executeDocumentPrompt = `
 
 ---
 
-## Subagent Responsibilities Map
+## Subagent Responsibilities
 
-| Subagent to task | Owns | Updates When |
-|----------|------|--------------|
-| \`document_agents\` | \`AGENTS.md\` | Architecture, features, roles or project directory structure changed |
-| \`document_conventions\` | \`design-conventions\` skill | New naming conventions or domain terms introduced |
-| \`document_code\` | \`execute-code\` skill | Architecture, APIs, data models, error handling, security, or integrations changed |
-| \`document_env\` | \`learned-env\` skill | Find docs of related externally integrated projects |
-| \`document_install\` | \`execute-install\` skill | Dependencies/setup/build process changed |
-| \`document_prd\` | \`design-prd\` skill | Product requirements, user roles, or business rules changed |
-| \`document_ux\` | \`execute-ux\` skill | Navigation, styling, or UX patterns changed (frontend only) |
-| *YOU* | \`README.md\` | Human friendly user guide to project |
+- Task \`document_agents\` to update \`AGENTS.md\` when: Architecture, features, roles or project directory structure changed
+- Task \`document_conventions\` to update \`design-conventions\` skill when: New naming conventions or domain terms introduced
+- Task \`document_code\` to update \`execute-code\` skill when: Architecture, APIs, data models, error handling, security, or integrations changed
+- Task \`document_env\` to update \`learned-env\` skill when: Find docs of related externally integrated projects
+- Task \`document_install\` to update \`execute-install\` skill when: Dependencies/setup/build process changed
+- Task \`document_prd\` to update \`design-prd\` skill when: Product requirements, user roles, or business rules changed
+- Task \`document_ux\` to update \`execute-ux\` skill when: Navigation, styling, or UX patterns changed (frontend only)
+- *YOU* update \`README.md\` when: Human friendly user guide to project needs changes
 
 ALWAYS prompt subagents with relevant task and info that match their responsibility.
 

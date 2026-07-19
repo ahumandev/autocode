@@ -13,6 +13,18 @@ function createFakeFileSystem() {
         async writeFile(filePath: string, content: string) {
             files.set(filePath, content)
         },
+        async readFile(filePath: string) {
+            const content = files.get(filePath)
+            if (content === undefined) {
+                const error = new Error("not found") as NodeJS.ErrnoException
+                error.code = "ENOENT"
+                throw error
+            }
+            return content
+        },
+        async rm(filePath: string) {
+            files.delete(filePath)
+        },
         getFile: (p: string) => files.get(p),
         hasDir: (p: string) => dirs.has(p),
     }
@@ -74,6 +86,8 @@ describe("skill_edit", () => {
         const failingFs = {
             mkdir: async () => undefined,
             writeFile: async () => { throw new Error("disk full") },
+            readFile: async () => { throw new Error("disk full") },
+            rm: async () => undefined,
         }
         const skillTool = createAutocodeSkillEditTool(failingFs)
         const result = await skillTool.execute(
@@ -82,5 +96,107 @@ describe("skill_edit", () => {
         )
         const parsed = JSON.parse(result as string)
         expect(parsed.failedAction).toBe("edit skill")
+    })
+
+    test("adds references creating files and a References section", async () => {
+        const fs = createFakeFileSystem()
+        const skillTool = createAutocodeSkillEditTool(fs)
+
+        await skillTool.execute(
+            {
+                name: "code-typescript",
+                description: "trigger",
+                content: "body",
+                references: [
+                    { description: "Template file", path: "templates/foo.txt", content: "hello" },
+                ],
+            } as never,
+            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+        )
+
+        expect(fs.getFile("/workspace/.agents/skills/code-typescript/templates/foo.txt")).toBe("hello")
+        const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
+        expect(skillMd).toContain("## References")
+        expect(skillMd).toContain("* [Template file](templates/foo.txt)")
+    })
+
+    test("deleting a reference removes file and entry", async () => {
+        const fs = createFakeFileSystem()
+        const skillTool = createAutocodeSkillEditTool(fs)
+
+        await skillTool.execute(
+            {
+                name: "code-typescript",
+                description: "trigger",
+                content: "body",
+                references: [
+                    { description: "Template file", path: "templates/foo.txt", content: "hello" },
+                    { description: "Other", path: "templates/bar.txt", content: "world" },
+                ],
+            } as never,
+            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+        )
+
+        await skillTool.execute(
+            {
+                name: "code-typescript",
+                description: "trigger",
+                content: "body",
+                references: [
+                    { description: "Template file", path: "templates/foo.txt", content: "[delete]" },
+                ],
+            } as never,
+            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+        )
+
+        expect(fs.getFile("/workspace/.agents/skills/code-typescript/templates/foo.txt")).toBeUndefined()
+        const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
+        expect(skillMd).not.toContain("templates/foo.txt")
+        expect(skillMd).toContain("templates/bar.txt")
+    })
+
+    test("deleting all references removes References section entirely", async () => {
+        const fs = createFakeFileSystem()
+        const skillTool = createAutocodeSkillEditTool(fs)
+
+        await skillTool.execute(
+            {
+                name: "code-typescript",
+                description: "trigger",
+                content: "body",
+                references: [
+                    { description: "Template file", path: "templates/foo.txt", content: "hello" },
+                ],
+            } as never,
+            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+        )
+
+        await skillTool.execute(
+            {
+                name: "code-typescript",
+                description: "trigger",
+                content: "body",
+                references: [
+                    { description: "Template file", path: "templates/foo.txt", content: "[delete]" },
+                ],
+            } as never,
+            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+        )
+
+        const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
+        expect(skillMd).not.toContain("## References")
+    })
+
+    test("no references arg leaves SKILL.md without References section", async () => {
+        const fs = createFakeFileSystem()
+        const skillTool = createAutocodeSkillEditTool(fs)
+
+        await skillTool.execute(
+            { name: "code-typescript", description: "trigger", content: "body" } as never,
+            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+        )
+
+        const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
+        expect(skillMd).not.toContain("## References")
     })
 })

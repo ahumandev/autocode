@@ -605,12 +605,12 @@ describe("auto resume wiring", () => {
         expect(sandboxGrep.description).toContain("Search")
         expect(sandboxRead.description).toContain("Read")
         expect(sandboxCopy.description).toContain("Copy")
-        expect(Object.keys(skillLearn.args)).toEqual(["category", "name", "content", "description", "key"])
+        expect(Object.keys(skillLearn.args)).toEqual(["category", "name", "content", "description", "key", "references"])
         expect(skillLearn.description).toContain("mistake self-corrected")
         expect(skillLearn.description).toContain("dev environment fact/limitation")
         expect(skillLearn.description).toContain("permanent rule")
         expect(skill.description).toContain("skill")
-        expect(Object.keys(skill.args)).toEqual(["name"])
+        expect(Object.keys(skill.args)).toEqual(["name", "reference"])
         expect(Object.keys(skill.args)).not.toContain("subjects")
     })
 
@@ -1408,8 +1408,6 @@ describe("autocode_plan_save tool", () => {
                     "autocode_session_context",
                     "autocode_session_create",
                     "skill_edit",
-                    "skill_edit_reference",
-                    "skill_read_reference",
                     "autocode_ssh_command",
                     "autocode_ssh_config_read",
                     "autocode_ssh_config_edit",
@@ -1479,9 +1477,9 @@ describe("autocode_plan_save tool", () => {
                 expect(toolSurfaceText(plugin.tool?.autocode_session_context)).toContain("Read sanitized current session context and token usage metadata.")
                 expect(plugin.tool?.autocode_session_create).toBeDefined()
                 expect(plugin.tool?.skill_learn).toBeDefined()
-                expect(Object.keys((plugin.tool?.skill_learn as unknown as { args: Record<string, unknown> }).args)).toEqual(["category", "name", "content", "description", "key"])
+                expect(Object.keys((plugin.tool?.skill_learn as unknown as { args: Record<string, unknown> }).args)).toEqual(["category", "name", "content", "description", "key", "references"])
                 expect(plugin.tool?.skill).toBeDefined()
-                expect(Object.keys((plugin.tool?.skill as unknown as { args: Record<string, unknown> }).args)).toEqual(["name"])
+                expect(Object.keys((plugin.tool?.skill as unknown as { args: Record<string, unknown> }).args)).toEqual(["name", "reference"])
                 expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
                 expect(plugin.tool?.autocode_job_execute).toBeDefined()
                 expect(plugin.tool?.autocode_execute_job).toBeUndefined()
