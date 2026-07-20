@@ -5,6 +5,9 @@ import { join } from "node:path"
 import { homedir } from "node:os"
 import type { SkillLogger } from "./logger"
 
+/** Maximum time (ms) to wait for a single git operation before aborting. */
+const GIT_OPERATION_TIMEOUT_MS = 1_000
+
 export function getCloneRoot(): string {
     return join(homedir(), ".config", "opencode", "autocode", "github")
 }
@@ -32,10 +35,12 @@ export function cloneRepo(args: { owner: string; project: string; branch?: strin
             "1",
             `https://github.com/${owner}/${project}.git`,
             target,
-        ], { encoding: "utf8" })
+        ], { encoding: "utf8", timeout: GIT_OPERATION_TIMEOUT_MS })
 
-        if (result.error || (result.status !== null && result.status !== 0)) {
-            const detail = result.error?.message ?? result.stderr?.trim() ?? `exit ${result.status}`
+        if (result.signal === "SIGTERM" || result.error || (result.status !== null && result.status !== 0)) {
+            const detail = result.signal === "SIGTERM"
+                ? "timed out after " + GIT_OPERATION_TIMEOUT_MS + "ms"
+                : (result.error?.message ?? result.stderr?.trim() ?? `exit ${result.status}`)
             logger.log(`error: clone: ${detail}`)
             return target
         }
@@ -43,14 +48,18 @@ export function cloneRepo(args: { owner: string; project: string; branch?: strin
         logger.log(`clone: ${owner}/${project} -> ${target}`)
 
         if (branch) {
-            const fetch = spawnSync("git", ["-C", target, "fetch", "--depth", "1", "origin", branch], { encoding: "utf8" })
-            if (fetch.error || (fetch.status !== null && fetch.status !== 0)) {
-                const detail = fetch.error?.message ?? fetch.stderr?.trim() ?? `exit ${fetch.status}`
+            const fetch = spawnSync("git", ["-C", target, "fetch", "--depth", "1", "origin", branch], { encoding: "utf8", timeout: GIT_OPERATION_TIMEOUT_MS })
+            if (fetch.signal === "SIGTERM" || fetch.error || (fetch.status !== null && fetch.status !== 0)) {
+                const detail = fetch.signal === "SIGTERM"
+                    ? "timed out after " + GIT_OPERATION_TIMEOUT_MS + "ms"
+                    : (fetch.error?.message ?? fetch.stderr?.trim() ?? `exit ${fetch.status}`)
                 logger.log(`error: checkout branch ${branch}: ${detail}`)
             } else {
-                const checkout = spawnSync("git", ["-C", target, "checkout", branch], { encoding: "utf8" })
-                if (checkout.error || (checkout.status !== null && checkout.status !== 0)) {
-                    const detail = checkout.error?.message ?? checkout.stderr?.trim() ?? `exit ${checkout.status}`
+                const checkout = spawnSync("git", ["-C", target, "checkout", branch], { encoding: "utf8", timeout: GIT_OPERATION_TIMEOUT_MS })
+                if (checkout.signal === "SIGTERM" || checkout.error || (checkout.status !== null && checkout.status !== 0)) {
+                    const detail = checkout.signal === "SIGTERM"
+                        ? "timed out after " + GIT_OPERATION_TIMEOUT_MS + "ms"
+                        : (checkout.error?.message ?? checkout.stderr?.trim() ?? `exit ${checkout.status}`)
                     logger.log(`error: checkout branch ${branch}: ${detail}`)
                 }
             }
