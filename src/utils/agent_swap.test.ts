@@ -154,6 +154,13 @@ describe("agent swap utilities", () => {
             model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
             variant: undefined,
         })
+        expect(resolveTierModel("operator", {
+            operator: { model: "openai/gpt-5", variant: "standard" },
+        })).toEqual({
+            model: { providerID: "openai", modelID: "gpt-5" },
+            variant: undefined,
+        })
+        expect(resolveTierModel("operator", {})).toEqual({})
     })
 
     test("swaps an existing session without updating the session title", async () => {

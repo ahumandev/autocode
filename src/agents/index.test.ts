@@ -148,7 +148,7 @@ describe("agent policies", () => {
 
         expect(agents.execute_rest?.mode).toBe("subagent")
         expect(agents.execute_rest?.hidden).toBe(true)
-        expect(agents.execute_rest?.tier).toBe("balanced")
+        expect(agents.execute_rest?.tier).toBe("operator")
         expect(agents.execute_rest?.temperature).toBe(0.1)
         expect(permissionRule(agents.execute_rest?.permission, "*")).toBe("deny")
         for (const toolName of executeRestToolNames) {
@@ -233,6 +233,14 @@ describe("agent policies", () => {
         expect(prompt).toContain("Verify the target path is within the allowed roots before any edit")
         expect(prompt).toContain("Make minimal targeted edits")
         expect(prompt).toContain("You MUST NOT edit source code, scripts, package/config files, or Markdown outside the allowed paths")
+    })
+
+    test("buildAgents assigns operator tier to operator-tier workers (edit, assist_browser, execute_config, execute_excel, execute_rest, execute_sandbox)", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+
+        for (const agentName of ["edit", "assist_browser", "execute_config", "execute_excel", "execute_rest", "execute_sandbox"]) {
+            expect((agents as Record<string, { tier?: string }>)[agentName]?.tier).toBe("operator")
+        }
     })
 
     test("execute_rest prompt covers main tool and follow-up saved-response tools", () => {

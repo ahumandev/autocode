@@ -7,7 +7,6 @@ export const toolQuestionRules = `
 - ✅ ALWAYS present all reports BEFORE calling \`question\` tool.
 - ✅ ALWAYS match PROPOSAL REPORT headings and order with \`question\` tool option \`labels\` and order.
 - ❌ NEVER ask for information user already provided.
-- ❌ NEVER ask when exactly one safe next action is obvious; continue with obvious answer.
 
 ### Question Design
 - Question in Concise English

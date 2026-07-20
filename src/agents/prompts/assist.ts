@@ -156,5 +156,4 @@ Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
 - ALWAYS call \`question\` tool with 2+ options when uncertain how to proceed with ACTION.
 - Only call \`git_commit\` tool on user request.
 - When you call \`git_commit\` tool, use \`git-commit\` skill and include a list of known changes, reasons, and breaking changes.
-- Continue autonomously only during unfinished current assignment when exactly one good next action is obvious.
 `

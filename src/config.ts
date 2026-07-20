@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "path"
 
 import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json" }
 
-const MODEL_TIERS = ["cheap", "fast", "balanced", "smart"] as const
+const MODEL_TIERS = ["cheap", "fast", "operator", "balanced", "smart"] as const
 const PERMISSION_ACTIONS = ["ask", "allow", "deny"] as const
 const SANDBOX_SYNC_METHODS = ["auto", "overlayfs", "reflink", "copy"] as const
 const SKILL_CATEGORIES: readonly SkillCategory[] = ["bash", "code", "design", "test"]

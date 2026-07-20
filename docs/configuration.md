@@ -19,12 +19,12 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 | `autocode.sandbox.distro.cache_path` | string           | Optional sandbox distribution cache path.                                                                                          | Unset.                                           |
 | `autocode.sandbox.distro.expire`     | string or number | Optional sandbox distribution expiry value.                                                                                        | Unset.                                           |
 | `autocode.tier`                      | string           | Selects a named tier set from `autocode.tiers`.                                                                                    | No selected set.                                 |
-| `autocode.tiers`                     | object           | Either a direct map of `cheap`, `fast`, `balanced`, and `smart` tier settings, or a map of named tier sets containing those tiers. | No overrides.                                    |
+| `autocode.tiers`                     | object           | Either a direct map of `cheap`, `fast`, `operator`, `balanced`, and `smart` tier settings, or a map of named tier sets containing those tiers. | No overrides.                                    |
 | `autocode.tiers.<tier>.model`        | string           | Optional model override for a tier.                                                                                                | Uses the agent or OpenCode default when omitted. |
 | `autocode.tiers.<tier>.variant`      | string           | Optional variant override for a tier.                                                                                              | Uses the agent or OpenCode default when omitted. |
 | `permission.external_directory`      | object or string | Path-pattern permissions for external-directory access. Values are `allow`, `ask`, or `deny`.                                      | `{}`                                             |
 
-Recognised model tiers are `cheap`, `fast`, `balanced`, and `smart`. The `cheap` tier is also used as the `small_model` fallback for OpenCode title generation and compaction when OpenCode has no explicit `small_model`.
+Recognised model tiers are `cheap`, `fast`, `operator`, `balanced`, and `smart`. The `operator` tier sits between `balanced` and `fast` and requires explicit user configuration (no default). The `cheap` tier is also used as the `small_model` fallback for OpenCode title generation and compaction when OpenCode has no explicit `small_model`.
 
 For example:
 
@@ -36,24 +36,28 @@ For example:
       "go": {
         "smart":    { "model": "opencode-go/glm-5.2", "variant": "high" },
         "balanced": { "model": "opencode-go/minimax-m3", "variant": "medium" },
+        "operator": { "model": "opencode-go/minimax-m3", "variant": "low" },
         "fast":     { "model": "opencode/deepseek-v4-flash-free", "variant": "low" },
         "cheap":    { "model": "opencode/deepseek-v4-flash-free", "variant": "low" }
       },
       "openai": {
         "smart":    { "model": "openai/gpt-5.5", "variant": "high" },
         "balanced": { "model": "openai/gpt-5.4", "variant": "medium" },
+        "operator": { "model": "openai/gpt-5.4", "variant": "low" },
         "fast":     { "model": "openai/gpt-5.3-spark", "variant": "low" },
         "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "low" }
       },
       "zai": {
         "smart":    { "model": "zai/glm-5.2", "variant": "high" },
         "balanced": { "model": "zai/glm-5.2", "variant": "medium" },
+        "operator": { "model": "zai/glm-5.2", "variant": "low" },
         "fast":     { "model": "zai/glm-4.7", "variant": "low" },
         "cheap":    { "model": "zai/glm-4.7-flash", "variant": "low" }
       },
       "zai-coding-plan": {
         "smart":    { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
         "balanced": { "model": "zai-coding-plan/glm-5.2", "variant": "medium" },
+        "operator": { "model": "zai-coding-plan/glm-5.2", "variant": "low" },
         "fast":     { "model": "zai-coding-plan/glm-4.7", "variant": "low" },
         "cheap":    { "model": "zai-coding-plan/glm-4.5-air", "variant": "low" }
       }
@@ -67,6 +71,8 @@ For example:
   }
 }
 ```
+
+Existing configurations that relied on `autocode.tiers.balanced` may need review because some agents now use the `operator` tier. Add an `autocode.tiers.operator` entry to your tier set for best results.
 
 OpenCode applies a last-matching-rule-wins model to external-directory permissions. Place broad defaults first and more specific overrides later.
 

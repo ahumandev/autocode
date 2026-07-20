@@ -48,7 +48,6 @@ import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
 import { executeConfigPrompt } from "./prompts/execute_config";
-import { write } from "bun";
 
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules
@@ -93,7 +92,7 @@ const baseAgents: AgentMap = {
     },
 
     compaction: {
-        tier: "cheap",
+        tier: "fast",
     },
 
     title: {
@@ -257,7 +256,7 @@ const baseAgents: AgentMap = {
             "skill_learn": "allow"
         },
         prompt: editPrompt,
-        tier: "balanced"
+        tier: "operator"
     },
 
     research: {
@@ -309,7 +308,7 @@ const baseAgents: AgentMap = {
         },
         prompt: assistBrowserPrompt,
         temperature: 0.3,
-        tier: "balanced",
+        tier: "operator",
     },
 
     assist_git_conflict: {
@@ -376,6 +375,7 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "deny",
                 execute_code: "allow",
+                execute_config: "allow",
                 execute_debug: "allow",
                 execute_os: "allow",
                 execute_rest: "allow",
@@ -445,7 +445,7 @@ const baseAgents: AgentMap = {
         },
         prompt: autoFeaturePrompt,
         temperature: 0.3,
-        tier: "smart",
+        tier: "balanced",
     },
 
     auto_general: {
@@ -474,7 +474,7 @@ const baseAgents: AgentMap = {
             },
         },
         prompt: autoGeneralPrompt,
-        tier: "smart",
+        tier: "balanced",
     },
 
     auto_refactor: {
@@ -505,7 +505,7 @@ const baseAgents: AgentMap = {
         },
         prompt: buildRefactorPrompt,
         temperature: 0.3,
-        tier: "smart",
+        tier: "balanced",
     },
 
     auto_research: {
@@ -584,7 +584,7 @@ const baseAgents: AgentMap = {
 
     auto_test: {
         color: colorAutonomousOrchestrator,
-        description: "task auto_test to write or fix tests and, when explicitly needed, targeted code/config support for passing verification",
+        description: "task auto_test to write, run or fix tests.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -602,16 +602,18 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "deny",
                 execute_code: "allow",
+                execute_config: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
                 query_code: "allow",
+                query_config: "allow",
                 query_git: "allow",
             },
             task_resume: "allow",
         },
         prompt: buildTestPrompt,
         temperature: 0.3,
-        tier: "smart",
+        tier: "balanced",
     },
 
     auto_troubleshoot: {
@@ -634,6 +636,7 @@ const baseAgents: AgentMap = {
             task: {
                 "*": "deny",
                 execute_code: "allow",
+                execute_config: "allow",
                 execute_debug: "allow",
                 execute_rest: "allow",
                 execute_sandbox: "allow",
@@ -670,7 +673,7 @@ const baseAgents: AgentMap = {
         },
         prompt: documentAgentsPrompt,
         temperature: 0.3,
-        tier: "fast",
+        tier: "balanced",
     },
 
     document_conventions: {
@@ -693,7 +696,7 @@ const baseAgents: AgentMap = {
         },
         prompt: documentConventionsPrompt,
         temperature: 0.3,
-        tier: "fast",
+        tier: "balanced",
     },
 
     document_code: {
@@ -716,7 +719,7 @@ const baseAgents: AgentMap = {
         },
         prompt: documentCodePrompt,
         temperature: 0.3,
-        tier: "fast",
+        tier: "balanced",
     },
 
     document_env: {
@@ -743,7 +746,7 @@ const baseAgents: AgentMap = {
         },
         prompt: documentEnvPrompt,
         temperature: 0.3,
-        tier: "fast",
+        tier: "balanced",
     },
 
     document_install: {
@@ -765,7 +768,7 @@ const baseAgents: AgentMap = {
         },
         prompt: documentInstallPrompt,
         temperature: 0.3,
-        tier: "fast",
+        tier: "balanced",
     },
 
     document_prd: {
@@ -788,7 +791,7 @@ const baseAgents: AgentMap = {
         },
         prompt: String(documentPrdPrompt),
         temperature: 0.3,
-        tier: "fast",
+        tier: "balanced",
     },
 
     document_ux: {
@@ -811,7 +814,7 @@ const baseAgents: AgentMap = {
         },
         prompt: documentUxPrompt,
         temperature: 0.3,
-        tier: "fast",
+        tier: "balanced",
     },
 
     // Execute workers
@@ -868,7 +871,7 @@ const baseAgents: AgentMap = {
         },
         prompt: executeConfigPrompt,
         temperature: 0.1,
-        tier: "balanced",
+        tier: "operator",
     },
 
     execute_debug: {
@@ -895,10 +898,8 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            "autocode_md_create": "allow",
-            "autocode_md_h1": "allow",
-            "autocode_md_read": "allow",
-            "autocode_md_update": "allow",
+            autocode_logo_find: "allow",
+            "autocode_md_*": "allow",
             skill: {
                 "*": "deny",
                 "author-caveman": "allow",
@@ -934,7 +935,7 @@ const baseAgents: AgentMap = {
         },
         prompt: executeExcelPrompt,
         temperature: 0.3,
-        tier: "balanced",
+        tier: "operator",
     },
 
     execute_os: {
@@ -1010,7 +1011,7 @@ const baseAgents: AgentMap = {
         },
         prompt: executeRestPrompt,
         temperature: 0.1,
-        tier: "balanced",
+        tier: "operator",
     },
 
     execute_sandbox: {
@@ -1041,7 +1042,7 @@ const baseAgents: AgentMap = {
         },
         prompt: executeOsPrompt,
         temperature: 0.1,
-        tier: "balanced",
+        tier: "operator",
     },
 
     execute_script: {
@@ -1134,7 +1135,7 @@ const baseAgents: AgentMap = {
 
     query_browser: {
         color: colorReadOnlyWorker,
-        description: "task query_browser to handle frontend ui testing with real browser. It can Debug, test and verify YOUR RUNNING APPLICATION: inspect UI behaviour, DOM elements, read console logs, analyze network requests, click UI elements, test performance and automate frontend testing. NOT for online research nor internet searches.",
+        description: "task query_browser to inspect or investigate UI of YOUR RUNNING APPLICATION in real browser (first start app before tasking query_browser) or to pair with user (you drive, user manual login and solve captchas) to access restricted online sources. Ask query_browser to debug, find DOM elements, summarize console logs, analyze network requests, interact with UI elements, monitor performance, test frontend functionality like human. NOT for internet searches.",
         hidden: true,
         mode: "subagent",
         permission: {

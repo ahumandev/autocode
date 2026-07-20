@@ -1,6 +1,6 @@
 ---
 name: author-readme
-description: Use `author-readme` skill when reviewing/editing README.md files.
+description: Use `author-readme` skill when reviewing/editing README.md file.
 ---
 
 - README.md written for humans in professional, user-manual style natural language 

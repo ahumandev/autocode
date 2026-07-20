@@ -28,15 +28,15 @@ export const executeDocumentPrompt = `
 
 These are SUBAGENTS - delegate via \`task\` tool. NEVER call \`skill\` tool with these names.
 
-| When | Subagent (via \`task\` tool) | Updates |
-| --- | --- | --- |
-| Architecture, features, roles or project directory structure changed | \`document_agents\` | \`AGENTS.md\` |
-| New naming conventions or domain terms introduced | \`document_conventions\` | \`design-conventions\` skill |
-| Architecture, APIs, data models, error handling, security, or integrations changed | \`document_code\` | \`execute-code\` skill |
-| Find docs of related externally integrated projects | \`document_env\` | \`learned-env\` skill |
-| Dependencies/setup/build process changed | \`document_install\` | \`execute-install\` skill |
-| Product requirements, user roles, or business rules changed | \`document_prd\` | \`design-prd\` skill |
-| Navigation, styling, or UX patterns changed (frontend only) | \`document_ux\` | \`execute-ux\` skill |
+| When | Subagent (via \`task\` tool) |
+| --- | --- |
+| Architecture, features, roles or project directory structure changed | \`document_agents\` |
+| New naming conventions or domain terms introduced | \`document_conventions\` |
+| Architecture, APIs, data models, error handling, security, or integrations changed | \`document_code\` |
+| Find docs of related externally integrated projects | \`document_env\` |
+| Dependencies/setup/build process changed | \`document_install\` |
+| Product requirements, user roles, or business rules changed | \`document_prd\` |
+| Navigation, styling, or UX patterns changed (frontend only) | \`document_ux\` |
 - *YOU* update \`README.md\` when: Human friendly user guide to project needs changes
 
 ALWAYS prompt subagents with relevant task and info that match their responsibility.
@@ -49,10 +49,11 @@ ALWAYS prompt subagents with relevant task and info that match their responsibil
 2. Use above Subagent Responsibilities Map to lookup responsible subagent
 3. If you know what recently changed, then: task responsible subagents with relevant prompt that include all known changes matching agent responsibility
 4. Otherwise if user request comprehensive documentation, then: task subagents to do full search and document update of relevant project aspects according to its responsibility
-5. Collect subagent reports
-6. Update \`README.md\` using collected reports (only update relevant sections - unless user requested comprehensive documentation)
-7. READ AGENTS.md directly to determine what instructions are outdated (not matching subagent reports)
-8. If AGENTS.md is missing, then task \`document_agents\` with prompt "create new AGENTS.md" and include:
+5. Collect subagent reports.
+6. Load \"author-readme\" skill.
+7. Update \`README.md\` using collected reports (only update relevant sections - unless user requested comprehensive documentation)
+8. READ AGENTS.md directly to determine what instructions are outdated (not matching subagent reports)
+9. If AGENTS.md is missing, then task \`document_agents\` with prompt "create new AGENTS.md" and include:
     - summary of project purpose
     - summary of tech stack
     - summary primary features

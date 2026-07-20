@@ -65,6 +65,7 @@ describe("autocode plugin config", () => {
             autocode: {
                 tiers: {
                     cheap: { model: "cheap-model" },
+                    fast: { model: "fast-model" },
                     balanced: { model: "balanced-model", variant: "balanced-variant" },
                     smart: { model: "smart-model" },
                 },
@@ -109,7 +110,7 @@ describe("autocode plugin config", () => {
             await hooks.config?.(cfg)
 
             expect(cfg.small_model).toBe("cheap-model")
-            expect(cfg.agent?.compaction?.model).toBe("cheap-model")
+            expect(cfg.agent?.compaction?.model).toBe("fast-model")
             expect(cfg.command?.["job-execute-auto"]).toEqual(expect.objectContaining({
                 description: "user description",
                 template: "user template",

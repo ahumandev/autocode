@@ -2376,6 +2376,51 @@ describe("loadAutocodeConfig", () => {
         expect(result.tiers.fast).toEqual({ model: "openai/gpt-5-mini" })
     })
 
+    test("operator tier config is parsed alongside other tiers", async () => {
+        const fs = makeFs({
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: {
+                    tiers: {
+                        cheap: { model: "openai/gpt-5-nano", variant: "economy" },
+                        fast: { model: "anthropic/claude-haiku-4-5", variant: "quick" },
+                        operator: { model: "openai/gpt-5", variant: "standard" },
+                        balanced: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
+                        smart: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
+                    },
+                },
+            }),
+        })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.tiers.cheap).toEqual({ model: "openai/gpt-5-nano", variant: "economy" })
+        expect(result.tiers.fast).toEqual({ model: "anthropic/claude-haiku-4-5", variant: "quick" })
+        expect(result.tiers.operator).toEqual({ model: "openai/gpt-5", variant: "standard" })
+        expect(result.tiers.balanced).toEqual({ model: "anthropic/claude-sonnet-4-5", variant: "standard" })
+        expect(result.tiers.smart).toEqual({ model: "anthropic/claude-opus-4-5", variant: "thinking" })
+    })
+
+    test("provider-selected operator tier config is parsed", async () => {
+        const fs = makeFs({
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: {
+                    tier: "openai",
+                    tiers: {
+                        openai: {
+                            operator: { model: "openai/gpt-5", variant: "standard" },
+                            balanced: { model: "openai/gpt-5-mini" },
+                        },
+                    },
+                },
+            }),
+        })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.tiers.operator).toEqual({ model: "openai/gpt-5", variant: "standard" })
+        expect(result.tiers.balanced).toEqual({ model: "openai/gpt-5-mini" })
+    })
+
     test("missing or non-string tier falls back to direct tiers", async () => {
         const missingTierFs = makeFs({
             "/wt/.opencode/autocode.jsonc": JSON.stringify({
@@ -2666,7 +2711,7 @@ describe("plugin.config tier wiring", () => {
         })
     })
 
-    test("cheap tier config populates runtime generation, compaction, and preserves existing tier mappings", async () => {
+    test("cheap tier config populates runtime small_model and preserves existing tier mappings for current agent tiers", async () => {
         await withIsolatedConfigHome(async () => {
             const worktree = mkdtempSync(join(tmpdir(), "autocode-test-"))
             try {
@@ -2685,10 +2730,10 @@ describe("plugin.config tier wiring", () => {
                 await configurePlugin(plugin, cfg)
 
                 expect(cfg.small_model).toBe("openai/gpt-5-nano")
-                expect(getAgentField(cfg, "auto_general", "model")).toBe("anthropic/claude-opus-4-5")
-                expect(getAgentField(cfg, "auto_general", "variant")).toBe("thinking")
-                expect(getAgentField(cfg, "compaction", "model")).toBe("openai/gpt-5-nano")
-                expect(getAgentField(cfg, "compaction", "variant")).toBe("economy")
+                expect(getAgentField(cfg, "auto_general", "model")).toBe("anthropic/claude-sonnet-4-5")
+                expect(getAgentField(cfg, "auto_general", "variant")).toBe("standard")
+                expect(getAgentField(cfg, "compaction", "model")).toBe("anthropic/claude-haiku-4-5")
+                expect(getAgentField(cfg, "compaction", "variant")).toBe("quick")
                 expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-opus-4-5")
                 expect(getAgentField(cfg, "design", "variant")).toBe("thinking")
                 expect(getAgentField(cfg, "auto", "model")).toBe("anthropic/claude-opus-4-5")
@@ -2847,7 +2892,7 @@ describe("plugin.config tier wiring", () => {
         })
     })
 
-    test("explicit compaction agent model overrides cheap tier model", async () => {
+    test("explicit compaction agent model overrides fast tier model", async () => {
         await withIsolatedConfigHome(async () => {
             const worktree = mkdtempSync(join(tmpdir(), "autocode-test-"))
             try {
@@ -2856,7 +2901,7 @@ describe("plugin.config tier wiring", () => {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
                         smart: { model: "anthropic/claude-opus-4-5" },
                         balanced: { model: "anthropic/claude-sonnet-4-5" },
-                        fast: { model: "anthropic/claude-haiku-4-5" },
+                        fast: { model: "anthropic/claude-haiku-4-5", variant: "quick" },
                     },
                 })
 
@@ -2873,7 +2918,7 @@ describe("plugin.config tier wiring", () => {
                 await configurePlugin(plugin, cfg)
 
                 expect(getAgentField(cfg, "compaction", "model")).toBe("user/compaction-model")
-                expect(getAgentField(cfg, "compaction", "variant")).toBe("economy")
+                expect(getAgentField(cfg, "compaction", "variant")).toBe("quick")
                 expect(getAgentField(cfg, "compaction", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "prompt")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "permission")).toBeUndefined()
