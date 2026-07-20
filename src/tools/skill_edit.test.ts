@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { resetRetryCounts } from "@/utils/tools"
-import { createAutocodeSkillEditTool } from "./skill_edit"
+import { AGENT_SKILL_MAP, createAutocodeSkillEditTool } from "./skill_edit"
 import { createToolContext } from "./test_context"
 
 function createFakeFileSystem() {
@@ -198,5 +198,83 @@ describe("skill_edit", () => {
 
         const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
         expect(skillMd).not.toContain("## References")
+    })
+
+    describe("AGENT_SKILL_MAP override", () => {
+        // Lock the expected agent -> skill mapping. Updating this map without
+        // updating these assertions should fail the regression suite.
+        const expectedMappings: Record<string, string> = {
+            "document_conventions": "design-conventions",
+            "document_code": "execute-code",
+            "document_install": "execute-install",
+            "document_prd": "design-prd",
+            "document_ux": "execute-ux",
+        }
+
+        test("AGENT_SKILL_MAP exports the expected agent -> skill mapping", () => {
+            expect(AGENT_SKILL_MAP).toEqual(expectedMappings)
+        })
+
+        test("document_code overrides any args.name to execute-code", async () => {
+            const fs = createFakeFileSystem()
+            const skillTool = createAutocodeSkillEditTool(fs)
+
+            const result = await skillTool.execute(
+                { name: "anything", description: "trigger", content: "body" } as never,
+                createToolContext({ agent: "document_code", directory: "/workspace", worktree: "/workspace" }),
+            )
+
+            expect(result).toBe(".agents/skills/execute-code/SKILL.md")
+            expect(fs.hasDir("/workspace/.agents/skills/execute-code")).toBe(true)
+            const content = fs.getFile("/workspace/.agents/skills/execute-code/SKILL.md")
+            expect(content).toContain("name: execute-code")
+            expect(content).not.toContain("anything")
+            // No skill dir created under the original args.name
+            expect(fs.hasDir("/workspace/.agents/skills/anything")).toBe(false)
+        })
+
+        test.each(Object.entries(expectedMappings))(
+            "agent %s overrides args.name to %s",
+            async (agent, skillName) => {
+                const fs = createFakeFileSystem()
+                const skillTool = createAutocodeSkillEditTool(fs)
+
+                const result = await skillTool.execute(
+                    { name: "should-be-overridden", description: "trigger", content: "body" } as never,
+                    createToolContext({ agent, directory: "/workspace", worktree: "/workspace" }),
+                )
+
+                expect(result).toBe(`.agents/skills/${skillName}/SKILL.md`)
+                expect(fs.hasDir(`/workspace/.agents/skills/${skillName}`)).toBe(true)
+                expect(fs.hasDir("/workspace/.agents/skills/should-be-overridden")).toBe(false)
+                const content = fs.getFile(`/workspace/.agents/skills/${skillName}/SKILL.md`)
+                expect(content).toContain(`name: ${skillName}`)
+            },
+        )
+
+        test("unmapped agent uses args.name as-is", async () => {
+            const fs = createFakeFileSystem()
+            const skillTool = createAutocodeSkillEditTool(fs)
+
+            const result = await skillTool.execute(
+                { name: "custom-skill", description: "trigger", content: "body" } as never,
+                createToolContext({ agent: "primary", directory: "/workspace", worktree: "/workspace" }),
+            )
+
+            expect(result).toBe(".agents/skills/custom-skill/SKILL.md")
+            expect(fs.hasDir("/workspace/.agents/skills/custom-skill")).toBe(true)
+            const content = fs.getFile("/workspace/.agents/skills/custom-skill/SKILL.md")
+            expect(content).toContain("name: custom-skill")
+        })
+
+        test("unmapped agent with blank name still rejected after fall-through", async () => {
+            const skillTool = createAutocodeSkillEditTool(createFakeFileSystem())
+            const result = await skillTool.execute(
+                { name: "   ", description: "trigger", content: "body" } as never,
+                createToolContext({ agent: "primary" }),
+            )
+            const parsed = JSON.parse(result as string)
+            expect(parsed.failedAction).toBe("edit skill")
+        })
     })
 })

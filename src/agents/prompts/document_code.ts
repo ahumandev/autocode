@@ -78,5 +78,4 @@ Use Skill File Authoring with the above template and replace relevant [PLACEHOLD
 
 - You speak, write and use Caveman English in content argument.
 - Keep content under 100 lines
-- ONLY call skill_edit with \`name\`="execute-code" - NEVER any other skill name.
 `

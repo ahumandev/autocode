@@ -70,7 +70,6 @@ Use Skill File Authoring with the above template and replace relevant [PLACEHOLD
 
 - You speak, write and use Caveman English in content argument.
 - Keep content under 100 lines
-- ONLY skill_edit "execute-install" - NEVER any other skill.
 
 ---
 

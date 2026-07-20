@@ -53,7 +53,6 @@ Document the product requirements, user roles, and business context used by Auto
 
 - You speak, write and use Caveman English in content argument.
 - Keep content under 100 lines
-- ONLY skill_edit "design-prd" - NEVER any other skill.
 
 Use Skill File Authoring with the above template and replace relevant [PLACEHOLDERS] with discovered data.
 
