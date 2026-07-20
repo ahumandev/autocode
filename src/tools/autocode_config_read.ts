@@ -9,13 +9,13 @@ export function createAutocodeConfigReadTool() {
   return tool({
     description: "Grep find values in local config/data files (.json/.jsonc/.yaml/.yml/.toml/.ini/.properties/.conf/.env) or read config/data files by glob pattern.",
     args: {
-      file_path_glob: tool.schema.string().describe("Glob pattern for config files, e.g. 'configs/**/*.json' or 'package.json'."),
-      key_path: tool.schema.string().optional().describe("Optional dotted path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') to drill into a specific key. Default = root."),
-      key_depth: tool.schema.number().int().min(0).optional().default(100).describe("Maximum traversal depth from key_path. Default = 100."),
-      subkey_regex: tool.schema.string().optional().describe("Regex; find nodes with matching key paths. Default = all."),
-      value_regex: tool.schema.string().optional().describe("Regex; find leaf nodes with matching values. Default = all."),
-      max_keys: tool.schema.number().int().min(0).optional().default(40).describe("Cap on total output nodes across all matching files. Default = 40."),
-      max_value_chars: tool.schema.number().int().min(0).optional().default(40).describe("Truncate string values exceeding max_value_chars by appending '...'. Default = 40."),
+      file_path_glob: tool.schema.string().describe("Glob pattern for config files, e.g. 'configs/**/*.json' or 'package.json'. Prefer exact file path unless unknown, then glob."),
+      key_path: tool.schema.string().optional().describe("Optional dotted path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') to drill into a specific key. Default = root. Only omit if unknown."),
+      key_depth: tool.schema.number().int().min(0).optional().default(100).describe("Maximum traversal depth from key_path. Default = 100. Decrease if previous result contains too much noise."),
+      subkey_regex: tool.schema.string().optional().describe("Regex; find nodes with matching key paths. Default = all. Set to search for presence or values of mathcing key regex."),
+      value_regex: tool.schema.string().optional().describe("Regex; find leaf nodes with matching values. Default = all. Set to search for presence or keys of matching value regex."),
+      max_keys: tool.schema.number().int().min(0).optional().default(40).describe("Cap on total output nodes across all matching files. Default = 40. Only increase for thorough outlines."),
+      max_value_chars: tool.schema.number().int().min(0).optional().default(40).describe("Truncate string values exceeding max_value_chars by appending '...'. Default = 40. Choose 7 for outline requests. Increase if needed value was truncated."),
     },
     execute: async (args, context) => {
       const failedAction = "Read configuration file"

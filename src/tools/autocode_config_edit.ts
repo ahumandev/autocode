@@ -8,7 +8,7 @@ export function createAutocodeConfigEditTool() {
   return tool({
     description: "Create, replace, or rename key-values in local config files (.json/.jsonc/.yaml/.yml/.toml/.ini/.properties/.conf/.env).",
     args: {
-      file_path: tool.schema.string().describe("Path to config file."),
+      file_path: tool.schema.string().describe("Exact path to file."),
       current_key: configPathSchema.optional().describe("Existing dotted key path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') to operate on. If omitted, a new_key required to CREATE."),
       new_key: configPathSchema.optional().describe("Target dotted key path with bracket array indexing to RENAME from current_key or CREATE if current_key is omitted."),
       content: tool.schema.union([

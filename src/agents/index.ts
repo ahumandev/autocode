@@ -368,8 +368,8 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "ask",
                 "execute*": "allow",
-                "learned-corrections-troubleshoot": "allow",
-                "learned-env": "allow",
+                "learned-corrections*": "allow",
+                "learned-env*": "allow",
                 "skill-write": "allow",
             },
             skill_learn: "allow",
@@ -428,7 +428,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "execute*": "allow",
-                "learned-preferences": "allow"
+                "learned-preferences*": "allow"
             },
             task: {
                 "*": "deny",
@@ -490,7 +490,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "execute*": "allow",
-                "learned-preferences": "allow"
+                "learned-preferences*": "allow"
             },
             task: {
                 "*": "deny",
@@ -595,7 +595,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "test*": "allow",
-                "learned-corrections-test": "allow",
+                "learned-corrections*": "allow",
                 "skill-write": "allow"
             },
             skill_learn: "allow",
@@ -626,8 +626,8 @@ const baseAgents: AgentMap = {
             "context7*": "allow",
             skill: {
                 "*": "deny",
-                "learned-corrections-troubleshoot": "allow",
-                "learned-env": "allow",
+                "learned-corrections*": "allow",
+                "learned-env*": "allow",
                 "skill-write": "allow",
             },
             skill_learn: "allow",
@@ -850,7 +850,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "code*": "allow",
                 "design*": "allow",
-                "learned-preferences": "allow"
+                "learned-preferences*": "allow"
             },
         },
         prompt: executeCodePrompt,
@@ -956,9 +956,9 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
-                "learned-corrections-os": "allow",
-                "learned-env": "allow",
-                "learned-permissions": "allow",
+                "learned-corrections*": "allow",
+                "learned-env*": "allow",
+                "learned-permissions*": "allow",
                 "skill-write": "allow"
             },
             skill_learn: "allow",
@@ -1002,8 +1002,8 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "learned-corrections-rest": "allow",
-                "learned-env": "allow",
+                "learned-corrections*": "allow",
+                "learned-env*": "allow",
                 "skill-write": "allow"
             },
             skill_learn: "allow",
@@ -1030,10 +1030,10 @@ const baseAgents: AgentMap = {
             autocode_sandbox_config_remove: "allow",
             skill: {
                 "*": "deny",
-                "learned-corrections-sandbox": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
-                "learned-env": "allow",
+                "learned-corrections*": "allow",
+                "learned-env*": "allow",
                 "skill-write": "allow"
             },
             skill_learn: "allow",
@@ -1067,11 +1067,11 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "learned-corrections-script": "allow",
-                "learned-env": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
-                "learned-permissions": "allow",
+                "learned-corrections*": "allow",
+                "learned-env*": "allow",
+                "learned-permissions*": "allow",
                 "skill-write": "allow"
             },
             skill_learn: "allow",
@@ -1093,9 +1093,9 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "execute-install": "allow",
-                "learned-corrections-ssh": "allow",
+                "learned-corrections*": "allow",
                 "learned-env-*": "allow",
-                "learned-permissions": "allow",
+                "learned-permissions*": "allow",
                 "skill-write": "allow"
             },
             skill_learn: "allow",
@@ -1151,7 +1151,7 @@ const baseAgents: AgentMap = {
 
     query_code: {
         color: colorReadOnlyWorker,
-        description: "task query_code to find or summarize: source code, scripts or codebase; NEVER query md content; NEVER to return full file content",
+        description: "task query_code to find, summarize, understand: source code, scripts or codebase; NEVER query md, template, styling, config, data files; NEVER to return full file content",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1168,6 +1168,19 @@ const baseAgents: AgentMap = {
         },
         prompt: queryCodePrompt,
         temperature: 0.3,
+        tier: "fast",
+    },
+
+    query_config: {
+        color: colorReadOnlyWorker,
+        description: "task query_config to read config or data file values or outlines: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; No other file types supported.",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            "autocode_config_*": "allow",
+        },
+        prompt: executeConfigPrompt,
+        temperature: 0.1,
         tier: "fast",
     },
 
@@ -1243,8 +1256,8 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
-                "learned-env": "allow",
-                "learned-permissions": "allow",
+                "learned-env*": "allow",
+                "learned-permissions*": "allow",
                 "skill-write": "allow",
             },
             skill_learn: "allow",
@@ -1265,10 +1278,7 @@ const baseAgents: AgentMap = {
                 "*": "deny",
                 "design*": "allow",
                 "execute*": "allow",
-                "learned-corrections-primary": "allow",
-                "learned-env*": "allow",
-                "learned-permissions": "allow",
-                "learned-preferences": "allow"
+                "learned-*": "allow",
             },
             "todo*": "allow"
         },
@@ -1292,8 +1302,8 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             skill: {
                 "*": "deny",
-                "learned-env": "allow",
-                "learned-permissions": "allow",
+                "learned-env*": "allow",
+                "learned-permissions*": "allow",
                 "skill-write": "allow",
             },
             skill_learn: "allow",
@@ -1305,7 +1315,7 @@ const baseAgents: AgentMap = {
 
     query_text: {
         color: colorReadOnlyWorker,
-        description: "task query_text to find/read/summarize: config file values, md content, md front-matter, articles/document sections, yaml files, json files, templates, assets, resources; NEVER to return full file content.",
+        description: "task query_text to answer questions (presence?, contains?, outline?) about: md content, md front-matter, articles/document sections, styling, templates, assets, resources; NEVER to return full file content.",
         hidden: true,
         mode: "subagent",
         permission: {

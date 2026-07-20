@@ -32,9 +32,9 @@ describe("buildAgents with external skills", () => {
             "*": "deny",
             "execute-install": "allow",
             "execute-sandbox": "allow",
-            "learned-corrections-os": "allow",
-            "learned-env": "allow",
-            "learned-permissions": "allow",
+            "learned-corrections*": "allow",
+            "learned-env*": "allow",
+            "learned-permissions*": "allow",
             "skill-write": "allow"
         })
     })
