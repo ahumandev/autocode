@@ -35,16 +35,16 @@ For example:
     "tiers": {
       "go": {
         "smart":    { "model": "opencode-go/glm-5.2", "variant": "high" },
-        "balanced": { "model": "opencode-go/minimax-m3", "variant": "medium" },
+        "balanced": { "model": "opencode-go/minimax-m3", "variant": "high" },
         "operator": { "model": "opencode-go/minimax-m3", "variant": "low" },
-        "fast":     { "model": "opencode/deepseek-v4-flash-free", "variant": "low" },
+        "fast":     { "model": "opencode-go/deepseek-v4-flash", "variant": "low" },
         "cheap":    { "model": "opencode/deepseek-v4-flash-free", "variant": "low" }
       },
       "openai": {
-        "smart":    { "model": "openai/gpt-5.5", "variant": "high" },
-        "balanced": { "model": "openai/gpt-5.4", "variant": "medium" },
-        "operator": { "model": "openai/gpt-5.4", "variant": "low" },
-        "fast":     { "model": "openai/gpt-5.3-spark", "variant": "low" },
+        "smart":    { "model": "openai/gpt-5.6-sol", "variant": "high" },
+        "balanced": { "model": "openai/gpt-5.6-terra", "variant": "medium" },
+        "operator": { "model": "openai/gpt-5.6-terra", "variant": "low" },
+        "fast":     { "model": "openai/gpt-5.6-luna", "variant": "low" },
         "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "low" }
       },
       "zai": {
@@ -56,8 +56,8 @@ For example:
       },
       "zai-coding-plan": {
         "smart":    { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
-        "balanced": { "model": "zai-coding-plan/glm-5.2", "variant": "medium" },
-        "operator": { "model": "zai-coding-plan/glm-5.2", "variant": "low" },
+        "balanced": { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
+        "operator": { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
         "fast":     { "model": "zai-coding-plan/glm-4.7", "variant": "low" },
         "cheap":    { "model": "zai-coding-plan/glm-4.5-air", "variant": "low" }
       }
