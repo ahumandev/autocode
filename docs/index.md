@@ -16,18 +16,22 @@ No special UI required. AutoCode runs in OpenCode, keeps progress in version-con
 ## Features
 
 - 🧭 **Structured lifecycle** — move researched work from concept to solution in phases: concept ➔ draft ➔ executing job ➔ review.
-- 🔎 **Research** — safely gather read-only evidence on project or non-project topics without making changes.
-- 🧠 **Design** — brainstorm options, study feasibility, compare approaches, and report pros, cons, and risks before implementation starts.
-- 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
-- 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
-- 📚 **Self-learning skills** — auto capture corrections, environment quirks, permissions, and user preferences as skills for future sessions.
+- 📚 **Self-learning memory** — auto capture corrections, environment quirks, permissions, and user preferences as skills for future sessions.
 - ⚠️ **Safe hand-offs** — provide a thorough manual task tutorial when an operation is unsafe.
-- ⚡ **Token-optimized workflows** — smart orchestrators delegate to faster specialists to improve performance and reduce token use.
+- 🪙 **Token-optimized workflows** — smart orchestrators delegate to faster specialists to improve performance and reduce token use.
 - 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
 - 🧪 **Sandboxed execution** — run supported risky commands in Linux bubblewrap sandboxes when the host supports user namespaces.
 - 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in other directories after permission checks.
 - 🔐 **SSH tool suite** — run remote commands and manage files through environment-keyed tools.
 - 🧹 **Agent cleanup** — agents remove temporary files and stop stray processes they started after debugging.
+
+### Optimized Modes
+
+- 🔎 **Research mode** — safely gather read-only evidence on project or non-project topics without making changes.
+- 🧠 **Design mode** — brainstorm options, study feasibility, compare approaches, and report pros, cons, and risks before implementation starts.
+- 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
+- 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
+- ✏️ **Edit mode** — make fast, targeted edits directly in-session without spawning subagents.
 
 ## Installation
 
