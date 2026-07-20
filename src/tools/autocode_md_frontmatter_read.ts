@@ -63,7 +63,7 @@ export function createAutocodeMdFrontmatterReadTool(): ReturnType<typeof tool> {
                 throw new Error("autocode_md_frontmatter_read: context.directory (project directory) is required but was not provided by host")
             }
             const cwd = context.directory
-            const matches = await expandGlob(String(args.file_path_glob), cwd, { accessHidden: true })
+            const matches = await expandGlob(String(args.file_path_glob), cwd, { dot: true })
             if (matches.length === 0) {
                 return createRetryResponse(failedAction, new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")
             }
