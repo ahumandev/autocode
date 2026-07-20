@@ -4,25 +4,26 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 
 ### Primary Agents
 
-| Agent      | Purpose                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------- |
-| `research` | Gathers evidence and produces Research Reports.                                                         |
-| `design`   | Creates solution plans from conversation and optional Research Report data.                             |
-| `auto`     | Autonomously executes drafted jobs from solution plans.                                                 |
-| `assist`   | Interactively executes immediate tasks with human control, optionally using solution plans as guidance. |
+|     | Agent      | Purpose                                                                     |
+| --- | ---------- | --------------------------------------------------------------------------- |
+| 🔎   | `research` | Gathers evidence and produces Research Reports.                             |
+| 🧠   | `design`   | Creates solution plans from conversation and optional Research Report data. |
+| 🤖   | `auto`     | Autonomously executes drafted jobs from solution plans.                     |
+| 🧑‍💻   | `assist`   | Interactively executes immediate tasks with human control                   |
+| ✏️   | `edit`     | Make fast, targeted edits directly in-session without spawning subagents    |
 
 ### Typical job workflow
 
 ```mermaid
 flowchart TD
-  Concepts[.agents/jobs/concepts] --> Drafts[.agents/jobs/drafts]
-  Drafts --> Assist[.agents/jobs/assist]
-  Drafts --> Executing[.agents/jobs/executing]
+  Concepts[🔎 .agents/jobs/concepts] --🧠 design-->  Drafts[.agents/jobs/drafts]
+  Drafts --🧑‍💻 assist --> Assist[.agents/jobs/assist]
+  Drafts --🤖 auto --> Executing[.agents/jobs/executing]
   Executing --> Review[.agents/jobs/review]
   Executing -.blocked.-> Facilitate[.agents/jobs/facilitate]
   Facilitate -.unblocked.-> Executing
   Assist --> Shelved[.agents/jobs/shelved]
-  Review --> Shelved[.agents/jobs/shelved]
+  Review --> Shelved
 ```
 
 1. Create or select a concept in `.agents/jobs/concepts`.

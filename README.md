@@ -22,14 +22,6 @@ No special UI required. AutoCode runs in OpenCode, keeps progress in version-con
 - 🔐 **SSH tool suite** — run remote commands and manage files through environment-keyed tools.
 - 🧹 **Agent cleanup** — agents remove temporary files and stop stray processes they started after debugging.
 
-### Optimized Modes
-
-- 🔎 **Research mode** — safely gather read-only evidence on project or non-project topics without making changes.
-- 🧠 **Design mode** — brainstorm options, study feasibility, compare approaches, and report pros, cons, and risks before implementation starts.
-- 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
-- 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
-- ✏️ **Edit mode** — make fast, targeted edits directly in-session without spawning subagents.
-
 ## Installation
 
 ### Prerequisites
@@ -61,20 +53,21 @@ AutoCode is an OpenCode plugin. It is not a standalone application and does not 
 
 ### Primary Agents
 
-| Agent      | Purpose                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------- |
-| `research` | Gathers evidence and produces Research Reports.                                                         |
-| `design`   | Creates solution plans from conversation and optional Research Report data.                             |
-| `auto`     | Autonomously executes drafted jobs from solution plans.                                                 |
-| `assist`   | Interactively executes immediate tasks with human control, optionally using solution plans as guidance. |
+|     | Agent      | Purpose                                                                     |
+| --- | ---------- | --------------------------------------------------------------------------- |
+| 🔎   | `research` | Gathers evidence and produces Research Reports.                             |
+| 🧠   | `design`   | Creates solution plans from conversation and optional Research Report data. |
+| 🤖   | `auto`     | Autonomously executes drafted jobs from solution plans.                     |
+| 🧑‍💻   | `assist`   | Interactively executes immediate tasks with human control                   |
+| ✏️   | `edit`     | Make fast, targeted edits directly in-session without spawning subagents    |
 
 ### Typical job workflow
 
 ```mermaid
 flowchart TD
-  Concepts[.agents/jobs/concepts] --> Drafts[.agents/jobs/drafts]
-  Drafts --> Assist[.agents/jobs/assist]
-  Drafts --> Executing[.agents/jobs/executing]
+  Concepts[🔎 .agents/jobs/concepts] --🧠 design-->  Drafts[.agents/jobs/drafts]
+  Drafts --🧑‍💻 assist --> Assist[.agents/jobs/assist]
+  Drafts --🤖 auto --> Executing[.agents/jobs/executing]
   Executing --> Review[.agents/jobs/review]
   Executing -.blocked.-> Facilitate[.agents/jobs/facilitate]
   Facilitate -.unblocked.-> Executing
