@@ -6,7 +6,7 @@ import type { AutocodeAgentConfig } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig } from "./config"
 import type { ConfigFileSystem } from "./config"
 
-function makeFs(files: Record<string, string>, createdPaths: string[] = [], readPaths: string[] = []): ConfigFileSystem {
+function makeFs(files: Record<string, string>, createdPaths: string[] = [], readPaths: string[] = [], writtenPaths: string[] = []): ConfigFileSystem {
     return {
         readFileSync(path: string) {
             readPaths.push(path)
@@ -20,6 +20,10 @@ function makeFs(files: Record<string, string>, createdPaths: string[] = [], read
                 files[path] = contents
                 createdPaths.push(path)
             }
+        },
+        writeFileSync(path: string, contents: string) {
+            files[path] = contents
+            writtenPaths.push(path)
         },
     }
 }

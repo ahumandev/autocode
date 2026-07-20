@@ -32,10 +32,12 @@ function makeFs(initialFiles: Record<string, string> = {}): {
     files: Record<string, string>
     readPaths: string[]
     createdPaths: string[]
+    writtenPaths: string[]
 } {
     const files: Record<string, string> = { ...initialFiles }
     const readPaths: string[] = []
     const createdPaths: string[] = []
+    const writtenPaths: string[] = []
 
     const fs: ConfigFileSystem = {
         readFileSync(path, _encoding) {
@@ -53,9 +55,13 @@ function makeFs(initialFiles: Record<string, string> = {}): {
                 createdPaths.push(path)
             }
         },
+        writeFileSync(path, contents) {
+            files[path] = contents
+            writtenPaths.push(path)
+        },
     }
 
-    return { fs, files, readPaths, createdPaths }
+    return { fs, files, readPaths, createdPaths, writtenPaths }
 }
 
 describe("skills config parsing and seeding", () => {
@@ -112,19 +118,31 @@ describe("skills config parsing and seeding", () => {
         expect(ensured).toContain("test")
     })
 
-    test("file exists with no skills key → result.skills equals default and the real file is written back with skills block", async () => {
-        const existingContent = preCreateRealFile(JSON.stringify({ autocode: { sandbox: { sync_method: "copy" } } }))
-        const { fs } = makeFs({ [globalPath()]: existingContent })
+    test("file exists with no skills key → result.skills equals default, write-back preserves existing sections, skills block added", async () => {
+        const existingContent = preCreateRealFile(JSON.stringify({
+            autocode: {
+                sandbox: { sync_method: "copy" },
+                learned: { max: 50 },
+            },
+        }))
+        const { fs, files, writtenPaths } = makeFs({ [globalPath()]: existingContent })
 
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
         expect(result.skills).toEqual(DEFAULT_SKILLS)
 
-        // The source's seed step uses real writeFileSync (not the injected fs),
-        // so verify the write-back on the real file under the temp dir.
-        const written = readFileSync(globalPath(), "utf-8")
+        // Seeding now writes through the injected fs mock — verify via the in-memory
+        // files dict + writtenPaths tracker.
+        expect(writtenPaths).toContain(globalPath())
+        const written = files[globalPath()]!
         const parsed = JSON.parse(written)
         expect(parsed.autocode.skills).toEqual(DEFAULT_SKILLS)
+        // Other sections MUST be preserved verbatim - never replaced.
+        expect(parsed.autocode.sandbox).toEqual({ sync_method: "copy" })
+        expect(parsed.autocode.learned).toEqual({ max: 50 })
+        // No other top-level keys should appear inside autocode.
+        const autocodeKeys = Object.keys(parsed.autocode).sort()
+        expect(autocodeKeys).toEqual(["learned", "sandbox", "skills"])
     })
 
     test("file exists with skills: {} → result.skills is undefined and no write-back happens", async () => {
@@ -165,19 +183,17 @@ describe("skills config parsing and seeding", () => {
         const existingContent = preCreateRealFile(JSON.stringify({ autocode: {} }))
         const { fs, files } = makeFs({ [globalPath()]: existingContent })
 
-        // First load seeds the skills block into the real file.
+        // First load seeds the skills block via the fs mock.
         await loadAutocodeConfig("/wt", "/wt", fs)
-        const afterFirst = readFileSync(globalPath(), "utf-8")
+        const afterFirst = files[globalPath()]!
         expect(JSON.parse(afterFirst).autocode.skills).toEqual(DEFAULT_SKILLS)
 
-        // Sync the in-memory mock to the real on-disk state so the second
-        // load reads a file that already carries the skills key.
-        files[globalPath()] = afterFirst
-
-        // Second load must not re-write the file.
-        await loadAutocodeConfig("/wt", "/wt", fs)
-        const afterSecond = readFileSync(globalPath(), "utf-8")
-        expect(afterSecond).toBe(afterFirst)
+        // Second load must not re-write the file. Re-create fs with the post-seed
+        // content so the read sees the skills key already present.
+        const second = makeFs({ [globalPath()]: afterFirst })
+        await loadAutocodeConfig("/wt", "/wt", second.fs)
+        expect(second.writtenPaths).not.toContain(globalPath())
+        expect(second.files[globalPath()]).toBe(afterFirst)
     })
 
     test("invalid skills value (string) → result.skills is undefined and no write-back", async () => {
@@ -209,6 +225,110 @@ describe("skills config parsing and seeding", () => {
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
         expect(result.skills).toBeUndefined()
+        const written = readFileSync(globalPath(), "utf-8")
+        expect(written).toBe(existingContent)
+    })
+
+    test("regression: existing tiers section preserved when seeding adds skills", async () => {
+        // User reported bug: seeding replaces entire tiers section with invalid config.
+        // Verify tiers is preserved verbatim when skills key is added.
+        const existingContent = preCreateRealFile(JSON.stringify({
+            autocode: {
+                tier: "openai",
+                tiers: {
+                    openai: {
+                        fast: { model: "global-fast" },
+                        smart: { model: "global-smart" },
+                    },
+                    anthropic: {
+                        fast: { model: "unused-fast" },
+                    },
+                },
+            },
+        }))
+        const { fs, files, writtenPaths } = makeFs({ [globalPath()]: existingContent })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.skills).toEqual(DEFAULT_SKILLS)
+
+        expect(writtenPaths).toContain(globalPath())
+        const written = files[globalPath()]!
+        const parsed = JSON.parse(written)
+        // skills block added.
+        expect(parsed.autocode.skills).toEqual(DEFAULT_SKILLS)
+        // tier + tiers section MUST be preserved verbatim - never touched.
+        expect(parsed.autocode.tier).toBe("openai")
+        expect(parsed.autocode.tiers).toEqual({
+            openai: {
+                fast: { model: "global-fast" },
+                smart: { model: "global-smart" },
+            },
+            anthropic: {
+                fast: { model: "unused-fast" },
+            },
+        })
+        // autocode must contain exactly: tier, tiers, skills - nothing else replaced.
+        const autocodeKeys = Object.keys(parsed.autocode).sort()
+        expect(autocodeKeys).toEqual(["skills", "tier", "tiers"])
+    })
+
+    test("regression: non-record autocode (array) → seeding skipped, file untouched", async () => {
+        // Previously the seeding would replace `autocode: [...]` with `{ skills: ... }`,
+        // wiping user's custom value entirely. Verify this NEVER happens anymore.
+        const existingContent = preCreateRealFile(JSON.stringify({
+            autocode: ["custom", "array", "value"],
+        }))
+        const { fs } = makeFs({ [globalPath()]: existingContent })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        // No skills returned (seeding skipped because ac is not a record).
+        expect(result.skills).toBeUndefined()
+
+        // File MUST be byte-for-byte identical — autocode array preserved.
+        const written = readFileSync(globalPath(), "utf-8")
+        expect(written).toBe(existingContent)
+    })
+
+    test("regression: non-record autocode (string) → seeding skipped, file untouched", async () => {
+        const existingContent = preCreateRealFile(JSON.stringify({
+            autocode: "custom-string-value",
+        }))
+        const { fs } = makeFs({ [globalPath()]: existingContent })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.skills).toBeUndefined()
+
+        const written = readFileSync(globalPath(), "utf-8")
+        expect(written).toBe(existingContent)
+    })
+
+    test("regression: non-record autocode (number) → seeding skipped, file untouched", async () => {
+        const existingContent = preCreateRealFile(JSON.stringify({
+            autocode: 12345,
+        }))
+        const { fs } = makeFs({ [globalPath()]: existingContent })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.skills).toBeUndefined()
+
+        const written = readFileSync(globalPath(), "utf-8")
+        expect(written).toBe(existingContent)
+    })
+
+    test("regression: null autocode → seeding skipped, file untouched", async () => {
+        const existingContent = preCreateRealFile(JSON.stringify({
+            autocode: null,
+        }))
+        const { fs } = makeFs({ [globalPath()]: existingContent })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.skills).toBeUndefined()
+
         const written = readFileSync(globalPath(), "utf-8")
         expect(written).toBe(existingContent)
     })

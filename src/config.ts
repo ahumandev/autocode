@@ -29,6 +29,7 @@ const DEFAULT_LEARNED_MAX = 10
 export interface ConfigFileSystem {
     readFileSync(path: string, encoding: "utf-8"): string
     ensureFileSync(path: string, contents: string): void
+    writeFileSync(path: string, contents: string): void
 }
 
 const defaultFs: ConfigFileSystem = {
@@ -41,6 +42,7 @@ const defaultFs: ConfigFileSystem = {
         mkdirSync(dirname(path), { recursive: true })
         writeFileSync(path, contents)
     },
+    writeFileSync: (path, contents) => writeFileSync(path, contents),
 }
 
 const DEFAULT_AUTOCODE_CONFIG =
@@ -400,23 +402,26 @@ export async function loadAutocodeConfig(
         tiers = { ...tiers, ...resolveTiers(parsed, availableTiers) }
     }
 
-    // Idempotent skill seeding: when global config exists but `autocode.skills` key is
-    // entirely absent, inject the default skills block. Missing file is already handled
-    // by ensureFileSync + the candidate loop above.
+    // Idempotent skill seeding: ONLY creates the `autocode.skills` key when ALL of the
+    // following are true:
+    //   - global config file already existed before this load
+    //   - parsed root is a record
+    //   - `autocode` section is itself a record (never an array / primitive)
+    //   - `skills` key is entirely absent from `autocode`
+    // Any other section (tiers, sandbox, learned, ...) is NEVER touched.
+    // If `skills` already exists with any value (including null / arrays / scalars),
+    // it is left alone. If `autocode` is not a record, seeding is skipped entirely
+    // so the user's custom configuration can never be replaced.
     if (globalExisted) {
         try {
             const raw = fs.readFileSync(globalConfigPath, "utf-8")
             const parsed = JSON.parse(stripJsoncComments(raw)) as { autocode?: Record<string, unknown> }
             const ac = parsed.autocode
-            if (isRecord(parsed) && ac && !("skills" in ac)) {
+            if (isRecord(parsed) && isRecord(ac) && !("skills" in ac)) {
                 const defaultSkills = JSON.parse(stripJsoncComments(DEFAULT_AUTOCODE_CONFIG)).autocode?.skills
-                if (!isRecord(ac)) {
-                    parsed.autocode = { skills: defaultSkills }
-                } else {
-                    ac.skills = defaultSkills
-                }
-                writeFileSync(globalConfigPath, JSON.stringify(parsed, null, 4))
-                const seeded = collectSkills(ac.skills)
+                ac.skills = defaultSkills
+                fs.writeFileSync(globalConfigPath, JSON.stringify(parsed, null, 4))
+                const seeded = collectSkills(defaultSkills)
                 if (seeded) skills = { ...(skills ?? {}), ...seeded }
             }
         } catch (err) {

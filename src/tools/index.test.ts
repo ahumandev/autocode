@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs"
 import { join } from "path"
 import { homedir, tmpdir } from "os"
@@ -2247,6 +2247,9 @@ function makeFs(files: Record<string, string>): ConfigFileSystem {
                 files[path] = contents
             }
         },
+        writeFileSync(path: string, contents: string) {
+            files[path] = contents
+        },
     }
 }
 
@@ -2591,6 +2594,21 @@ describe("loadAutocodeConfig", () => {
 // ── plugin.config end-to-end tier tests ──────────────────────────────────────
 
 describe("plugin.config tier wiring", () => {
+    let previousSkipBootstrap: string | undefined
+
+    beforeAll(() => {
+        previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
+        process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
+    })
+
+    afterAll(() => {
+        if (previousSkipBootstrap === undefined) {
+            delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
+        } else {
+            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
+        }
+    })
+
     function createTierClient(): OpencodeClient {
         return {
             session: {
@@ -2631,8 +2649,6 @@ describe("plugin.config tier wiring", () => {
     test("user override wins over tier mapping", async () => {
         await withIsolatedConfigHome(async () => {
             const worktree = mkdtempSync(join(tmpdir(), "autocode-test-"))
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
             try {
                 mkdirSync(join(worktree, ".opencode"), { recursive: true })
                 writeFileSync(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
@@ -2646,11 +2662,6 @@ describe("plugin.config tier wiring", () => {
                 expect(getAgentField(cfg, "assist", "model")).toBe("user/custom-model")
             } finally {
                 rmSync(worktree, { recursive: true, force: true })
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
             }
         })
     })
