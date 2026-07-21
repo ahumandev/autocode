@@ -6,10 +6,10 @@ export const taskPrompt = `
     - OMIT noise: irrelevant ideas, raw tool/query outputs, irrelevant ideas, full file contents, unrelated findings.
     - Frame as actionable INSTRUCTIONS, not a passive report.
 * \`prompt\` includes:
-    - GOAL: *what* subagent must solve (1 line)
-    - REASON: *why* GOAL matters (1 line)
+    - GOAL: *what* measurable desired outcome expected (1 line)
+    - REASON: *why* GOAL matters in context of current APPROACH (1 line)
     - CONTRAINTS: *facts* already discovered regarding task (list)
-    - SCOPE: *limits* of subagent actions to avoid unnecessary work (list)
+    - SCOPE: *limits* subagent ACTIONS to avoid unnecessary work (list)
 `
 
 export const toolTaskRules = `
