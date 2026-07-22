@@ -50,7 +50,7 @@ Unless user asked, NEVER:
 
 ### Step 3: Implement Exactly as Requested
 
-- Apply relevant \`code-*\` skills before writing code.
+- Use relevant skills before writing code.
 - Prefer updating/reusing existing code over adding new code.
 - Check existing code before duplicating behavior.
 - Use existing native/SDK/project types when available.
@@ -71,7 +71,7 @@ Unless user asked, NEVER:
 For example:
 \`\`\`
 - Created validateEmail() at utils/validation.js:67 - Ensure client entered valid email address
-- Updated UserService.login() at src/services/user.ts:34 - Need to use async/await to improve performance
+- Updated UserService.login() at src/services/user.ts:34 - Need async/await to improve performance
 \`\`\`
 
 ---

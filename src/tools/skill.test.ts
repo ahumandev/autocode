@@ -626,13 +626,34 @@ describe("skill tool", () => {
         })
     })
 
-    test("missing generated skill returns abort error", async () => {
+    test("missing generated skill returns retry error", async () => {
         await withTempSkillRoots(async ({ worktree }) => {
             const result = await executeSkillLoad(worktree)
 
             expect(result.failedAction).toBe("load skill")
             expect(result.error).toBe("Unable to load skill code-typescript")
-            expect(String(result.instruction)).toContain("Immediately ABORT")
+            expect(result.instruction).toBe("Retry with a skill name from the available skills list.")
+        })
+    })
+
+    test("skill loading I/O error returns retry guidance", async () => {
+        await withTempSkillRoots(async ({ worktree }) => {
+            const fileSystem = {
+                readFile: async (): Promise<string> => "",
+                readdir: async (): Promise<never> => {
+                    throw new Error("I/O failure")
+                },
+            }
+            const tool = createSkillTool(undefined, fileSystem)
+            const result = parseToolResult(await tool.execute({ name: "code-typescript" } as never, createToolContext({
+                agent: "pair",
+                directory: worktree,
+                worktree,
+                sessionID: "session-1",
+            })))
+
+            expect(result.failedAction).toBe("load skill")
+            expect(result.error).toBe("Skill code-typescript is unavailable.")
         })
     })
 

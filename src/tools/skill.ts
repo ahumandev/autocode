@@ -493,10 +493,25 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
             }
 
             const skillContext = context as SkillLoadContext
+            let skill: LoadedSkill | undefined
             try {
-                const skill = await loadSkill(fileSystem, skillContext, validatedArgs.name)
+                skill = await loadSkill(fileSystem, skillContext, validatedArgs.name)
+            }
+            catch {
+                return createRetryResponse(
+                    "load skill",
+                    `Skill ${validatedArgs.name} is unavailable.`,
+                    `Try another skill or skip ${validatedArgs.name} skill.`,
+                )
+            }
+
+            try {
                 if (skill === undefined) {
-                    return createAbortResponse("load skill", buildSkillNotFoundError(validatedArgs.name))
+                    return createRetryResponse(
+                        "load skill",
+                        buildSkillNotFoundError(validatedArgs.name),
+                        "Retry with a skill name from the available skills list.",
+                    )
                 }
 
                 if (validatedArgs.reference !== undefined) {

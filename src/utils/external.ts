@@ -12,11 +12,22 @@ export type ExternalSkill = {
     project: string
 }
 
+export type ExternalSkillDependencies = {
+    cloneRepo: (args: Parameters<typeof cloneRepo>[0]) => string | Promise<string>
+    installSymlinks: (
+        parsed: ParsedGitHubSkillUrl,
+        cloneTarget: string,
+        logger: SkillLogger,
+    ) => InstalledSkill[] | Promise<InstalledSkill[]>
+}
+
 const SKILL_CATEGORIES: SkillCategory[] = ["bash", "code", "design", "test"]
+const productionDependencies: ExternalSkillDependencies = { cloneRepo, installSymlinks }
 
 export async function bootstrapExternalSkills(
     skillsConfig: SkillsConfig | undefined,
     logger: SkillLogger,
+    dependencies: ExternalSkillDependencies = productionDependencies,
 ): Promise<ExternalSkill[]> {
     if (skillsConfig === undefined || typeof skillsConfig !== "object") {
         logger.log("skip bootstrap: no skills config")
@@ -47,14 +58,14 @@ export async function bootstrapExternalSkills(
                     continue
                 }
 
-                const cloneTarget = cloneRepo({
+                const cloneTarget = await dependencies.cloneRepo({
                     owner: parsed.owner,
                     project: parsed.project,
                     branch: "branch" in parsed ? parsed.branch : undefined,
                     logger,
                 })
 
-                const installed: InstalledSkill[] = installSymlinks(parsed, cloneTarget, logger)
+                const installed: InstalledSkill[] = await dependencies.installSymlinks(parsed, cloneTarget, logger)
 
                 for (const inst of installed) {
                     results.push({ category, skillName: inst.skillName, owner: inst.owner, project: inst.project })
