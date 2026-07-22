@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { parse as parseJsonc } from "jsonc-parser"
 import { loadAutocodeConfig, type ConfigFileSystem } from "./config"
 
 const DEFAULT_SKILLS = {
@@ -143,6 +144,48 @@ describe("skills config parsing and seeding", () => {
         // No other top-level keys should appear inside autocode.
         const autocodeKeys = Object.keys(parsed.autocode).sort()
         expect(autocodeKeys).toEqual(["learned", "sandbox", "skills"])
+    })
+
+    test("JSONC missing skills → seed preserves comments, custom tiers, and permission rules", async () => {
+        const existingContent = preCreateRealFile(`{
+    // named user comment
+    "autocode": {
+        "tiers": {
+            "custom": {
+                "fast": { "model": "custom-fast" },
+            },
+        },
+    },
+    "permission": {
+        "external_directory": {
+            "/workspace/**": "allow",
+            "*": "ask",
+        },
+    },
+}
+`)
+        const { fs, files, writtenPaths } = makeFs({ [globalPath()]: existingContent })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.skills).toEqual(DEFAULT_SKILLS)
+        expect(writtenPaths).toContain(globalPath())
+        const written = files[globalPath()]!
+        const parsed = parseJsonc(written) as {
+            autocode: { skills: unknown, tiers: unknown }
+            permission: unknown
+        }
+        expect(parsed.autocode.skills).toEqual(DEFAULT_SKILLS)
+        expect(parsed.autocode.tiers).toEqual({
+            custom: { fast: { model: "custom-fast" } },
+        })
+        expect(parsed.permission).toEqual({
+            external_directory: {
+                "/workspace/**": "allow",
+                "*": "ask",
+            },
+        })
+        expect(written).toContain("// named user comment")
     })
 
     test("file exists with skills: {} → result.skills is undefined and no write-back happens", async () => {

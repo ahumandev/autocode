@@ -3,6 +3,7 @@ import { homedir } from "os"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "path"
 
 import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json" }
+import { createJsoncDocumentEditor } from "./tools/config/json"
 
 const MODEL_TIERS = ["cheap", "fast", "operator", "balanced", "smart"] as const
 const PERMISSION_ACTIONS = ["ask", "allow", "deny"] as const
@@ -13,6 +14,7 @@ export type ModelTier = (typeof MODEL_TIERS)[number]
 export type TierConfig = { model?: string; variant?: string }
 export type PermissionAction = (typeof PERMISSION_ACTIONS)[number]
 export type ExternalDirectoryRules = Record<string, PermissionAction>
+export type TaskExternalRules = ExternalDirectoryRules
 export type SandboxSyncMethod = (typeof SANDBOX_SYNC_METHODS)[number]
 export type AutocodeSandboxConfig = {
     sync_method?: SandboxSyncMethod
@@ -68,6 +70,7 @@ type AutocodeJsoncNew = {
     }
     permission?: {
         external_directory?: unknown
+        task_external?: unknown
     }
 }
 
@@ -83,6 +86,7 @@ type ParsedAutocodeConfig = {
     tiers?: Record<string, unknown>
     legacyTiers?: Partial<Record<ModelTier, TierConfig>>
     externalDirectories?: ExternalDirectoryRules
+    taskExternalRules?: TaskExternalRules
     sandbox?: AutocodeSandboxConfig
     skills?: SkillsConfig
     learned?: LearnedConfig
@@ -163,6 +167,10 @@ export function collectExternalDirectories(value: unknown): ExternalDirectoryRul
     }
 
     return Object.keys(result).length > 0 ? result : undefined
+}
+
+export function collectTaskExternalRules(value: unknown): TaskExternalRules | undefined {
+    return collectExternalDirectories(value)
 }
 
 function collectSandboxConfig(value: unknown): AutocodeSandboxConfig | undefined {
@@ -259,17 +267,19 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
     }
     const ac = parsed?.autocode
     const externalDirectories = collectExternalDirectories(parsed.permission?.external_directory)
+    const taskExternalRules = collectTaskExternalRules(parsed.permission?.task_external)
     const sandbox = collectSandboxConfig(ac?.sandbox)
     const skills = collectSkills(ac?.skills)
     const learned = collectLearned(ac?.learned)
 
-    if (!ac) return { externalDirectories, sandbox, skills, learned }
+    if (!ac) return { externalDirectories, taskExternalRules, sandbox, skills, learned }
 
     if (isRecord(ac.tiers)) {
         return {
             tier: typeof ac.tier === "string" ? ac.tier : undefined,
             tiers: ac.tiers,
             externalDirectories,
+            taskExternalRules,
             sandbox,
             skills,
             learned,
@@ -277,7 +287,7 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
     }
 
     if (typeof ac.tier === "string") {
-        return { tier: ac.tier, externalDirectories, sandbox, skills, learned }
+        return { tier: ac.tier, externalDirectories, taskExternalRules, sandbox, skills, learned }
     }
 
     // legacy shape: autocode.model.<tier> + optional autocode.variant.<tier>
@@ -289,10 +299,10 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
                 result[tier] = { model, variant: ac.variant?.[tier] }
             }
         }
-        return { legacyTiers: result, externalDirectories, sandbox, skills, learned }
+        return { legacyTiers: result, externalDirectories, taskExternalRules, sandbox, skills, learned }
     }
 
-    return { externalDirectories, sandbox, skills, learned }
+    return { externalDirectories, taskExternalRules, sandbox, skills, learned }
 }
 
 function addCandidate(candidates: string[], path: string): void {
@@ -341,6 +351,24 @@ function collectLocalConfigCandidates(worktree: string, directory: string): stri
     return candidates
 }
 
+function collectLocalOpencodeConfigCandidates(worktree: string, directory: string): string[][] {
+    return collectLocalConfigCandidates(worktree, directory).map((path) => {
+        const configDirectory = dirname(dirname(path))
+        return [join(configDirectory, "opencode.jsonc"), join(configDirectory, "opencode.json")]
+    })
+}
+
+function readFirstConfig(fs: ConfigFileSystem, paths: readonly string[]): { path: string, raw: string } | undefined {
+    for (const path of paths) {
+        try {
+            return { path, raw: fs.readFileSync(path, "utf-8") }
+        } catch {
+            continue
+        }
+    }
+    return undefined
+}
+
 function resolveTiers(config: ParsedAutocodeConfig, availableTiers: Record<string, unknown>): Partial<Record<ModelTier, TierConfig>> {
     if (config.legacyTiers) return config.legacyTiers
 
@@ -357,17 +385,18 @@ export async function loadAutocodeConfig(
     directory: string,
     fs: ConfigFileSystem = defaultFs,
 ): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined, learned: LearnedConfig }> {
-    const globalConfigPath = join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode", "autocode.jsonc")
-    const candidates: string[] = []
+    const globalConfigDirectory = join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode")
+    const globalConfigPath = join(globalConfigDirectory, "autocode.jsonc")
+    const candidates: string[][] = []
 
     // global defaults
     const globalExisted = existsSync(globalConfigPath)
     fs.ensureFileSync(globalConfigPath, DEFAULT_AUTOCODE_CONFIG)
-    addCandidate(candidates, globalConfigPath)
+    candidates.push([join(globalConfigDirectory, "opencode.jsonc"), join(globalConfigDirectory, "opencode.json")])
+    candidates.push([globalConfigPath])
 
-    for (const candidate of collectLocalConfigCandidates(worktree, directory)) {
-        addCandidate(candidates, candidate)
-    }
+    candidates.push(...collectLocalOpencodeConfigCandidates(worktree, directory))
+    candidates.push(...collectLocalConfigCandidates(worktree, directory).map((path) => [path]))
 
     let tiers: Partial<Record<ModelTier, TierConfig>> = {}
     let availableTiers: Record<string, unknown> = {}
@@ -375,20 +404,19 @@ export async function loadAutocodeConfig(
     let sandbox: AutocodeSandboxConfig = {}
     let skills: SkillsConfig | undefined
     let learned: LearnedConfig = { max: DEFAULT_LEARNED_MAX }
-    for (const path of candidates) {
-        let raw: string
-        try {
-            raw = fs.readFileSync(path, "utf-8")
-        } catch {
-            continue
-        }
+    for (const candidate of candidates) {
+        const config = readFirstConfig(fs, candidate)
+        if (!config) continue
         // later candidates override earlier ones per tier
-        const parsed = parseAutocodeConfig(raw, path)
+        const parsed = parseAutocodeConfig(config.raw, config.path)
         if (parsed.tiers) {
             availableTiers = mergeTierMaps(availableTiers, parsed.tiers)
         }
         if (parsed.externalDirectories) {
             externalDirectories = mergeExternalDirectoryRules(externalDirectories, parsed.externalDirectories)
+        }
+        if (parsed.taskExternalRules) {
+            externalDirectories = mergeExternalDirectoryRules(externalDirectories, parsed.taskExternalRules)
         }
         if (parsed.sandbox) {
             sandbox = { ...sandbox, ...parsed.sandbox }
@@ -418,9 +446,10 @@ export async function loadAutocodeConfig(
             const parsed = JSON.parse(stripJsoncComments(raw)) as { autocode?: Record<string, unknown> }
             const ac = parsed.autocode
             if (isRecord(parsed) && isRecord(ac) && !("skills" in ac)) {
-                const defaultSkills = JSON.parse(stripJsoncComments(DEFAULT_AUTOCODE_CONFIG)).autocode?.skills
-                ac.skills = defaultSkills
-                fs.writeFileSync(globalConfigPath, JSON.stringify(parsed, null, 4))
+                const defaultSkills: SkillsConfig = defaultAutocodeConfig.autocode.skills
+                const editor = createJsoncDocumentEditor(raw)
+                editor.apply({ kind: "create", path: ["autocode", "skills"], value: defaultSkills, index: null })
+                fs.writeFileSync(globalConfigPath, editor.toString())
                 const seeded = collectSkills(defaultSkills)
                 if (seeded) skills = { ...(skills ?? {}), ...seeded }
             }

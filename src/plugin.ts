@@ -1,7 +1,7 @@
 import type { Plugin, PluginInput, Hooks } from "@opencode-ai/plugin"
 import type { AgentConfig, Config } from "@opencode-ai/sdk/v2"
 import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, injectExternalSkillPermissions, type AutocodeAgentConfig } from "./agents"
-import { collectExternalDirectories, loadAutocodeConfig, mergeExternalDirectoryRules } from "./config"
+import { collectExternalDirectories, collectTaskExternalRules, loadAutocodeConfig, mergeExternalDirectoryRules } from "./config"
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { commands } from "./commands"
 import { createAgentSwitchBackHook } from "./hooks/agent_switch_back"
@@ -62,6 +62,10 @@ async function mergeConfig(cfg: Config, input: PluginInputWithSandboxSupportOver
     cfg.skills = cfg.skills ?? {}
     cfg.skills.paths = injectGeneratedSkillsPath(cfg.skills.paths, generatedSkillsPath)
 
+    if ((cfg.subagent_depth ?? 1) < 4) {
+        cfg.subagent_depth = 4
+    }
+
     // Bootstrap external GitHub skills (resilient — failures never break startup).
     const skillLogger = createSkillLogger()
     let externalSkills: ExternalSkill[] = []
@@ -82,8 +86,14 @@ async function mergeConfig(cfg: Config, input: PluginInputWithSandboxSupportOver
     const nativeExternalDirectories = typeof cfg.permission === "object" && cfg.permission !== null
         ? collectExternalDirectories(cfg.permission.external_directory)
         : undefined
-    const agentExternalDirectories = nativeExternalDirectories
-        ? mergeExternalDirectoryRules(nativeExternalDirectories, externalDirectories)
+    const nativeTaskExternalRules = typeof cfg.permission === "object" && cfg.permission !== null
+        ? collectTaskExternalRules((cfg.permission as Record<string, unknown>).task_external)
+        : undefined
+    const nativePermissionRules = nativeTaskExternalRules
+        ? mergeExternalDirectoryRules(nativeExternalDirectories ?? {}, nativeTaskExternalRules)
+        : nativeExternalDirectories
+    const agentExternalDirectories = nativePermissionRules
+        ? mergeExternalDirectoryRules(nativePermissionRules, externalDirectories)
         : externalDirectories
 
     if (cfg.small_model === undefined && tiers.cheap?.model) {

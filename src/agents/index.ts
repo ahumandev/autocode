@@ -894,7 +894,7 @@ const baseAgents: AgentMap = {
 
     execute_document: {
         color: colorDocumentWorker,
-        description: "task execute_document to update `AGENTS.md`, `README.md`, subagent skill files, remember architectural/design decisions or specs.",
+        description: "task execute_document to update `AGENTS.md`, `README.md`, skills, remember architectural/design decisions or specs.",
         mode: "subagent",
         permission: {
             "*": "deny",
@@ -902,7 +902,6 @@ const baseAgents: AgentMap = {
             "autocode_md_*": "allow",
             skill: {
                 "*": "deny",
-                "author-caveman": "allow",
                 "author-readme": "allow",
             },
             task: {
@@ -987,7 +986,7 @@ const baseAgents: AgentMap = {
         },
         prompt: executeOpencodePrompt,
         temperature: 0.3,
-        tier: "balanced",
+        tier: "operator",
     },
 
     execute_rest: {
@@ -1335,7 +1334,7 @@ const baseAgents: AgentMap = {
 
     query_web: {
         color: colorReadOnlyWorker,
-        description: "task query_web to search and read public ONLINE web sources: documentation, articles, forums, GitHub, news, framework API/SDKs, public repo examples",
+        description: "task query_web to search and read public ONLINE web sources: documentation, articles, forums, GitHub, news, framework API/SDKs, public repo examples; Allow ONLY 1 query per subagent session.",
         hidden: true,
         mode: "subagent",
         permission: {
@@ -1347,7 +1346,7 @@ const baseAgents: AgentMap = {
         },
         prompt: queryWebPrompt,
         temperature: 0.5,
-        tier: "fast",
+        tier: "operator", // Needs more context to load websites
     },
 
     // Temporary agents: execute 1 task then move out of the way so that original agent can continue

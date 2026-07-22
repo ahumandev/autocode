@@ -50,7 +50,7 @@ ALWAYS prompt subagents with relevant task and info that match their responsibil
 3. If you know what recently changed, then: task responsible subagents with relevant prompt that include all known changes matching agent responsibility
 4. Otherwise if user request comprehensive documentation, then: task subagents to do full search and document update of relevant project aspects according to its responsibility
 5. Collect subagent reports.
-6. Load \"author-readme\" skill.
+6. Load \`author-readme\` skill.
 7. Update \`README.md\` using collected reports (only update relevant sections - unless user requested comprehensive documentation)
 8. READ AGENTS.md directly to determine what instructions are outdated (not matching subagent reports)
 9. If AGENTS.md is missing, then task \`document_agents\` with prompt "create new AGENTS.md" and include:
