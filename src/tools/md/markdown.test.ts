@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseMarkdown, rebuildFile } from "./markdown"
+import { buildOutline, parseMarkdown, rebuildFile } from "./markdown"
 import { serializeTree } from "./transform"
 
 describe("rebuildFile blank-line boundary", () => {
@@ -33,5 +33,14 @@ describe("rebuildFile blank-line boundary", () => {
 
         expect(out).toBe(raw)
         expect(out.startsWith("\n")).toBe(false)
+    })
+})
+
+describe("buildOutline", () => {
+    test("keeps nested headings without line metadata", () => {
+        const outline = buildOutline(parseMarkdown("# Root\n\n## Child\n\n### Grandchild\n"))
+
+        expect(outline).toEqual({ root: { child: { grandchild: {} } } })
+        expect(JSON.stringify(outline)).not.toContain("_lines")
     })
 })

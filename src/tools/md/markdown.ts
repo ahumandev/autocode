@@ -204,15 +204,15 @@ export function ownText(model: MdModel, h: MdHeading): string {
     return computeOwn(model, h).text
 }
 
-function sectionObj(model: MdModel, h: MdHeading): Record<string, unknown> {
-    const obj: Record<string, unknown> = { _lines: [h.start, h.spanEnd] }
-    for (const c of h.children) obj[c.referenceId] = sectionObj(model, c)
+function sectionObj(h: MdHeading): Record<string, unknown> {
+    const obj: Record<string, unknown> = {}
+    for (const c of h.children) obj[c.referenceId] = sectionObj(c)
     return obj
 }
 
 export function buildOutline(model: MdModel): Record<string, unknown> {
     const result: Record<string, unknown> = {}
-    for (const r of model.roots) result[r.referenceId] = sectionObj(model, r)
+    for (const r of model.roots) result[r.referenceId] = sectionObj(r)
     return result
 }
 
