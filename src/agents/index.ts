@@ -982,6 +982,7 @@ const baseAgents: AgentMap = {
                 "author-agent": "allow",
                 "author-command": "allow",
                 "author-rules": "allow",
+                "customize-opencode": "allow"
             },
         },
         prompt: executeOpencodePrompt,
@@ -1276,6 +1277,7 @@ const baseAgents: AgentMap = {
             '*': "deny",
             skill: {
                 "*": "deny",
+                "customize-opencode": "allow",
                 "design*": "allow",
                 "execute*": "allow",
                 "learned-*": "allow",
