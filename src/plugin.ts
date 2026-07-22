@@ -13,6 +13,7 @@ import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 type PluginAgentConfig = AutocodeAgentConfig
+type ConfigWithSubagentDepth = Config & { subagent_depth?: number }
 type PluginInputWithSandboxSupportOverride = PluginInput & {
     sandboxSupportOverride?: SandboxPlatformSupportOptions
     serverUrl?: URL
@@ -48,7 +49,7 @@ function preparePluginAgentsAfterOverrides(
     ]))
 }
 
-async function mergeConfig(cfg: Config, input: PluginInputWithSandboxSupportOverride): Promise<void> {
+async function mergeConfig(cfg: ConfigWithSubagentDepth, input: PluginInputWithSandboxSupportOverride): Promise<void> {
     const generatedSkillsPath = await ensureGeneratedSkills()
 
     try {
@@ -61,10 +62,6 @@ async function mergeConfig(cfg: Config, input: PluginInputWithSandboxSupportOver
 
     cfg.skills = cfg.skills ?? {}
     cfg.skills.paths = injectGeneratedSkillsPath(cfg.skills.paths, generatedSkillsPath)
-
-    if ((cfg.subagent_depth ?? 1) < 4) {
-        cfg.subagent_depth = 4
-    }
 
     // Bootstrap external GitHub skills (resilient — failures never break startup).
     const skillLogger = createSkillLogger()
@@ -99,6 +96,8 @@ async function mergeConfig(cfg: Config, input: PluginInputWithSandboxSupportOver
     if (cfg.small_model === undefined && tiers.cheap?.model) {
         cfg.small_model = tiers.cheap.model
     }
+
+    cfg.subagent_depth = Math.max(cfg.subagent_depth ?? 0, 4)
 
     cfg.agent = cfg.agent ?? {}
     const agents = buildAgents(agentExternalDirectories, input.sandboxSupportOverride, externalSkills)
@@ -152,7 +151,7 @@ const autocode: Plugin = async (input: PluginInput): Promise<Hooks> => {
     const { sandbox } = await loadAutocodeConfig(input.worktree, input.directory)
 
     return {
-        async config(cfg: Config) {
+        async config(cfg: ConfigWithSubagentDepth) {
             await mergeConfig(cfg, pluginInput)
         },
 
