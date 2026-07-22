@@ -3,27 +3,6 @@ name: author-readme
 description: Use `author-readme` skill when reviewing/editing README.md file.
 ---
 
-- README.md written for humans in professional, user-manual style natural language 
-- Use full sentences except diagrams and listing items like features
-- Use British English by default (unless specified otherwise)
-- Assume user has limited technical knowledge, but understand technical terminology (no need to explain basic technical terms like "docker", "compile", "proxy", etc.)
-- Code examples must specify the correct language attribute for syntax highlighting
-- Do not invent exact command output. If exact output is not known, describe the expected result in prose.
-- Use only links that are present in the repository, existing README, package metadata, build files, or supplied documentation.
-- Do not create links to internal files unless the file path is known.
-- Prefer relative links for repository files.
-- Mermaid diagrams must be high-level, readable, and syntactically valid.
-- Prefer `flowchart TD` for integration and component diagrams.
-- Use short node labels.
-- Do not include secrets, environment-specific hostnames, or internal credentials in diagrams.
-- Use one H1 heading only.
-- Use sequential heading levels without skipping levels.
-- Surround headings and fenced code blocks with blank lines.
-- Specify a language for every fenced code block, for example `bash`, `json`, `yaml`, `sql`, `text`, or `mermaid`.
-- Do not use trailing spaces.
-- Use hyphens for unordered lists.
-- MUST use README.md Layout
-
 ## README.md Layout
 
 ```markdown
@@ -185,17 +164,15 @@ Replace placeholders in README.md as follows:
 
 ## Rules for Updates
 
-- If current README.md already follows this layout, only update outdated or missing sections
-- If current README.md already exist, but in different format:
-    1. Identify critical info to keep
-    2. Reorganize original README.md according to this specification
-    3. Verify that critical info is still included and in correct section
-- Remove empty sections or sections with no factual content (no guessing or "coming soon" placeholders)
-- Ensure all markdown links to internal project files or external sites are valid
-- Updated/Remove outdated info (if detected)
-- Avoid duplicated content (instead add markdown links in text that refers to previous sections of same content applies)
-- First time non-standard acronym is used: include definition in round brackets (), for example: "It guard UST (User Security Tables) when configured."
-- First time non-standard definition is used: include an INFO block below the paragraph where it was used to explain what it is in < 20 words.
-- NEVER repeat definitions, only first occurrence.
-- NEVER mention deprecated tools or configs
-- Keep examples updated with current tools/APIs/configs
+- Use README.md Layout only for a new README or user-requested full rewrite.
+- For target update, keep existing README structure.
+- Before edit, record hero, logo, H1, badges, header HTML, and section anchors.
+- Edit only requested anchors or anchors with factually outdated content.
+- Never remove or replace hero, logo, H1, badges, or header HTML in partial update.
+- If `autocode_logo_find` failed, preserve existing logo; never remove or substitute it.
+- After write, verify recorded hero, logo, H1, badges, header HTML, and unrelated sections are unchanged.
+- Remove empty sections without factual content; do not add guessed or "coming soon" content.
+- Validate markdown links; update factually outdated information.
+- Avoid duplicate content; link to existing sections instead.
+- Define non-standard acronyms and terms once at first use.
+- Never mention deprecated tools or configs; keep examples current.
