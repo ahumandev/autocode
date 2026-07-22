@@ -19,6 +19,7 @@ package-lock.json
 *.swo
 *~
 .DS_Store
+*.code-workspace
 
 # Environment
 .env
