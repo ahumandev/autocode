@@ -1,6 +1,6 @@
-// Shallow-clones a GitHub repo into ~/.config/opencode/autocode/github/{owner}/{project}. Never throws; failures are logged and the target path is still returned for partial scans.
+// Shallow-clones GitHub repos; existing target directories are reused without network access.
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
+import { existsSync, mkdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import type { SkillLogger } from "./logger"
@@ -16,12 +16,21 @@ export function getCloneTarget(owner: string, project: string): string {
     return join(getCloneRoot(), owner, project)
 }
 
+export function findExistingCloneTarget(owner: string, project: string): string | undefined {
+    const target = getCloneTarget(owner, project)
+    try {
+        return existsSync(target) && statSync(target).isDirectory() ? target : undefined
+    } catch {
+        return undefined
+    }
+}
+
 export function cloneRepo(args: { owner: string; project: string; branch?: string; logger: SkillLogger }): string {
     const { owner, project, branch, logger } = args
     const target = getCloneTarget(owner, project)
 
     try {
-        if (existsSync(target) && statSync(target).isDirectory() && readdirSync(target).length > 0) {
+        if (findExistingCloneTarget(owner, project) !== undefined) {
             logger.log(`skip: already cloned ${owner}/${project}`)
             return target
         }

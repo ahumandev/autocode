@@ -1,7 +1,7 @@
 // Orchestrates parse → clone → symlink for configured external skill URLs. Returns registered skills for agent permission injection.
 import type { SkillLogger } from "./logger"
 import { parseGitHubSkillUrl, type ParsedGitHubSkillUrl } from "./github"
-import { cloneRepo } from "./clone"
+import { cloneRepo, findExistingCloneTarget } from "./clone"
 import { installSymlinks, type InstalledSkill } from "./symlink"
 import type { SkillCategory, SkillsConfig } from "../config"
 
@@ -14,6 +14,7 @@ export type ExternalSkill = {
 
 export type ExternalSkillDependencies = {
     cloneRepo: (args: Parameters<typeof cloneRepo>[0]) => string | Promise<string>
+    findExistingCloneTarget: (owner: string, project: string) => string | undefined
     installSymlinks: (
         parsed: ParsedGitHubSkillUrl,
         cloneTarget: string,
@@ -22,7 +23,7 @@ export type ExternalSkillDependencies = {
 }
 
 const SKILL_CATEGORIES: SkillCategory[] = ["bash", "code", "design", "test"]
-const productionDependencies: ExternalSkillDependencies = { cloneRepo, installSymlinks }
+const productionDependencies: ExternalSkillDependencies = { cloneRepo, findExistingCloneTarget, installSymlinks }
 
 export async function bootstrapExternalSkills(
     skillsConfig: SkillsConfig | undefined,
@@ -58,12 +59,13 @@ export async function bootstrapExternalSkills(
                     continue
                 }
 
-                const cloneTarget = await dependencies.cloneRepo({
-                    owner: parsed.owner,
-                    project: parsed.project,
-                    branch: "branch" in parsed ? parsed.branch : undefined,
-                    logger,
-                })
+                const cloneTarget = dependencies.findExistingCloneTarget(parsed.owner, parsed.project)
+                    ?? await dependencies.cloneRepo({
+                        owner: parsed.owner,
+                        project: parsed.project,
+                        branch: "branch" in parsed ? parsed.branch : undefined,
+                        logger,
+                    })
 
                 const installed: InstalledSkill[] = await dependencies.installSymlinks(parsed, cloneTarget, logger)
 

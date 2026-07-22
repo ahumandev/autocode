@@ -8,6 +8,7 @@ const stubLogger: SkillLogger = { log: () => {} }
 function createDependencies(installed: InstalledSkill[] = []): ExternalSkillDependencies {
     return {
         cloneRepo: async () => "/tmp/fake-clone-target",
+        findExistingCloneTarget: () => undefined,
         installSymlinks: async () => installed,
     }
 }
@@ -45,6 +46,7 @@ describe("bootstrapExternalSkills", () => {
                 cloneCalls += 1
                 return "/tmp/fake-clone-target"
             },
+            findExistingCloneTarget: () => undefined,
             installSymlinks: async () => {
                 installCalls += 1
                 return []
@@ -60,6 +62,30 @@ describe("bootstrapExternalSkills", () => {
         expect(installCalls).toBe(0)
     })
 
+    test("uses existing skill directories without cloning", async () => {
+        let cloneCalls = 0
+        let installedTarget: string | undefined
+        const dependencies: ExternalSkillDependencies = {
+            cloneRepo: async () => {
+                cloneCalls += 1
+                return "/tmp/fake-clone-target"
+            },
+            findExistingCloneTarget: () => "/tmp/existing-skill",
+            installSymlinks: async (_parsed, cloneTarget) => {
+                installedTarget = cloneTarget
+                return [{ category: "", skillName: "my-skill", owner: "o", project: "p" }]
+            },
+        }
+
+        const result = await bootstrapExternalSkills({
+            bash: ["https://github.com/o/p/blob/main/skills/my-skill/SKILL.md"],
+        }, stubLogger, dependencies)
+
+        expect(cloneCalls).toBe(0)
+        expect(installedTarget).toBe("/tmp/existing-skill")
+        expect(result).toHaveLength(1)
+    })
+
     test("per-URL clone failures do not stop other URLs from being processed", async () => {
         let cloneCalls = 0
         const dependencies: ExternalSkillDependencies = {
@@ -70,6 +96,7 @@ describe("bootstrapExternalSkills", () => {
                 }
                 return "/tmp/fake-clone-target"
             },
+            findExistingCloneTarget: () => undefined,
             installSymlinks: async () => [{ category: "", skillName: "skill-2", owner: "o", project: "p" }],
         }
 
