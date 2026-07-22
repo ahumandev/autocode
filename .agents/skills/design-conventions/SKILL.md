@@ -1,43 +1,25 @@
 ---
 name: design-conventions
-description: Use `design-conventions` to get Project Conventions when deciding on names, job vocabulary, or skill terms to avoid repo-specific ambiguity.
+description: Use `design-conventions` to get Project Conventions when deciding on name of variable, class, file, system object, label or command or understanding acronyms and project definitions to avoid ambiguous wording.
 ---
 
-# Project Conventions
-
 ## Internal Acronyms
-- **job_name**: Canonical job folder key; also used as session title target.
-- **session_id**: Persisted OpenCode session identifier stored in `session.yml`.
-- **session_title**: Human-facing session name, usually synced to `job_name`.
-- **SKILL.md**: Source skill file consumed and re-rendered into generated skill bundles.
+- None.
 
 ## Definitions
-- **Concept**: Idea note saved under `.agents/jobs/concepts/` before planning.
-- **Draft / plan**: Proposed solution saved as `plan.md` under `.agents/jobs/drafts/{name}/`.
-- **Planned job**: Job with a stable `job_name` and lifecycle directory.
-- **Lifecycle directory**: One of `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `shelved`.
-- **Active lifecycle**: Any lifecycle except `shelved`.
-- **Generated skill**: Rendered copy of `src/skills/*/SKILL.md` written to the user skill store.
-- **Primary agent**: One of `assist`, `auto`, `research`, `design`.
-- **Temp agent**: Internal orchestration agent prefixed with `temp_`.
+- **Skill**: Reusable agent guidance loaded by `skill` tool.
+- **Learned skill**: Per-item reusable guidance created by `skill_learn`.
+- **Reference**: Companion file inside skill, read through `skill` `reference` arg.
 
 ## Naming Rules
-### Job lifecycle names
-**Purpose:** Keep job state and filesystem paths aligned.
-**Pattern:** Use exact lifecycle names: `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, `shelved`. Do not invent new status words.
+### Skill Tool Names
+**Purpose:** Keep skill operations one tool family.
+**Pattern:** Use `skill` to load, `skill_edit` to replace main `SKILL.md`, and `skill_learn` to create learned skill. Do not use removed `skill_read` or `skill_edit_reference`.
 
-### Planned job folder shape
-**Purpose:** Make jobs discoverable and movable across states.
-**Pattern:** Use `.agents/jobs/{status}/{job_name}/` with `plan.md`, `criteria.yml`, `solution.md`, and `session.yml` as needed.
+### Skill Reference Names
+**Purpose:** Keep companion files linked to main skill.
+**Pattern:** Pass relative reference path in `skill` `reference` arg. Pass `references[]` to `skill_edit` or `skill_learn`.
 
-### Session/job sync
-**Purpose:** Preserve one job identity across session and title updates.
-**Pattern:** Store `session_id` in `session.yml`; sync session title to `job_name` when lifecycle changes.
+---
 
-### Command vocabulary
-**Purpose:** Separate user commands from internal tool names.
-**Pattern:** User commands use kebab-case `job-*` and `document-*`; tool names use `autocode_*`; internal agents use `temp_*`, `execute_*`, `query_*`, `document_*`, `auto_*`.
-
-### Generated skill packaging
-**Purpose:** Keep bundled skills deterministic.
-**Pattern:** Source skills live in `src/skills/{name}/SKILL.md`; generated output is written to `~/.agents/skills/autocode/{name}/SKILL.md` (or XDG config equivalent).
+**IMPORTANT**: Edit this `design-conventions` skillwhenever new naming conventions or domain terms are introduced.

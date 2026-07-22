@@ -1,11 +1,18 @@
-# Autocode Plugin
+# Purpose of project
 
 OpenCode plugin/library for tracked job flow, safe execution, and docs.
 It turns concepts into plans, runs work in OpenCode, and keeps state in text files.
 
+## Primary features
+
+- **`/learn`**: Retains corrections, environment quirks, permissions, and preferences as skills.
+- **External GitHub skill bootstrap**: Bootstraps reusable skills from supported external GitHub sources.
+- **SSH tool suite**: Runs remote commands and manages files through environment-keyed tools.
+- **`edit` agent**: Makes fast, targeted in-session edits without spawning subagents.
+
 # Architecture map
 
-- `src/plugin.ts`: Plugin entry; registers agents, commands, tools, config, and guidance.
+- `src/plugin.ts`: Plugin entry; registers agents, commands, tools, skills, config, and guidance.
 - `src/agents/`: Managed agents and prompts.
 - `src/commands/`: Slash command registration.
 - `src/tools/`: Runtime tools for jobs, DB read, sandbox, SSH, cross-project tasks, resume.
