@@ -4,7 +4,6 @@ import type { ExternalSkill } from "../utils/external"
 import { assistBrowserPrompt } from "./prompts/assist_browser";
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
 import { assistPrompt } from "./prompts/assist";
-import { assistTroubleshootPrompt } from "./prompts/assist_troubleshoot";
 import { autoDesignPrompt } from "./prompts/auto_design";
 import { autoFeaturePrompt } from "./prompts/auto_feature";
 import { autoGeneralPrompt } from "./prompts/auto_general";
@@ -131,6 +130,7 @@ const baseAgents: AgentMap = {
             question: "allow",
             skill: {
                 "*": "deny",
+                "assist-*": "allow",
                 "git-commit": "allow",
                 "learned-permissions*": "allow",
                 "primary-manual*": "allow",
@@ -349,48 +349,6 @@ const baseAgents: AgentMap = {
         prompt: assistGitConflictPrompt,
         temperature: 0.3,
         tier: "balanced",
-    },
-
-    assist_troubleshoot: {
-        color: colorWritableInteractiveOrchestrator,
-        description: "task assist_troubleshoot to troubleshoot ASSIGNMENT obstacles.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_sandbox_create: "ask",
-            autocode_sandbox_delete: "allow",
-            "context7*": "allow",
-            doom_loop: "ask",
-            external_directory: "ask",
-            question: "allow",
-            skill: {
-                "*": "ask",
-                "execute*": "allow",
-                "learned-corrections*": "allow",
-                "learned-env*": "allow",
-                "skill-write": "allow",
-            },
-            skill_learn: "allow",
-            task: {
-                "*": "deny",
-                execute_code: "allow",
-                execute_config: "allow",
-                execute_debug: "allow",
-                execute_os: "allow",
-                execute_rest: "allow",
-                execute_sandbox: "allow",
-                execute_script: "allow",
-                execute_ssh: "allow",
-                "query*": "allow",
-            },
-            task_external: "allow",
-            task_resume: "allow",
-            "todo*": "allow",
-        },
-        prompt: assistTroubleshootPrompt,
-        temperature: 0.5,
-        tier: "smart",
     },
 
     auto_design: {
@@ -992,7 +950,7 @@ const baseAgents: AgentMap = {
 
     execute_rest: {
         color: colorReadOnlyWorker,
-        description: "task execute_rest to make REST/API requests on HTTP/HTTPS endpoints.",
+        description: "task execute_rest to make REST/API requests on HTTP/HTTPS endpoints. Useful to reproduce API-related issues.",
         hidden: true,
         mode: "subagent",
         permission: {

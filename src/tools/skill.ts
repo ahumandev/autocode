@@ -481,7 +481,7 @@ async function readActiveContext(client: OpencodeClient | undefined, context: Sk
 
 export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem, runtime?: SkillLoadRuntime): ReturnType<typeof tool> {
     return tool({
-        description: "Before starting work: load all applicable skills from \`<available_skills>\` block ONLY.",
+        description: "Before starting work: load all applicable skills (not yet loaded) or skills needed by current step from \`<available_skills>\` block ONLY.",
         args: {
             name: tool.schema.string().describe("Must exactly match \`<name>\` from \`<available_skills>\` block in system prompt. If name only appears in agent prompt body (e.g. \`Task \`foo\`\`), it is a subagent - use \`task\` tool instead."),
             reference: tool.schema.string().optional().describe("Relative file path matching link in SKILL.md content exactly, to read a reference file instead of the main SKILL.md content. Example: reference/template.xml"),

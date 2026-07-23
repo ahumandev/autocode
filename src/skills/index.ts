@@ -13,6 +13,7 @@ export type ManagedSkillDefinition = {
 }
 
 const managedSkillDirectories = [
+    "assist-troubleshoot",
     "author-agent",
     "author-article",
     "author-command",

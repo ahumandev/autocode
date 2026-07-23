@@ -63,7 +63,7 @@ ${implementationDefinitions}
     - TD Mermaid flow diagram code branching occurs
     - Otherwise, Concise English (max 40 words)
 7. Measure task results according against ASSIGNMENT:
-   - Failure: Follow [Troubleshooting Workflow](#troubleshooting)
+   - Failure: Then follow "Troubleshoot Workflow" from \`assist-troubleshoot\` skill
    - Success, but ASSIGNMENT is incomplete:
         1. Report to user why ASSIGNMENT is incomplete and what is lacking
         2. Suggest follow-up actions using \`question\` tool
@@ -86,40 +86,14 @@ ${responseHumanRules}
 
 ${toolTaskRules}
 
+## Task Failures
+
+- If \`task\` failure reason was obvious mistake (1 simple solution like fix test, syntax error, missing import, etc.): Then automatically correct task and try again.
+- If \`task\` failure reason was not obvious or complex (CAUSES unkown or need multiple ACTIONS), then follow "Troubleshoot Workflow" from \`assist-troubleshoot\` skill.
+
 ---
 
 ${toolQuestionRules}
-
----
-
-## Troubleshooting Workflow {#troubleshooting}
-
-- If task failure reason was obvious mistake (1 simple solution like fix test, syntax error, missing import, etc.): Then automatically correct task and try again.
-- If task failure reason was not obvious or complex (multiple steps to fix or multiple possible causes), then:
-    1. Create and present formatted Obstacle Report with these values:
-        - SYMPTOMS = ASSIGNMENT's obstacle (what is observed)
-        - ENVIRONMENT = environment context where SYMPTOM occurs (like OS, runtime version, profile, config)
-        - BACKGROUND = why ASSIGNMENT is needed (if known)
-        - CHANGES = what you recently changed that might be relevant to obstacle
-        - EXPECTATION = what is expected to happen (like "respond 200 OK")
-        - CAUSE = what possibly caused SYMPTOM (like "new auth library is incorrectly implemented")
-        - EVIDENCE = facts that support theory of CAUSE (include blockcode of actual data, snippets of code, filenames, line numbers, urls, etc)
-        - ERROR = EVIDENCE observed facts about SYMPTOM (like specific error message, stack trace, or exception)
-        - TRACE = where ERROR was observed (like trace_id, log file, line number, timestamp, surrounding log messages, etc)
-        - REPRODUCTION = steps to reproduce SYMPTOM in ENVIRONMENT include sample input data in blockcode (if possible)
-    2. Then \`task\` subagent \`assist_troubleshoot\` in Caveman English with the Obstacle Report and all relevant \`task_id\` values of recent tasked subagents that may have context of obstacle.
-    3. Report troubleshooting task result to user:
-        - If troubleshooting was successful: then
-            1. Tell user how obstacle was resolved in < 40 words.
-            2. Resume Assistant Workflow.
-        - If troubleshooting was unsuccessful, then tell user why OBSTACLE is unresolved in < 40 words.
-    4. Call \`question\` tool to suggest 2-4 best work-around options to user.
-    5. Background context + user answer = \`prompt\` to task \`assist_troubleshoot\`
-    6. Repeat Troubleshooting Workflow until obstacle is resolved or user changes next ASSIGNMENT.
-
----
-
-Follow [Troubleshooting Workflow](#troubleshooting) when a task fails.
 
 ---
 

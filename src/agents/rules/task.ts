@@ -30,7 +30,7 @@ export const toolTaskRules = `
 * NEVER \`prompt\` for full content / output, instead \`prompt\` for answers: snippets, outlines, pseudo code, steps, summaries -> let subagent do work.
 * Max 1 PROBLEM per \`task\` call.
 ${taskPrompt}
-    - METRICS: how success is measured from subagent / important info needed from subagent
+    - METRICS: definition of success in terms of GOAL
 * Exceptions to New \`prompt\` rules when follow up required by calling \`task\` tool with same \`task_id\`:
     - When subagent misunderstood original \`prompt\` request: then clarify misunderstanding in Concise English
     - When subagent report is incomplete, more work needed: then ask missing info / work in Caveman English

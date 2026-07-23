@@ -6,6 +6,7 @@ import path from "path"
 import { cleanupLearnedSkills, ensureGeneratedSkills, getGeneratedSkillsRoot, managedSkills } from "./index"
 
 const expectedManagedDirectories = [
+    "assist-troubleshoot",
     "author-agent",
     "author-article",
     "author-command",
