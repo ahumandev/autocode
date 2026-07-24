@@ -131,6 +131,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "assist-*": "allow",
+                "codebase-design": "allow", // From mattpocock/skills
                 "git-commit": "allow",
                 "learned-permissions*": "allow",
                 "primary-manual*": "allow",
@@ -205,6 +206,7 @@ const baseAgents: AgentMap = {
             question: "allow",
             skill: {
                 "*": "deny",
+                "codebase-design": "allow", // From mattpocock/skills
                 "skill-write": "allow",
             },
             skill_learn: "allow",
@@ -385,6 +387,7 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "code*": "allow",
+                "codebase-design": "allow", // From mattpocock/skills
                 "execute*": "allow",
                 "learned-preferences*": "allow"
             },
@@ -416,7 +419,9 @@ const baseAgents: AgentMap = {
             doom_loop: "deny",
             external_directory: "deny",
             skill: {
-                "*": "allow"
+                "*": "allow",
+                "assist-*": "deny",
+                "primary-*": "deny",
             },
             task: {
                 "*": "allow",
@@ -447,12 +452,14 @@ const baseAgents: AgentMap = {
             skill: {
                 "*": "deny",
                 "code*": "allow",
+                "codebase-design": "allow", // From mattpocock/skills
                 "execute*": "allow",
                 "learned-preferences*": "allow"
             },
             task: {
                 "*": "deny",
                 auto_troubleshoot: "allow",
+                
                 execute_code: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
@@ -940,7 +947,7 @@ const baseAgents: AgentMap = {
                 "author-agent": "allow",
                 "author-command": "allow",
                 "author-rules": "allow",
-                "customize-opencode": "allow"
+                "customize-opencode": "allow" // Build-in to OpenCode
             },
         },
         prompt: executeOpencodePrompt,
@@ -1235,7 +1242,7 @@ const baseAgents: AgentMap = {
             '*': "deny",
             skill: {
                 "*": "deny",
-                "customize-opencode": "allow",
+                "customize-opencode": "allow", // Build-in to OpenCode
                 "design*": "allow",
                 "execute*": "allow",
                 "learned-*": "allow",
