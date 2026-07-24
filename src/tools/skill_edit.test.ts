@@ -7,8 +7,9 @@ function createFakeFileSystem() {
     const files = new Map<string, string>()
     const dirs = new Set<string>()
     return {
-        async mkdir(dirPath: string) {
+        async mkdir(dirPath: string): Promise<string | undefined> {
             dirs.add(dirPath)
+            return undefined
         },
         async writeFile(filePath: string, content: string) {
             files.set(filePath, content)
@@ -84,7 +85,7 @@ describe("skill_edit", () => {
 
     test("returns abort when writeFile fails", async () => {
         const failingFs = {
-            mkdir: async () => undefined,
+            mkdir: async (): Promise<string | undefined> => undefined,
             writeFile: async () => { throw new Error("disk full") },
             readFile: async () => { throw new Error("disk full") },
             rm: async () => undefined,

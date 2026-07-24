@@ -23,7 +23,10 @@ function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?:
     const files = { ...(options?.files ?? {}) }
     return {
         fileSystem: {
-            mkdir: mock(async (filePath: string) => { existing.add(filePath) }),
+            mkdir: mock(async (filePath: string): Promise<string | undefined> => {
+                existing.add(filePath)
+                return undefined
+            }),
             readFile: mock(async (filePath: string) => {
                 if (filePath in files) return files[filePath]
                 throw missingError()

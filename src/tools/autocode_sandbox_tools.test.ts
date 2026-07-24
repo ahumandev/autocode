@@ -50,7 +50,10 @@ function createDeps(options?: { existing?: string[], files?: Record<string, stri
     const files = { ...(options?.files ?? {}) }
     const deps = {
         fileSystem: {
-            mkdir: mock(async (filePath: string) => { existing.add(filePath) }),
+            mkdir: mock(async (filePath: string): Promise<string | undefined> => {
+                existing.add(filePath)
+                return undefined
+            }),
             readFile: mock(async (filePath: string) => {
                 if (filePath in files) return files[filePath]
                 throw missingError()
@@ -857,12 +860,13 @@ describe("autocode sandbox tools", () => {
         await tool.execute({ sandbox_name: "dev", command: "id" }, createToolContext())
         expect(deps.spawnProcess).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--chdir", "/home/root", "/bin/sh", "-lc", "id"]), expect.any(Object))
 
-        deps.fileSystem.mkdir = mock(async (filePath: string) => {
+        deps.fileSystem.mkdir = mock(async (filePath: string): Promise<string | undefined> => {
             if (filePath.endsWith(".autocode_run_lock")) {
                 const error = new Error("busy") as NodeJS.ErrnoException
                 error.code = "EEXIST"
                 throw error
             }
+            return undefined
         })
         expect(parseResult(await tool.execute({ sandbox_name: "dev", command: "id" }, createToolContext())).status).toBe("busy")
     })

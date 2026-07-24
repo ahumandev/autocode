@@ -10,6 +10,7 @@ import type { ConfigDocumentEditor, EditOperation } from "./types"
 import type {
     ConfigAdapter,
     ConfigFormatParser,
+    ConfigKeyPath,
     ConfigMode,
     ConfigNode,
     ReadOptions,
@@ -456,15 +457,15 @@ type ConfigReadArgs = {
 
 type ConfigEditArgs = {
     file_path: string
-    current_key?: string
-    new_key?: string
+    current_key?: ConfigKeyPath
+    new_key?: ConfigKeyPath
     content?: unknown
     new_index?: number
 }
 
 type ConfigRemoveArgs = {
     file_path: string
-    key_path?: string
+    key_path?: ConfigKeyPath
 }
 
 async function configReadFlow(adapter: ConfigAdapter, args: ConfigReadArgs): Promise<string> {

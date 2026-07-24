@@ -99,8 +99,9 @@ function createMemoryRestFileSystem() {
         throw createMissingError()
     }
 
-    async function mkdir(dirPath: string, _options?: { recursive?: boolean }): Promise<void> {
+    async function mkdir(dirPath: string, _options?: { recursive?: boolean }): Promise<string | undefined> {
         ensureDirectory(dirPath)
+        return undefined
     }
 
     async function readdir(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {

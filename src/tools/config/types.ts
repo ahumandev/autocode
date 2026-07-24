@@ -1,5 +1,7 @@
 export type ConfigMode = "json" | "yaml" | "ini" | "toml" | "env"
 
+export type ConfigKeyPath = string | (string | number)[]
+
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
 export type RetryResult<T> = { ok: true; value: T } | { ok: false; response: string }
