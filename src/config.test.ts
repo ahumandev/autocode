@@ -67,10 +67,11 @@ describe("external directory config", () => {
         expect(createdPaths).toEqual([globalAutocodeConfigPath()])
         const content = files[globalAutocodeConfigPath()]
         expect(content).toContain('"skills"')
-        expect(content).toContain('"bash"')
-        expect(content).toContain('"code"')
-        expect(content).toContain('"design"')
-        expect(content).toContain('"test"')
+        expect(content).toContain('"freeze": false')
+        expect(content).not.toContain('"bash"')
+        expect(content).not.toContain('"code"')
+        expect(content).not.toContain('"design"')
+        expect(content).not.toContain('"test"')
     })
 
     test("loadAutocodeConfig does not create missing worktree or directory config files", async () => {

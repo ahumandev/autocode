@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, rm, writeFile, mkdir } from "fs/promises"
+import { mkdtemp, rm, writeFile, mkdir, readdir } from "fs/promises"
 import { join } from "path"
 import { tmpdir } from "os"
 import type { PluginInput } from "@opencode-ai/plugin"
@@ -49,6 +49,13 @@ function createInput(
         client: {},
         sandboxSupportOverride,
     } as PluginInputWithSandboxSupportOverride
+}
+
+function skillPermissions(config: PluginConfig, agentName: string): Record<string, unknown> | undefined {
+    const permission = config.agent?.[agentName]?.permission
+    if (!permission || typeof permission === "string") return undefined
+    const skill = (permission as Record<string, unknown>).skill
+    return skill && typeof skill !== "string" ? skill as Record<string, unknown> : undefined
 }
 
 afterEach(async () => {
@@ -148,6 +155,134 @@ describe("autocode plugin config", () => {
             await hooks.config?.(explicitTitleConfig)
 
             expect(explicitTitleConfig.agent?.title?.options?.reasoningEffort).toBe("high")
+        })
+    })
+
+    test("startup reconciliation makes no network calls", async () => {
+        const root = await createTempRoot()
+        const originalFetch = globalThis.fetch
+        let fetchCalls = 0
+        globalThis.fetch = Object.assign(
+            async (..._args: Parameters<typeof fetch>): Promise<Response> => {
+                fetchCalls += 1
+                throw new Error("network must not run during startup")
+            },
+            { preconnect: originalFetch.preconnect.bind(originalFetch) },
+        )
+
+        try {
+            await withEnv({ XDG_CONFIG_HOME: join(root, "xdg"), HOME: root }, async () => {
+                const hooks = await autocode(createInput(join(root, "worktree"))) as unknown as PluginConfigHook
+                await hooks.config?.({})
+            })
+        } finally {
+            globalThis.fetch = originalFetch
+        }
+
+        expect(fetchCalls).toBe(0)
+    })
+
+    test("frozen skills skip startup writes and network while exposing existing generated root", async () => {
+        const root = await createTempRoot()
+        const configHome = join(root, "xdg")
+        const worktree = join(root, "worktree")
+        const generatedRoot = join(configHome, "skills", "autocode")
+        const existingSkill = join(generatedRoot, "existing", "SKILL.md")
+        await mkdir(join(configHome, "opencode"), { recursive: true })
+        await mkdir(join(worktree, ".opencode"), { recursive: true })
+        await mkdir(join(generatedRoot, "existing"), { recursive: true })
+        await writeFile(join(configHome, "opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: false } } }))
+        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: true } } }))
+        await writeFile(existingSkill, "pre-existing skill")
+        const originalFetch = globalThis.fetch
+        let fetchCalls = 0
+        globalThis.fetch = Object.assign(
+            async (..._args: Parameters<typeof fetch>): Promise<Response> => {
+                fetchCalls += 1
+                throw new Error("network must not run during frozen startup")
+            },
+            { preconnect: originalFetch.preconnect.bind(originalFetch) },
+        )
+
+        try {
+            await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+                const hooks = await autocode(createInput(worktree)) as unknown as PluginConfigHook
+                const cfg: PluginConfig = {}
+                await hooks.config?.(cfg)
+
+                expect(cfg.skills?.paths?.[0]).toBe(generatedRoot)
+            })
+        } finally {
+            globalThis.fetch = originalFetch
+        }
+
+        expect(await readdir(generatedRoot)).toEqual(["existing"])
+        expect(await Bun.file(existingSkill).text()).toBe("pre-existing skill")
+        expect(fetchCalls).toBe(0)
+    })
+
+    test("legacy skill URL has no startup fetch, grant, or generated-file effect", async () => {
+        const root = await createTempRoot()
+        const configHome = join(root, "xdg")
+        const worktree = join(root, "worktree")
+        const legacyUrl = "https://github.com/example/legacy-startup-url/blob/main/SKILL.md"
+        await mkdir(join(configHome, "opencode"), { recursive: true })
+        await mkdir(join(worktree, ".opencode"), { recursive: true })
+        await writeFile(join(configHome, "opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: false } } }))
+        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
+            autocode: { skills: { freeze: true, bash: [legacyUrl] } },
+        }))
+        const originalFetch = globalThis.fetch
+        let fetchCalls = 0
+        globalThis.fetch = Object.assign(
+            async (..._args: Parameters<typeof fetch>): Promise<Response> => {
+                fetchCalls += 1
+                throw new Error("legacy URL must not fetch during startup")
+            },
+            { preconnect: originalFetch.preconnect.bind(originalFetch) },
+        )
+
+        try {
+            await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+                const hooks = await autocode(createInput(worktree)) as unknown as PluginConfigHook
+                const cfg: PluginConfig = {}
+                await hooks.config?.(cfg)
+
+                expect(skillPermissions(cfg, "execute_os")?.["legacy-startup-url"]).toBeUndefined()
+                expect(cfg.skills?.paths?.[0]).toBe(join(configHome, "skills", "autocode"))
+            })
+        } finally {
+            globalThis.fetch = originalFetch
+        }
+
+        expect(fetchCalls).toBe(0)
+        expect(await readdir(join(configHome, "skills")).catch(() => [])).toEqual([])
+    })
+
+    test("manifest skills grant matching category agents without duplicate grants", async () => {
+        const root = await createTempRoot()
+        const configHome = join(root, "xdg")
+        const worktree = join(root, "worktree")
+        await mkdir(join(configHome, "opencode"), { recursive: true })
+        await mkdir(join(worktree, ".opencode"), { recursive: true })
+        await writeFile(join(configHome, "opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: false } } }))
+        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: true } } }))
+
+        await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+            const hooks = await autocode(createInput(worktree)) as unknown as PluginConfigHook
+            const cfg: PluginConfig = {}
+            await hooks.config?.(cfg)
+
+            expect(skillPermissions(cfg, "execute_code")?.["angular-developer"]).toBe("allow")
+            expect(skillPermissions(cfg, "execute_os")?.["angular-developer"]).toBeUndefined()
+            expect(skillPermissions(cfg, "execute_os")?.["drawio"]).toBe("allow")
+            expect(skillPermissions(cfg, "execute_script")?.["drawio"]).toBe("allow")
+            expect(skillPermissions(cfg, "auto_test")?.["vitest"]).toBe("allow")
+            expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBe("allow")
+            expect(skillPermissions(cfg, "auto")?.["codebase-design"]).toBe("allow")
+            expect(skillPermissions(cfg, "design")?.["codebase-design"]).toBe("allow")
+            const grants = Object.keys(skillPermissions(cfg, "execute_code") ?? {})
+            expect(new Set(grants).size).toBe(grants.length)
         })
     })
 })

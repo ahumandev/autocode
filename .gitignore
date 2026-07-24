@@ -40,11 +40,10 @@ coverage/
 /autocode.iml
 
 # Autocode
-\.agents/jobs/
-\.agents/sandboxes/
+.agents/jobs/
+.agents/sandboxes/
+.opencode/autocode/cache/
 .opencode/autocode.jsonc
-
-/out/
 
 # mdsite: generated state (renderer working dir; runtime artifacts and materialized renderer)
 .mdsite/*

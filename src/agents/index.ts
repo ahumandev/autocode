@@ -1504,6 +1504,7 @@ function applyBundledAgentPolicy(
 }
 
 export function injectExternalSkillPermissions(agents: AgentMap, externalSkills: ExternalSkill[]): void {
+    const granted = new Set<string>()
     for (const { category, skillName } of externalSkills) {
         const targetAgentNames = CATEGORY_AGENTS[category]
         if (targetAgentNames === undefined) {
@@ -1511,6 +1512,9 @@ export function injectExternalSkillPermissions(agents: AgentMap, externalSkills:
         }
 
         for (const agentName of targetAgentNames) {
+            const grantKey = `${agentName}\0${skillName}`
+            if (granted.has(grantKey)) continue
+            granted.add(grantKey)
             const agent = agents[agentName]
             if (agent === undefined) {
                 continue

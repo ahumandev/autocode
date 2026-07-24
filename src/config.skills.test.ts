@@ -5,28 +5,7 @@ import { join } from "node:path"
 import { parse as parseJsonc } from "jsonc-parser"
 import { loadAutocodeConfig, type ConfigFileSystem } from "./config"
 
-const DEFAULT_SKILLS = {
-    bash: [
-        "https://github.com/github/awesome-copilot/blob/main/skills/create-spring-boot-kotlin-project/SKILL.md",
-        "https://github.com/github/awesome-copilot/blob/main/skills/drawio/SKILL.md",
-    ],
-    code: [
-        "https://github.com/angular/skills",
-        "https://github.com/antfu/skills/blob/main/skills/nitro/SKILL.md",
-        "https://github.com/antfu/skills/blob/main/skills/nuxt/SKILL.md",
-        "https://github.com/pedronauck/skills/blob/main/skills/mine/tailwindcss/SKILL.md",
-        "https://github.com/pedronauck/skills/blob/main/skills/mine/ui-craft/SKILL.md",
-        "https://github.com/vuejs-ai/skills/blob/main/skills/vue-best-practices/SKILL.md",
-    ],
-    design: [
-        "https://github.com/mattpocock/skills/blob/main/skills/engineering/codebase-design/SKILL.md",
-    ],
-    test: [
-        "https://github.com/github/awesome-copilot/blob/main/skills/java-junit/SKILL.md",
-        "https://github.com/github/awesome-copilot/blob/main/skills/javascript-typescript-jest/SKILL.md",
-        "https://github.com/antfu/skills/blob/main/skills/vitest/SKILL.md",
-    ],
-}
+const DEFAULT_SKILLS = { freeze: false }
 
 function makeFs(initialFiles: Record<string, string> = {}): {
     fs: ConfigFileSystem
@@ -104,7 +83,7 @@ describe("skills config parsing and seeding", () => {
         return content
     }
 
-    test("file missing → mock receives ensureFileSync with the default config (4-category skills block)", async () => {
+    test("file missing → mock receives ensureFileSync with freeze disabled by default", async () => {
         const { fs, files, createdPaths } = makeFs({})
 
         await loadAutocodeConfig("/wt", "/wt", fs)
@@ -113,10 +92,7 @@ describe("skills config parsing and seeding", () => {
         const ensured = files[globalPath()]
         expect(ensured).toBeDefined()
         expect(ensured).toContain("skills")
-        expect(ensured).toContain("bash")
-        expect(ensured).toContain("code")
-        expect(ensured).toContain("design")
-        expect(ensured).toContain("test")
+        expect(ensured).toContain('"freeze": false')
     })
 
     test("file exists with no skills key → result.skills equals default, write-back preserves existing sections, skills block added", async () => {
@@ -210,16 +186,47 @@ describe("skills config parsing and seeding", () => {
         expect(written).toBe(existingContent)
     })
 
-    test("file exists with skills: { bash: ['...'] } → result.skills.bash has the URL and no write-back happens", async () => {
+    test("legacy category arrays are ignored without rewriting config", async () => {
         const url = "https://github.com/o/p/blob/main/skills/s/SKILL.md"
         const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: { bash: [url] } } }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
-        expect(result.skills?.bash).toEqual([url])
+        expect(result.skills).toBeUndefined()
         const written = readFileSync(globalPath(), "utf-8")
         expect(written).toBe(existingContent)
+    })
+
+    test("skills.freeze accepts exact booleans and defaults to false", async () => {
+        const missing = makeFs()
+        expect((await loadAutocodeConfig("/wt", "/wt", missing.fs)).skills?.freeze).toBe(false)
+
+        for (const freeze of [true, false]) {
+            const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: { freeze } } }))
+            const { fs } = makeFs({ [globalPath()]: existingContent })
+            expect((await loadAutocodeConfig("/wt", "/wt", fs)).skills?.freeze).toBe(freeze)
+        }
+    })
+
+    test("invalid skills.freeze falls back to false", async () => {
+        for (const freeze of ["yes", 1, null]) {
+            const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: { freeze } } }))
+            const { fs } = makeFs({ [globalPath()]: existingContent })
+
+            expect((await loadAutocodeConfig("/wt", "/wt", fs)).skills?.freeze).toBe(false)
+        }
+    })
+
+    test("local freeze setting overrides global config tier", async () => {
+        const global = preCreateRealFile(JSON.stringify({ autocode: { skills: { freeze: false } } }))
+        const localPath = join("/wt", ".opencode", "autocode.jsonc")
+        const { fs } = makeFs({
+            [globalPath()]: global,
+            [localPath]: JSON.stringify({ autocode: { skills: { freeze: true } } }),
+        })
+
+        expect((await loadAutocodeConfig("/wt", "/wt", fs)).skills?.freeze).toBe(true)
     })
 
     test("idempotency: second load with skills key present does not write back", async () => {

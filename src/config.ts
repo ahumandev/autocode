@@ -23,7 +23,7 @@ export type AutocodeSandboxConfig = {
 }
 
 export type SkillCategory = "bash" | "code" | "design" | "test"
-export type SkillsConfig = Partial<Record<SkillCategory, string[]>>
+export type SkillsConfig = Partial<Record<SkillCategory, string[]>> & { freeze?: boolean }
 
 export type LearnedConfig = { max?: number }
 const DEFAULT_LEARNED_MAX = 10
@@ -192,20 +192,29 @@ function collectSkills(value: unknown): SkillsConfig | undefined {
         console.warn(`autocode: invalid skills config (expected object, got ${Array.isArray(value) ? "array" : typeof value})`)
         return undefined
     }
-    const known = new Set<string>(SKILL_CATEGORIES)
     const result: SkillsConfig = {}
-    let hasAny = false
-    for (const key of Object.keys(value)) {
-        if (!known.has(key)) {
-            console.warn(`autocode: ignoring unknown skills category "${key}"`)
-            continue
+    if ("freeze" in value) {
+        if (typeof value.freeze !== "boolean") {
+            console.warn(`autocode: invalid skills.freeze (expected boolean, got ${JSON.stringify(value.freeze)}); falling back to false`)
+            result.freeze = false
+        } else {
+            result.freeze = value.freeze
         }
-        const list = value[key]
-        if (!Array.isArray(list)) continue
-        result[key as SkillCategory] = list as string[]
-        hasAny = true
     }
-    return hasAny ? result : undefined
+
+    if (SKILL_CATEGORIES.some((category) => Array.isArray(value[category]))) {
+        warnLegacySkillsConfig()
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined
+}
+
+let didWarnLegacySkillsConfig = false
+
+function warnLegacySkillsConfig(): void {
+    if (didWarnLegacySkillsConfig) return
+    didWarnLegacySkillsConfig = true
+    console.warn("autocode: legacy skills category arrays are deprecated and ignored")
 }
 
 function collectLearned(value: unknown): LearnedConfig | undefined {

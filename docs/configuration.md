@@ -15,6 +15,7 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 | Key                                  | Type             | Description                                                                                                                        | Default                                          |
 | ------------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `autocode.learned.max`               | integer          | Limits how many learned skills are kept per category before oldest are pruned.                                                     | `10`                                             |
+| `autocode.skills.freeze`              | boolean          | Strictly skips first-run extraction and all generated-root mutation; stale generated skills remain.                              | `false`                                          |
 | `autocode.sandbox.sync_method`       | string           | Sandbox sync strategy. Valid values are `auto`, `overlayfs`, `reflink`, and `copy`.                                                | Unset.                                           |
 | `autocode.sandbox.distro.cache_path` | string           | Optional sandbox distribution cache path.                                                                                          | Unset.                                           |
 | `autocode.sandbox.distro.expire`     | string or number | Optional sandbox distribution expiry value.                                                                                        | Unset.                                           |
@@ -25,6 +26,12 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 | `permission.external_directory`      | object or string | Path-pattern permissions for external-directory access. Values are `allow`, `ask`, or `deny`.                                      | `{}`                                             |
 
 Recognised model tiers are `cheap`, `fast`, `operator`, `balanced`, and `smart`. The `operator` tier sits between `balanced` and `fast` and requires explicit user configuration (no default). The `cheap` tier is also used as the `small_model` fallback for OpenCode title generation and compaction when OpenCode has no explicit `small_model`.
+
+Legacy external skill arrays are ignored.
+
+#### Generated skills
+
+Set `autocode.skills.freeze` to `true` to strictly skip first-run extraction and every generated-root mutation. Existing stale generated skills remain until manually removed or a later unfrozen startup updates them.
 
 For example:
 
@@ -80,7 +87,7 @@ See [OpenCode Go documentation](https://opencode.ai/docs/go#endpoints) for suppo
 
 #### Learned skills
 
-`autocode.learned.max` caps how many learned skills AutoCode retains in each `learned-{category}/` directory. Each category is pruned independently:
+`autocode.learned.max` caps how many learned skills AutoCode retains in each category. Each category is pruned independently:
 
 - `corrections`
 - `env`

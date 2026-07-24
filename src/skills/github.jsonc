@@ -1,0 +1,153 @@
+{
+    "skills": [
+        {
+            "sourceUrl": "https://github.com/angular/skills",
+            "resolvedCommit": "a23a517dea2ce90c97a4a85d684ae13eb4ff91a2",
+            "relativeInstallPath": "github/angular/skills/angular-developer",
+            "category": "code",
+            "sha256": "9b95169f9a779afc3ec9bab70924ba9e274ff03c91d74247344c3cc63a597201",
+            "legalFiles": []
+        },
+        {
+            "sourceUrl": "https://github.com/angular/skills",
+            "resolvedCommit": "a23a517dea2ce90c97a4a85d684ae13eb4ff91a2",
+            "relativeInstallPath": "github/angular/skills/angular-new-app",
+            "category": "code",
+            "sha256": "807120998cc2161b14963300fcb8fd594c71f3a527f67f0172123b458178631e",
+            "legalFiles": []
+        },
+        {
+            "sourceUrl": "https://github.com/antfu/skills/blob/main/skills/nitro/SKILL.md",
+            "resolvedCommit": "a74f281a27dadc02397bc1a174b0f2c97531b6ae",
+            "relativeInstallPath": "github/antfu/skills/nitro",
+            "category": "code",
+            "sha256": "83550658c20d0d4e6614fa45e752b984ea149ab53bf3360ab53942b6bfe08942",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE.md",
+                    "sha256": "2a596f697b619094b6f4067936e0f385027a393bce32211383db0478774c1cb2"
+                }
+            ]
+        },
+        {
+            "sourceUrl": "https://github.com/antfu/skills/blob/main/skills/nuxt/SKILL.md",
+            "resolvedCommit": "a74f281a27dadc02397bc1a174b0f2c97531b6ae",
+            "relativeInstallPath": "github/antfu/skills/nuxt",
+            "category": "code",
+            "sha256": "0c7759f5201fcdd6fc149d14e4f55b29090228800a22b61f96c065b77caaff3a",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE.md",
+                    "sha256": "2a596f697b619094b6f4067936e0f385027a393bce32211383db0478774c1cb2"
+                }
+            ]
+        },
+        {
+            "sourceUrl": "https://github.com/antfu/skills/blob/main/skills/vitest/SKILL.md",
+            "resolvedCommit": "a74f281a27dadc02397bc1a174b0f2c97531b6ae",
+            "relativeInstallPath": "github/antfu/skills/vitest",
+            "category": "test",
+            "sha256": "2da9b15c28b9be17d545751b0e0813de306331b3c4dccb748934f4fdd2298968",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE.md",
+                    "sha256": "2a596f697b619094b6f4067936e0f385027a393bce32211383db0478774c1cb2"
+                }
+            ]
+        },
+        {
+            "sourceUrl": "https://github.com/github/awesome-copilot/blob/main/skills/create-spring-boot-kotlin-project/SKILL.md",
+            "resolvedCommit": "dae77f24132c1d686c30fd5b29aee0d63668d1d2",
+            "relativeInstallPath": "github/github/awesome-copilot/create-spring-boot-kotlin-project",
+            "category": "bash",
+            "sha256": "75722e39c0294d6fc3eb5b368ec890376707127c944426ed91ad7644621e2f83",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE",
+                    "sha256": "e32449d23085399adc1222f7a17408b730550258e51627c153cb108ca9955823"
+                }
+            ]
+        },
+        {
+            "sourceUrl": "https://github.com/github/awesome-copilot/blob/main/skills/drawio/SKILL.md",
+            "resolvedCommit": "dae77f24132c1d686c30fd5b29aee0d63668d1d2",
+            "relativeInstallPath": "github/github/awesome-copilot/drawio",
+            "category": "bash",
+            "sha256": "b7ea3e77d64adb6ae4ab5f08c0f7dbe9b238f7033486523e8cc324f80e649256",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE",
+                    "sha256": "e32449d23085399adc1222f7a17408b730550258e51627c153cb108ca9955823"
+                }
+            ]
+        },
+        {
+            "sourceUrl": "https://github.com/github/awesome-copilot/blob/main/skills/java-junit/SKILL.md",
+            "resolvedCommit": "dae77f24132c1d686c30fd5b29aee0d63668d1d2",
+            "relativeInstallPath": "github/github/awesome-copilot/java-junit",
+            "category": "test",
+            "sha256": "beeae246a2b1a8debffb53b005eba0e025f70923fa26a11f3c4bfefd99388fa3",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE",
+                    "sha256": "e32449d23085399adc1222f7a17408b730550258e51627c153cb108ca9955823"
+                }
+            ]
+        },
+        {
+            "sourceUrl": "https://github.com/github/awesome-copilot/blob/main/skills/javascript-typescript-jest/SKILL.md",
+            "resolvedCommit": "dae77f24132c1d686c30fd5b29aee0d63668d1d2",
+            "relativeInstallPath": "github/github/awesome-copilot/javascript-typescript-jest",
+            "category": "test",
+            "sha256": "cb9a552dfe63cae4f310b27067ba28351b59ad17e83a9e1c5ff23c542ce6fdd8",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE",
+                    "sha256": "e32449d23085399adc1222f7a17408b730550258e51627c153cb108ca9955823"
+                }
+            ]
+        },
+        {
+            "sourceUrl": "https://github.com/mattpocock/skills/blob/main/skills/engineering/codebase-design/SKILL.md",
+            "resolvedCommit": "ed37663cc5fbef691ddfecd080dff42f7e7e350d",
+            "relativeInstallPath": "github/mattpocock/skills/codebase-design",
+            "category": "design",
+            "sha256": "a8d50abac5a4018f60e1d911d4b6f4e36454ca14d6c390c0695a578c7de65dad",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE",
+                    "sha256": "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5"
+                }
+            ]
+        },
+        {
+            "sourceUrl": "https://github.com/pedronauck/skills/blob/main/skills/mine/tailwindcss/SKILL.md",
+            "resolvedCommit": "c7d6e602b2b14172189d39592731344cd3e92971",
+            "relativeInstallPath": "github/pedronauck/skills/tailwindcss",
+            "category": "code",
+            "sha256": "fa4a4503aa2b56a988d454226aa31a6be943803578291e4d46db00fc94c961a4",
+            "legalFiles": []
+        },
+        {
+            "sourceUrl": "https://github.com/pedronauck/skills/blob/main/skills/mine/ui-craft/SKILL.md",
+            "resolvedCommit": "c7d6e602b2b14172189d39592731344cd3e92971",
+            "relativeInstallPath": "github/pedronauck/skills/ui-craft",
+            "category": "code",
+            "sha256": "8374e2c3124f406c0c782f9398d5d565147bd750aac726f6851adb05a885d131",
+            "legalFiles": []
+        },
+        {
+            "sourceUrl": "https://github.com/vuejs-ai/skills/blob/main/skills/vue-best-practices/SKILL.md",
+            "resolvedCommit": "c9d355ff23f654309dd02006be671859df0a134c",
+            "relativeInstallPath": "github/vuejs-ai/skills/vue-best-practices",
+            "category": "code",
+            "sha256": "05b373713e6bbd216fb3ee9709289b68bcdeb9eac8ffea477e35bdbd8e0f9acd",
+            "legalFiles": [
+                {
+                    "relativePath": "LICENSE",
+                    "sha256": "2ea4e714425cf682879c4dea3d0d0a1a379a1418f463063f9eea1aa709ad946d"
+                }
+            ]
+        }
+    ]
+}

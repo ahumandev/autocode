@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, utimesSync } from "fs"
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync, utimesSync } from "fs"
 import { mkdtemp } from "fs/promises"
-import { tmpdir } from "os"
+import { homedir, tmpdir } from "os"
 import path from "path"
-import { cleanupLearnedSkills, ensureGeneratedSkills, getGeneratedSkillsRoot, managedSkills } from "./index"
+import { cleanupLearnedSkills, ensureGeneratedSkills, getGeneratedSkillsRoot, managedSkills, reconcileGeneratedSkills } from "./index"
 
 const expectedManagedDirectories = [
     "assist-troubleshoot",
@@ -123,9 +123,247 @@ describe("managed skills", () => {
                 const generatedSkillPath = path.join(generatedRoot, skill.directory, "SKILL.md")
                 const generatedContent = readFileSync(generatedSkillPath, "utf8")
 
-                expect(generatedContent.startsWith(`---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n\n`)).toBe(true)
-                expect(generatedContent).toContain(skill.content)
+                expect(generatedContent).toBe(readFileSync(path.join(sourceSkillsRoot(), skill.directory, "SKILL.md"), "utf8"))
             }
+        })
+    })
+})
+
+describe("generated skill reconciliation", () => {
+    function statePath(root: string): string {
+        return path.join(root, "skills.jsonc")
+    }
+
+    function readState(root: string): { items: Record<string, { sha256: string }> } {
+        return JSON.parse(readFileSync(statePath(root), "utf8"))
+    }
+
+    function writeState(root: string, state: { items: Record<string, { sha256: string }> }): void {
+        writeFileSync(statePath(root), JSON.stringify(state))
+    }
+
+    test("uses XDG config root or HOME agents fallback", async () => {
+        await withIsolatedSkillConfigHome(async (_home, xdgConfigHome) => {
+            expect(getGeneratedSkillsRoot()).toBe(path.join(xdgConfigHome, "skills", "autocode"))
+            delete process.env.XDG_CONFIG_HOME
+            expect(getGeneratedSkillsRoot()).toBe(path.join(homedir(), ".agents", "skills", "autocode"))
+        })
+    })
+
+    test("skips unchanged items using recorded SHA-256 state", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            const before = readFileSync(path.join(root, "author-agent", "SKILL.md"), "utf8")
+
+            const result = await reconcileGeneratedSkills()
+
+            expect(result.changedPaths).toEqual([])
+            expect(readFileSync(path.join(root, "author-agent", "SKILL.md"), "utf8")).toBe(before)
+        })
+    })
+
+    test("copies a missing destination even when state records its SHA-256", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            const destination = path.join(root, "author-agent")
+            rmSync(destination, { recursive: true })
+
+            const result = await reconcileGeneratedSkills()
+
+            expect(result.changedPaths).toContain(destination)
+            expect(readFileSync(path.join(destination, "SKILL.md"), "utf8")).toContain(managedSkills.find((skill) => skill.directory === "author-agent")!.content)
+        })
+    })
+
+    test("updates only changed state item while unchanged destinations stay untouched", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            const state = readState(root)
+            const untouched = path.join(root, "author-command", "SKILL.md")
+            const untouchedContent = readFileSync(untouched, "utf8")
+            state.items["author-agent"] = { sha256: "stale" }
+            writeState(root, state)
+
+            const result = await reconcileGeneratedSkills()
+
+            expect(result.changedPaths).toEqual([path.join(root, "author-agent")])
+            expect(readFileSync(untouched, "utf8")).toBe(untouchedContent)
+            expect(readState(root).items["author-agent"]?.sha256).not.toBe("stale")
+        })
+    })
+
+    test("removes destination and state for removed managed item", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            const removed = path.join(root, "removed-skill")
+            mkdirSync(removed)
+            writeFileSync(path.join(removed, "SKILL.md"), "old")
+            const state = readState(root)
+            state.items["removed-skill"] = { sha256: "old" }
+            writeState(root, state)
+
+            const result = await reconcileGeneratedSkills()
+
+            expect(result.changedPaths).toContain(removed)
+            expect(existsSync(removed)).toBe(false)
+            expect(readState(root).items["removed-skill"]).toBeUndefined()
+        })
+    })
+
+    test("migrates legacy GitHub symlink destination to real directory", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            const destination = path.join(root, "github", "angular", "skills")
+            rmSync(destination, { recursive: true })
+            symlinkSync(path.join(root, "author-agent"), destination, "dir")
+
+            const result = await reconcileGeneratedSkills()
+
+            expect(result.changedPaths).toContain(destination)
+            expect(lstatSync(destination).isSymbolicLink()).toBe(false)
+            expect(existsSync(path.join(destination, "angular-developer", "SKILL.md"))).toBe(true)
+        })
+    })
+
+    test("extracts, updates, and removes a repository legal file with reconciled state", async () => {
+        const repositoryPath = "github/antfu/skills"
+        const legalFile = "LICENSE.md"
+        const legalPath = `${repositoryPath}/${legalFile}`
+
+        await withIsolatedSkillConfigHome(async () => {
+            const initial = await reconcileGeneratedSkills()
+            const destination = path.join(initial.root, repositoryPath)
+            const generatedLegalPath = path.join(destination, legalFile)
+            const legalContent = readFileSync(generatedLegalPath, "utf8")
+            const initialDigest = readState(initial.root).items[repositoryPath]!.sha256
+
+            expect(initial.changedPaths).toContain(destination)
+            expect(initialDigest).toMatch(/^[a-f0-9]{64}$/)
+
+            writeFileSync(generatedLegalPath, "previous bundle legal content")
+            const updateState = readState(initial.root)
+            updateState.items[repositoryPath] = { sha256: "stale" }
+            writeState(initial.root, updateState)
+
+            const updated = await reconcileGeneratedSkills()
+
+            expect(updated.changedPaths).toContain(destination)
+            expect(readFileSync(generatedLegalPath, "utf8")).toBe(legalContent)
+            expect(readState(updated.root).items[repositoryPath]?.sha256).toBe(initialDigest)
+
+            const removalState = readState(updated.root)
+            removalState.items[legalPath] = { sha256: "removed bundle legal file" }
+            writeState(updated.root, removalState)
+
+            const removed = await reconcileGeneratedSkills()
+
+            expect(removed.changedPaths).toContain(generatedLegalPath)
+            expect(existsSync(generatedLegalPath)).toBe(false)
+            expect(readState(removed.root).items[legalPath]).toBeUndefined()
+        })
+    })
+
+    test("recovers corrupt state by replacing destinations and writing valid SHA-256 state", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            writeFileSync(statePath(root), "not json")
+
+            const result = await reconcileGeneratedSkills()
+            const state = readState(root)
+
+            expect(result.changedPaths).toContain(path.join(root, "author-agent"))
+            expect(readFileSync(path.join(root, "author-agent", "SKILL.md"), "utf8").length).toBeGreaterThan(0)
+            expect(state.items["author-agent"]?.sha256).toMatch(/^[a-f0-9]{64}$/)
+        })
+    })
+
+    test("writes complete state atomically without temporary state files", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            const state = readState(root)
+            const unchangedDigest = state.items["author-command"]!.sha256
+            state.items["author-agent"] = { sha256: "stale" }
+            writeState(root, state)
+
+            await reconcileGeneratedSkills()
+
+            expect(readState(root).items["author-command"]?.sha256).toBe(unchangedDigest)
+            expect(readState(root).items["author-agent"]?.sha256).toMatch(/^[a-f0-9]{64}$/)
+            expect(readdirSync(root).some((entry) => entry.startsWith("skills.jsonc.tmp-"))).toBe(false)
+        })
+    })
+
+    test("keeps failed item state and destination while logging isolated extraction failure", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            const state = readState(root)
+            const githubRoot = path.join(root, "github")
+            rmSync(githubRoot, { recursive: true })
+            writeFileSync(githubRoot, "prior destination")
+            state.items["github/angular/skills"] = { sha256: "prior-state" }
+            writeState(root, state)
+            const warnings: string[] = []
+            const warn = console.warn
+            console.warn = (message: string): void => { warnings.push(message) }
+
+            try {
+                await reconcileGeneratedSkills()
+            } finally {
+                console.warn = warn
+            }
+
+            expect(readFileSync(githubRoot, "utf8")).toBe("prior destination")
+            expect(readState(root).items["github/angular/skills"]?.sha256).toBe("prior-state")
+            expect(warnings.some((message) => message.includes("github/angular/skills"))).toBe(true)
+        })
+    })
+
+    test("updates and removes legal root files with state", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = (await reconcileGeneratedSkills()).root
+            const inventory = path.join(root, "github.jsonc")
+            const obsolete = path.join(root, "obsolete.jsonc")
+            writeFileSync(inventory, "old inventory")
+            writeFileSync(obsolete, "obsolete")
+            const state = readState(root)
+            state.items["github.jsonc"] = { sha256: "stale" }
+            state.items["obsolete.jsonc"] = { sha256: "obsolete" }
+            writeState(root, state)
+
+            const result = await reconcileGeneratedSkills()
+
+            expect(result.changedPaths).toContain(inventory)
+            expect(result.changedPaths).toContain(obsolete)
+            expect(readFileSync(inventory, "utf8")).toContain('"skills"')
+            expect(existsSync(obsolete)).toBe(false)
+            expect(readState(root).items["obsolete.jsonc"]).toBeUndefined()
+        })
+    })
+
+    test("skipExtraction returns generated root without creating or changing it", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const expectedRoot = getGeneratedSkillsRoot()
+            const result = await reconcileGeneratedSkills({ skipExtraction: true })
+
+            expect(result.root).toBe(expectedRoot)
+            expect(result.changedPaths).toEqual([])
+            expect(existsSync(result.root)).toBe(false)
+        })
+    })
+
+    test("skipExtraction preserves an existing generated root without state writes", async () => {
+        await withIsolatedSkillConfigHome(async () => {
+            const root = getGeneratedSkillsRoot()
+            const existingSkill = path.join(root, "existing", "SKILL.md")
+            mkdirSync(path.dirname(existingSkill), { recursive: true })
+            writeFileSync(existingSkill, "existing skill")
+
+            const result = await reconcileGeneratedSkills({ skipExtraction: true })
+
+            expect(result.root).toBe(root)
+            expect(result.changedPaths).toEqual([])
+            expect(readFileSync(existingSkill, "utf8")).toBe("existing skill")
+            expect(existsSync(statePath(root))).toBe(false)
         })
     })
 })

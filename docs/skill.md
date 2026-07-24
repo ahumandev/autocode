@@ -5,10 +5,18 @@ Learned skills are persistent notes AutoCode writes to disk through `skill_learn
 ## Storage location
 
 - Root: `{agentsStorageRoot}/.agents/skills/`.
-- Each category lives in its own subdirectory: `learned-corrections/`, `learned-env/`, `learned-permissions/`, `learned-preferences/`.
-- Each skill is a directory containing a `SKILL.md` file.
-- Full path pattern: `.agents/skills/learned-{category}/{skill-slug}/SKILL.md`.
+- Each skill directory contains `SKILL.md` and may contain supporting files.
+- Categories are metadata, never filesystem path segments.
 - `agentsStorageRoot` is resolved by `resolveAgentsStorageRoot` with priority: worktree → directory → fallback.
+
+Managed generated skills use `$XDG_CONFIG_HOME/skills/autocode` when `XDG_CONFIG_HOME` is set; otherwise `~/.agents/skills/autocode`.
+
+- Managed built-in path, relative to home: `.agents/skills/autocode/<skill-name>/`.
+- Managed GitHub path, relative to home: `.agents/skills/autocode/github/<owner>/<project>/<skill>/`.
+- With `XDG_CONFIG_HOME` set, replace the managed root with `$XDG_CONFIG_HOME/skills/autocode`.
+- Recommended global manual user-skill path, relative to home: `.config/opencode/skills/<skill-name>/`.
+- Do not put custom skills in managed `.agents/skills/autocode/`; AutoCode reconciles that directory.
+- GitHub is the only supported provider now. GitHub sync primary cache: `~/.cache/autocode/github/<owner>/<project>/`; fallback is `.opencode/autocode/cache/github/<owner>/<project>/` only after primary filesystem access returns `EACCES` or `EPERM`. The provider namespace leaves room for future sibling paths such as `~/.cache/autocode/gitlab/`; this does not indicate GitLab support. Both cache trees are disposable and safe to delete. `bun run skill:sync` refreshes tracked GitHub snapshots, and `bun run skill:sync -- --force-refresh` bypasses cached repositories and refreshes them remotely.
 
 ## SKILL.md format
 
@@ -23,7 +31,7 @@ description: Use this skill when [TRIGGER] to [BENEFIT]. NEVER for [EXCLUSIONS].
 ---
 ```
 
-- `name`: derived from the skill name parameter, prefixed with `learned-{category}-`.
+- `name`: derived from the skill name parameter.
 - `description`: written by the caller; should follow the trigger / benefit / exclusion pattern, in Caveman English, max 40 words.
 - Body: skill content in Caveman English.
 
@@ -44,12 +52,25 @@ Content outdated? Call `skill_learn` with name=`learned-corrections-avoid-re-ren
 
 ## Categories
 
+Categories are metadata, never filesystem path segments. Manual placement never assigns an execution category through a directory name.
+
+### Execution categories
+
+- `bash`: shell, CLI, or OS automation.
+- `code`: implementation, debugging, or refactoring.
+- `design`: architecture, interfaces, or planning.
+- `test`: test authoring, execution, or diagnosis.
+
+Never use `bash`, `code`, `design`, or `test` as directory segments.
+
+### Learned categories
+
 | Category    | Tool                      | Trigger                                                              | Content                                                                                                 |
 | ----------- | ------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| corrections | `skill_learn_correction`  | A mistake was self-corrected.                                        | Mistake plus correction steps.                                                                          |
-| env         | `skill_learn_env`         | An unusual environment capability or limit was found.                | OS, platform, or hardware limits; non-standard scripts or aliases; network quirks; access restrictions. |
-| permissions | `skill_learn_permission`  | User says a task is safe OR warns a task is unsafe.                  | Safe vs dangerous actions; safe passwords.                                                              |
-| preferences | `skill_learn_preferences` | User sets a permanent rule ("always", "never", ALL CAPS plus `!!!`). | Programming patterns, file organization, naming, editing style.                                         |
+| corrections | `skill_learn_correction`  | A mistake was self-corrected.                                        | Corrected mistakes and correction steps.                                                                |
+| env         | `skill_learn_env`         | An unusual environment capability or limit was found.                | Environment quirks: OS, platform, hardware, scripts, network, or access limits.                         |
+| permissions | `skill_learn_permission`  | User says a task is safe OR warns a task is unsafe.                  | Safety and manual-operation rules.                                                                      |
+| preferences | `skill_learn_preferences` | User sets a permanent rule ("always", "never", ALL CAPS plus `!!!`). | Durable user conventions for programming, organization, naming, or editing.                             |
 
 ## Skill discovery and loading
 

@@ -5,10 +5,8 @@ import { collectExternalDirectories, collectTaskExternalRules, loadAutocodeConfi
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { commands } from "./commands"
 import { createAgentSwitchBackHook } from "./hooks/agent_switch_back"
-import { cleanupLearnedSkills, ensureGeneratedSkills, injectGeneratedSkillsPath } from "./skills"
+import { cleanupLearnedSkills, injectGeneratedSkillsPath, reconcileGeneratedSkills } from "./skills"
 import { createTools } from "./tools"
-import { createSkillLogger } from "./utils/logger"
-import { bootstrapExternalSkills, type ExternalSkill } from "./utils/external"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
@@ -38,7 +36,7 @@ function preparePluginAgentsAfterOverrides(
     agents: Record<string, PluginAgentConfig>,
     externalDirectories: ExternalDirectoryRules,
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
-    externalSkills: ExternalSkill[] = [],
+    externalSkills: Parameters<typeof injectExternalSkillPermissions>[1] = [],
 ): Record<string, Omit<PluginAgentConfig, "tier">> {
     const externalDirectoryFinalizedAgents = applyExternalDirectoryPolicy(agents, externalDirectories)
     const sandboxFinalizedAgents = applySandboxPlatformPolicy(externalDirectoryFinalizedAgents, sandboxSupportOverride ?? {})
@@ -50,36 +48,23 @@ function preparePluginAgentsAfterOverrides(
 }
 
 async function mergeConfig(cfg: ConfigWithSubagentDepth, input: PluginInputWithSandboxSupportOverride): Promise<void> {
-    const generatedSkillsPath = await ensureGeneratedSkills()
+    const autocodeConfig = await loadAutocodeConfig(input.worktree, input.directory)
+    const generatedSkills = await reconcileGeneratedSkills({ skipExtraction: autocodeConfig.skills?.freeze === true })
+    const generatedSkillsPath = generatedSkills.root
 
-    try {
-        const cleanupConfig = await loadAutocodeConfig(input.worktree, input.directory)
-        const agentsRoot = resolveAgentsStorageRoot({ worktree: input.worktree, directory: input.directory })
-        await cleanupLearnedSkills(agentsRoot, cleanupConfig.learned.max ?? 10)
-    } catch (err) {
-        console.warn(`autocode: cleanup learned skills failed: ${err instanceof Error ? err.message : String(err)}`)
+    if (autocodeConfig.skills?.freeze !== true) {
+        try {
+            const agentsRoot = resolveAgentsStorageRoot({ worktree: input.worktree, directory: input.directory })
+            await cleanupLearnedSkills(agentsRoot, autocodeConfig.learned.max ?? 10)
+        } catch (err) {
+            console.warn(`autocode: cleanup learned skills failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
     }
 
     cfg.skills = cfg.skills ?? {}
     cfg.skills.paths = injectGeneratedSkillsPath(cfg.skills.paths, generatedSkillsPath)
 
-    // Bootstrap external GitHub skills (resilient — failures never break startup).
-    const skillLogger = createSkillLogger()
-    let externalSkills: ExternalSkill[] = []
-    if (process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP) {
-        skillLogger.log("skip bootstrap: AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP set")
-    } else {
-        skillLogger.log("startup: bootstrap external skills")
-        try {
-            const config = await loadAutocodeConfig(input.worktree, input.directory)
-            externalSkills = await bootstrapExternalSkills(config.skills, skillLogger)
-        } catch (err) {
-            skillLogger.log(`error: bootstrap: ${err instanceof Error ? err.message : String(err)}`)
-        }
-        skillLogger.log(`done: registered ${externalSkills.length} external skills`)
-    }
-
-    const { tiers, externalDirectories } = await loadAutocodeConfig(input.worktree, input.directory)
+    const { tiers, externalDirectories } = autocodeConfig
     const nativeExternalDirectories = typeof cfg.permission === "object" && cfg.permission !== null
         ? collectExternalDirectories(cfg.permission.external_directory)
         : undefined
@@ -100,7 +85,7 @@ async function mergeConfig(cfg: ConfigWithSubagentDepth, input: PluginInputWithS
     cfg.subagent_depth = Math.max(cfg.subagent_depth ?? 0, 4)
 
     cfg.agent = cfg.agent ?? {}
-    const agents = buildAgents(agentExternalDirectories, input.sandboxSupportOverride, externalSkills)
+    const agents = buildAgents(agentExternalDirectories, input.sandboxSupportOverride, generatedSkills.externalSkills)
     const mergedAgents: Record<string, PluginAgentConfig> = {}
     for (const [name, agentDef] of Object.entries(agents)) {
         const userOverride = cfg.agent[name]
@@ -111,21 +96,10 @@ async function mergeConfig(cfg: ConfigWithSubagentDepth, input: PluginInputWithS
         mergedAgents,
         agentExternalDirectories,
         input.sandboxSupportOverride,
-        externalSkills,
+        generatedSkills.externalSkills,
     )
     for (const [name, agent] of Object.entries(finalAgents)) {
         ;(cfg.agent as Record<string, unknown>)[name] = agent
-    }
-
-    const finalAgentNames = Object.keys(finalAgents)
-    skillLogger.log(`agent-skill-registry: ${finalAgentNames.length} agents`)
-    for (const name of finalAgentNames) {
-        const skillPermission = (finalAgents[name] as { permission?: { skill?: unknown } }).permission?.skill
-        if (skillPermission === undefined || typeof skillPermission !== "object" || skillPermission === null) continue
-        for (const [skillName, action] of Object.entries(skillPermission as Record<string, unknown>)) {
-            if (skillName === "*") continue
-            skillLogger.log(`agent=${name} skill=${skillName} action=${action}`)
-        }
     }
 
     cfg.command = cfg.command ?? {}

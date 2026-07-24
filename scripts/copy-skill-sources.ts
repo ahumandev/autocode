@@ -1,9 +1,9 @@
 /**
  * @file copy-skill-sources.ts
- * @description Recursively copies "SKILL.md" files from the `src/skills/` folder to the target build folder `dist/skills/`.
+ * @description Creates immutable release skill bundle from local source assets.
  * 
  * Why it is used:
- * Bundles source markdown skills into the compiled distribution folder
+ * Bundles local skill assets into the compiled distribution folder
  * so they can be autoloaded by OpenCode.
  * 
  * Where it is called:
@@ -12,32 +12,45 @@
  * - Called in watch mode: `bun run watch`.
  */
 
-import { cp, mkdir, readdir, rm } from "node:fs/promises"
-import { dirname, join, resolve, relative } from "node:path"
+import { type Dirent } from "node:fs"
+import { copyFile, mkdir, readdir, rm } from "node:fs/promises"
+import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { writeSkillBundleManifest } from "./skill-bundle"
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const sourceRoot = join(rootDir, "src", "skills")
 const targetRoot = join(rootDir, "dist", "skills")
 
+function isReleaseFile(relativePath: string): boolean {
+    return !relativePath.endsWith(".ts") && !relativePath.endsWith(".tsx") && !/\.(test|spec)\.[^/]+$/.test(relativePath)
+}
+
 async function copySkillSources(directory: string): Promise<void> {
-    const entries = await readdir(directory, { withFileTypes: true })
+    const entries: Dirent[] = await readdir(directory, { withFileTypes: true })
 
     for (const entry of entries) {
         const sourcePath = join(directory, entry.name)
+        const sourceRelativePath = relative(sourceRoot, sourcePath)
+        const targetPath = join(targetRoot, sourceRelativePath)
 
         if (entry.isDirectory()) {
+            await mkdir(targetPath, { recursive: true })
             await copySkillSources(sourcePath)
             continue
         }
 
-        if (entry.isFile() && entry.name === "SKILL.md") {
-            const targetPath = join(targetRoot, relative(sourceRoot, sourcePath))
+        if (entry.isFile() && isReleaseFile(sourceRelativePath)) {
             await mkdir(dirname(targetPath), { recursive: true })
-            await cp(sourcePath, targetPath)
+            await copyFile(sourcePath, targetPath)
+            continue
         }
+
+        if (!entry.isFile()) throw new Error(`Unsupported skill source entry: ${sourceRelativePath}`)
     }
 }
 
 await rm(targetRoot, { recursive: true, force: true })
+await mkdir(targetRoot, { recursive: true })
 await copySkillSources(sourceRoot)
+await writeSkillBundleManifest(targetRoot)

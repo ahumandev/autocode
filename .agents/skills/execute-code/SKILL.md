@@ -4,13 +4,13 @@ description: Use `execute-code` to get "Technical Design" when you must design t
 ---
 
 ## Architectural Overview
-OpenCode plugin injects agents, commands, tools, generated skills, external skills, and config. Runtime merges repo and user config, applies policy, sets subagent depth minimum 4, and manages jobs under `.agents/jobs/`.
+OpenCode plugin injects agents, commands, tools, generated skills, bundled GitHub skill snapshots, and config. Runtime merges repo and user config, applies policy, sets subagent depth minimum 4, and manages jobs under `.agents/jobs/`.
 
 ## Technology Choices
 - **TypeScript**: Type SDK hooks, tools, config, and policies.
 - **@opencode-ai SDK/plugin**: Native agent, command, tool, and session hooks.
 - **JSONC config**: User/project overrides keep comments.
-- **Markdown skills**: Managed skills generated; external GitHub skills cloned and symlinked.
+- **Markdown skills**: Managed skills generated; reviewed GitHub snapshots bundled at build time.
 
 ## Key Data Models
 - **AgentConfig** (`src/agents/index.ts`): Agent prompt, permissions, tier, sandbox policy.
@@ -32,7 +32,7 @@ OpenCode plugin injects agents, commands, tools, generated skills, external skil
 - **Tool error JSON** (`src/utils/tools.ts`): Normalize `failedAction`, `error`, `instruction`.
 - **Retry/abort escalation** (`src/utils/tools.ts`): Retry same failure up to 5, then abort.
 - **Config parse errors** (`src/config.ts`): Invalid JSONC throws file-path error.
-- **Skill bootstrap** (`src/plugin.ts`): Log external-skill failures; do not break startup.
+- **Bundled GitHub skills** (`src/plugin.ts`): Startup uses snapshots only; no clone, symlink, or network bootstrap.
 - **Learned cleanup** (`src/skills/index.ts`): Log per-category cleanup errors; retain uninspectable dirs.
 
 ## Security Design
@@ -42,7 +42,7 @@ OpenCode owns auth/session context. Agents default-deny then allow named tools, 
 - **OpenCode client/session APIs** (`src/tools`, `src/utils/jobs.ts`): Session and job orchestration — SDK
 - **Filesystem** (`src/config.ts`, `src/utils/jobs.ts`, `src/skills/index.ts`): Config, jobs, generated, learned skills — Node fs
 - **Sandbox runtime** (`src/tools/autocode_sandbox_*`, `src/agents/index.ts`): Local sandbox lifecycle — local process
-- **GitHub** (`src/utils/external.ts`): Clone configured skill repos, symlink skills — Git
+- **GitHub** (`scripts/sync-skills.ts`): Sync reviewed skill snapshots before build — Git
 
 ## Directory Structure
 - **Agents** (`src/agents/`): Prompts, policies, agent definitions.
@@ -51,19 +51,19 @@ OpenCode owns auth/session context. Agents default-deny then allow named tools, 
 - **Utils** (`src/utils/`): Shared config, jobs, sandbox, error, external-skill helpers.
 - **Skills sources** (`src/skills/`): Bundled managed-skill Markdown.
 - **Job storage** (`.agents/jobs/`): Job lifecycle artifacts.
-- **Learned skills** (`.agents/skills/learned-*`): Per-item corrections, environment, permissions, preferences.
+- **Learned skills** (`.agents/skills/`): Per-item corrections, environment, permissions, preferences.
 
 ## Special Files
 - `src/skills/index.ts`: Generates managed skills; prunes learned skills by newest max.
 - `src/config.ts`: Loads `.opencode/autocode.jsonc` and validates skills/learned settings.
-- `src/plugin.ts`: Merges plugin config; bootstraps external skills; enforces subagent depth 4.
-- `src/utils/external.ts`: Parses, clones, symlinks configured GitHub skills.
+- `src/plugin.ts`: Merges plugin config; loads bundled skills; enforces subagent depth 4.
+- `src/utils/external.ts`: Parses supported GitHub skill definitions for offline snapshots.
 
 ## Known Risks & Anti-Patterns
 - **Overlapping policy sources**: User config and plugin defaults both shape permissions.
-- **External skill startup I/O**: Git clone and symlink work delays startup.
+- **GitHub snapshot review**: Sync output needs manual Git review before commit.
 - **Dynamic job paths**: Layout assumptions can break cross-worktree flow.
-- **Generated skill overwrite**: Managed generated-skill root clears each load.
+- **Frozen generated skills**: `autocode.skills.freeze` leaves stale generated skills in place.
 - **Platform-gated sandbox**: Unsupported hosts disable sandbox paths.
 
 ---
