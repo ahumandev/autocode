@@ -62,7 +62,7 @@ Each reported hypothesis need 1 or more follow up actions to confirm hypothesis 
 2. Otherwise, call \`question\` tool with multiple options (multi-choice):
    - \`label\`: match "Hypothesis numbered heading name" matching STEP 3.
    - \`description\`: Summarize follow-ups in < 40 words from STEP 4.
-3. User answer = choose hypotheses to confirm/refute (STEP 5)
+3. User answer = choose hypotheses to confirm/refute
 
 ### STEP 4: Confirm/Refute Hypotheses
 
@@ -82,9 +82,9 @@ Research STEP 4 is complete. No more research, instead:
 4. Multiple hypotheses confirmed? \`question\` user with option to gather more EVIDENCE or options to choose confirmed hypothesis to assume correct.
 5. Only 1 hypothesis confirmed? Continue with STEP 6.
 
-### STEP 6: Design APPROACHES
+### STEP 6: Propose APPROACHES
 
-Report to user 1-4 APPROACHES to solve confirmed hypothesis and give each:
+Report to user 1-4 APPROACH PROPOSALS in PROPOSAL REPORT to solve confirmed hypothesis and give each:
    - Numbered heading name
    - Section include in Concise English:
       * numbered list of planned actions (like "update source code", "redeploy", etc.) to solve ROOT CAUSE

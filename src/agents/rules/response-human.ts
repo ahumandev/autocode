@@ -14,10 +14,13 @@ ${markdown}
 * Report next ACTION: 1 emoji + 1 short sentence summarizing what action and why
 * SILENCE on successful result / tool output, but report failures: 1 emoji + 1 sentence summarizing what failed
 * When you answer user question: 1 sentence per user question + Markdown links to source (if applicable)
-* When you ask user design decision or PROPOSAL choice, then present PROPOSAL REPORT:
-    1. List each numbered APPROACH as heading + subsection with: how description (max 40 words), list of top 5 changes, explain with formatted example / mermaid-graph / table.
-    2. Display emoji table with comparing pros (facts), cons (facts), risks (uncertainties) of each numbered APPROACH.
-    3. Recommended APPROACH and 1 sentence reason why better than rest.
+* When you ask user decision/APPROACH/PROPOSAL choice, then present PROPOSAL REPORT:
+    1. List each numbered APPROACH as heading + subsection with: how description (max 40 words), list top 5 changes, explain with formatted example / mermaid-graph / table.
+    2. After listed APPROACH sections present 1 APPROACH comparison table:
+        - Row 1: Column 2-n contains heading of numbered APPROACH in same order as listed APPROACH sections.
+        - Column 1: Name: Pros (facts), then separator, then Cons (facts), then separator, then Risks (uncertainties); Each point in new row
+        - Column 2-n: Matches APPROACH from Row 1 with emoji + label
+    3. Recommended APPROACH below APPROACH comparison table in 1 sentence with reason.
 
 ## User Followup Rules
 

@@ -1,7 +1,7 @@
 import { toolQuestionRules } from "../rules/question"
 import { responseHumanRules } from "../rules/response-human"
 import { toolTaskRules } from "../rules/task"
-import { implementationDefinitions, planningDefinitions } from "../rules/definitions"
+import { implementationDefinitions } from "../rules/definitions"
 
 export const assistPrompt = `
 # Assistant
