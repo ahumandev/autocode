@@ -29,24 +29,6 @@ function mergePluginAgentConfig(
     return { ...agentBase, ...tierMapping, ...userOverride }
 }
 
-type TitleAgentOptions = { reasoningEffort?: string }
-
-function isTitleAgentOptions(options: unknown): options is TitleAgentOptions {
-    return typeof options === "object" && options !== null
-}
-
-function applyCheapTierReasoningToTitleAgent(agent: PluginAgentConfig, cheapTier: TierConfig | undefined): PluginAgentConfig {
-    const options = isTitleAgentOptions(agent.options) ? agent.options : {}
-    if (cheapTier?.variant === undefined || options.reasoningEffort !== undefined) return agent
-    return {
-        ...agent,
-        options: {
-            ...options,
-            reasoningEffort: cheapTier.variant,
-        },
-    }
-}
-
 function stripRuntimeAgentTier(agent: PluginAgentConfig): Omit<PluginAgentConfig, "tier"> {
     const { tier, ...runtimeAgent } = agent
     return runtimeAgent
@@ -123,9 +105,7 @@ async function mergeConfig(cfg: ConfigWithSubagentDepth, input: PluginInputWithS
     for (const [name, agentDef] of Object.entries(agents)) {
         const userOverride = cfg.agent[name]
         const mergedAgent = mergePluginAgentConfig(agentDef, tiers, userOverride)
-        mergedAgents[name] = name === "title"
-            ? applyCheapTierReasoningToTitleAgent(mergedAgent, tiers.cheap)
-            : mergedAgent
+        mergedAgents[name] = mergedAgent
     }
     const finalAgents = preparePluginAgentsAfterOverrides(
         mergedAgents,

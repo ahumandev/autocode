@@ -64,7 +64,7 @@ describe("autocode plugin config", () => {
         await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
             autocode: {
                 tiers: {
-                    cheap: { model: "cheap-model", variant: "low" },
+                    cheap: { model: "cheap-model", variant: "high" },
                     fast: { model: "fast-model" },
                     balanced: { model: "balanced-model", variant: "balanced-variant" },
                     smart: { model: "smart-model" },
@@ -110,7 +110,11 @@ describe("autocode plugin config", () => {
             await hooks.config?.(cfg)
 
             expect(cfg.small_model).toBe("cheap-model")
-            expect(cfg.agent?.title?.options?.reasoningEffort).toBe("low")
+            expect(cfg.agent?.title).toEqual(expect.objectContaining({
+                model: "cheap-model",
+                variant: "high",
+            }))
+            expect(cfg.agent?.title?.options?.reasoningEffort).toBeUndefined()
             expect(cfg.agent?.compaction?.model).toBe("fast-model")
             expect(cfg.command?.["job-execute-auto"]).toEqual(expect.objectContaining({
                 description: "user description",
