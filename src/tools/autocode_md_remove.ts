@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync } from "fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection } from "./md/markdown"
 import type { MdHeading } from "./md/markdown"
 import { serializeTree } from "./md/transform"

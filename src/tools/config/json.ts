@@ -120,7 +120,7 @@ export class JsoncDocumentEditor implements ConfigDocumentEditor {
         const root = parseTree(this.text, errors, { allowTrailingComma: true, disallowComments: false })
         if (!root) throw new Error("rename: invalid JSON")
         const valueNode = findNodeAtLocation(root, curPath)
-        if (!valueNode || !valueNode.parent) throw new Error("rename: node not found")
+        if (!valueNode?.parent) throw new Error("rename: node not found")
         const propertyNode = valueNode.parent
         if (propertyNode.type !== "property") throw new Error("rename: not a property")
         const keyNode = propertyNode.children?.[0]

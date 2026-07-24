@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
-import { homedir } from "os"
-import { dirname, isAbsolute, join, relative, resolve, sep } from "path"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 
 import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json" }
 import { createJsoncDocumentEditor } from "./tools/config/json"
@@ -372,7 +372,6 @@ function readFirstConfig(fs: ConfigFileSystem, paths: readonly string[]): { path
         try {
             return { path, raw: fs.readFileSync(path, "utf-8") }
         } catch {
-            continue
         }
     }
     return undefined

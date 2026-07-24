@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import path from "path"
+import path from "node:path"
 import { createAbortResponse, createRetryResponse, flattenError } from "@/utils/tools"
 import { assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, defaultSandboxDependencies, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getSandboxPaths, materializeSandboxRootfs, normalizeOptionalDistro, normalizeSandboxName, readSandboxMetadata, resolveSandboxJob, writeSandboxMetadata, type EffectiveSandboxSyncMethod, type SandboxConfig, type SandboxDependencies, type SandboxDistro, type SandboxMetadata } from "@/utils/sandbox"
 import { addBubblewrapBind, addBubblewrapProxyEnv, addOptionalBubblewrapReadOnlyBind, bubblewrapHostNetworkReadOnlyBinds, bubblewrapQuickEtcReadOnlyBinds, bubblewrapQuickRootReadOnlyBinds, pathExists, redactProxyCredentials } from "@/utils/autocode_sandbox_helpers"

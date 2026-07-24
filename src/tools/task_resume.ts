@@ -440,7 +440,7 @@ export function createTaskResumeTool(client: OpencodeClient) {
                             }
                         }
                     }
-                } catch (error) {
+                } catch {
                     // ignore
                 }
 

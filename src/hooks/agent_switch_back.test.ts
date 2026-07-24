@@ -1,11 +1,9 @@
 import { describe, expect, mock, test, beforeEach } from "bun:test"
 import type { Event } from "@opencode-ai/sdk"
-import { findPreviousPrimaryAutocodeAgent, resolveAutocodeAgentSessionSettings, swapCurrentAutocodeSession } from "@/utils/agent_swap"
+import type { findPreviousPrimaryAutocodeAgent, resolveAutocodeAgentSessionSettings, swapCurrentAutocodeSession } from "@/utils/agent_swap"
 import { createAgentSwitchBackHook } from "@/hooks/agent_switch_back"
 
 const SWAP_BACK_PROMPT = "Present the next action to the user using the question tool."
-const PRIMARY = ["assist", "auto", "design", "research"]
-
 type SwapFn = typeof swapCurrentAutocodeSession
 type ResolveFn = typeof resolveAutocodeAgentSessionSettings
 type FindPrevFn = typeof findPreviousPrimaryAutocodeAgent

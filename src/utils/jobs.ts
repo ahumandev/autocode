@@ -1,7 +1,7 @@
-import path from "path"
+import path from "node:path"
 import type { AssistantMessage, Message, OpencodeClient, Part } from "@opencode-ai/sdk"
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "fs/promises"
-import type { Dirent } from "fs"
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
+import type { Dirent } from "node:fs"
 import { readLatestSolutionStatus } from "./solution"
 
 export const activeJobLifecycleDirectories = ["concepts", "drafts", "assist", "executing", "facilitate", "review"] as const
@@ -84,7 +84,7 @@ type ReadFileSystem = {
 }
 
 export type DirectoryFileSystem = ReadFileSystem & {
-    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
+    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     readdir: (dirPath: string, options: { withFileTypes: true }) => Promise<Dirent[]>
     rename?: (oldPath: string, newPath: string) => Promise<void>
     rm?: (path: string, options?: { recursive?: boolean, force?: boolean }) => Promise<void>
@@ -93,7 +93,7 @@ export type DirectoryFileSystem = ReadFileSystem & {
 }
 
 export type JobToolFileSystem = {
-    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
+    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
     readdir: (dirPath: string, options?: { withFileTypes?: boolean }) => Promise<string[] | Dirent[]>
     rename?: (oldPath: string, newPath: string) => Promise<void>
@@ -1205,12 +1205,14 @@ export async function moveResolvedPlannedJobToStatus(
     options: MovePlannedJobOptions = {},
 ): Promise<MovePlannedJobResult> {
     const destinationDirectory = getCanonicalDirectoryForStatus(status)
+    const rename = fileSystem.rename
+    if (!rename) throw new Error("Job move requires rename support")
     let destinationJobName = source.job_name
     let destinationDir = getJobDirectoryPath(worktree, destinationDirectory, destinationJobName)
     if (source.absolute_path !== destinationDir) {
         await fileSystem.mkdir(getJobDirectoryPath(worktree, destinationDirectory, ""), { recursive: true })
         try {
-            await fileSystem.rename!(source.absolute_path, destinationDir)
+            await rename(source.absolute_path, destinationDir)
         }
         catch (error) {
             if (isCollisionError(error)) {
@@ -1222,7 +1224,7 @@ export async function moveResolvedPlannedJobToStatus(
                 destinationDir = getJobDirectoryPath(worktree, destinationDirectory, destinationJobName)
 
                 try {
-                    await fileSystem.rename!(source.absolute_path, destinationDir)
+                    await rename(source.absolute_path, destinationDir)
                 }
                 catch (retryError) {
                     if (isCollisionError(retryError)) {

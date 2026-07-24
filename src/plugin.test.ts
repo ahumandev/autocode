@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, rm, writeFile, mkdir, readdir } from "fs/promises"
-import { join } from "path"
-import { tmpdir } from "os"
+import { mkdtemp, rm, writeFile, mkdir, readdir } from "node:fs/promises"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
 import autocode from "./plugin"
@@ -132,10 +132,13 @@ describe("autocode plugin config", () => {
             expect(cfg.command?.["job-execute-assist"]?.template).toContain("autocode_job_execute")
             expect(cfg.agent?.assist?.model).toBe("user-model")
             expect(cfg.agent?.assist?.variant).toBe("balanced-variant")
-            expect((cfg.agent?.assist as Record<string, unknown>).tier).toBeUndefined()
+            const assist = cfg.agent?.assist
+            const design = cfg.agent?.design
+            const assistPermission = assist?.permission
+            expect(((assist ?? {}) as Record<string, unknown>).tier).toBeUndefined()
             expect(cfg.agent?.design?.model).toBe("smart-model")
-            expect((cfg.agent?.design as Record<string, unknown>).tier).toBeUndefined()
-            expect((cfg.agent?.assist?.permission as Record<string, unknown>).external_directory).toEqual({
+            expect(((design ?? {}) as Record<string, unknown>).tier).toBeUndefined()
+            expect(((assistPermission ?? {}) as Record<string, unknown>).external_directory).toEqual({
                 "*": "ask",
                 "/native/*": "ask",
                 "/configured/*": "allow",
@@ -275,8 +278,6 @@ describe("autocode plugin config", () => {
 
             expect(skillPermissions(cfg, "execute_code")?.["angular-developer"]).toBe("allow")
             expect(skillPermissions(cfg, "execute_os")?.["angular-developer"]).toBeUndefined()
-            expect(skillPermissions(cfg, "execute_os")?.["drawio"]).toBe("allow")
-            expect(skillPermissions(cfg, "execute_script")?.["drawio"]).toBe("allow")
             expect(skillPermissions(cfg, "auto_test")?.["vitest"]).toBe("allow")
             expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBe("allow")
             expect(skillPermissions(cfg, "auto")?.["codebase-design"]).toBe("allow")

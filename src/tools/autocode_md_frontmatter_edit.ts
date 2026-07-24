@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFile, writeFile } from "fs/promises"
+import { readFile, writeFile } from "node:fs/promises"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { validateContentPath } from "./md/frontmatter/validate"
 import { yamlParser } from "@/tools/config/yaml"

@@ -20,7 +20,8 @@ export function isDescendant(candidate: MdHeading, ancestor: MdHeading): boolean
 }
 
 export function getOwnText(model: MdModel, h: MdHeading, overrides?: OwnTextOverrides): string {
-    if (overrides && overrides.has(h)) return overrides.get(h)!
+    const override = overrides?.get(h)
+    if (override !== undefined) return override
     return ownText(model, h)
 }
 

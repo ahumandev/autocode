@@ -1,15 +1,13 @@
-import path from "path"
+import path from "node:path"
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdir, readFile, readdir, stat, writeFile } from "fs/promises"
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
 import { createDirectoryFileSystem, deriveJobNameFromTitle, ensurePlannedJobFiles, getJobDirectoryPath, isMissingFile, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type RestToolFileSystem = Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "stat"> & {
     writeFile: (file: string, data: string | Buffer | Uint8Array) => Promise<void>
 }
-
-type Scalar = string | number | boolean | null
 
 type PlainObject = Record<string, unknown>
 
@@ -34,18 +32,6 @@ function isPlainObject(value: unknown): value is PlainObject {
 
     const prototype = Object.getPrototypeOf(value)
     return prototype === Object.prototype || prototype === null
-}
-
-function isScalar(value: unknown): value is Scalar {
-    return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-}
-
-function isFiniteNumber(value: unknown): value is number {
-    return typeof value === "number" && Number.isFinite(value)
-}
-
-function isPositiveInteger(value: unknown): value is number {
-    return isFiniteNumber(value) && Number.isInteger(value) && value > 0
 }
 
 function validateBodyValue(value: unknown): boolean {
@@ -191,7 +177,7 @@ function sanitizeUrlForFileName(url: string): string {
         .replace(/:\/{2,}/g, "_")
         .replace(/\//g, "-")
         .replace(/\?/g, "_")
-        .replace(/[^a-zA-Z0-9,&\-_!@#$%^()\[\]]/g, "-")
+        .replace(/[^a-zA-Z0-9,&\-_!@#$%^()[\]]/g, "-")
         .slice(0, 120)
 }
 
@@ -417,4 +403,3 @@ export function createAutocodeRestTool(client?: OpencodeClient, fileSystem: Rest
         },
     })
 }
-

@@ -18,8 +18,8 @@ ${markdown}
     1. List each numbered APPROACH as heading + subsection with: how description (max 40 words), list top 5 changes, explain with formatted example / mermaid-graph / table.
     2. After listed APPROACH sections present 1 APPROACH comparison table:
         - Row 1: Column 2-n contains heading of numbered APPROACH in same order as listed APPROACH sections.
-        - Column 1: Name: Pros (facts), then separator, then Cons (facts), then separator, then Risks (uncertainties); Each point in new row
-        - Column 2-n: Matches APPROACH from Row 1 with emoji + label
+        - Column 1: Describe in max 10 words each pro (facts) in new row, then each cons (facts) in new row, then each risk (uncertainties) in new row
+        - Column 2-n: Matches APPROACH from Row 1 with emoji and 1-4 word clarification
     3. Recommended APPROACH below APPROACH comparison table in 1 sentence with reason.
 
 ## User Followup Rules

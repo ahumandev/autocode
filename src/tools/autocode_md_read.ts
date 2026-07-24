@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync } from "fs"
+import { readFileSync } from "node:fs"
 import { expandGlob } from "@/utils/glob"
 import { ownText, parseMarkdown } from "./md/markdown"
 import { createRetryResponse } from "@/utils/tools"

@@ -46,12 +46,12 @@ describe("loadGitHubSkillInventory", () => {
     test("loads committed inventory with expected categories, paths, provenance, and snapshots", async () => {
         const inventory = await loadGitHubSkillInventory(join(import.meta.dir, "github.jsonc"), import.meta.dir)
 
-        expect(inventory.skills).toHaveLength(13)
-        expect(new Set(inventory.skills.map((entry) => entry.sourceUrl)).size).toBe(12)
+        expect(inventory.skills).toHaveLength(11)
+        expect(new Set(inventory.skills.map((entry) => entry.sourceUrl)).size).toBe(10)
         expect(Object.fromEntries(["bash", "code", "design", "test"].map((category) => [
             category,
             inventory.skills.filter((entry) => entry.category === category).length,
-        ]))).toEqual({ bash: 2, code: 7, design: 1, test: 3 })
+        ]))).toEqual({ bash: 0, code: 7, design: 1, test: 3 })
 
         for (const entry of inventory.skills) {
             const segments = entry.relativeInstallPath.split("/")

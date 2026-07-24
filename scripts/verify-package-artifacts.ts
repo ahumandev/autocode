@@ -11,7 +11,7 @@
  *   `bun run test && bun run typecheck && bun run build && bun run verify:package`
  */
 
-import { type Dirent } from "node:fs"
+import type { Dirent } from "node:fs"
 import { access, readFile, readdir } from "node:fs/promises"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"

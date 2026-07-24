@@ -11,6 +11,9 @@ export function createAutocodeConfigRemoveTool() {
       file_path: tool.schema.string().describe("Exact path to file."),
       key_path: configPathSchema.describe("Dotted key path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') of the key to remove."),
     },
-    execute: (args, context) => configRemoveFlow(createLocalConfigAdapter(context), args as Record<string, unknown>),
+    execute: (args, context) => {
+      const filePath = typeof args.file_path === "string" ? args.file_path : ""
+      return configRemoveFlow(createLocalConfigAdapter(context), { ...args, file_path: filePath })
+    },
   })
 }

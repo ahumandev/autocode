@@ -1,4 +1,4 @@
-import { parse as yamlParse, stringify as yamlStringify, parseDocument, isMap, isSeq, isScalar, type Document, type Node, type YAMLMap, type YAMLSeq } from "yaml"
+import { parse as yamlParse, stringify as yamlStringify, parseDocument, isMap, isSeq, isScalar, type Document, type Node, type YAMLSeq } from "yaml"
 import type { ConfigFormatParser, ConfigDocumentEditor, EditOperation } from "./types"
 
 export const yamlParser: ConfigFormatParser = {

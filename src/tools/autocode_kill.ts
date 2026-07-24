@@ -1,5 +1,5 @@
-import type { Dirent } from "fs"
-import path from "path"
+import type { Dirent } from "node:fs"
+import path from "node:path"
 import { tool, type ToolContext } from "@opencode-ai/plugin"
 import { defaultSandboxDependencies, type SandboxDependencies } from "@/utils/sandbox"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
@@ -207,7 +207,7 @@ function parseSsListeners(output: string): Listener[] {
         const portMatch = line.match(/(?:^|\s)(?:\S+:|\[[^\]]+\]:)(\d{1,5})(?=\s)/)
         const port = portMatch ? normalizePort(portMatch[1]) : undefined
         if (port === undefined) continue
-        const name = line.match(/users:\(\(\"([^\"]+)\"/)?.[1] ?? ""
+        const name = line.match(/users:\(\("([^"]+)"/)?.[1] ?? ""
         const pid = line.match(/pid=(\d+)/)?.[1]
         listeners.push({ port, process_name: name, process_owner: "", pid })
     }

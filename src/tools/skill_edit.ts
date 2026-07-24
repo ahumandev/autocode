@@ -1,12 +1,12 @@
 import { tool } from "@opencode-ai/plugin"
-import { mkdir, readFile, rm, writeFile } from "fs/promises"
-import path from "path"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import path from "node:path"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import { upsertReferencesSection } from "@/tools/skill_shared"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type FileSystem = {
-    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
+    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     writeFile: (filePath: string, content: string) => Promise<void>
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
     rm: (filePath: string, options?: { force?: boolean }) => Promise<void>

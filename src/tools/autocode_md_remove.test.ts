@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
-import { tmpdir } from "os"
-import { join } from "path"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { createAutocodeMdRemoveTool } from "./autocode_md_remove"
 import { createToolContext } from "./test_context"
 

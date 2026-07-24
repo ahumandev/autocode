@@ -43,7 +43,6 @@ function findSkillDirs(rootDir: string): string[] {
                     walk(full)
                 }
             } catch {
-                continue
             }
         }
     }

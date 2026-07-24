@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync } from "fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection, slugifyHeading } from "./md/markdown"
 import type { MdHeading } from "./md/markdown"
 import { clampIndex, parseContentBlocks, serializeTree } from "./md/transform"
@@ -40,7 +40,7 @@ export function createAutocodeMdCreateTool(): ReturnType<typeof tool> {
                 const hasIndex = args.index !== undefined && args.index !== null
                 let newParentHeading: MdHeading | null
                 if (hasParent) {
-                    const pres = resolveSection(model, args.parent_anchor!)
+                    const pres = resolveSection(model, args.parent_anchor ?? "")
                     if (!pres.ok) {
                         return createErrorResponse("autocode_md_create", new Error("parent not found"), `parent_anchor '${args.parent_anchor}' was not found. Run autocode_md_read to list valid anchors.`)
                     }
@@ -52,20 +52,20 @@ export function createAutocodeMdCreateTool(): ReturnType<typeof tool> {
                 }
                 const level = newParentHeading ? newParentHeading.level + 1 : 2
                 const S: MdHeading = {
-                    title: args.heading!,
+                    title: args.heading ?? "",
                     level,
                     start: 0,
                     headerEnd: 0,
                     spanEnd: 0,
                     children: [],
                     parent: newParentHeading,
-                    referenceId: slugifyHeading(args.heading!),
+                    referenceId: slugifyHeading(args.heading ?? ""),
                     marker: "atx",
                 }
                 const overrides = new Map<MdHeading, string>()
                 for (const h of model.headings) overrides.set(h, ownText(model, h))
                 if (hasContent) {
-                    const blocks = parseContentBlocks(args.content!, S.level)
+                    const blocks = parseContentBlocks(args.content ?? "", S.level)
                     // attach rebased subsections as children of S (in order)
                     for (const child of blocks.children) {
                         child.parent = S

@@ -52,17 +52,6 @@ Content outdated? Call `skill_learn` with name=`learned-corrections-avoid-re-ren
 
 ## Categories
 
-Categories are metadata, never filesystem path segments. Manual placement never assigns an execution category through a directory name.
-
-### Execution categories
-
-- `bash`: shell, CLI, or OS automation.
-- `code`: implementation, debugging, or refactoring.
-- `design`: architecture, interfaces, or planning.
-- `test`: test authoring, execution, or diagnosis.
-
-Never use `bash`, `code`, `design`, or `test` as directory segments.
-
 ### Learned categories
 
 | Category    | Tool                      | Trigger                                                              | Content                                                                                                 |

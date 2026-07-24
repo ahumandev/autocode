@@ -74,10 +74,10 @@ Local setup is for repository development only. It is not the public npm install
 
 | Command                         | Purpose                                                                                                                          |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run build`                 | Removes `dist`, builds `src/plugin.ts`, emits declarations, and copies generated skills and GitHub snapshots into `dist/`. Does not install the shim. |
+| `bun run skill:sync`            | Refreshes tracked GitHub skill snapshots; review Git changes before commit.                                                      |
+| `bun run build`                 | Clears `dist`, bundles `src/plugin.ts`, emits declarations, and copies skill into `dist/skills`.                                 |
 | `bun run install:shim`          | Installs the local development shim at `~/.config/opencode/plugins/autocode.js`.                                                 |
-| `bun run watch`                 | Copies generated skills once, then watches the Bun bundle and declarations as source files change.                               |
-| `bun run skill:sync`            | Refreshes tracked GitHub skill snapshots; review Git changes before commit.                                                       |
+| `bun run watch`                 | Copies generated skills once, then watches source files. When they change, it automatically rebuilds the Bun bundle and declarations. |
 | `bun test`                      | Runs the Bun test suite under `src`.                                                                                             |
 | `bun run typecheck`             | Runs TypeScript type checking without emitting files.                                                                            |
 | `bun run verify:sandbox-online` | Runs the sandbox verification script.                                                                                            |

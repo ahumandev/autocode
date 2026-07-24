@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
-import type { Dirent } from "fs"
-import path from "path"
+import type { Dirent } from "node:fs"
+import path from "node:path"
 import type { SandboxDependencies } from "@/utils/sandbox"
 import { createAutocodeKillTool, runAutocodeKill } from "./autocode_kill"
 

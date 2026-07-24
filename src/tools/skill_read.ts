@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFile } from "fs/promises"
-import path from "path"
+import { readFile } from "node:fs/promises"
+import path from "node:path"
 import { isMissingFile, resolveAgentsStorageRoot } from "@/utils/jobs"
 import { createRetryResponse } from "@/utils/tools"
 
@@ -12,7 +12,7 @@ const defaultFileSystem: FileSystem = { readFile }
 
 export function createAutocodeSkillReadTool(fileSystem: FileSystem = defaultFileSystem) {
     return tool({
-        description: "ALWAYS preview old skill file content before editing with \`skill_edit\`. ",
+        description: "ALWAYS preview old skill file content before editing with `skill_edit`. ",
         args: {
             name: tool.schema.string().describe("Skill name."),
         },

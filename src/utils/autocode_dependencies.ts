@@ -1,5 +1,5 @@
-import { homedir } from "os"
-import path from "path"
+import { homedir } from "node:os"
+import path from "node:path"
 import { flattenError } from "@/utils/tools"
 import { defaultSandboxDependencies, detectSandboxBackend, hasTermuxEnvironmentSignal, type SandboxDependencies } from "@/utils/sandbox"
 
@@ -477,7 +477,7 @@ function formatVersion(version: Version): string {
     return `${version.major}.${version.minor}.${version.patch}`
 }
 
-export function isAtLeastMinimumOpencodeVersion(version: Version, minimum = parseTolerantSemver(MINIMUM_OPENCODE_VERSION)!): boolean {
+export function isAtLeastMinimumOpencodeVersion(version: Version, minimum = { major: 1, minor: 17, patch: 9 }): boolean {
     return compareVersions(version, minimum) >= 0
 }
 

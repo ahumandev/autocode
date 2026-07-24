@@ -12,7 +12,7 @@
  * - Called in watch mode: `bun run watch`.
  */
 
-import { type Dirent } from "node:fs"
+import type { Dirent } from "node:fs"
 import { copyFile, mkdir, readdir, rm } from "node:fs/promises"
 import { dirname, join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"

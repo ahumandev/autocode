@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import path from "path"
+import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { resetRetryCounts } from "@/utils/tools"
 import { createAutocodeRestTool } from "./autocode_rest"

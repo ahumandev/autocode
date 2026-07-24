@@ -9,9 +9,12 @@ import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { expandGlob } from "@/utils/glob"
 import { configModeFromExtension } from "./config/adapter"
 import { configEditFlow, configRead, configRemoveFlow, formatPath, getParser, parseKeyPath, resolvePath } from "./config/core"
-import type { ConfigAdapter, ConfigMode, ConfigTarget, RetryResult } from "./config/types"
+import type { z } from "zod"
+import type { ConfigAdapter, ConfigMode, ConfigTarget, JsonValue, RetryResult } from "./config/types"
 
 const configPathSchema = tool.schema.string()
+const jsonValueSchema: z.ZodType<JsonValue> = tool.schema.json()
+type ConfigFlowArgs = Record<string, unknown> & { file_path: string }
 
 export function createSandboxConfigAdapter(rootPath: string, deps: SandboxDependencies): ConfigAdapter {
     return {
@@ -47,14 +50,16 @@ function createSandboxConfigExecute(
     client: OpencodeClient | undefined,
     deps: SandboxDependencies,
     failedAction: string,
-    flow: (adapter: ConfigAdapter, args: Record<string, unknown>) => Promise<string>,
+    flow: (adapter: ConfigAdapter, args: ConfigFlowArgs) => Promise<string>,
 ): (args: Record<string, unknown>, context: SessionJobContext) => Promise<string> {
     return async (args: Record<string, unknown>, context: SessionJobContext): Promise<string> => {
         try {
             const sandbox = await resolveSandboxForFileTool(client, context, deps, args.sandbox_name, failedAction)
             if (!sandbox.ok) return sandbox.response
             const adapter = createSandboxConfigAdapter(sandbox.metadata.root_path, deps)
-            const flowArgs: Record<string, unknown> = { ...args, file_path: args.path ?? args.file_path }
+            const configuredPath = args.path ?? args.file_path
+            const filePath = typeof configuredPath === "string" ? configuredPath : ""
+            const flowArgs: ConfigFlowArgs = { ...args, file_path: filePath }
             return await flow(adapter, flowArgs)
         }
         catch (error) {
@@ -71,14 +76,7 @@ export function createAutocodeSandboxConfigEditTool(client?: OpencodeClient, dep
             path: tool.schema.string().describe("Sandbox-root-relative path to config file."),
             current_key: configPathSchema.optional().describe("Existing dotted key path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') to operate on. If omitted, a new_key must be given (CREATE)."),
             new_key: configPathSchema.optional().describe("Target key path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') for RENAME or CREATE. Must not already exist."),
-            content: tool.schema.union([
-                tool.schema.string(),
-                tool.schema.number(),
-                tool.schema.boolean(),
-                tool.schema.null(),
-                tool.schema.array(tool.schema.unknown()),
-                tool.schema.object({}).loose()
-            ]).optional().describe("New value. Accepts string, number, boolean, null, array, or object. Strings are JSON.parsed when possible, else stored as a literal string. Non-string scalars and arrays/objects are stored as-is. Required for REPLACE and CREATE."),
+            content: jsonValueSchema.optional().describe("New value. Accepts string, number, boolean, null, array, or object. Strings are JSON.parsed when possible, else stored as a literal string. Non-string scalars and arrays/objects are stored as-is. Required for REPLACE and CREATE."),
             new_index: tool.schema.number().int().optional().describe("Position when inserting into arrays: 0=first, -1=last/append, N=nth. Ignored for object keys."),
         },
         execute: createSandboxConfigExecute(client, deps, "edit sandbox config file", configEditFlow),

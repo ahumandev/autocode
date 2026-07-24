@@ -1,4 +1,5 @@
 import path from "node:path"
+import type { Dirent } from "node:fs"
 import { readdir, realpath, stat } from "node:fs/promises"
 
 const SKIP_DIR_NAMES = new Set(["node_modules", ".git", ".hg", ".svn", "dist", "build", ".next", ".cache", "coverage", ".turbo"])
@@ -89,7 +90,7 @@ export async function bfsFindFilename(
 
         if (depth >= maxDepth) continue
 
-        let entries
+        let entries: Dirent[]
         try {
             entries = await readdir(dir, { withFileTypes: true })
         }

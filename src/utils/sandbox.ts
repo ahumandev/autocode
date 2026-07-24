@@ -1,9 +1,9 @@
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createHash } from "crypto"
-import { spawn, spawnSync } from "child_process"
-import { cp, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "fs/promises"
-import { existsSync } from "fs"
-import path from "path"
+import { createHash } from "node:crypto"
+import { spawn, spawnSync } from "node:child_process"
+import { cp, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import path from "node:path"
 import { createDirectoryFileSystem, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type PlannedJobIdentityResolution, type ResolvedPlannedJob, type SessionJobContext } from "./jobs"
 
 export const allowedSandboxDistros = ["alpine", "debian", "ubuntu", "archlinux", "opensuse"] as const

@@ -9,7 +9,8 @@ const tempPaths: string[] = []
 
 afterEach(async () => {
     while (tempPaths.length > 0) {
-        const p = tempPaths.pop()!
+        const p = tempPaths.pop()
+        if (!p) continue
         await rm(p, { recursive: true, force: true }).catch(() => {})
     }
 })

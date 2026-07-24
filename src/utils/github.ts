@@ -28,10 +28,10 @@ export function parseGitHubSkillUrl(url: string): ParsedGitHubSkillUrl {
     if (rawMatch) {
         return {
             strategy: "raw",
-            owner: rawMatch[1]!,
-            project: rawMatch[2]!,
-            branch: rawMatch[3]!,
-            subDirs: rawMatch[4]!,
+            owner: rawMatch[1] ?? "",
+            project: rawMatch[2] ?? "",
+            branch: rawMatch[3] ?? "",
+            subDirs: rawMatch[4] ?? "",
             skillFile: "SKILL.md",
         }
     }
@@ -40,10 +40,10 @@ export function parseGitHubSkillUrl(url: string): ParsedGitHubSkillUrl {
     if (blobMatch) {
         return {
             strategy: "blob",
-            owner: blobMatch[1]!,
-            project: blobMatch[2]!,
-            branch: blobMatch[3]!,
-            subDirs: blobMatch[4]!,
+            owner: blobMatch[1] ?? "",
+            project: blobMatch[2] ?? "",
+            branch: blobMatch[3] ?? "",
+            subDirs: blobMatch[4] ?? "",
             skillFile: "SKILL.md",
         }
     }
@@ -52,10 +52,10 @@ export function parseGitHubSkillUrl(url: string): ParsedGitHubSkillUrl {
     if (subtreeMatch) {
         return {
             strategy: "subtree",
-            owner: subtreeMatch[1]!,
-            project: subtreeMatch[2]!,
-            branch: subtreeMatch[3]!,
-            subDirs: subtreeMatch[4]!,
+            owner: subtreeMatch[1] ?? "",
+            project: subtreeMatch[2] ?? "",
+            branch: subtreeMatch[3] ?? "",
+            subDirs: subtreeMatch[4] ?? "",
         }
     }
 
@@ -63,8 +63,8 @@ export function parseGitHubSkillUrl(url: string): ParsedGitHubSkillUrl {
     if (repoMatch) {
         return {
             strategy: "repo",
-            owner: repoMatch[1]!,
-            project: repoMatch[2]!,
+            owner: repoMatch[1] ?? "",
+            project: repoMatch[2] ?? "",
         }
     }
 

@@ -84,7 +84,7 @@ function options(fixture: Fixture): GitHubSkillSyncOptions {
     }
 }
 
-function dependencies(fixture: Fixture, state: { clones: number; fetches: number } = { clones: 0, fetches: 0 }): GitHubSkillSyncDependencies {
+function dependencies(fixture: Fixture, state: { clones: number; fetches: number } = { clones: 0, fetches: 0 }): GitHubSkillSyncDependencies & { git: GitHubSkillGit } {
     const repositories = new Set<string>()
     const git: GitHubSkillGit = {
         async isRepository(path: string): Promise<boolean> {
@@ -157,13 +157,15 @@ describe("syncGitHubSkillInventory", () => {
         expect(await nodeFs.readFile(join(fixture.skillsRoot, "acme/repository/LICENSE"), "utf8")).toBe("root license\n")
         expect(await nodeFs.readFile(join(fixture.skillsRoot, "acme/tree-repository/selected/tree-skill/legal/NOTICE"), "utf8")).toBe("nested notice\n")
         expect(existsSync(join(fixture.skillsRoot, "github/acme"))).toBe(false)
-        const tree = result.inventory.skills.find((skill) => skill.relativeInstallPath.endsWith("tree-skill"))!
+        const tree = result.inventory.skills.find((skill) => skill.relativeInstallPath.endsWith("tree-skill"))
+        if (!tree) throw new Error("Expected tree skill")
         expect(tree.sha256).toBe(sha256("tree\n"))
         expect(tree.legalFiles).toEqual([
             { relativePath: "LICENSE", sha256: sha256("tree license\n") },
             { relativePath: "selected/tree-skill/legal/NOTICE", sha256: sha256("nested notice\n") },
         ])
-        const repository = result.inventory.skills.find((skill) => skill.relativeInstallPath.endsWith("/alpha"))!
+        const repository = result.inventory.skills.find((skill) => skill.relativeInstallPath.endsWith("/alpha"))
+        if (!repository) throw new Error("Expected repository skill")
         expect(repository.legalFiles?.map((file) => file.relativePath)).toEqual(["attribution", "COPYING.txt", "LICENSE", "NOTICE.md"])
         expect(fixture.warnings).toEqual([])
     })
@@ -175,8 +177,8 @@ describe("syncGitHubSkillInventory", () => {
         const state = { clones: 0, fetches: 0 }
         const syncDependencies = dependencies(fixture, state)
         const destructiveOperations: string[] = []
-        syncDependencies.git!.hardReset = async (): Promise<void> => { destructiveOperations.push("hardReset") }
-        syncDependencies.git!.clean = async (): Promise<void> => { destructiveOperations.push("clean") }
+        syncDependencies.git.hardReset = async (): Promise<void> => { destructiveOperations.push("hardReset") }
+        syncDependencies.git.clean = async (): Promise<void> => { destructiveOperations.push("clean") }
 
         await syncGitHubSkillInventory(options(fixture), syncDependencies)
         await syncGitHubSkillInventory(options(fixture), syncDependencies)
@@ -196,8 +198,8 @@ describe("syncGitHubSkillInventory", () => {
             const mkdirPaths: string[] = []
             await addRepository(fixture, sourceUrl, { "LICENSE": "license\n", "skill/SKILL.md": "skill\n" })
             const syncDependencies = dependencies(fixture)
-            const clone = syncDependencies.git!.clone
-            syncDependencies.git!.clone = async (url: string, destination: string): Promise<void> => {
+            const clone = syncDependencies.git.clone
+            syncDependencies.git.clone = async (url: string, destination: string): Promise<void> => {
                 clonePaths.push(destination)
                 await clone(url, destination)
             }
@@ -231,23 +233,23 @@ describe("syncGitHubSkillInventory", () => {
         const clonePaths: string[] = []
         await addRepository(fixture, sourceUrl, { "LICENSE": "license\n", "skill/SKILL.md": "skill\n" })
         const syncDependencies = dependencies(fixture, state)
-        const clone = syncDependencies.git!.clone
-        syncDependencies.git!.clone = async (url: string, destination: string): Promise<void> => {
+        const clone = syncDependencies.git.clone
+        syncDependencies.git.clone = async (url: string, destination: string): Promise<void> => {
             clonePaths.push(destination)
             await clone(url, destination)
         }
-        syncDependencies.git!.fetch = async (path: string): Promise<void> => {
+        syncDependencies.git.fetch = async (path: string): Promise<void> => {
             operations.push(`fetch:${path}`)
             state.fetches += 1
         }
-        syncDependencies.git!.fetchRemote = async (path: string): Promise<void> => { operations.push(`fetchRemote:${path}`) }
-        syncDependencies.git!.remoteDefaultBranch = async (path: string): Promise<string> => {
+        syncDependencies.git.fetchRemote = async (path: string): Promise<void> => { operations.push(`fetchRemote:${path}`) }
+        syncDependencies.git.remoteDefaultBranch = async (path: string): Promise<string> => {
             operations.push(`remoteDefaultBranch:${path}`)
             return "main"
         }
-        syncDependencies.git!.checkout = async (path: string, revision: string): Promise<void> => { operations.push(`checkout:${path}:${revision}`) }
-        syncDependencies.git!.hardReset = async (path: string, revision: string): Promise<void> => { operations.push(`hardReset:${path}:${revision}`) }
-        syncDependencies.git!.clean = async (path: string): Promise<void> => { operations.push(`clean:${path}`) }
+        syncDependencies.git.checkout = async (path: string, revision: string): Promise<void> => { operations.push(`checkout:${path}:${revision}`) }
+        syncDependencies.git.hardReset = async (path: string, revision: string): Promise<void> => { operations.push(`hardReset:${path}:${revision}`) }
+        syncDependencies.git.clean = async (path: string): Promise<void> => { operations.push(`clean:${path}`) }
         const fs: GitHubSkillSyncFileSystem = {
             ...nodeFs,
             async mkdir(path: string, mkdirOptions?: { recursive?: boolean }): Promise<string | undefined> {
@@ -281,7 +283,7 @@ describe("syncGitHubSkillInventory", () => {
         const clonePaths: string[] = []
         const mkdirPaths: string[] = []
         const syncDependencies = dependencies(fixture)
-        syncDependencies.git!.clone = async (_url: string, destination: string): Promise<void> => { clonePaths.push(destination) }
+        syncDependencies.git.clone = async (_url: string, destination: string): Promise<void> => { clonePaths.push(destination) }
         const fs: GitHubSkillSyncFileSystem = {
                 ...nodeFs,
                 async mkdir(path: string, mkdirOptions?: { recursive?: boolean }): Promise<string | undefined> {
@@ -306,7 +308,7 @@ describe("syncGitHubSkillInventory", () => {
         const fallbackRepository = join(fallbackCacheRoot, "acme", "network-failure")
         const clonePaths: string[] = []
         const syncDependencies = dependencies(fixture)
-        syncDependencies.git!.clone = async (_url: string, destination: string): Promise<void> => {
+        syncDependencies.git.clone = async (_url: string, destination: string): Promise<void> => {
             clonePaths.push(destination)
             throw new Error("network unavailable")
         }
@@ -326,12 +328,12 @@ describe("syncGitHubSkillInventory", () => {
         const clonePaths: string[] = []
         await addRepository(fixture, sourceUrl, { "LICENSE": "license\n", "skill/SKILL.md": "skill\n" })
         const syncDependencies = dependencies(fixture)
-        const clone = syncDependencies.git!.clone
-        syncDependencies.git!.clone = async (url: string, destination: string): Promise<void> => {
+        const clone = syncDependencies.git.clone
+        syncDependencies.git.clone = async (url: string, destination: string): Promise<void> => {
             clonePaths.push(destination)
             await clone(url, destination)
         }
-        syncDependencies.git!.isRepository = async (): Promise<boolean> => false
+        syncDependencies.git.isRepository = async (): Promise<boolean> => false
 
         await expect(syncGitHubSkillInventory({ ...options(fixture), fallbackCacheRoot }, syncDependencies)).rejects.toThrow(`clone ${primaryRepository} is not a Git repository`)
 
@@ -344,7 +346,7 @@ describe("syncGitHubSkillInventory", () => {
         const fallbackCacheRoot = join(fixture.root, "fallback-cache")
         const clonePaths: string[] = []
         const syncDependencies = dependencies(fixture)
-        syncDependencies.git!.clone = async (_url: string, destination: string): Promise<void> => { clonePaths.push(destination) }
+        syncDependencies.git.clone = async (_url: string, destination: string): Promise<void> => { clonePaths.push(destination) }
         await nodeFs.writeFile(fixture.manifestPath, "{\n")
 
         await expect(syncGitHubSkillInventory({ ...options(fixture), fallbackCacheRoot }, syncDependencies)).rejects.toThrow("malformed JSONC")
@@ -365,19 +367,19 @@ describe("syncGitHubSkillInventory", () => {
         await writeTree(remoteRepository, { "forced-skill/SKILL.md": "remote skill\n" })
 
         const operations: string[] = []
-        syncDependencies.git!.fetchRemote = async (path: string): Promise<void> => {
+        syncDependencies.git.fetchRemote = async (path: string): Promise<void> => {
             operations.push("fetchRemote")
             await nodeFs.rm(path, { recursive: true, force: true })
             await nodeFs.cp(remoteRepository, path, { recursive: true, dereference: false })
         }
-        syncDependencies.git!.remoteDefaultBranch = async (): Promise<string> => {
+        syncDependencies.git.remoteDefaultBranch = async (): Promise<string> => {
             operations.push("remoteDefaultBranch")
             return "main"
         }
-        syncDependencies.git!.checkout = async (_path: string, revision: string): Promise<void> => { operations.push(`checkout:${revision}`) }
-        syncDependencies.git!.hardReset = async (_path: string, revision: string): Promise<void> => { operations.push(`hardReset:${revision}`) }
-        syncDependencies.git!.clean = async (): Promise<void> => { operations.push("clean") }
-        syncDependencies.git!.revision = async (): Promise<string> => {
+        syncDependencies.git.checkout = async (_path: string, revision: string): Promise<void> => { operations.push(`checkout:${revision}`) }
+        syncDependencies.git.hardReset = async (_path: string, revision: string): Promise<void> => { operations.push(`hardReset:${revision}`) }
+        syncDependencies.git.clean = async (): Promise<void> => { operations.push("clean") }
+        syncDependencies.git.revision = async (): Promise<string> => {
             operations.push("revision")
             return remoteCommit
         }
@@ -417,11 +419,11 @@ describe("syncGitHubSkillInventory", () => {
         await syncGitHubSkillInventory(options(fixture), syncDependencies)
         const oldSnapshot = await nodeFs.readFile(join(fixture.skillsRoot, "acme/forced-rollback/skill/SKILL.md"))
         const oldManifest = await nodeFs.readFile(fixture.manifestPath)
-        syncDependencies.git!.fetchRemote = async (): Promise<void> => {}
-        syncDependencies.git!.remoteDefaultBranch = async (): Promise<string> => "main"
-        syncDependencies.git!.checkout = async (): Promise<void> => {}
-        syncDependencies.git!.hardReset = async (): Promise<void> => { throw new Error("forced reset failure") }
-        syncDependencies.git!.clean = async (): Promise<void> => {}
+        syncDependencies.git.fetchRemote = async (): Promise<void> => {}
+        syncDependencies.git.remoteDefaultBranch = async (): Promise<string> => "main"
+        syncDependencies.git.checkout = async (): Promise<void> => {}
+        syncDependencies.git.hardReset = async (): Promise<void> => { throw new Error("forced reset failure") }
+        syncDependencies.git.clean = async (): Promise<void> => {}
 
         await expect(syncGitHubSkillInventory({ ...options(fixture), forceRefresh: true }, syncDependencies)).rejects.toThrow("forced reset failure")
 

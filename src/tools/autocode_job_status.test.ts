@@ -1,5 +1,5 @@
 import { describe, beforeEach, expect, mock, test } from "bun:test"
-import type { Dirent } from "fs"
+import type { Dirent } from "node:fs"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { resetRetryCounts } from "@/utils/tools"
 import { createToolContext } from "./test_context"

@@ -1,4 +1,4 @@
-import path from "path"
+import path from "node:path"
 
 const solutionLifecycleDirectories = ["concepts", "drafts", "assist", "executing", "facilitate", "review", "shelved"] as const
 const statusEventPattern = /^# (\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - Update Status To (concepts|drafts|assist|executing|facilitate|review|shelved)$/m
@@ -9,7 +9,7 @@ export enum SolutionLogEvent {
 
 type SolutionFileSystem = {
     appendFile?: (filePath: string, content: string) => Promise<void>
-    mkdir?: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
+    mkdir?: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
     readdir?: (dirPath: string, options?: { withFileTypes?: boolean }) => Promise<string[] | import("fs").Dirent[]>
     writeFile: (filePath: string, content: string) => Promise<void>

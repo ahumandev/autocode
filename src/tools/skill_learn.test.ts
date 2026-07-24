@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs"
-import { join } from "path"
-import { tmpdir } from "os"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
 import {
     createSkillLearnTool,
     validateSkillLearnArgs,

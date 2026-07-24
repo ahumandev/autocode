@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { homedir } from "os"
-import { join } from "path"
+import { homedir } from "node:os"
+import { join } from "node:path"
 import { applyExternalDirectoryPolicy, buildAgents } from "./agents"
 import type { AutocodeAgentConfig } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig } from "./config"

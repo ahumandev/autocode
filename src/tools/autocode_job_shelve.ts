@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "fs/promises"
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { createAbortResponse, createLifecycleJobRequiredRetryResponse, createRetryResponse } from "@/utils/tools"
 import { createDirectoryFileSystem, readLatestAssistantResponseText, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type PlannedJobIdentityResolution } from "@/utils/jobs"
 import { shelveResolvedPlannedJob } from "@/utils/shelve"

@@ -1,5 +1,5 @@
 import { toolTaskRules } from "../rules/task"
-import { implementationDefinitions, planningDefinitions } from "../rules/definitions"
+import { implementationDefinitions } from "../rules/definitions"
 import { responseHumanRules } from "../rules/response-human";
 
 export const autoPrompt = `

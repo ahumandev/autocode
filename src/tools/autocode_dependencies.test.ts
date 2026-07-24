@@ -102,8 +102,11 @@ describe("autocode_dependencies", () => {
         expect(parseTolerantSemver("opencode 1.14.28\n")?.patch).toBe(28)
         expect(parseTolerantSemver("v2.0.0-beta")?.major).toBe(2)
         expect(parseTolerantSemver("no version")).toBeUndefined()
-        expect(isAtLeastMinimumOpencodeVersion(parseTolerantSemver("1.17.9")!)).toBe(true)
-        expect(isAtLeastMinimumOpencodeVersion(parseTolerantSemver("1.17.8")!)).toBe(false)
+        const minimumVersion = parseTolerantSemver("1.17.9")
+        const outdatedVersion = parseTolerantSemver("1.17.8")
+        if (!minimumVersion || !outdatedVersion) throw new Error("Expected valid semantic versions")
+        expect(isAtLeastMinimumOpencodeVersion(minimumVersion)).toBe(true)
+        expect(isAtLeastMinimumOpencodeVersion(outdatedVersion)).toBe(false)
     })
 
     test("reports OpenCode upgrade, missing, and unknown version guidance", async () => {

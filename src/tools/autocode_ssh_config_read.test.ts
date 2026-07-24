@@ -36,7 +36,8 @@ class MemorySftp implements SftpLike {
     readFile(path: string, encoding: BufferEncoding, callback: (err: Error | undefined, data: Buffer) => void): void
     readFile(path: string, encodingOrCallback: BufferEncoding | ((err: Error | undefined, data: Buffer) => void), maybeCallback?: (err: Error | undefined, data: Buffer) => void): void {
         this.readFileCalls.push(path)
-        const callback = typeof encodingOrCallback === "function" ? encodingOrCallback : maybeCallback!
+        const callback = typeof encodingOrCallback === "function" ? encodingOrCallback : maybeCallback
+        if (!callback) throw new Error("Expected read callback")
         if (this.missing.has(path)) {
             callback(new Error("No such file"), Buffer.alloc(0))
             return
@@ -77,7 +78,7 @@ class MemorySftp implements SftpLike {
             return
         }
         if (this.files.has(path)) {
-            const data = this.files.get(path)!
+            const data = this.files.get(path) ?? ""
             const size = Buffer.byteLength(data, "utf8")
             const stats = {
                 isDirectory: () => false,
@@ -131,7 +132,7 @@ class MemorySftp implements SftpLike {
             const rest = fullPath.slice(prefix.length)
             const isFile = !rest.includes("/") && this.files.has(fullPath)
             if (isFile) {
-                const size = Buffer.byteLength(this.files.get(fullPath)!, "utf8")
+                const size = Buffer.byteLength(this.files.get(fullPath) ?? "", "utf8")
                 return {
                     filename: name,
                     attrs: {

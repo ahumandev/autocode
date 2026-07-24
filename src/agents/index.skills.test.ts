@@ -30,6 +30,7 @@ describe("buildAgents with external skills", () => {
         const executeOsSkill = getSkillObject(agents.execute_os)
         expect(executeOsSkill).toEqual({
             "*": "deny",
+            "angular-new-app": "allow",
             "execute-install": "allow",
             "execute-sandbox": "allow",
             "learned-corrections*": "allow",
@@ -74,7 +75,8 @@ describe("buildAgents with external skills", () => {
         // it should have an object containing at least the new rule.
         const designSkill = getSkillObject(agents.design)
         expect(designSkill).toBeDefined()
-        expect(designSkill!["my-design-skill"]).toBe("allow")
+        if (!designSkill) throw new Error("Expected design skill permissions")
+        expect(designSkill["my-design-skill"]).toBe("allow")
     })
 
     test("test category → only auto_test gets the rule", () => {

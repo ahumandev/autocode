@@ -1,6 +1,6 @@
 import { Glob } from "bun"
 import { existsSync, statSync } from "node:fs"
-import { isAbsolute, relative, resolve } from "path"
+import { isAbsolute, relative, resolve } from "node:path"
 
 export interface GlobMatch {
     /** Path key: relative to cwd if inside cwd, else absolute */

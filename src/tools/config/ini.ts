@@ -25,7 +25,7 @@ function iniParse(raw: string): unknown {
         const sectionMatch = SECTION_PATTERN.exec(line)
         if (sectionMatch && sectionMatch[1] !== undefined) {
             const sectionName = sectionMatch[1].trim()
-            if (!Object.prototype.hasOwnProperty.call(result, sectionName)) {
+            if (!Object.hasOwn(result, sectionName)) {
                 result[sectionName] = {}
             }
             const target = result[sectionName]

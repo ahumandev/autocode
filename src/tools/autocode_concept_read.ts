@@ -1,13 +1,13 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdir, readFile, rename, writeFile } from "fs/promises"
-import path from "path"
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import path from "node:path"
 import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { stripLeadingYamlFrontMatter } from "@/utils/frontmatter"
 import { deriveJobNameFromTitle, getRelativeConceptFilePath, isMissingFile, resolveAgentsStorageRoot, updateCurrentSessionTitleToJobName } from "@/utils/jobs"
 
 type FileSystem = {
-    mkdir?: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
+    mkdir?: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
     rename?: (oldPath: string, newPath: string) => Promise<void>
     writeFile?: (filePath: string, content: string) => Promise<void>

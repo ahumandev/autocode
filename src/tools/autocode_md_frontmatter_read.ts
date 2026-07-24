@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFile } from "fs/promises"
+import { readFile } from "node:fs/promises"
 import { createRetryResponse } from "@/utils/tools"
 import { expandGlob } from "@/utils/glob"
 import { configRead, formatPath } from "@/tools/config/core"

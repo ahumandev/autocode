@@ -1,8 +1,8 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "fs/promises"
-import type { Dirent } from "fs"
-import path from "path"
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
+import type { Dirent } from "node:fs"
+import path from "node:path"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { activeJobLifecycleDirectories, completedJobLifecycleDirectory, deriveJobNameFromTitle, findExistingJobFile, getCurrentSessionTitle, getJobFilePath, getRelativeJobFilePath, resolveAgentsStorageRoot, updateCurrentSessionTitleToJobName, type ActiveJobLifecycleDirectory, type JobStatus } from "@/utils/jobs"
 
@@ -41,7 +41,7 @@ Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:
 type FileSystem = {
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
     writeFile: (filePath: string, content: string) => Promise<void>
-    mkdir?: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
+    mkdir?: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     rm?: (path: string, options?: { recursive?: boolean, force?: boolean }) => Promise<void>
     stat?: (path: string) => Promise<{ mtimeMs: number }>
     readdir?: (dirPath: string, options: { withFileTypes: true }) => Promise<Dirent[]>

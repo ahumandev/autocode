@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs"
-import { tmpdir } from "os"
-import { join } from "path"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import {
     activeContextIncludesMarkerHash,
     buildAutocodeSkillLoadHash,
@@ -213,7 +213,7 @@ describe("skill tool", () => {
 
     test("loads generated skill content with native-like output", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
+            writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
 
             const result = await executeSkillLoad(worktree)
 
@@ -224,7 +224,7 @@ describe("skill tool", () => {
 
     test("skill alias loads generated output with marker proof", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
+            writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
 
             const result = await executeSkillAlias(worktree)
 
@@ -236,7 +236,7 @@ describe("skill tool", () => {
 
     test("skill alias loads project skill fallback from safe directory", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            const directory = writeProjectSkill(worktree, "a", "Local project skill A guidance.")
+            writeProjectSkill(worktree, "a", "Local project skill A guidance.")
 
             const result = await executeSkillAlias(worktree, undefined, { name: "a" })
 
@@ -248,7 +248,7 @@ describe("skill tool", () => {
 
     test("loads learned skill from hyphenated subject agent path", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            const directory = writeLearnedSkill(worktree, "learned-corrections", "pair", "Learned correction guidance.")
+            writeLearnedSkill(worktree, "learned-corrections", "pair", "Learned correction guidance.")
 
             const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-pair" })
 
@@ -260,7 +260,7 @@ describe("skill tool", () => {
 
     test("loads learned correction skill from shortened suffix path", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            const directory = writeLearnedSkill(worktree, "learned-corrections", "os", "Learned os correction guidance.")
+            writeLearnedSkill(worktree, "learned-corrections", "os", "Learned os correction guidance.")
 
             const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-os" }, "execute_os")
 
@@ -272,7 +272,7 @@ describe("skill tool", () => {
 
     test("generated skill path wins before project skill fallback", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome, "a", "Generated skill A guidance.")
+            writeGeneratedSkill(configHome, "a", "Generated skill A guidance.")
             writeProjectSkill(worktree, "a", "Project skill A guidance must not load.")
 
             const result = await executeSkillLoad(worktree, undefined, { name: "a" })
@@ -297,7 +297,7 @@ describe("skill tool", () => {
 
     test("agent name from context is not required for native-like load", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
+            writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
 
             const result = await executeSkillLoad(worktree, undefined, { name: "code-typescript" }, "../pair")
 
@@ -308,7 +308,7 @@ describe("skill tool", () => {
 
     test("skips when active context contains exact marker and hash", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const loaded = await executeSkillLoad(worktree)
             const marker = extractMarker(loaded.output)
             const activeContextCalls: unknown[] = []
@@ -332,7 +332,7 @@ describe("skill tool", () => {
 
     test("v2 context uses sessionID request and skips with real data response marker", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const loaded = await executeSkillLoad(worktree)
             const marker = extractMarker(loaded.output)
             const contextCalls: unknown[] = []
@@ -363,7 +363,7 @@ describe("skill tool", () => {
 
     test("loads when v2 context real data response has no active marker", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance after v2 miss.")
+            writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance after v2 miss.")
             const contextCalls: unknown[] = []
             const client = createClient({
                 v2: {
@@ -386,7 +386,7 @@ describe("skill tool", () => {
 
     test("probe error falls back to next active context probe", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const loaded = await executeSkillLoad(worktree)
             const marker = extractMarker(loaded.output)
             const calls: string[] = []
@@ -417,7 +417,7 @@ describe("skill tool", () => {
 
     test("loads when active context has no marker after compaction", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance after compaction.")
+            writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance after compaction.")
             const client = createClient({
                 session: {
                     async activeContext() {
@@ -435,7 +435,7 @@ describe("skill tool", () => {
 
     test("second same-session same-hash call skips via live cache when active context misses", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const activeContextCalls: unknown[] = []
             const client = createClient({
                 session: {
@@ -457,7 +457,7 @@ describe("skill tool", () => {
 
     test("different session does not skip via live cache", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const client = createClient({
                 session: {
                     async activeContext() {
@@ -476,7 +476,7 @@ describe("skill tool", () => {
 
     test("changed content hash reloads and stores new live cache key", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome, "code-typescript", "Old generated guidance.")
+            writeGeneratedSkill(configHome, "code-typescript", "Old generated guidance.")
             const client = createClient({
                 session: {
                     async activeContext() {
@@ -509,7 +509,7 @@ describe("skill tool", () => {
 
     test("loads when active context method is missing or throws", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const missingClient = createClient({ session: { async messages() { throw new Error("messages must not be used") } } })
             const throwingClient = createClient({ session: { async activeContext() { throw new Error("active context failed") } } })
 
@@ -524,7 +524,7 @@ describe("skill tool", () => {
 
     test("direct HTTP context fallback uses SDK client base URL and skips duplicate marker", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const loaded = await executeSkillLoad(worktree)
             const marker = extractMarker(loaded.output)
             const requests: string[] = []
@@ -554,7 +554,7 @@ describe("skill tool", () => {
 
     test("loads with native-like shape when no context API or base URL exists", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const client = createClient({ session: { async messages() { return { data: [] } } } })
 
             const result = await executeSkillLoad(worktree, client)
@@ -565,7 +565,7 @@ describe("skill tool", () => {
 
     test("durable-history-only marker does not skip or read client.session.messages", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome)
+            writeGeneratedSkill(configHome)
             const loaded = await executeSkillLoad(worktree)
             const activeContextCalls: unknown[] = []
             const client = createClient({
@@ -590,7 +590,7 @@ describe("skill tool", () => {
 
     test("reloads changed generated content when active context has old marker hash", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const directory = writeGeneratedSkill(configHome, "code-typescript", "Old generated guidance.")
+            writeGeneratedSkill(configHome, "code-typescript", "Old generated guidance.")
             const oldResult = await executeSkillLoad(worktree)
             const activeContextCalls: unknown[] = []
             writeGeneratedSkill(configHome, "code-typescript", "New generated guidance.")

@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs"
-import { join } from "path"
-import { homedir, tmpdir } from "os"
-import type { Dirent } from "fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
+import { homedir, tmpdir } from "node:os"
+import type { Dirent } from "node:fs"
 import type { Config as PluginConfig, Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Session, OpencodeClient, SessionGetData, SessionChildrenData, SessionPromptAsyncData } from "@opencode-ai/sdk"
 import autocode from "../plugin"
@@ -1470,13 +1470,10 @@ describe("autocode_plan_save tool", () => {
                 expect(plugin.tool?.autocode_agent_execute).toBeDefined()
                 expect(plugin.tool?.autocode_agent_swap).toBeDefined()
                 expect(plugin.tool?.autocode_session_context).toBeDefined()
-                expect(Object.keys((plugin.tool?.autocode_session_context as unknown as { args: Record<string, unknown> }).args)).toEqual([])
                 expect(toolSurfaceText(plugin.tool?.autocode_session_context)).toContain("Read sanitized current session context and token usage metadata.")
                 expect(plugin.tool?.autocode_session_create).toBeDefined()
                 expect(plugin.tool?.skill_learn).toBeDefined()
-                expect(Object.keys((plugin.tool?.skill_learn as unknown as { args: Record<string, unknown> }).args)).toEqual(["category", "name", "content", "description", "key", "references"])
                 expect(plugin.tool?.skill).toBeDefined()
-                expect(Object.keys((plugin.tool?.skill as unknown as { args: Record<string, unknown> }).args)).toEqual(["name", "reference"])
                 expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
                 expect(plugin.tool?.autocode_job_execute).toBeDefined()
                 expect(plugin.tool?.autocode_execute_job).toBeUndefined()

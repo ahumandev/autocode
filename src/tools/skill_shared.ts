@@ -13,11 +13,12 @@ function parseExistingReferences(skillMdContent: string): Map<string, string> {
 
     const section = match[0]
     const linkPattern = /^\*\s*\[(.*?)\]\((.*?)\)\s*$/gm
-    let linkMatch: RegExpExecArray | null
-    while ((linkMatch = linkPattern.exec(section)) !== null) {
+    let linkMatch = linkPattern.exec(section)
+    while (linkMatch !== null) {
         const description = linkMatch[1]
         const refPath = linkMatch[2]
         map.set(refPath, description)
+        linkMatch = linkPattern.exec(section)
     }
 
     return map

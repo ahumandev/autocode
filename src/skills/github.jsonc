@@ -2,7 +2,7 @@
     "skills": [
         {
             "sourceUrl": "https://github.com/angular/skills",
-            "resolvedCommit": "a23a517dea2ce90c97a4a85d684ae13eb4ff91a2",
+            "resolvedCommit": "e4b5705623af001f552538792a45eab825bfe0b1",
             "relativeInstallPath": "github/angular/skills/angular-developer",
             "category": "code",
             "sha256": "9b95169f9a779afc3ec9bab70924ba9e274ff03c91d74247344c3cc63a597201",
@@ -10,7 +10,7 @@
         },
         {
             "sourceUrl": "https://github.com/angular/skills",
-            "resolvedCommit": "a23a517dea2ce90c97a4a85d684ae13eb4ff91a2",
+            "resolvedCommit": "e4b5705623af001f552538792a45eab825bfe0b1",
             "relativeInstallPath": "github/angular/skills/angular-new-app",
             "category": "code",
             "sha256": "807120998cc2161b14963300fcb8fd594c71f3a527f67f0172123b458178631e",
@@ -56,34 +56,8 @@
             ]
         },
         {
-            "sourceUrl": "https://github.com/github/awesome-copilot/blob/main/skills/create-spring-boot-kotlin-project/SKILL.md",
-            "resolvedCommit": "dae77f24132c1d686c30fd5b29aee0d63668d1d2",
-            "relativeInstallPath": "github/github/awesome-copilot/create-spring-boot-kotlin-project",
-            "category": "bash",
-            "sha256": "75722e39c0294d6fc3eb5b368ec890376707127c944426ed91ad7644621e2f83",
-            "legalFiles": [
-                {
-                    "relativePath": "LICENSE",
-                    "sha256": "e32449d23085399adc1222f7a17408b730550258e51627c153cb108ca9955823"
-                }
-            ]
-        },
-        {
-            "sourceUrl": "https://github.com/github/awesome-copilot/blob/main/skills/drawio/SKILL.md",
-            "resolvedCommit": "dae77f24132c1d686c30fd5b29aee0d63668d1d2",
-            "relativeInstallPath": "github/github/awesome-copilot/drawio",
-            "category": "bash",
-            "sha256": "b7ea3e77d64adb6ae4ab5f08c0f7dbe9b238f7033486523e8cc324f80e649256",
-            "legalFiles": [
-                {
-                    "relativePath": "LICENSE",
-                    "sha256": "e32449d23085399adc1222f7a17408b730550258e51627c153cb108ca9955823"
-                }
-            ]
-        },
-        {
             "sourceUrl": "https://github.com/github/awesome-copilot/blob/main/skills/java-junit/SKILL.md",
-            "resolvedCommit": "dae77f24132c1d686c30fd5b29aee0d63668d1d2",
+            "resolvedCommit": "a3bee6f71d17f6f255a6769982b40d58e282e3d3",
             "relativeInstallPath": "github/github/awesome-copilot/java-junit",
             "category": "test",
             "sha256": "beeae246a2b1a8debffb53b005eba0e025f70923fa26a11f3c4bfefd99388fa3",
@@ -96,7 +70,7 @@
         },
         {
             "sourceUrl": "https://github.com/github/awesome-copilot/blob/main/skills/javascript-typescript-jest/SKILL.md",
-            "resolvedCommit": "dae77f24132c1d686c30fd5b29aee0d63668d1d2",
+            "resolvedCommit": "a3bee6f71d17f6f255a6769982b40d58e282e3d3",
             "relativeInstallPath": "github/github/awesome-copilot/javascript-typescript-jest",
             "category": "test",
             "sha256": "cb9a552dfe63cae4f310b27067ba28351b59ad17e83a9e1c5ff23c542ce6fdd8",

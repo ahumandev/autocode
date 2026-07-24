@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { type Dirent } from "node:fs"
+import type { Dirent } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { join, relative } from "node:path"
 

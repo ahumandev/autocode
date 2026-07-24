@@ -74,7 +74,7 @@ Immediately ABORT your flow and advise user what failed as follow:
     return createErrorResponse(failedAction, error, instruction)
 }
 
-export function createRetryResponse(failedAction: string, error: any, correctiveAction: string): string {
+export function createRetryResponse(failedAction: string, error: unknown, correctiveAction: string): string {
     const key = JSON.stringify([failedAction, correctiveAction])
     const retries = (retryCounts.get(key) ?? 0) + 1
 

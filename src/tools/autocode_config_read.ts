@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFile } from "fs/promises"
+import { readFile } from "node:fs/promises"
 import { configRead, formatPath, getParser, parseKeyPath, resolvePath } from "./config/core"
 import { configModeFromExtension } from "./config/adapter"
 import { createRetryResponse } from "@/utils/tools"

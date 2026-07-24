@@ -1,4 +1,4 @@
-import path from "path"
+import path from "node:path"
 import type { ToolContext } from "@opencode-ai/plugin"
 import { createRetryResponse } from "@/utils/tools"
 import { validateFilePath } from "@/utils/validate_file_path"
@@ -36,11 +36,9 @@ export async function validateContentPath(
     if (typeof input === "string" && input.includes("\0")) {
         return { ok: false, response: createRetryResponse(failedAction, "path must not contain NUL bytes.", "Provide a relative .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file path within the current working directory.") }
     }
-    if (typeof input === "string" && input.trim() !== "") {
-        const mode = contentModeFromExtension(input)
-        if (!mode) {
-            return { ok: false, response: createRetryResponse(failedAction, "path must use .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf extension/name.", "Retry with a Markdown, JSON, JSONC, YAML, TOML, .env, INI, properties, or .conf file path.") }
-        }
+    const mode = typeof input === "string" && input.trim() !== "" ? contentModeFromExtension(input) : undefined
+    if (typeof input === "string" && input.trim() !== "" && !mode) {
+        return { ok: false, response: createRetryResponse(failedAction, "path must use .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf extension/name.", "Retry with a Markdown, JSON, JSONC, YAML, TOML, .env, INI, properties, or .conf file path.") }
     }
     const result = await validateFilePath(input, {
         failedAction,
@@ -49,5 +47,6 @@ export async function validateContentPath(
         requireContextForExternalPaths: true,
     })
     if (!result.ok) return result
-    return { ok: true, value: { inputPath: input as string, absolutePath: result.value, mode: contentModeFromExtension(input as string)! } }
+    if (typeof input !== "string" || !mode) return { ok: false, response: createRetryResponse(failedAction, "path must use a supported extension/name.", "Retry with a supported content file path.") }
+    return { ok: true, value: { inputPath: input, absolutePath: result.value, mode } }
 }

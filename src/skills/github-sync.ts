@@ -367,10 +367,11 @@ async function validateStagedInventory(inventory: GitHubSkillInventory, stagingR
     validateGitHubSkillInventory(inventory, manifestPath)
     for (const entry of inventory.skills) {
         const [, owner, project, skillName] = entry.relativeInstallPath.split("/")
-        const skill = await fs.readFile(stagedRepositoryPath(stagingRoot, owner!, project!, `${skillName!}/SKILL.md`)) as Buffer
+        if (!owner || !project || !skillName) throw syncError(`invalid staged snapshot path ${entry.relativeInstallPath}`)
+        const skill = await fs.readFile(stagedRepositoryPath(stagingRoot, owner, project, `${skillName}/SKILL.md`)) as Buffer
         if (digest(skill) !== entry.sha256) throw syncError(`staged snapshot digest mismatch for ${entry.relativeInstallPath}`)
         for (const legal of entry.legalFiles ?? []) {
-            const legalContent = await fs.readFile(stagedRepositoryPath(stagingRoot, owner!, project!, legal.relativePath)) as Buffer
+            const legalContent = await fs.readFile(stagedRepositoryPath(stagingRoot, owner, project, legal.relativePath)) as Buffer
             if (digest(legalContent) !== legal.sha256) throw syncError(`staged legal digest mismatch for ${legal.relativePath}`)
         }
     }

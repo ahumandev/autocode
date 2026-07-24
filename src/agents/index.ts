@@ -136,6 +136,8 @@ const baseAgents: AgentMap = {
                 "learned-permissions*": "allow",
                 "primary-manual*": "allow",
                 "skill-write": "allow",
+                "vue-best-practices": "allow",
+                "ui-craft": "allow",
             },
             skill_learn: "allow",
             task: {
@@ -248,6 +250,7 @@ const baseAgents: AgentMap = {
             write: "allow",
             skill: {
                 "*": "deny",
+                "angular-developer": "allow",
                 "author-article": "allow",
                 "code*": "allow",
                 "design*": "allow",
@@ -389,7 +392,9 @@ const baseAgents: AgentMap = {
                 "code*": "allow",
                 "codebase-design": "allow", // From mattpocock/skills
                 "execute*": "allow",
-                "learned-preferences*": "allow"
+                "learned-preferences*": "allow",
+                "vue-best-practices": "allow",
+                "ui-craft": "allow",
             },
             task: {
                 "*": "deny",
@@ -816,9 +821,16 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
+                "angular-developer": "allow",
                 "code*": "allow",
                 "design*": "allow",
-                "learned-preferences*": "allow"
+                "java-junit": "allow",
+                "javascript-typescript-jest": "allow",
+                "nitro": "allow",
+                "nuxt": "allow",
+                "learned-preferences*": "allow",
+                "tailwindcss": "allow",
+                "vitest": "allow"
             },
         },
         prompt: executeCodePrompt,
@@ -919,6 +931,7 @@ const baseAgents: AgentMap = {
             read: "allow",
             skill: {
                 "*": "deny",
+                "angular-new-app": "allow",
                 "execute-install": "allow",
                 "execute-sandbox": "allow",
                 "learned-corrections*": "allow",
@@ -1246,6 +1259,8 @@ const baseAgents: AgentMap = {
                 "design*": "allow",
                 "execute*": "allow",
                 "learned-*": "allow",
+                "vue-best-practices": "allow",
+                "ui-craft": "allow",
             },
             "todo*": "allow"
         },
@@ -1405,7 +1420,7 @@ function applyExternalDirectoryOverrides(
 }
 
 function hasPermissionRule(permission: PermissionObject, key: string): boolean {
-    return Object.prototype.hasOwnProperty.call(permission, key)
+    return  Object.hasOwn(permission, key)
 }
 
 function hasSandboxPermissionRule(permission: PermissionObject): boolean {

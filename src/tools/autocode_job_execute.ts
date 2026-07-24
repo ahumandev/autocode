@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "fs/promises"
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { createAutocodeSessionPrompt, resolveAutocodeAgentSessionSettings, swapCurrentAutocodeSession } from "@/utils/agent_swap"
 import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, getStorageRelativePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"

@@ -27,7 +27,7 @@ function makeFs(initialFiles: Record<string, string> = {}): {
                 err.code = "ENOENT"
                 throw err
             }
-            return files[path]!
+            return files[path] ?? ""
         },
         ensureFileSync(path, contents) {
             if (!(path in files)) {
@@ -111,7 +111,7 @@ describe("skills config parsing and seeding", () => {
         // Seeding now writes through the injected fs mock — verify via the in-memory
         // files dict + writtenPaths tracker.
         expect(writtenPaths).toContain(globalPath())
-        const written = files[globalPath()]!
+        const written = files[globalPath()] ?? ""
         const parsed = JSON.parse(written)
         expect(parsed.autocode.skills).toEqual(DEFAULT_SKILLS)
         // Other sections MUST be preserved verbatim - never replaced.
@@ -146,7 +146,7 @@ describe("skills config parsing and seeding", () => {
 
         expect(result.skills).toEqual(DEFAULT_SKILLS)
         expect(writtenPaths).toContain(globalPath())
-        const written = files[globalPath()]!
+        const written = files[globalPath()] ?? ""
         const parsed = parseJsonc(written) as {
             autocode: { skills: unknown, tiers: unknown }
             permission: unknown
@@ -235,7 +235,7 @@ describe("skills config parsing and seeding", () => {
 
         // First load seeds the skills block via the fs mock.
         await loadAutocodeConfig("/wt", "/wt", fs)
-        const afterFirst = files[globalPath()]!
+        const afterFirst = files[globalPath()] ?? ""
         expect(JSON.parse(afterFirst).autocode.skills).toEqual(DEFAULT_SKILLS)
 
         // Second load must not re-write the file. Re-create fs with the post-seed
@@ -303,7 +303,7 @@ describe("skills config parsing and seeding", () => {
         expect(result.skills).toEqual(DEFAULT_SKILLS)
 
         expect(writtenPaths).toContain(globalPath())
-        const written = files[globalPath()]!
+        const written = files[globalPath()] ?? ""
         const parsed = JSON.parse(written)
         // skills block added.
         expect(parsed.autocode.skills).toEqual(DEFAULT_SKILLS)

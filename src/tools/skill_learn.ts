@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
-import { existsSync, readFileSync } from "fs"
-import { mkdir, readFile, rm, writeFile } from "fs/promises"
-import path from "path"
+import { existsSync, readFileSync } from "node:fs"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import path from "node:path"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import { upsertReferencesSection } from "@/tools/skill_shared"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
@@ -20,7 +20,7 @@ const subjectDirName: Record<LearnedSkillSubject, string> = {
 }
 
 type FileSystem = {
-    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
+    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     writeFile: (filePath: string, content: string) => Promise<void>
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
     rm: (filePath: string, options?: { force?: boolean }) => Promise<void>
@@ -70,7 +70,10 @@ export function isSafePathIdentifier(value: string): boolean {
 }
 
 function hasControlCharacter(value: string): boolean {
-    return /[\u0000-\u001f\u007f]/.test(value)
+    return [...value].some((character) => {
+        const code = character.charCodeAt(0)
+        return code <= 31 || code === 127
+    })
 }
 
 function sanitizeLearnedName(name: string): string {
@@ -356,7 +359,7 @@ export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem)
 - "corrections": self corrected mistakes: summarize mistake + correction steps or lessons learned
 - "env": unusual capability / limitation found in dev/remote environment: non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.
 - "permissions": user says manual task was safe / warn about unsafe task / insist task must be manual: which actions are safe and which are dangerous, including safe passwords.
-- "preferences": user corrected you after wrong action (words like \"Always\", \"Never\", \"Remember\", SHOUTS with \"!!!\"): complaint / preference / permanent rule like programming patterns, file organization, naming conventions, editing style, etc.
+- "preferences": user corrected you after wrong action (words like "Always", "Never", "Remember", SHOUTS with "!!!"): complaint / preference / permanent rule like programming patterns, file organization, naming conventions, editing style, etc.
         `,
         args,
         async execute(args, context) {

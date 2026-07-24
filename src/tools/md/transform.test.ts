@@ -6,8 +6,9 @@ describe("sanitize stray empty headings", () => {
     test("serializeTree drops an orphan \"## \" line from parent intro when sibling removed", () => {
         const raw = "# Top\n\n## \n\n## Beta\n\nbeta body\n"
         const m = parseMarkdown(raw)
-        const top = m.headings.find((h) => h.title === "Top")!
-        const beta = m.headings.find((h) => h.title === "Beta")!
+        const top = m.headings.find((h) => h.title === "Top")
+        const beta = m.headings.find((h) => h.title === "Beta")
+        if (!top || !beta) throw new Error("Expected test headings")
         const overrides = new Map()
         for (const h of m.headings) overrides.set(h, ownText(m, h))
         const idx = top.children.indexOf(beta)
@@ -22,8 +23,9 @@ describe("sanitize stray empty headings", () => {
     test("serializeTree preserves fenced ``` block containing stray \"##\" lines", () => {
         const raw = "# Top\n\n```bash\n##\n## \necho hi\n```\n\n## Other\n\nother text\n"
         const m = parseMarkdown(raw)
-        const top = m.headings.find((h) => h.title === "Top")!
-        const other = m.headings.find((h) => h.title === "Other")!
+        const top = m.headings.find((h) => h.title === "Top")
+        const other = m.headings.find((h) => h.title === "Other")
+        if (!top || !other) throw new Error("Expected test headings")
         const overrides = new Map()
         for (const h of m.headings) overrides.set(h, ownText(m, h))
         const idx = top.children.indexOf(other)
@@ -47,8 +49,9 @@ describe("sanitize stray empty headings", () => {
     test("serializeTree collapses triple newlines produced by dropped stray lines back to one blank line", () => {
         const raw = "# A\n\n##\n\n##\n\n## B\n\nb\n"
         const m = parseMarkdown(raw)
-        const a = m.headings.find((h) => h.title === "A")!
-        const b = m.headings.find((h) => h.title === "B")!
+        const a = m.headings.find((h) => h.title === "A")
+        const b = m.headings.find((h) => h.title === "B")
+        if (!a || !b) throw new Error("Expected test headings")
         const overrides = new Map()
         for (const h of m.headings) overrides.set(h, ownText(m, h))
         const idx = a.children.indexOf(b)

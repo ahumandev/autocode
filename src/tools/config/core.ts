@@ -43,9 +43,10 @@ function parseKeyPath(input: unknown): (string | number)[] | null {
         const out: (string | number)[] = []
         // Plain tokens or [N] numeric indices
         const re = /([^.[\]]+)|\[(\d+)\]/g
-        let m: RegExpExecArray | null
-        while ((m = re.exec(input)) !== null) {
+        let m = re.exec(input)
+        while (m !== null) {
             out.push(m[2] !== undefined ? Number(m[2]) : m[1])
+            m = re.exec(input)
         }
         return out
     }
@@ -79,7 +80,7 @@ function resolvePath(root: unknown, path: (string | number)[]): { found: boolean
         if (cursor !== null && typeof cursor === "object") {
             const obj = cursor as Record<string, unknown>
             const key = String(segment)
-            if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+            if (!Object.hasOwn(obj, key)) {
                 return { found: false, value: undefined }
             }
             cursor = obj[key]
@@ -223,7 +224,7 @@ function vivify(root: unknown, parentPath: (string | number)[]): unknown {
         if (isArray) {
             exists = typeof segment === "number" && segment >= 0 && segment < (cursor as unknown[]).length
         } else {
-            exists = typeof segment === "string" && Object.prototype.hasOwnProperty.call(cursor as object, segment)
+            exists = typeof segment === "string" && Object.hasOwn(cursor as object, segment)
         }
         if (exists) {
             const record = cursor as Record<string | number, unknown>
@@ -259,7 +260,7 @@ function validateCreatable(root: unknown, path: (string | number)[]): { ok: bool
             continue
         }
         const obj = cursor as Record<string, unknown>
-        if (!Object.prototype.hasOwnProperty.call(obj, segment)) {
+        if (!Object.hasOwn(obj, segment)) {
             return { ok: true }
         }
         cursor = obj[String(segment)]
@@ -443,7 +444,30 @@ function configRemove(root: unknown, keyPath: (string | number)[], failedAction:
     return { ok: true, value: { value: root, removed: keyPath, parentNow } }
 }
 
-async function configReadFlow(adapter: ConfigAdapter, args: any): Promise<string> {
+type ConfigReadArgs = {
+    file_path: string
+    key_path?: string
+    subkey_regex?: string
+    value_regex?: string
+    key_depth?: number
+    max_keys?: number
+    max_value_chars?: number
+}
+
+type ConfigEditArgs = {
+    file_path: string
+    current_key?: string
+    new_key?: string
+    content?: unknown
+    new_index?: number
+}
+
+type ConfigRemoveArgs = {
+    file_path: string
+    key_path?: string
+}
+
+async function configReadFlow(adapter: ConfigAdapter, args: ConfigReadArgs): Promise<string> {
     const failedAction = "Read configuration file"
     const target = await adapter.validateConfigPath(args.file_path)
     if (!target.ok) return target.response
@@ -504,7 +528,7 @@ function getDocumentEditor(mode: ConfigMode, raw: string): ConfigDocumentEditor 
     }
 }
 
-async function configEditFlow(adapter: ConfigAdapter, args: any): Promise<string> {
+async function configEditFlow(adapter: ConfigAdapter, args: ConfigEditArgs): Promise<string> {
     const failedAction = "Write configuration file"
     const target = await adapter.validateConfigPath(args.file_path, failedAction)
     if (!target.ok) return target.response
@@ -564,7 +588,7 @@ async function configEditFlow(adapter: ConfigAdapter, args: any): Promise<string
     })
 }
 
-async function configRemoveFlow(adapter: ConfigAdapter, args: any): Promise<string> {
+async function configRemoveFlow(adapter: ConfigAdapter, args: ConfigRemoveArgs): Promise<string> {
     const failedAction = "Remove configuration key"
     const target = await adapter.validateConfigPath(args.file_path, failedAction)
     if (!target.ok) return target.response

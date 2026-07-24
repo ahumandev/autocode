@@ -1,8 +1,8 @@
 import { tool } from "@opencode-ai/plugin"
 import type { ToolContext } from "@opencode-ai/plugin"
-import { spawn as nodeSpawn } from "child_process"
-import { realpath as nodeRealpath, stat as nodeStat } from "fs/promises"
-import { isAbsolute, resolve } from "path"
+import { spawn as nodeSpawn } from "node:child_process"
+import { realpath as nodeRealpath, stat as nodeStat } from "node:fs/promises"
+import { isAbsolute, resolve } from "node:path"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { authorizeToolAsk } from "@/utils/tool_permission"
 

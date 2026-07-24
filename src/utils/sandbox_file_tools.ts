@@ -1,6 +1,6 @@
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { cp, lstat, realpath } from "fs/promises"
-import path from "path"
+import { cp, lstat, realpath } from "node:fs/promises"
+import path from "node:path"
 import { assertSafeSandboxPath, findSandboxLookupMatches, getSandboxPaths, normalizeSandboxName, readSandboxMetadata, resolveSandboxJob, type SandboxDependencies, type SandboxLookupMatch, type SandboxMetadata, type SandboxPaths } from "@/utils/sandbox"
 import { pathExists } from "@/utils/autocode_sandbox_helpers"
 import { createRetryResponse } from "@/utils/tools"

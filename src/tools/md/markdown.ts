@@ -96,7 +96,6 @@ function scanHeadings(lines: string[], bodyStartLine: number): RawHeading[] {
             if (setextH2.test(next)) {
                 out.push({ title: trimmed, level: 2, start: i + 1, headerEnd: i + 3, marker: "setext" })
                 i += 1
-                continue
             }
         }
     }
@@ -139,7 +138,7 @@ function computeSpans(headings: MdHeading[], lineCount: number): void {
     }
 }
 
-function assignReferenceIds(roots: MdHeading[], headings: MdHeading[]): void {
+function assignReferenceIds(roots: MdHeading[]): void {
     const used = new Set<string>()
     const order: MdHeading[] = []
     const walk = (h: MdHeading) => {
@@ -168,7 +167,7 @@ export function parseMarkdown(raw: string): MdModel {
     const raws = scanHeadings(lines, bodyStartLine)
     const { headings, roots } = buildTree(raws)
     computeSpans(headings, lineCount)
-    assignReferenceIds(roots, headings)
+    assignReferenceIds(roots)
     return { raw, newline, lines, lineCount, frontmatterBlock: block, bodyStartLine, headings, roots }
 }
 

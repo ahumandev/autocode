@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFile, readdir } from "fs/promises"
+import { readFile, readdir } from "node:fs/promises"
 import { createAbortResponse, createRetryResponse } from "../utils/tools"
 import { listPlannedJobs, listedActiveJobStatuses, normalizeJobStatusInput, resolveAgentsStorageRoot, type JobStatus } from "@/utils/jobs"
 

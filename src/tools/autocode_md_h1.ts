@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync } from "fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { buildOutline, ownText, parseMarkdown, rebuildFile, slugifyHeading } from "./md/markdown"
 import type { MdHeading } from "./md/markdown"
 import { normalizeContentBlock, serializeTree } from "./md/transform"
@@ -36,7 +36,7 @@ export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
                 const existingH1 = model.headings.filter((h) => h.level === 1)[0]
                 let newPreamble: string
                 if (hasPreamble) {
-                    newPreamble = normalizeContentBlock(args.preamble!)
+                    newPreamble = normalizeContentBlock(args.preamble ?? "")
                 } else {
                     const firstHeadingStart = model.roots[0]?.start ?? model.lineCount + 1
                     const preambleEndLine = Math.max(model.bodyStartLine, firstHeadingStart) - 1
@@ -45,7 +45,7 @@ export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
                 }
                 let newTitle: string
                 if (hasTitle) {
-                    newTitle = args.title!
+                    newTitle = args.title ?? ""
                 } else if (existingH1) {
                     newTitle = existingH1.title
                 } else {
@@ -53,7 +53,7 @@ export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
                 }
                 let newIntro: string
                 if (hasIntro) {
-                    newIntro = normalizeContentBlock(args.intro!)
+                    newIntro = normalizeContentBlock(args.intro ?? "")
                 } else if (existingH1) {
                     newIntro = ownText(model, existingH1)
                 } else {

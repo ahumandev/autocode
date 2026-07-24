@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync } from "fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection, slugifyHeading } from "./md/markdown"
 import type { MdHeading } from "./md/markdown"
 import { adjustLevels, clampIndex, isDescendant, parseContentBlocks, serializeTree } from "./md/transform"
@@ -45,9 +45,9 @@ export function createAutocodeMdUpdateTool(): ReturnType<typeof tool> {
                     return createErrorResponse("autocode_md_update", new Error(res.reason === "none" ? "anchor not found" : "anchor ambiguous"), correctiveAction)
                 }
                 const S = res.heading
-                let newParentHeading: MdHeading | null | undefined = undefined
+                let newParentHeading: MdHeading | null | undefined 
                 if (hasParent) {
-                    const parent_anchor = args.parent_anchor!
+                    const parent_anchor = args.parent_anchor ?? ""
                     if (parent_anchor === args.anchor) {
                         return createRetryResponse("autocode_md_update", new Error("self parent"), "cannot move a section under itself; parent_anchor equals the section's own anchor - pick a different parent or omit parent_anchor to keep current parent.")
                     }
@@ -66,8 +66,8 @@ export function createAutocodeMdUpdateTool(): ReturnType<typeof tool> {
                 const oldIndex = oldList.indexOf(S)
                 if (oldIndex >= 0) oldList.splice(oldIndex, 1)
                 if (hasHeading) {
-                    S.title = args.heading!
-                    S.referenceId = slugifyHeading(args.heading!)
+                    S.title = args.heading ?? ""
+                    S.referenceId = slugifyHeading(args.heading ?? "")
                 }
                 let targetList: MdHeading[]
                 if (newParentHeading !== undefined) {
@@ -80,7 +80,7 @@ export function createAutocodeMdUpdateTool(): ReturnType<typeof tool> {
                 }
                 let insertAt: number
                 if (hasIndex) {
-                    insertAt = clampIndex(args.index!, -1, targetList.length)
+                    insertAt = clampIndex(args.index ?? -1, -1, targetList.length)
                 } else if (newParentHeading !== undefined) {
                     insertAt = targetList.length
                 } else {
@@ -88,7 +88,7 @@ export function createAutocodeMdUpdateTool(): ReturnType<typeof tool> {
                 }
                 targetList.splice(insertAt, 0, S)
                 if (hasContent) {
-                    const blocks = parseContentBlocks(args.content!, S.level)
+                    const blocks = parseContentBlocks(args.content ?? "", S.level)
                     for (const child of blocks.children) {
                         child.parent = S
                         S.children.push(child)   // append AFTER existing preserved children

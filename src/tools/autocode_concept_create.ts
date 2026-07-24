@@ -1,12 +1,12 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdir, stat, writeFile } from "fs/promises"
-import path from "path"
+import { mkdir, stat, writeFile } from "node:fs/promises"
+import path from "node:path"
 import { getCurrentSessionTitle, getRelativeConceptFilePath, isMissingFile, resolveAgentsStorageRoot } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type FileSystem = {
-    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined | void>
+    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     stat: (filePath: string) => Promise<{ mtimeMs: number }>
     writeFile: (filePath: string, content: string) => Promise<void>
 }

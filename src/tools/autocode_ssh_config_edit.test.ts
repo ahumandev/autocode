@@ -28,7 +28,8 @@ class MemorySftp implements SftpLike {
     readFile(path: string, encoding: BufferEncoding, callback: (err: Error | undefined, data: Buffer) => void): void
     readFile(path: string, encodingOrCallback: BufferEncoding | ((err: Error | undefined, data: Buffer) => void), maybeCallback?: (err: Error | undefined, data: Buffer) => void): void {
         this.readFileCalls.push(path)
-        const callback = typeof encodingOrCallback === "function" ? encodingOrCallback : maybeCallback!
+        const callback = typeof encodingOrCallback === "function" ? encodingOrCallback : maybeCallback
+        if (!callback) throw new Error("Expected read callback")
         if (this.missing.has(path)) {
             callback(new Error("No such file"), Buffer.alloc(0))
             return

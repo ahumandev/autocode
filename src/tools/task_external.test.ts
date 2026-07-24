@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import { EventEmitter } from "events"
+import { EventEmitter } from "node:events"
 import { createTaskProjectTool } from "./task_external"
 import { createAskEffect, createNoopAsk } from "./test_context"
 import { createAbortResponse } from "@/utils/tools"
@@ -81,10 +81,11 @@ type SpawnCall = {
 
 function getSpawnCall(spawn: ReturnType<typeof mock>, index = 0): SpawnCall {
     const call = spawn.mock.calls[index]
+    if (!call) throw new Error(`Expected spawn call at index ${index}`)
     return {
-        command: call![0],
-        args: call![1],
-        options: call![2],
+        command: call[0],
+        args: call[1],
+        options: call[2],
     }
 }
 

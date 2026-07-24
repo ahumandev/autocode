@@ -1,6 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
-import { access } from "fs/promises"
-import path from "path"
+import { access } from "node:fs/promises"
+import path from "node:path"
 
 type FileSystem = {
     access: (filePath: string) => Promise<void>

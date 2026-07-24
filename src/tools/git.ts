@@ -1,5 +1,5 @@
-import * as fs from "fs"
-import path from "path"
+import * as fs from "node:fs"
+import path from "node:path"
 import { tool } from "@opencode-ai/plugin"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { defaultSandboxDependencies, type SandboxCommandResult, type SandboxDependencies } from "@/utils/sandbox"
@@ -57,6 +57,13 @@ const gitToolNames = [
 
 const revisionPattern = /^[A-Za-z0-9._/@{}:+~^=-]+$/
 const branchNamePattern = /^[A-Za-z0-9._/-]+$/
+
+function hasControlCharacter(value: string): boolean {
+    return [...value].some((character) => {
+        const code = character.charCodeAt(0)
+        return code <= 31 || code === 127
+    })
+}
 
 function retry<T>(message: string, correctiveAction: string): GitValidationResult<T> {
     return { ok: false, message, correctiveAction }
@@ -128,7 +135,7 @@ function validateRevision(input: unknown, fieldName: string, required: boolean):
 
     const value = input.trim()
     if (!value) return retry(`${fieldName} must be non-empty.`, `Provide a safe ${fieldName} revision string.`)
-    if (value.includes("\0") || /^-|\s|[\x00-\x1f\x7f]/.test(value) || !revisionPattern.test(value)) {
+    if (value.includes("\0") || /^-|\s/.test(value) || hasControlCharacter(value) || !revisionPattern.test(value)) {
         return retry(`${fieldName} contains unsafe characters.`, `Provide a conservative ${fieldName} using only safe git revision characters.`)
     }
 
@@ -140,7 +147,7 @@ function validateBranchName(input: unknown): GitValidationResult<string> {
 
     const value = input.trim()
     if (!value) return retry("branch_name must be non-empty.", "Provide a safe branch name.")
-    if (value.includes("\0") || /\s|[\x00-\x1f\x7f]/.test(value) || value.startsWith("-")) return retry("branch_name contains unsafe characters.", "Provide a safe branch name that is not option-like.")
+    if (value.includes("\0") || /\s/.test(value) || hasControlCharacter(value) || value.startsWith("-")) return retry("branch_name contains unsafe characters.", "Provide a safe branch name that is not option-like.")
     if (value.includes("..") || value.includes("@{") || value.includes("//") || value.includes("\\") || value.includes(":") || value.endsWith(".lock")) {
         return retry("branch_name contains unsafe git ref syntax.", "Provide a simple branch name using letters, digits, dots, underscores, slashes, or hyphens.")
     }

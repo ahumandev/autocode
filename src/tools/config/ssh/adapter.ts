@@ -11,6 +11,8 @@ import { withSftp, type SshToolDeps } from "../../autocode_ssh"
 import { configModeFromExtension } from "../adapter"
 import type { ConfigAdapter, ConfigTarget, RetryResult } from "../types"
 
+type ConfigFlowArgs = Record<string, unknown> & { file_path: string }
+
 export function createRemoteConfigAdapter(sftp: SftpLike): ConfigAdapter {
     return {
         async validateConfigPath(input: unknown, failedAction: string = "Read configuration file"): Promise<RetryResult<ConfigTarget>> {
@@ -42,10 +44,12 @@ export function createRemoteConfigAdapter(sftp: SftpLike): ConfigAdapter {
 export function createRemoteConfigExecute(
     deps: SshToolDeps,
     failedAction: string,
-    flow: (adapter: ConfigAdapter, args: Record<string, unknown>) => Promise<string>,
+    flow: (adapter: ConfigAdapter, args: ConfigFlowArgs) => Promise<string>,
 ): (args: Record<string, unknown>) => Promise<string> {
     return async (args: Record<string, unknown>): Promise<string> => {
-        const flowArgs: Record<string, unknown> = { ...args, file_path: args.path ?? args.file_path }
+        const configuredPath = args.path ?? args.file_path
+        const filePath = typeof configuredPath === "string" ? configuredPath : ""
+        const flowArgs: ConfigFlowArgs = { ...args, file_path: filePath }
         return withSftp(String(args.ssh_key), deps, failedAction, async ({ sftp }) => flow(createRemoteConfigAdapter(sftp), flowArgs))
     }
 }
