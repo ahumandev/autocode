@@ -1,18 +1,22 @@
-import type { Plugin, PluginInput, Hooks } from "@opencode-ai/plugin"
+import { define } from "@opencode-ai/plugin/v2/promise"
+import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin"
 import type { AgentConfig, Config } from "@opencode-ai/sdk/v2"
 import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, injectExternalSkillPermissions, type AutocodeAgentConfig } from "./agents"
 import { collectExternalDirectories, collectTaskExternalRules, loadAutocodeConfig, mergeExternalDirectoryRules } from "./config"
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { commands } from "./commands"
 import { createAgentSwitchBackHook } from "./hooks/agent_switch_back"
-import { cleanupLearnedSkills, injectGeneratedSkillsPath, reconcileGeneratedSkills } from "./skills"
+import { cleanupLearnedSkills, reconcileGeneratedSkills } from "./skills"
 import { createTools } from "./tools"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 type PluginAgentConfig = AutocodeAgentConfig
 type ConfigWithSubagentDepth = Config & { subagent_depth?: number }
-type PluginInputWithSandboxSupportOverride = PluginInput & {
+type PluginInputWithSandboxSupportOverride = {
+    client: Parameters<typeof createTools>[0]
+    directory: string
+    worktree: string
     sandboxSupportOverride?: SandboxPlatformSupportOptions
     serverUrl?: URL
 }
@@ -47,23 +51,12 @@ function preparePluginAgentsAfterOverrides(
     ]))
 }
 
-async function mergeConfig(cfg: ConfigWithSubagentDepth, input: PluginInputWithSandboxSupportOverride): Promise<void> {
-    const autocodeConfig = await loadAutocodeConfig(input.worktree, input.directory)
-    const generatedSkills = await reconcileGeneratedSkills({ skipExtraction: autocodeConfig.skills?.freeze === true })
-    const generatedSkillsPath = generatedSkills.root
-
-    if (autocodeConfig.skills?.freeze !== true) {
-        try {
-            const agentsRoot = resolveAgentsStorageRoot({ worktree: input.worktree, directory: input.directory })
-            await cleanupLearnedSkills(agentsRoot, autocodeConfig.learned.max ?? 10)
-        } catch (err) {
-            console.warn(`autocode: cleanup learned skills failed: ${err instanceof Error ? err.message : String(err)}`)
-        }
-    }
-
-    cfg.skills = cfg.skills ?? {}
-    cfg.skills.paths = injectGeneratedSkillsPath(cfg.skills.paths, generatedSkillsPath)
-
+async function mergeConfig(
+    cfg: ConfigWithSubagentDepth,
+    input: PluginInputWithSandboxSupportOverride,
+    autocodeConfig: Awaited<ReturnType<typeof loadAutocodeConfig>>,
+    generatedSkills: Awaited<ReturnType<typeof reconcileGeneratedSkills>>,
+): Promise<void> {
     const { tiers, externalDirectories } = autocodeConfig
     const nativeExternalDirectories = typeof cfg.permission === "object" && cfg.permission !== null
         ? collectExternalDirectories(cfg.permission.external_directory)
@@ -117,22 +110,51 @@ async function mergeConfig(cfg: ConfigWithSubagentDepth, input: PluginInputWithS
     }
 }
 
-const autocode: Plugin = async (input: PluginInput): Promise<Hooks> => {
-    const pluginInput = input as PluginInputWithSandboxSupportOverride
+async function createPluginHooks(
+    input: PluginInputWithSandboxSupportOverride,
+    registerSkills?: (path: string) => void,
+): Promise<Hooks> {
     const home = process.env.HOME ?? ""
     const bunBin = `${home}/.bun/bin`
     process.env.BUN_INSTALL = `${home}/.bun`
     process.env.PATH = process.env.PATH ? `${bunBin}:${process.env.PATH}` : bunBin
-    const { sandbox } = await loadAutocodeConfig(input.worktree, input.directory)
+
+    const autocodeConfig = await loadAutocodeConfig(input.worktree, input.directory)
+    const generatedSkills = await reconcileGeneratedSkills({ skipExtraction: autocodeConfig.skills?.freeze === true })
+    registerSkills?.(generatedSkills.root)
+    if (autocodeConfig.skills?.freeze !== true) {
+        try {
+            const agentsRoot = resolveAgentsStorageRoot({ worktree: input.worktree, directory: input.directory })
+            await cleanupLearnedSkills(agentsRoot, autocodeConfig.learned.max ?? 10)
+        } catch (err) {
+            console.warn(`autocode: cleanup learned skills failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
+    }
 
     return {
         async config(cfg: ConfigWithSubagentDepth) {
-            await mergeConfig(cfg, pluginInput)
+            await mergeConfig(cfg, input, autocodeConfig, generatedSkills)
         },
-
-        tool: createTools(input.client, sandbox, { serverUrl: pluginInput.serverUrl }),
+        tool: createTools(input.client, autocodeConfig.sandbox, { serverUrl: input.serverUrl }),
         event: createAgentSwitchBackHook(input.client, input.directory, input.worktree),
     }
 }
+
+const plugin = define({
+    id: "autocode",
+    async setup(context) {
+        const input = context as unknown as PluginInputWithSandboxSupportOverride
+        await createPluginHooks(input, (path) => {
+            context.skill.transform((draft) => {
+                draft.source({ type: "directory", path })
+            })
+        })
+    },
+})
+
+const autocode: Plugin = Object.assign(
+    async (input: PluginInput): Promise<Hooks> => createPluginHooks(input as PluginInputWithSandboxSupportOverride),
+    plugin,
+)
 
 export default autocode

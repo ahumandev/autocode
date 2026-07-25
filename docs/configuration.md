@@ -51,8 +51,9 @@ For example:
         "smart":    { "model": "openai/gpt-5.6-sol", "variant": "high" },
         "balanced": { "model": "openai/gpt-5.6-terra", "variant": "medium" },
         "operator": { "model": "openai/gpt-5.6-terra", "variant": "low" },
-        "fast":     { "model": "openai/gpt-5.3-codex-spark", "variant": "low" },
-        "cheap":    { "model": "openai/gpt-5.3-codex-spark", "variant": "low" }
+        "fast":     { "model": "openai/gpt-5.6-luna", "variant": "low" },
+        //"fast":   { "model": "openai/gpt-5.3-codex-spark", "variant": "low" },
+        "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "none" }
       },
       "zai": {
         "smart":    { "model": "zai/glm-5.2", "variant": "high" },

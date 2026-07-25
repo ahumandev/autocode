@@ -266,7 +266,3 @@ export async function cleanupLearnedSkills(agentsRoot: string, max: number): Pro
         }
     }
 }
-
-export function injectGeneratedSkillsPath(paths: string[] | undefined, generatedPath: string): string[] {
-    return [generatedPath, ...(paths ?? []).filter((skillPath) => skillPath !== generatedPath)]
-}

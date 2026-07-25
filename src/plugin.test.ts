@@ -13,6 +13,12 @@ type PluginConfigHook = { config?: (input: PluginConfig) => Promise<void> }
 type PluginInputWithSandboxSupportOverride = PluginInput & {
     sandboxSupportOverride?: SandboxPlatformSupportOptions
 }
+type SkillSource = { type: "directory", path: string }
+type V2Plugin = {
+    setup(context: PluginInputWithSandboxSupportOverride & {
+        skill: { transform(callback: (draft: { source(source: SkillSource): void }) => void): void }
+    }): Promise<void>
+}
 
 async function createTempRoot(): Promise<string> {
     const root = await mkdtemp(join(tmpdir(), "autocode-plugin-test-"))
@@ -49,6 +55,23 @@ function createInput(
         client: {},
         sandboxSupportOverride,
     } as PluginInputWithSandboxSupportOverride
+}
+
+async function registerGeneratedSkills(input: PluginInputWithSandboxSupportOverride): Promise<SkillSource[]> {
+    const sources: SkillSource[] = []
+    await (autocode as unknown as V2Plugin).setup({
+        ...input,
+        skill: {
+            transform(callback) {
+                callback({
+                    source(source) {
+                        sources.push(source)
+                    },
+                })
+            },
+        },
+    })
+    return sources
 }
 
 function skillPermissions(config: PluginConfig, agentName: string): Record<string, unknown> | undefined {
@@ -108,11 +131,9 @@ describe("autocode plugin config", () => {
                         "/configured/*": "deny",
                     },
                 },
-                skills: {
-                    paths: ["/user/skills"],
-                },
             }
-            const hooks = await autocode(createInput(worktree)) as unknown as PluginConfigHook
+            const input = createInput(worktree)
+            const hooks = await autocode(input) as unknown as PluginConfigHook
 
             await hooks.config?.(cfg)
 
@@ -143,8 +164,10 @@ describe("autocode plugin config", () => {
                 "/native/*": "ask",
                 "/configured/*": "allow",
             })
-            expect(cfg.skills?.paths?.[0]).toBe(join(configHome, "skills", "autocode"))
-            expect(cfg.skills?.paths?.[1]).toBe("/user/skills")
+            expect(await registerGeneratedSkills(input)).toContainEqual({
+                type: "directory",
+                path: join(configHome, "skills", "autocode"),
+            })
 
             const explicitTitleConfig: PluginConfig = {
                 agent: {
@@ -209,11 +232,12 @@ describe("autocode plugin config", () => {
 
         try {
             await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
-                const hooks = await autocode(createInput(worktree)) as unknown as PluginConfigHook
+                const input = createInput(worktree)
+                const hooks = await autocode(input) as unknown as PluginConfigHook
                 const cfg: PluginConfig = {}
                 await hooks.config?.(cfg)
 
-                expect(cfg.skills?.paths?.[0]).toBe(generatedRoot)
+                expect(await registerGeneratedSkills(input)).toContainEqual({ type: "directory", path: generatedRoot })
             })
         } finally {
             globalThis.fetch = originalFetch
@@ -247,12 +271,16 @@ describe("autocode plugin config", () => {
 
         try {
             await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
-                const hooks = await autocode(createInput(worktree)) as unknown as PluginConfigHook
+                const input = createInput(worktree)
+                const hooks = await autocode(input) as unknown as PluginConfigHook
                 const cfg: PluginConfig = {}
                 await hooks.config?.(cfg)
 
                 expect(skillPermissions(cfg, "execute_os")?.["legacy-startup-url"]).toBeUndefined()
-                expect(cfg.skills?.paths?.[0]).toBe(join(configHome, "skills", "autocode"))
+                expect(await registerGeneratedSkills(input)).toContainEqual({
+                    type: "directory",
+                    path: join(configHome, "skills", "autocode"),
+                })
             })
         } finally {
             globalThis.fetch = originalFetch
