@@ -1527,7 +1527,7 @@ describe("autocode_plan_save tool", () => {
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_read")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_save")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_draft_job_create")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_agent_swap")).toBe("allow")
+                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_agent_swap")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_create")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_plan_read")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_list")).toBeUndefined()

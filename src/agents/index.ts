@@ -119,7 +119,6 @@ const baseAgents: AgentMap = {
         mode: "primary",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
             autocode_dependencies: "allow",
             autocode_job_status: "allow",
             autocode_sandbox_create: "ask",
@@ -235,7 +234,6 @@ const baseAgents: AgentMap = {
             "autocode_config_*": "allow",
             "autocode_md_*": "allow",
             apply_patch: "allow",
-            autocode_agent_swap: "allow",
             autocode_session_create: "allow",
             doom_loop: "ask",
             edit: "allow",

@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { cp, mkdir, mkdtemp, readFile, rm, unlink } from "node:fs/promises"
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, unlink } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import {
     createSkillBundleManifest,
@@ -9,8 +9,11 @@ import {
     writeSkillBundleManifest,
 } from "../../scripts/skill-bundle"
 
+setDefaultTimeout(30_000)
+
 const repositoryRoot = join(import.meta.dir, "..", "..")
 const temporaryRoots: string[] = []
+const temporaryRootPrefix = ".autocode-package-artifacts-"
 
 type CommandResult = {
     exitCode: number
@@ -49,7 +52,7 @@ function sha256(content: string): string {
 }
 
 async function createTemporaryRoot(): Promise<string> {
-    const root = await mkdtemp(join(repositoryRoot, ".autocode-package-artifacts-"))
+    const root = await mkdtemp(join(repositoryRoot, temporaryRootPrefix))
     temporaryRoots.push(root)
     return root
 }
@@ -78,6 +81,7 @@ async function writeFixtureFile(root: string, relativePath: string, content: str
 async function createScriptFixture(): Promise<string> {
     const root = await createTemporaryRoot()
     await cp(join(repositoryRoot, "scripts"), join(root, "scripts"), { recursive: true })
+    await mkdir(join(root, "node_modules"), { recursive: true })
     await mkdir(join(root, "src", "skills"), { recursive: true })
     await mkdir(join(root, "src", "utils"), { recursive: true })
     await cp(join(repositoryRoot, "src", "skills", "github.ts"), join(root, "src", "skills", "github.ts"))
@@ -120,6 +124,13 @@ async function createArtifactFixture(): Promise<string> {
 
 afterEach(async () => {
     await Promise.all(temporaryRoots.splice(0).map(async (root) => rm(root, { recursive: true, force: true })))
+})
+
+beforeAll(async () => {
+    const entries = await readdir(repositoryRoot, { withFileTypes: true })
+    await Promise.all(entries
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith(temporaryRootPrefix))
+        .map(async (entry) => rm(join(repositoryRoot, entry.name), { recursive: true, force: true })))
 })
 
 describe("package skill artifacts", () => {
