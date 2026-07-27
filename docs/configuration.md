@@ -111,7 +111,7 @@ For example:
 }
 ```
 
-### DB Environment Variables
+### Database environment variables
 
 | Variable pattern                  | Description                                                                                                           | Default |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -121,25 +121,23 @@ For example:
 
 Replace `{db_key}` with letters, digits, or underscores. Environment lookup is case-insensitive. Then instruct agent to use your chosen `{db_key}` to access your DB.
 
-### REST Environment Variables
+### REST authentication
 
-| Variable pattern                              | Description                                                                                         | Default |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------- |
-| `AUTOCODE_REST_{rest_key}_AUTHORIZATION`      | Optional raw HTTP `Authorization` header for one configured REST target.                            | Unset.  |
-| `AUTOCODE_REST_{rest_key}_USERNAME`           | Optional username for HTTP Basic authentication.                                                    | Unset.  |
-| `AUTOCODE_REST_{rest_key}_PASSWORD`           | Optional password for HTTP Basic authentication.                                                    | Unset.  |
+For REST tools that use `rest_key`, authentication is resolved in this order:
 
-Replace `{rest_key}` with letters, digits, or underscores. Environment lookup is case-insensitive.
+1. An explicit request `Authorization` header is used when provided.
+2. Otherwise, AutoCode uses `AUTOCODE_REST_<KEY>_AUTHORIZATION`.
+3. Otherwise, it builds HTTP Basic authentication from both `AUTOCODE_REST_<KEY>_USERNAME` and `AUTOCODE_REST_<KEY>_PASSWORD`.
 
-Authentication resolves in this order:
+Replace `<KEY>` with the `rest_key` in uppercase. For example, for `rest_key: billing`:
 
-1. Explicit request `Authorization` header.
-2. `AUTOCODE_REST_{rest_key}_AUTHORIZATION`.
-3. HTTP Basic authentication using both `AUTOCODE_REST_{rest_key}_USERNAME` and `AUTOCODE_REST_{rest_key}_PASSWORD`.
+```sh
+AUTOCODE_REST_BILLING_AUTHORIZATION="Bearer <token>"
+```
 
-Both username and password are required for HTTP Basic authentication.
+Use either the raw `Authorization` variable or the username/password pair; do not place real credentials in project files.
 
-### SSH Environment Variables
+### SSH tool suite
 
 Configure each SSH target with `{ssh_key}` environment variables:
 

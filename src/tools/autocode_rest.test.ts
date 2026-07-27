@@ -264,6 +264,24 @@ describe("autocode_rest tools", () => {
         expect(parsed.response_time).toBeGreaterThanOrEqual(0)
     })
 
+    test("bypasses TLS validation by default and validates when check_tls is true", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+        const requests: Array<{ tls?: { rejectUnauthorized?: boolean } }> = []
+
+        await seedCurrentJobSession(fileSystem)
+        globalThis.fetch = (async (_input: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
+            requests.push({ tls: init?.tls })
+            return new Response("ok")
+        }) as unknown as typeof fetch
+
+        await tool.execute({ url: "https://example.com", method: "GET" } as never, createToolContext())
+        await tool.execute({ url: "https://example.com", method: "GET", check_tls: true } as never, createToolContext())
+
+        expect(requests[0]?.tls).toEqual({ rejectUnauthorized: false })
+        expect(requests[1]?.tls).toEqual({ rejectUnauthorized: true })
+    })
+
     test("saves body to file always, omits inline response_body when large, uses collision suffix", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)

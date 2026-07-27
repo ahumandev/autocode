@@ -307,6 +307,7 @@ async function executeRestRequest(args: {
     body?: unknown
     rest_key?: string
     timeout?: number
+    check_tls?: boolean
 }, context: SessionJobContext, client: OpencodeClient | undefined, fileSystem: RestToolFileSystem): Promise<string> {
     const methodResult = normalizeMethod(args.method)
     if (!methodResult.ok) {
@@ -368,6 +369,7 @@ async function executeRestRequest(args: {
             headers: headersResult.headers,
             body: bodyResult.body,
             signal: controller.signal,
+            tls: { rejectUnauthorized: args.check_tls ?? false },
         })
 
         const buffer = await response.arrayBuffer()
@@ -438,6 +440,7 @@ export function createAutocodeRestTool(client?: OpencodeClient, fileSystem: Rest
             body: tool.schema.unknown().optional().describe("Optional request body."),
             rest_key: tool.schema.string().optional().describe("Optional environment-backed REST authentication key."),
             timeout: tool.schema.number().optional().default(5000).describe("Optional timeout in milliseconds."),
+            check_tls: tool.schema.boolean().optional().default(false).describe("Validate TLS certificates when true."),
         },
         async execute(args, context) {
             return executeRestRequest(args as {
@@ -447,6 +450,7 @@ export function createAutocodeRestTool(client?: OpencodeClient, fileSystem: Rest
                 body?: unknown
                 rest_key?: string
                 timeout?: number
+                check_tls?: boolean
             }, context, client, fileSystem)
         },
     })
