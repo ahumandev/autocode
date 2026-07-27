@@ -418,18 +418,15 @@ function mapDirent(entry: Dirent | string): DirectoryEntry {
     }
 }
 
-export function createDirectoryFileSystem(fileSystem: JobToolFileSystem): DirectoryFileSystem {
+export function createDirectoryFileSystem<T extends Pick<JobToolFileSystem, "readFile" | "readdir">>(
+    fileSystem: T,
+): Omit<T, "readdir"> & Pick<DirectoryFileSystem, "readdir"> {
     return {
-        mkdir: fileSystem.mkdir,
-        readFile: fileSystem.readFile,
+        ...fileSystem,
         readdir: async (dirPath: string, options: { withFileTypes: true }): Promise<Dirent[]> => {
             const entries = await fileSystem.readdir(dirPath, options)
             return normalizeReaddirEntries(entries)
         },
-        rename: fileSystem.rename,
-        rm: fileSystem.rm,
-        stat: fileSystem.stat,
-        writeFile: fileSystem.writeFile,
     }
 }
 
