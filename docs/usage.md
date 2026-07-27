@@ -50,13 +50,13 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 
 ### Handover commands
 
-| Command             | Purpose                                                                  |
-| ------------------- | ------------------------------------------------------------------------ |
-| `/new-research`     | Creates a new research session from recent context.                      |
-| `/new-design`       | Creates a new design session for a solution plan.                        |
-| `/new-assist`       | Creates a new assist session for interactive implementation.             |
-| `/new-auto`         | Creates a new auto session for autonomous implementation.                |
-| `/new-troubleshoot` | Creates a new troubleshooting session from recent symptoms and evidence. |
+| Command         | Purpose                                                                  |
+| --------------- | ------------------------------------------------------------------------ |
+| `/research`     | Resets research session from recent context.                      |
+| `/design`       | Resets design session for a solution plan.                        |
+| `/assist`       | Resets assist session for interactive implementation.             |
+| `/auto`         | Resets auto session for autonomous implementation.                |
+| `/troubleshoot` | Resets troubleshooting session from recent symptoms and evidence. |
 
 ### Documentation commands
 

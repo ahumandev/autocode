@@ -111,7 +111,7 @@ For example:
 }
 ```
 
-### Database environment variables
+### DB Environment Variables
 
 | Variable pattern                  | Description                                                                                                           | Default |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -139,7 +139,7 @@ Authentication resolves in this order:
 
 Both username and password are required for HTTP Basic authentication.
 
-### SSH tool suite
+### SSH Environment Variables
 
 Configure each SSH target with `{ssh_key}` environment variables:
 
