@@ -3,6 +3,7 @@ import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
 import { createDirectoryFileSystem, deriveJobNameFromTitle, ensurePlannedJobFiles, getJobDirectoryPath, isMissingFile, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
+import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type RestToolFileSystem = Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "stat"> & {
@@ -12,6 +13,8 @@ type RestToolFileSystem = Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdi
 type PlainObject = Record<string, unknown>
 
 type HeaderMap = Record<string, string>
+
+type RestAuthorizationResult = { authorization: string } | { error: string }
 
 async function readDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
     return options?.withFileTypes ? readdir(dirPath, { withFileTypes: true }) : readdir(dirPath)
@@ -131,6 +134,37 @@ function findHeaderValue(headers: HeaderMap, requestedHeader: string): { key: st
     }
 
     return undefined
+}
+
+function resolveRestAuthorization(restKey: string): RestAuthorizationResult {
+    let normalizedKey: string
+    try {
+        normalizedKey = normalizeEnvKey(restKey, {
+            errorMessage: "Invalid rest_key. Use only ASCII letters, digits, and underscores.",
+            label: "rest_key",
+        })
+    }
+    catch (error) {
+        return { error: error instanceof Error ? error.message : "Invalid rest_key." }
+    }
+
+    const authorizationEnvVar = buildEnvVarName("AUTOCODE_REST", normalizedKey, "AUTHORIZATION")
+    const usernameEnvVar = buildEnvVarName("AUTOCODE_REST", normalizedKey, "USERNAME")
+    const passwordEnvVar = buildEnvVarName("AUTOCODE_REST", normalizedKey, "PASSWORD")
+    const authorization = process.env[authorizationEnvVar]
+    if (authorization !== undefined) {
+        return { authorization }
+    }
+
+    const username = process.env[usernameEnvVar]
+    const password = process.env[passwordEnvVar]
+    if (username === undefined || password === undefined) {
+        return {
+            error: `Missing REST authentication configuration: set ${authorizationEnvVar} or both ${usernameEnvVar} and ${passwordEnvVar}.`,
+        }
+    }
+
+    return { authorization: `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}` }
 }
 
 const TEXT_CONTENT_TYPE_FRAGMENTS = [
@@ -271,6 +305,7 @@ async function executeRestRequest(args: {
     method: string
     headers?: unknown
     body?: unknown
+    rest_key?: string
     timeout?: number
 }, context: SessionJobContext, client: OpencodeClient | undefined, fileSystem: RestToolFileSystem): Promise<string> {
     const methodResult = normalizeMethod(args.method)
@@ -281,6 +316,17 @@ async function executeRestRequest(args: {
     const headersResult = normalizeHeaderMap(args.headers)
     if (!headersResult.ok) {
         return createRetryResponse("autocode_rest", headersResult.error, "Provide headers as a plain object with string, number, or boolean values.")
+    }
+
+    if (args.rest_key !== undefined) {
+        const authorizationResult = resolveRestAuthorization(args.rest_key)
+        if ("error" in authorizationResult) {
+            return createRetryResponse("autocode_rest", authorizationResult.error, "Configure rest_key authentication in environment variables, then retry.")
+        }
+
+        if (!findHeaderValue(headersResult.headers, "authorization")) {
+            headersResult.headers.Authorization = authorizationResult.authorization
+        }
     }
 
     const bodyResult = normalizeRequestBody(args.body)
@@ -390,6 +436,7 @@ export function createAutocodeRestTool(client?: OpencodeClient, fileSystem: Rest
             method: tool.schema.string().describe("HTTP method: GET, POST, PUT, PATCH, DELETE."),
             headers: tool.schema.unknown().optional().describe("Optional object of request headers."),
             body: tool.schema.unknown().optional().describe("Optional request body."),
+            rest_key: tool.schema.string().optional().describe("Optional environment-backed REST authentication key."),
             timeout: tool.schema.number().optional().default(5000).describe("Optional timeout in milliseconds."),
         },
         async execute(args, context) {
@@ -398,6 +445,7 @@ export function createAutocodeRestTool(client?: OpencodeClient, fileSystem: Rest
                 method: string
                 headers?: unknown
                 body?: unknown
+                rest_key?: string
                 timeout?: number
             }, context, client, fileSystem)
         },

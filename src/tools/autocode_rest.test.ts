@@ -182,6 +182,22 @@ async function withFixedDate<T>(isoDate: string, fn: () => Promise<T>): Promise<
 
 describe("autocode_rest tools", () => {
     const originalFetch = globalThis.fetch
+    const restEnvNames = [
+        "AUTOCODE_REST_API_AUTHORIZATION",
+        "AUTOCODE_REST_API_USERNAME",
+        "AUTOCODE_REST_API_PASSWORD",
+        "AUTOCODE_REST_MY_KEY_AUTHORIZATION",
+        "AUTOCODE_REST_MY_KEY_USERNAME",
+        "AUTOCODE_REST_MY_KEY_PASSWORD",
+    ] as const
+    const originalRestEnv = new Map(restEnvNames.map(name => [name, process.env[name]]))
+
+    function setRestEnvironment(values: Partial<Record<typeof restEnvNames[number], string>>): void {
+        for (const name of restEnvNames) {
+            delete process.env[name]
+        }
+        Object.assign(process.env, values)
+    }
 
     beforeEach(() => {
         resetRetryCounts()
@@ -189,6 +205,10 @@ describe("autocode_rest tools", () => {
 
     afterEach(() => {
         globalThis.fetch = originalFetch
+        for (const [name, value] of originalRestEnv) {
+            if (value === undefined) delete process.env[name]
+            else process.env[name] = value
+        }
     })
 
     test("validates method and protocol and serializes headers", async () => {
@@ -414,5 +434,120 @@ describe("autocode_rest tools", () => {
         expect(allFiles).toContain("/workspace/.agents/jobs/drafts/my_job/session.yml")
         expect(allFiles.some(f => f.includes("/assist/"))).toBe(false)
         await expect(fileSystem.stat("/workspace/.agents/jobs/assist")).rejects.toMatchObject({ code: "ENOENT" })
+    })
+
+    test("uses raw Authorization environment value", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+        setRestEnvironment({ AUTOCODE_REST_API_AUTHORIZATION: "Bearer raw-secret" })
+        await seedCurrentJobSession(fileSystem)
+
+        let requestHeaders: HeadersInit | undefined
+        globalThis.fetch = (async (_input, init) => {
+            requestHeaders = init?.headers
+            return new Response("ok")
+        }) as typeof fetch
+
+        await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext())
+
+        expect(requestHeaders).toEqual({ Authorization: "Bearer raw-secret" })
+    })
+
+    test("uses raw Authorization before environment credentials", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+        setRestEnvironment({
+            AUTOCODE_REST_API_AUTHORIZATION: "Bearer raw-secret",
+            AUTOCODE_REST_API_USERNAME: "user",
+            AUTOCODE_REST_API_PASSWORD: "password",
+        })
+        await seedCurrentJobSession(fileSystem)
+
+        let requestHeaders: HeadersInit | undefined
+        globalThis.fetch = (async (_input, init) => {
+            requestHeaders = init?.headers
+            return new Response("ok")
+        }) as typeof fetch
+
+        await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext())
+
+        expect(requestHeaders).toEqual({ Authorization: "Bearer raw-secret" })
+    })
+
+    test("generates Basic Authorization from UTF-8 environment credentials", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+        setRestEnvironment({ AUTOCODE_REST_API_USERNAME: "usér", AUTOCODE_REST_API_PASSWORD: "päss" })
+        await seedCurrentJobSession(fileSystem)
+
+        let requestHeaders: HeadersInit | undefined
+        globalThis.fetch = (async (_input, init) => {
+            requestHeaders = init?.headers
+            return new Response("ok")
+        }) as typeof fetch
+
+        await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext())
+
+        expect(requestHeaders).toEqual({ Authorization: "Basic dXPDqXI6cMOkc3M=" })
+    })
+
+    test("errors when REST credentials are incomplete without exposing values", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+        setRestEnvironment({ AUTOCODE_REST_API_USERNAME: "hidden-user" })
+
+        const error = parseError(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext()))
+
+        expect(error.error).toContain("AUTOCODE_REST_API_AUTHORIZATION")
+        expect(error.error).toContain("AUTOCODE_REST_API_PASSWORD")
+        expect(error.error).not.toContain("hidden-user")
+    })
+
+    test("normalizes rest_key for environment lookup", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+        setRestEnvironment({ AUTOCODE_REST_MY_KEY_AUTHORIZATION: "Bearer normalized" })
+        await seedCurrentJobSession(fileSystem)
+
+        let requestHeaders: HeadersInit | undefined
+        globalThis.fetch = (async (_input, init) => {
+            requestHeaders = init?.headers
+            return new Response("ok")
+        }) as typeof fetch
+
+        await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "  my_key  " } as never, createToolContext())
+
+        expect(requestHeaders).toEqual({ Authorization: "Bearer normalized" })
+    })
+
+    test("rejects invalid rest_key without request", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+
+        const error = parseError(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "bad/key" } as never, createToolContext()))
+
+        expect(error.error).toBe("Invalid rest_key. Use only ASCII letters, digits, and underscores.")
+    })
+
+    test("explicit Authorization header takes precedence over rest_key authentication", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+        setRestEnvironment({ AUTOCODE_REST_API_AUTHORIZATION: "Bearer environment-secret" })
+        await seedCurrentJobSession(fileSystem)
+
+        let requestHeaders: HeadersInit | undefined
+        globalThis.fetch = (async (_input, init) => {
+            requestHeaders = init?.headers
+            return new Response("ok")
+        }) as typeof fetch
+
+        await tool.execute({
+            url: "http://example.com/api",
+            method: "GET",
+            headers: { authorization: "Bearer explicit" },
+            rest_key: "api",
+        } as never, createToolContext())
+
+        expect(requestHeaders).toEqual({ authorization: "Bearer explicit" })
     })
 })

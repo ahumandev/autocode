@@ -121,6 +121,24 @@ For example:
 
 Replace `{db_key}` with letters, digits, or underscores. Environment lookup is case-insensitive. Then instruct agent to use your chosen `{db_key}` to access your DB.
 
+### REST Environment Variables
+
+| Variable pattern                              | Description                                                                                         | Default |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------- |
+| `AUTOCODE_REST_{rest_key}_AUTHORIZATION`      | Optional raw HTTP `Authorization` header for one configured REST target.                            | Unset.  |
+| `AUTOCODE_REST_{rest_key}_USERNAME`           | Optional username for HTTP Basic authentication.                                                    | Unset.  |
+| `AUTOCODE_REST_{rest_key}_PASSWORD`           | Optional password for HTTP Basic authentication.                                                    | Unset.  |
+
+Replace `{rest_key}` with letters, digits, or underscores. Environment lookup is case-insensitive.
+
+Authentication resolves in this order:
+
+1. Explicit request `Authorization` header.
+2. `AUTOCODE_REST_{rest_key}_AUTHORIZATION`.
+3. HTTP Basic authentication using both `AUTOCODE_REST_{rest_key}_USERNAME` and `AUTOCODE_REST_{rest_key}_PASSWORD`.
+
+Both username and password are required for HTTP Basic authentication.
+
 ### SSH tool suite
 
 Configure each SSH target with `{ssh_key}` environment variables:
