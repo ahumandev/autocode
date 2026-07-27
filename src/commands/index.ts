@@ -16,11 +16,11 @@ import { jobExecuteAssistCommandTemplate } from "./job-execute_assist"
 import { jobExecuteAutoCommandTemplate } from "./job-execute_auto"
 import { jobReviewCommitCommandTemplate } from "./job-review-commit"
 import { learnCommand } from "./learn"
-import { newAssistCommandTemplate } from "./new-assist"
-import { newAutoCommandTemplate } from "./new-auto"
-import { newDesignCommandTemplate } from "./new-design"
-import { newResearchCommandTemplate } from "./new-research"
-import { newTroubleshootCommandTemplate } from "./new-troubleshoot"
+import { newAssistCommandTemplate } from "./assist"
+import { newAutoCommandTemplate } from "./auto"
+import { newDesignCommandTemplate } from "./design"
+import { newResearchCommandTemplate } from "./research"
+import { newTroubleshootCommandTemplate } from "./troubleshoot"
 import { repeatAsMdCommandTemplate } from "./repeat-as-md"
 import { repeatAsWikiCommandTemplate } from "./repeat-as-wiki"
 import { testsCommandTemplate } from "./tests"
@@ -211,32 +211,32 @@ Report to user:
 
     "install": installCommand,
 
-    "new-assist": {
-        description: "Assist task execution in new session.",
+    "assist": {
+        description: "Continue assist task execution in same session.",
         subtask: false,
         template: newAssistCommandTemplate,
     },
 
-    "new-auto": {
-        description: "Autonomously execute task in new session.",
+    "auto": {
+        description: "Continue autonomous task execution in same session.",
         subtask: false,
         template: newAutoCommandTemplate,
     },
 
-    "new-design": {
-        description: "Design solutions in new session.",
+    "design": {
+        description: "Continue solution design in same session.",
         subtask: false,
         template: newDesignCommandTemplate,
     },
 
     "new-research": {
-        description: "Research topic in new session.",
+        description: "Continue topic research in same session.",
         subtask: false,
         template: newResearchCommandTemplate,
     },
 
-    "new-troubleshoot": {
-        description: "Troubleshoot issue in new session.",
+    "troubleshoot": {
+        description: "Continue issue troubleshooting in same session.",
         subtask: false,
         template: newTroubleshootCommandTemplate,
     },

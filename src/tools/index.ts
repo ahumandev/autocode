@@ -39,7 +39,7 @@ import { createAutocodeSessionContextTool } from "./autocode_session_context"
 import { createAutocodeSkillEditTool } from "./skill_edit"
 import { createAutocodeSkillReadTool } from "./skill_read"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
-import { createAutocodeSessionCreateTool } from "./autocode_session_create"
+import { createAutocodeSessionRestartTool } from "./autocode_session_restart"
 import { createSkillLearnTool } from "./skill_learn"
 import { createSkillTool } from "./skill"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
@@ -94,7 +94,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_sandbox_grep: createAutocodeSandboxGrepTool(client),
         autocode_sandbox_read: createAutocodeSandboxReadTool(client),
         autocode_session_context: createAutocodeSessionContextTool(client),
-        autocode_session_create: createAutocodeSessionCreateTool(client),
+        autocode_session_restart: createAutocodeSessionRestartTool(client),
         autocode_ssh_command: createAutocodeSshCommandTool(),
         autocode_ssh_config_edit: createAutocodeSshConfigEditTool(),
         autocode_ssh_config_read: createAutocodeSshConfigReadTool(),

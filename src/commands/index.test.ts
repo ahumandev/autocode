@@ -206,28 +206,27 @@ describe("commands", () => {
         expect(template).not.toContain("README")
     })
 
-    test("keeps duplicated new session command template intent", () => {
+    test("keeps duplicated same-session continuation command template intent", () => {
         const sessionCommands = {
-            "new-assist": { agent: "assist", response: "Assist task execution session" },
-            "new-auto": { agent: "auto", response: "Follow autonomous task execution session" },
-            "new-design": { agent: "design", response: "Advise design session" },
-            "new-research": { agent: "research", response: "Follow research session" },
-            "new-troubleshoot": { agent: "assist_troubleshoot", response: "Follow troubleshoot session" },
+            "new-assist": { agent: "assist", response: "Assist task execution" },
+            "new-auto": { agent: "auto", response: "Autonomous task execution" },
+            "new-design": { agent: "design", response: "Design guidance" },
+            "new-research": { agent: "research", response: "Research" },
+            "new-troubleshoot": { agent: "assist", response: "Troubleshooting" },
         }
 
         for (const [commandName, expectation] of Object.entries(sessionCommands)) {
             const template = commands[commandName]?.template ?? ""
-            expect(template).toContain(`Call \`autocode_session_create\` with \`agent\` = \`${expectation.agent}\``)
-            expect(template).toContain(`${expectation.response}: "[session_title]".`)
-            expect(template).toContain("Replace [session_title] with `session_title` value from `autocode_session_create` tool response.")
+            expect(template).toContain(`Call \`autocode_session_restart\` with \`agent\` = \`${expectation.agent}\``)
+            expect(template).toContain(`${expectation.response} continues in same session.`)
+            expect(template).not.toContain("autocode_session_create")
+            expect(template).not.toContain("[session_title]")
+            expect(template).not.toContain("new session")
         }
 
-        expect(commands["new-assist"]?.template).toContain("PROBLEMS = wrong/missing behavior or missing info according to user instructions")
-        expect(commands["new-assist"]?.template).toContain("IMPACT = why issue matters to user/workflow/system")
-        expect(commands["new-assist"]?.template).not.toContain("OBSERVATION")
-        expect(commands["new-auto"]?.template).toContain("EXPECTATIONS = expected outcome or target behavior")
-        expect(commands["new-auto"]?.template).toContain("REQUIREMENTS = required project changes or research scope, each with CRITERIA")
-        expect(commands["new-auto"]?.template).not.toContain("OBSERVATION")
+        expect(commands["new-assist"]?.template).toContain("# STEP 2: Respond to user:")
+        expect(commands["new-assist"]?.template).not.toContain("separate session")
+        expect(commands["new-assist"]?.template).not.toContain("new title")
     })
 
     test("keeps repeat_as_md template intent independent of stale description", () => {

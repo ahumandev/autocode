@@ -143,6 +143,15 @@ describe("agent policies", () => {
         expect(permissionRule(agents.temp_shelve?.permission, "git_reset")).toBeUndefined()
     })
 
+    test("allows every primary agent to restart the current session", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+
+        for (const agentName of ["assist", "auto", "design", "edit", "research"] as const) {
+            expect(agents[agentName]?.mode).toBe("primary")
+            expect(permissionRule(agents[agentName]?.permission, "autocode_session_restart")).toBe("allow")
+        }
+    })
+
     test("buildAgents exposes execute_rest as REST-only worker and allows supported orchestration tasks to call it", () => {
         const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
 

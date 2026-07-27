@@ -131,7 +131,7 @@ describe("agent swap utilities", () => {
             query: { directory: "/workspace" },
             body: {
                 agent: "auto",
-                model: { providerID: "openai", modelID: "gpt-5.5" },
+                model: { providerID: "openai", modelID: "gpt-5.5", variant: "thinking" },
                 parts: [{ type: "text", text: "Continue execution." }],
             },
         })

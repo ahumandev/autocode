@@ -14,6 +14,7 @@ import { resetRetryCounts } from "@/utils/tools"
 type ExpectedModel = {
     providerID: string
     modelID: string
+    variant?: string
 }
 
 type ParsedToolResult = {
@@ -108,7 +109,7 @@ describe("autocode_agent_swap tool", () => {
     function expectedModelForTier(tier: string | undefined): ExpectedModel {
         return tier === "balanced"
             ? { providerID: "anthropic", modelID: "claude-sonnet-4-5" }
-            : { providerID: "openai", modelID: "gpt-5.5" }
+            : { providerID: "openai", modelID: "gpt-5.5", variant: "thinking" }
     }
 
     test("swaps the current session with the supplied prompt for the selected agent", async () => {

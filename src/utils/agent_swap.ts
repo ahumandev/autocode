@@ -36,7 +36,7 @@ type AutocodeAgentPromptDispatchResult = {
     sessionID: string
 }
 
-type ResolvedAgentModel = {
+export type ResolvedAgentModel = {
     model?: {
         providerID: string
         modelID: string
@@ -44,7 +44,7 @@ type ResolvedAgentModel = {
     variant?: string
 }
 
-type ResolvedAutocodeAgentSessionSettings = {
+export type ResolvedAutocodeAgentSessionSettings = {
     resolvedModel: ResolvedAgentModel
 }
 
@@ -87,7 +87,7 @@ type AutocodeSessionApi = {
 
 type SessionPromptAsyncBody = {
     agent: string
-    model?: ResolvedAgentModel["model"]
+    model?: ResolvedAgentModel["model"] & { variant?: string }
     parts: Array<{ type: "text", text: string }>
 }
 
@@ -239,7 +239,10 @@ export async function dispatchAutocodeAgentPrompt(
             parts: [{ type: "text", text: prompt }],
         }
         if (resolvedModel.model) {
-            body.model = resolvedModel.model
+            body.model = {
+                ...resolvedModel.model,
+                ...(resolvedModel.variant ? { variant: resolvedModel.variant } : {}),
+            }
         }
 
         const promptResponse = await client.session.promptAsync({

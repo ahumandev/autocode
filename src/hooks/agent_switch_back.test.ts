@@ -2,6 +2,9 @@ import { describe, expect, mock, test, beforeEach } from "bun:test"
 import type { Event } from "@opencode-ai/sdk"
 import type { findPreviousPrimaryAutocodeAgent, resolveAutocodeAgentSessionSettings, swapCurrentAutocodeSession } from "@/utils/agent_swap"
 import { createAgentSwitchBackHook } from "@/hooks/agent_switch_back"
+import { createAgentRestartPrompt } from "@/hooks/agent_restart_prompt"
+import { jobExecuteAssistCommandTemplate } from "@/commands/job-execute_assist"
+import { jobExecuteAutoCommandTemplate } from "@/commands/job-execute_auto"
 
 const SWAP_BACK_PROMPT = "Present the next action to the user using the question tool."
 type SwapFn = typeof swapCurrentAutocodeSession
@@ -196,5 +199,31 @@ describe("createAgentSwitchBackHook", () => {
         await handler(updated("s1", "temp_concept"))
         await handler(event({ type: "session.created", properties: {} }))
         expect(swapMock).not.toHaveBeenCalled()
+    })
+})
+
+describe("createAgentRestartPrompt", () => {
+    test("returns fixed prompt when current and target agents match before target lookup", () => {
+        for (const agent of ["assist", "auto", "research", "design"] as const) {
+            expect(createAgentRestartPrompt({ currentAgent: agent, targetAgent: agent })).toBe("Continue from compacted context.")
+        }
+    })
+
+    test("returns research guidance", () => {
+        expect(createAgentRestartPrompt({ currentAgent: "assist", targetAgent: "research" })).toBe(
+            "Find answer to user's question or discover possibilities to improve project regarding discovered problem.",
+        )
+    })
+
+    test("returns design guidance", () => {
+        expect(createAgentRestartPrompt({ currentAgent: "assist", targetAgent: "design" })).toBe("Design solution to solve discovered problem.")
+    })
+
+    test("reuses auto job-execute guidance", () => {
+        expect(createAgentRestartPrompt({ currentAgent: "assist", targetAgent: "auto" })).toBe(jobExecuteAutoCommandTemplate)
+    })
+
+    test("reuses assist job-execute guidance", () => {
+        expect(createAgentRestartPrompt({ currentAgent: "auto", targetAgent: "assist" })).toBe(jobExecuteAssistCommandTemplate)
     })
 })

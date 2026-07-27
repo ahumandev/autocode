@@ -458,7 +458,7 @@ describe("autocode_job_execute tool", () => {
             expect(client.session.create).toHaveBeenCalledTimes(1)
             expect(getPromptAsyncBodies(client)).toContainEqual({
                 agent: "auto",
-                model: { providerID: "openai", modelID: "gpt-5.5" },
+                model: { providerID: "openai", modelID: "gpt-5.5", variant: "thinking" },
                 parts: [{ type: "text", text: "# Problem\n\nLong auto execution\n" }],
             })
         } finally {
