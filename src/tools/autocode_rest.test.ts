@@ -270,7 +270,7 @@ describe("autocode_rest tools", () => {
         const requests: Array<{ tls?: { rejectUnauthorized?: boolean } }> = []
 
         await seedCurrentJobSession(fileSystem)
-        globalThis.fetch = (async (_input: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
+        globalThis.fetch = (async (_input: URL | RequestInfo, init?: RequestInit & { tls?: { rejectUnauthorized?: boolean } }): Promise<Response> => {
             requests.push({ tls: init?.tls })
             return new Response("ok")
         }) as unknown as typeof fetch
