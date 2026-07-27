@@ -229,7 +229,7 @@ Report to user:
         template: newDesignCommandTemplate,
     },
 
-    "new-research": {
+    "research": {
         description: "Continue topic research in same session.",
         subtask: false,
         template: newResearchCommandTemplate,

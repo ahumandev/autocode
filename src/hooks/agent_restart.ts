@@ -1,5 +1,7 @@
 import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk"
+import { readFile, readdir } from "node:fs/promises"
 import { createAgentRestartPrompt } from "@/hooks/agent_restart_prompt"
+import { createDirectoryFileSystem, getJobFilePath, isMissingFile, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem } from "@/utils/jobs"
 import {
     dispatchAutocodeAgentPrompt,
     isPrimaryAutocodeAgent,
@@ -64,6 +66,21 @@ export type AgentRestartDependencies = {
     resolveAutocodeAgentSessionSettings?: typeof resolveAutocodeAgentSessionSettings
     summarizeAutocodeAgentSession?: typeof summarizeAutocodeAgentSession
     dispatchAutocodeAgentPrompt?: typeof dispatchAutocodeAgentPrompt
+    readCurrentJobPlan?: typeof readCurrentJobPlan
+}
+
+export type CurrentJobPlan = {
+    jobName: string
+    plan: string
+}
+
+async function readDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
+    return options?.withFileTypes ? readdir(dirPath, { withFileTypes: true }) : readdir(dirPath)
+}
+
+const defaultJobFileSystem: Pick<JobToolFileSystem, "readFile" | "readdir"> = {
+    readFile,
+    readdir: readDirectory,
 }
 
 function unwrapOpenCodeData<T>(response: OpenCodeApiResponse<T> | T): T | undefined {
@@ -147,6 +164,26 @@ export async function summarizeAutocodeAgentSession(
     })
 }
 
+export async function readCurrentJobPlan(
+    client: OpencodeClient,
+    context: AgentRestartContext,
+    fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir"> = defaultJobFileSystem,
+): Promise<CurrentJobPlan | undefined> {
+    const directoryFileSystem = createDirectoryFileSystem(fileSystem)
+    const identity = await resolvePlannedJobIdentity(directoryFileSystem, client, context)
+    const job = identity.resolved_job
+    if (!job) return undefined
+
+    try {
+        const plan = await fileSystem.readFile(getJobFilePath(resolveAgentsStorageRoot(context), job.directory, job.job_name, "plan.md"), "utf8")
+        return { jobName: job.job_name, plan }
+    }
+    catch (error) {
+        if (isMissingFile(error)) return undefined
+        throw error
+    }
+}
+
 export async function restartAutocodeAgentInSession(
     input: AgentRestartInput,
     deps: AgentRestartDependencies = {},
@@ -198,8 +235,19 @@ export async function restartAutocodeAgentInSession(
         return createRetryResponse("compaction", compaction.error ?? "Session compaction did not complete.", "Retry same-session compaction before continuation dispatch.")
     }
 
+    let jobPlan: CurrentJobPlan | undefined
+    if (targetAgent === "assist" || targetAgent === "auto") {
+        const readPlan = deps.readCurrentJobPlan ?? readCurrentJobPlan
+        try {
+            jobPlan = await readPlan(input.client, input.context)
+        }
+        catch (error) {
+            return createRetryResponse("current job plan lookup", error, "Retry restart after current job plan lookup succeeds.")
+        }
+    }
+
     const dispatch = deps.dispatchAutocodeAgentPrompt ?? dispatchAutocodeAgentPrompt
-    const prompt = createAgentRestartPrompt({ currentAgent: activeAgent.currentAgent, targetAgent })
+    const prompt = createAgentRestartPrompt({ currentAgent: activeAgent.currentAgent, targetAgent, jobPlan })
     let dispatched: Awaited<ReturnType<typeof dispatchAutocodeAgentPrompt>>
     try {
         dispatched = await dispatch(input.client, input.context.directory, input.context.sessionID, targetAgent, prompt, settings.resolvedModel)

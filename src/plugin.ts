@@ -5,7 +5,6 @@ import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, 
 import { collectExternalDirectories, collectTaskExternalRules, loadAutocodeConfig, mergeExternalDirectoryRules } from "./config"
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { commands } from "./commands"
-import { createAgentSwitchBackHook } from "./hooks/agent_switch_back"
 import { cleanupLearnedSkills, reconcileGeneratedSkills } from "./skills"
 import { createTools } from "./tools"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
@@ -136,7 +135,6 @@ async function createPluginHooks(
             await mergeConfig(cfg, input, autocodeConfig, generatedSkills)
         },
         tool: createTools(input.client, autocodeConfig.sandbox, { serverUrl: input.serverUrl }),
-        event: createAgentSwitchBackHook(input.client, input.directory, input.worktree),
     }
 }
 

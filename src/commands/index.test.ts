@@ -34,11 +34,11 @@ describe("commands", () => {
             "git-conflict",
             "init",
             "install",
-            "new-assist",
-            "new-auto",
-            "new-design",
-            "new-research",
-            "new-troubleshoot",
+            "assist",
+            "auto",
+            "design",
+            "research",
+            "troubleshoot",
             "learn",
             "repeat-as-md",
             "repeat-as-wiki",
@@ -208,11 +208,11 @@ describe("commands", () => {
 
     test("keeps duplicated same-session continuation command template intent", () => {
         const sessionCommands = {
-            "new-assist": { agent: "assist", response: "Assist task execution" },
-            "new-auto": { agent: "auto", response: "Autonomous task execution" },
-            "new-design": { agent: "design", response: "Design guidance" },
-            "new-research": { agent: "research", response: "Research" },
-            "new-troubleshoot": { agent: "assist", response: "Troubleshooting" },
+            "assist": { agent: "assist", response: "Assist task execution" },
+            "auto": { agent: "auto", response: "Autonomous task execution" },
+            "design": { agent: "design", response: "Design guidance" },
+            "research": { agent: "research", response: "Research" },
+            "troubleshoot": { agent: "assist", response: "Troubleshooting" },
         }
 
         for (const [commandName, expectation] of Object.entries(sessionCommands)) {
@@ -224,9 +224,9 @@ describe("commands", () => {
             expect(template).not.toContain("new session")
         }
 
-        expect(commands["new-assist"]?.template).toContain("# STEP 2: Respond to user:")
-        expect(commands["new-assist"]?.template).not.toContain("separate session")
-        expect(commands["new-assist"]?.template).not.toContain("new title")
+        expect(commands["assist"]?.template).toContain("# STEP 2: Respond to user:")
+        expect(commands["assist"]?.template).not.toContain("separate session")
+        expect(commands["assist"]?.template).not.toContain("new title")
     })
 
     test("keeps repeat_as_md template intent independent of stale description", () => {

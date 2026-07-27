@@ -6,8 +6,10 @@ import {
 import type {
     AgentRestartDependencies,
     AgentRestartInput,
+    readCurrentJobPlan,
     summarizeAutocodeAgentSession,
 } from "@/hooks/agent_restart"
+import { RESTART_ASSIST_PROMPT, RESTART_AUTO_PROMPT } from "@/hooks/agent_restart_prompt"
 import { dispatchAutocodeAgentPrompt } from "@/utils/agent_swap"
 import type { resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
 
@@ -15,6 +17,7 @@ type FindActiveFn = typeof findActiveAutocodeAgent
 type ResolveSettingsFn = typeof resolveAutocodeAgentSessionSettings
 type SummarizeFn = typeof summarizeAutocodeAgentSession
 type DispatchFn = typeof dispatchAutocodeAgentPrompt
+type ReadCurrentJobPlanFn = typeof readCurrentJobPlan
 
 const SESSION_ID = "session-123"
 const DIRECTORY = "/repo"
@@ -28,6 +31,7 @@ const resolveSettingsMock = mock<ResolveSettingsFn>(async () => ({
 }))
 const summarizeMock = mock<SummarizeFn>(async () => ({ data: true }))
 const dispatchMock = mock<DispatchFn>(async () => ({ sessionID: SESSION_ID }))
+const readCurrentJobPlanMock = mock<ReadCurrentJobPlanFn>(async () => undefined)
 const promptAsyncMock = mock(async () => ({}))
 const client = { session: { create: sessionCreateMock, promptAsync: promptAsyncMock } } as unknown as AgentRestartInput["client"]
 
@@ -45,6 +49,7 @@ function dependencies(): AgentRestartDependencies {
         resolveAutocodeAgentSessionSettings: resolveSettingsMock,
         summarizeAutocodeAgentSession: summarizeMock,
         dispatchAutocodeAgentPrompt: dispatchMock,
+        readCurrentJobPlan: readCurrentJobPlanMock,
     }
 }
 
@@ -55,6 +60,7 @@ describe("restartAutocodeAgentInSession", () => {
         resolveSettingsMock.mockClear()
         summarizeMock.mockClear()
         dispatchMock.mockClear()
+        readCurrentJobPlanMock.mockClear()
         promptAsyncMock.mockClear()
         findActiveMock.mockImplementation(async () => ({ currentAgent: "assist" }))
         resolveSettingsMock.mockImplementation(async () => ({
@@ -62,6 +68,7 @@ describe("restartAutocodeAgentInSession", () => {
         }))
         summarizeMock.mockImplementation(async () => ({ data: true }))
         dispatchMock.mockImplementation(async () => ({ sessionID: SESSION_ID }))
+        readCurrentJobPlanMock.mockImplementation(async () => undefined)
     })
 
     test("forwards resolved model and reasoning variant to restart dispatch", async () => {
@@ -113,6 +120,27 @@ describe("restartAutocodeAgentInSession", () => {
         expect(summarizeMock.mock.calls[0].slice(0, 3)).toEqual([client, DIRECTORY, SESSION_ID])
         expect(dispatchMock.mock.calls[0].slice(0, 4)).toEqual([client, DIRECTORY, SESSION_ID, "research"])
         expect(sessionCreateMock).not.toHaveBeenCalled()
+    })
+
+    test("injects current job name and plan for assist and auto restart", async () => {
+        readCurrentJobPlanMock.mockImplementation(async () => ({ jobName: "current_job", plan: "# Current plan" }))
+
+        await restartAutocodeAgentInSession(input("assist"), dependencies())
+
+        expect(dispatchMock.mock.calls[0][4]).toBe("Selected job: current_job\n\nplan.md:\n# Current plan")
+
+        dispatchMock.mockClear()
+        await restartAutocodeAgentInSession(input("auto"), dependencies())
+        expect(dispatchMock.mock.calls[0][4]).toBe("Selected job: current_job\n\nplan.md:\n# Current plan")
+    })
+
+    test("uses exact assist and auto fallback prompts when current job plan is unavailable", async () => {
+        await restartAutocodeAgentInSession(input("assist"), dependencies())
+        expect(dispatchMock.mock.calls[0][4]).toBe(RESTART_ASSIST_PROMPT)
+
+        dispatchMock.mockClear()
+        await restartAutocodeAgentInSession(input("auto"), dependencies())
+        expect(dispatchMock.mock.calls[0][4]).toBe(RESTART_AUTO_PROMPT)
     })
 
     test("blocks dispatch and reports structured compaction failure", async () => {

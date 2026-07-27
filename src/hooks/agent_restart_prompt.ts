@@ -1,26 +1,38 @@
-import { jobExecuteAssistCommandTemplate } from "@/commands/job-execute_assist"
-import { jobExecuteAutoCommandTemplate } from "@/commands/job-execute_auto"
 import type { PrimaryAutocodeAgent } from "@/utils/agent_swap"
 
 export type AgentRestartPromptInput = {
     currentAgent: PrimaryAutocodeAgent
     targetAgent: PrimaryAutocodeAgent
+    jobPlan?: {
+        jobName: string
+        plan: string
+    }
 }
 
-const SAME_AGENT_RESTART_PROMPT = "Continue from compacted context."
-const RESEARCH_RESTART_PROMPT = "Find answer to user's question or discover possibilities to improve project regarding discovered problem."
-const DESIGN_RESTART_PROMPT = "Design solution to solve discovered problem."
+const RESTART_SAME_AGENT_PROMPT = "Continue"
+const RESTART_RESEARCH_PROMPT = "Research possibilities regarding recent discussion to answer user question."
+const RESTART_DESIGN_PROMPT = "Design solution to improve project."
+export const RESTART_ASSIST_PROMPT = "Continue with most urgent unblocked GOAL as next ASSIGNMENT."
+export const RESTART_AUTO_PROMPT = "Autonomously meet all user REQUIREMENTS."
 
 const restartPromptByTarget: Record<PrimaryAutocodeAgent, string> = {
-    assist: jobExecuteAssistCommandTemplate,
-    auto: jobExecuteAutoCommandTemplate,
-    design: DESIGN_RESTART_PROMPT,
-    research: RESEARCH_RESTART_PROMPT,
+    assist: RESTART_ASSIST_PROMPT,
+    auto: RESTART_AUTO_PROMPT,
+    design: RESTART_DESIGN_PROMPT,
+    research: RESTART_RESEARCH_PROMPT,
 }
 
 export function createAgentRestartPrompt(input: AgentRestartPromptInput): string {
+    if (input.targetAgent === "assist" || input.targetAgent === "auto") {
+        if (input.jobPlan) {
+            return `Selected job: ${input.jobPlan.jobName}\n\nplan.md:\n${input.jobPlan.plan}`
+        }
+
+        return input.targetAgent === "assist" ? RESTART_ASSIST_PROMPT : RESTART_AUTO_PROMPT
+    }
+
     if (input.currentAgent === input.targetAgent) {
-        return SAME_AGENT_RESTART_PROMPT
+        return RESTART_SAME_AGENT_PROMPT
     }
 
     return restartPromptByTarget[input.targetAgent]
