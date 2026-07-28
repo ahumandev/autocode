@@ -136,7 +136,8 @@ export function resolveTierModel(tier: ModelTier | undefined, tiers: Partial<Rec
         return {}
     }
 
-    const configuredModel = tiers[tier]?.model?.trim()
+    const configuredModel = (tier === "context" ? tiers.context?.model ?? tiers.operator?.model : tiers[tier]?.model)?.trim()
+    const configuredVariant = tier === "context" ? tiers.context?.variant ?? tiers.operator?.variant : tiers[tier]?.variant
     if (!configuredModel) {
         return {}
     }
@@ -154,7 +155,7 @@ export function resolveTierModel(tier: ModelTier | undefined, tiers: Partial<Rec
 
     return {
         model: { providerID, modelID },
-        variant: tiers[tier]?.variant === "standard" ? undefined : tiers[tier]?.variant,
+        variant: configuredVariant === "standard" ? undefined : configuredVariant,
     }
 }
 

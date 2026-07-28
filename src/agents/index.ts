@@ -1145,7 +1145,7 @@ const baseAgents: AgentMap = {
         },
         prompt: queryCodePrompt,
         temperature: 0.3,
-        tier: "fast",
+        tier: "context",
     },
 
     query_config: {
@@ -1174,7 +1174,7 @@ const baseAgents: AgentMap = {
         },
         prompt: queryDbPrompt,
         temperature: 0.1,
-        tier: "fast",
+        tier: "context",
     },
 
     query_excel: {
@@ -1191,7 +1191,7 @@ const baseAgents: AgentMap = {
         },
         prompt: queryExcelPrompt,
         temperature: 0.1,
-        tier: "fast",
+        tier: "context",
     },
 
     query_git: {
@@ -1309,7 +1309,7 @@ const baseAgents: AgentMap = {
         },
         prompt: queryTextPrompt,
         temperature: 0.1,
-        tier: "fast",
+        tier: "context",
     },
 
     query_web: {
@@ -1326,7 +1326,7 @@ const baseAgents: AgentMap = {
         },
         prompt: queryWebPrompt,
         temperature: 0.5,
-        tier: "operator", // Needs more context to load websites
+        tier: "context",
     },
 
     // Temporary agents: execute 1 task then move out of the way so that original agent can continue

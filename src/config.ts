@@ -5,7 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json" }
 import { createJsoncDocumentEditor } from "./tools/config/json"
 
-const MODEL_TIERS = ["cheap", "fast", "operator", "balanced", "smart"] as const
+const MODEL_TIERS = ["cheap", "fast", "operator", "context", "balanced", "smart"] as const
 const PERMISSION_ACTIONS = ["ask", "allow", "deny"] as const
 const SANDBOX_SYNC_METHODS = ["auto", "overlayfs", "reflink", "copy"] as const
 const SKILL_CATEGORIES: readonly SkillCategory[] = ["bash", "code", "design", "test"]
@@ -238,18 +238,26 @@ function collectLearned(value: unknown): LearnedConfig | undefined {
     return Object.keys(result).length > 0 ? result : undefined
 }
 
-function mergeTierMaps(base: Record<string, unknown>, next: Record<string, unknown>): Record<string, unknown> {
-    const merged: Record<string, unknown> = { ...base }
-
-    for (const [key, value] of Object.entries(next)) {
-        if (MODEL_TIERS.includes(key as ModelTier) || !isRecord(merged[key]) || !isRecord(value)) {
-            merged[key] = value
-            continue
-        }
-
-        merged[key] = { ...(merged[key] as Record<string, unknown>), ...value }
+function mergeTiers(
+    base: Partial<Record<ModelTier, TierConfig>>,
+    next: Partial<Record<ModelTier, TierConfig>>,
+): Partial<Record<ModelTier, TierConfig>> {
+    const merged = { ...base }
+    for (const tier of MODEL_TIERS) {
+        if (next[tier]) merged[tier] = { ...merged[tier], ...next[tier] }
     }
+    return merged
+}
 
+function mergeProviderTiers(
+    base: Record<string, Partial<Record<ModelTier, TierConfig>>>,
+    availableTiers: Record<string, unknown>,
+): Record<string, Partial<Record<ModelTier, TierConfig>>> {
+    const merged = { ...base }
+    for (const [provider, value] of Object.entries(availableTiers)) {
+        const providerTiers = collectTiers(value)
+        if (providerTiers) merged[provider] = mergeTiers(merged[provider] ?? {}, providerTiers)
+    }
     return merged
 }
 
@@ -377,16 +385,6 @@ function readFirstConfig(fs: ConfigFileSystem, paths: readonly string[]): { path
     return undefined
 }
 
-function resolveTiers(config: ParsedAutocodeConfig, availableTiers: Record<string, unknown>): Partial<Record<ModelTier, TierConfig>> {
-    if (config.legacyTiers) return config.legacyTiers
-
-    if (config.tier) {
-        const selectedTiers = collectTiers(availableTiers[config.tier])
-        if (selectedTiers) return selectedTiers
-    }
-
-    return collectTiers(availableTiers) ?? {}
-}
 
 export async function loadAutocodeConfig(
     worktree: string,
@@ -407,7 +405,8 @@ export async function loadAutocodeConfig(
     candidates.push(...collectLocalConfigCandidates(worktree, directory).map((path) => [path]))
 
     let tiers: Partial<Record<ModelTier, TierConfig>> = {}
-    let availableTiers: Record<string, unknown> = {}
+    let providerTiers: Record<string, Partial<Record<ModelTier, TierConfig>>> = {}
+    let selectedProvider: string | undefined
     let externalDirectories: ExternalDirectoryRules = {}
     let sandbox: AutocodeSandboxConfig = {}
     let skills: SkillsConfig | undefined
@@ -415,10 +414,32 @@ export async function loadAutocodeConfig(
     for (const candidate of candidates) {
         const config = readFirstConfig(fs, candidate)
         if (!config) continue
-        // later candidates override earlier ones per tier
+        // Provider definitions merge field-wise; selecting one replaces each defined tier.
         const parsed = parseAutocodeConfig(config.raw, config.path)
         if (parsed.tiers) {
-            availableTiers = mergeTierMaps(availableTiers, parsed.tiers)
+            const directTiers = collectTiers(parsed.tiers) ?? {}
+            providerTiers = mergeProviderTiers(providerTiers, parsed.tiers)
+
+            if (parsed.tier) {
+                const selectedTiers = providerTiers[parsed.tier]
+                if (selectedTiers) {
+                    selectedProvider = parsed.tier
+                    tiers = { ...tiers, ...selectedTiers }
+                } else {
+                    tiers = mergeTiers(tiers, directTiers)
+                }
+            } else {
+                tiers = mergeTiers(tiers, directTiers)
+                if (selectedProvider && collectTiers(parsed.tiers[selectedProvider])) {
+                    tiers = { ...tiers, ...providerTiers[selectedProvider] }
+                }
+            }
+        } else if (parsed.tier) {
+            const selectedTiers = providerTiers[parsed.tier]
+            if (selectedTiers) {
+                selectedProvider = parsed.tier
+                tiers = { ...tiers, ...selectedTiers }
+            }
         }
         if (parsed.externalDirectories) {
             externalDirectories = mergeExternalDirectoryRules(externalDirectories, parsed.externalDirectories)
@@ -435,7 +456,9 @@ export async function loadAutocodeConfig(
         if (parsed.learned) {
             learned = { ...learned, ...parsed.learned }
         }
-        tiers = { ...tiers, ...resolveTiers(parsed, availableTiers) }
+        if (parsed.legacyTiers) {
+            tiers = mergeTiers(tiers, parsed.legacyTiers)
+        }
     }
 
     // Idempotent skill seeding: ONLY creates the `autocode.skills` key when ALL of the

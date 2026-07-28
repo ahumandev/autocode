@@ -20,12 +20,12 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 | `autocode.sandbox.distro.cache_path` | string           | Optional sandbox distribution cache path.                                                                                          | Unset.                                           |
 | `autocode.sandbox.distro.expire`     | string or number | Optional sandbox distribution expiry value.                                                                                        | Unset.                                           |
 | `autocode.tier`                      | string           | Selects a named tier set from `autocode.tiers`.                                                                                    | No selected set.                                 |
-| `autocode.tiers`                     | object           | Either a direct map of `cheap`, `fast`, `operator`, `balanced`, and `smart` tier settings, or a map of named tier sets containing those tiers. | No overrides.                                    |
+| `autocode.tiers`                     | object           | Either a direct map of `cheap`, `fast`, `operator`, `context`, `balanced`, and `smart` tier settings, or a map of named tier sets containing those tiers. | No overrides.                                    |
 | `autocode.tiers.<tier>.model`        | string           | Optional model override for a tier.                                                                                                | Uses the agent or OpenCode default when omitted. |
 | `autocode.tiers.<tier>.variant`      | string           | Optional variant override for a tier.                                                                                              | Uses the agent or OpenCode default when omitted. |
 | `permission.external_directory`      | object or string | Path-pattern permissions for external-directory access. Values are `allow`, `ask`, or `deny`.                                      | `{}`                                             |
 
-Recognised model tiers are `cheap`, `fast`, `operator`, `balanced`, and `smart`. The `operator` tier sits between `balanced` and `fast` and requires explicit user configuration (no default). The `cheap` tier is also used as the `small_model` fallback for OpenCode title generation and compaction when OpenCode has no explicit `small_model`.
+Recognised model tiers are `cheap`, `fast`, `operator`, `context`, `balanced`, and `smart`. The `context` tier falls back to selected provider `operator` model and variant when either context value is omitted. The `operator` tier sits between `balanced` and `fast` and requires explicit user configuration (no default). The `cheap` tier is also used as the `small_model` fallback for OpenCode title generation and compaction when OpenCode has no explicit `small_model`.
 
 Legacy external skill arrays are ignored.
 
@@ -51,6 +51,7 @@ For example:
         "smart":    { "model": "openai/gpt-5.6-sol", "variant": "high" },
         "balanced": { "model": "openai/gpt-5.6-terra", "variant": "medium" },
         "operator": { "model": "openai/gpt-5.6-terra", "variant": "low" },
+        "context":  { "model": "openai/gpt-5.6-luna", "variant": "low" },
         "fast":     { "model": "openai/gpt-5.6-luna", "variant": "low" },
         //"fast":   { "model": "openai/gpt-5.3-codex-spark", "variant": "low" },
         "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "none" }

@@ -2414,6 +2414,21 @@ describe("loadAutocodeConfig", () => {
         expect(result.tiers.smart).toEqual({ model: "anthropic/claude-opus-4-5", variant: "thinking" })
     })
 
+    test("context tier config accepts model and variant with local precedence", async () => {
+        const fs = makeFs({
+            [globalAutocodeConfigPath()]: JSON.stringify({
+                autocode: { tiers: { context: { model: "openai/gpt-5", variant: "standard" } } },
+            }),
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: { tiers: { context: { model: "anthropic/claude-opus-4-5", variant: "thinking" } } },
+            }),
+        })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.tiers.context).toEqual({ model: "anthropic/claude-opus-4-5", variant: "thinking" })
+    })
+
     test("provider-selected operator tier config is parsed", async () => {
         const fs = makeFs({
             "/wt/.opencode/autocode.jsonc": JSON.stringify({

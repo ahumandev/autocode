@@ -693,3 +693,39 @@ describe("learned config", () => {
         expect(result.learned).toEqual({ max: 10 })
     })
 })
+
+
+describe("context tier config", () => {
+    test("loadAutocodeConfig merges and selects canonical provider context config", async () => {
+        const fs = makeFs({
+            [globalAutocodeConfigPath()]: JSON.stringify({
+                autocode: {
+                    tier: "anthropic",
+                    tiers: {
+                        openai: {
+                            context: { model: "openai/gpt-5", variant: "standard" },
+                        },
+                        anthropic: {
+                            context: { model: "anthropic/claude-opus-4-5", variant: "standard" },
+                        },
+                    },
+                },
+            }),
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: {
+                    tiers: {
+                        anthropic: {
+                            context: { variant: "thinking" },
+                        },
+                    },
+                },
+            }),
+        })
+
+        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+        expect(result.tiers).toEqual({
+            context: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
+        })
+    })
+})

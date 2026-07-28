@@ -171,6 +171,40 @@ describe("autocode_agent_swap tool", () => {
         }
     })
 
+    test("dispatches context query agent with selected provider model", async () => {
+        const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-swap-"))
+        try {
+            writeAutocodeTierConfig(worktree, {
+                tier: "anthropic",
+                tiers: {
+                    openai: {
+                        context: { model: "openai/gpt-5", variant: "standard" },
+                    },
+                    anthropic: {
+                        context: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
+                    },
+                },
+            })
+
+            const client = createMockClient()
+            const tool = createAutocodeAgentSwapTool(client)
+
+            await tool.execute({ agent: "query_code", prompt: "Find the provider selection path." }, createToolContext({ directory: worktree, worktree, sessionID: "old-session" }))
+
+            expect(client.session.promptAsync).toHaveBeenCalledWith({
+                path: { id: "old-session" },
+                query: { directory: worktree },
+                body: {
+                    agent: "query_code",
+                    model: { providerID: "anthropic", modelID: "claude-opus-4-5", variant: "thinking" },
+                    parts: [{ type: "text", text: "Find the provider selection path." }],
+                },
+            })
+        } finally {
+            rmSync(worktree, { recursive: true, force: true })
+        }
+    })
+
     test("falls back safely when the swapped agent tier has no configured model", async () => {
         const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-swap-"))
         try {

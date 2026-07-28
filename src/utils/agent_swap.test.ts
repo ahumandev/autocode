@@ -1,6 +1,14 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createAutocodeAgentPreviousSkippedResponse, createAutocodeAgentSwapSuccessResponse, createAutocodeSession, createAutocodeSessionCreateSuccessResponse, createAutocodeSessionPrompt, deriveAutocodeAgentSwapTitle, dispatchAutocodeAgentPrompt, findPreviousPrimaryAutocodeAgent, formatAutocodeSessionTitleForAgent, resolveTierModel, swapCurrentAutocodeSession, validateAutocodeAgentSwapInput, validateAutocodeSessionCreateInput } from "./agent_swap"
+import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { getAgentTier } from "@/agents"
+import autocode from "@/plugin"
+import { createAutocodeAgentPreviousSkippedResponse, createAutocodeAgentSwapSuccessResponse, createAutocodeSession, createAutocodeSessionCreateSuccessResponse, createAutocodeSessionPrompt, deriveAutocodeAgentSwapTitle, dispatchAutocodeAgentPrompt, findPreviousPrimaryAutocodeAgent, formatAutocodeSessionTitleForAgent, resolveAutocodeAgentSessionSettings, resolveTierModel, swapCurrentAutocodeSession, validateAutocodeAgentSwapInput, validateAutocodeSessionCreateInput } from "./agent_swap"
+
+type PluginConfigHook = { config?: (input: PluginConfig) => Promise<void> }
 
 function createClient() {
     return {
@@ -161,6 +169,135 @@ describe("agent swap utilities", () => {
             variant: undefined,
         })
         expect(resolveTierModel("operator", {})).toEqual({})
+    })
+
+    test("routes context tier with its explicit model and variant", () => {
+        expect(resolveTierModel("context", {
+            context: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
+            operator: { model: "openai/gpt-5", variant: "standard" },
+        })).toEqual({
+            model: { providerID: "anthropic", modelID: "claude-opus-4-5" },
+            variant: "thinking",
+        })
+    })
+
+    test("routes context tier through operator when context config is absent", () => {
+        expect(resolveTierModel("context", {
+            operator: { model: "openai/gpt-5", variant: "thinking" },
+        })).toEqual({
+            model: { providerID: "openai", modelID: "gpt-5" },
+            variant: "thinking",
+        })
+    })
+
+    test("routes context tier with explicit model and operator variant fallback", () => {
+        expect(resolveTierModel("context", {
+            context: { model: "anthropic/claude-opus-4-5" },
+            operator: { model: "openai/gpt-5", variant: "thinking" },
+        })).toEqual({
+            model: { providerID: "anthropic", modelID: "claude-opus-4-5" },
+            variant: "thinking",
+        })
+    })
+
+    test("routes context tier with operator model and explicit variant", () => {
+        expect(resolveTierModel("context", {
+            context: { variant: "thinking" },
+            operator: { model: "openai/gpt-5", variant: "standard" },
+        })).toEqual({
+            model: { providerID: "openai", modelID: "gpt-5" },
+            variant: "thinking",
+        })
+    })
+
+    test("keeps query agents classified in the context tier", () => {
+        for (const agent of ["query_code", "query_db", "query_excel", "query_text", "query_web"]) {
+            expect(getAgentTier(agent)).toBe("context")
+        }
+    })
+
+    test("falls back to selected provider operator variant for partial context model", async () => {
+        const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-config-"))
+        try {
+            mkdirSync(join(worktree, ".opencode"), { recursive: true })
+            writeFileSync(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
+                autocode: {
+                    tier: "anthropic",
+                    tiers: {
+                        anthropic: {
+                            operator: { model: "anthropic/claude-sonnet-4-5", variant: "thinking" },
+                            context: { model: "anthropic/claude-opus-4-5" },
+                        },
+                    },
+                },
+            }))
+
+            expect(await resolveAutocodeAgentSessionSettings("query_code", worktree, worktree)).toEqual({
+                resolvedModel: {
+                    model: { providerID: "anthropic", modelID: "claude-opus-4-5" },
+                    variant: "thinking",
+                },
+            })
+        } finally {
+            rmSync(worktree, { recursive: true, force: true })
+        }
+    })
+
+    test("falls back to selected provider operator model for partial context variant", async () => {
+        const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-config-"))
+        try {
+            mkdirSync(join(worktree, ".opencode"), { recursive: true })
+            writeFileSync(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
+                autocode: {
+                    tier: "anthropic",
+                    tiers: {
+                        anthropic: {
+                            operator: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
+                            context: { variant: "thinking" },
+                        },
+                    },
+                },
+            }))
+
+            expect(await resolveAutocodeAgentSessionSettings("query_code", worktree, worktree)).toEqual({
+                resolvedModel: {
+                    model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
+                    variant: "thinking",
+                },
+            })
+        } finally {
+            rmSync(worktree, { recursive: true, force: true })
+        }
+    })
+
+    test("lets cfg.agent query override selected provider context model and variant", async () => {
+        const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-config-"))
+        try {
+            mkdirSync(join(worktree, ".opencode"), { recursive: true })
+            writeFileSync(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
+                autocode: {
+                    tier: "anthropic",
+                    tiers: {
+                        anthropic: {
+                            context: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
+                        },
+                    },
+                },
+            }))
+            const cfg: PluginConfig = {
+                agent: {
+                    query_code: { model: "openai/gpt-5.5", variant: "high" },
+                },
+            }
+            const hooks = await autocode({ worktree, directory: worktree, client: {} } as Parameters<typeof autocode>[0]) as unknown as PluginConfigHook
+
+            await hooks.config?.(cfg)
+
+            expect(cfg.agent?.query_code?.model).toBe("openai/gpt-5.5")
+            expect(cfg.agent?.query_code?.variant).toBe("high")
+        } finally {
+            rmSync(worktree, { recursive: true, force: true })
+        }
     })
 
     test("swaps an existing session without updating the session title", async () => {

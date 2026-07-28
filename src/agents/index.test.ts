@@ -252,6 +252,30 @@ describe("agent policies", () => {
         }
     })
 
+    test("buildAgents assigns exact tiers to managed query agents", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const queryAgentTiers = Object.fromEntries(
+            Object.entries(agents)
+                .filter(([name]) => name.startsWith("query_"))
+                .map(([name, agent]) => [name, agent.tier]),
+        )
+
+        expect(queryAgentTiers).toEqual({
+            query_skills: "fast",
+            query_ssh: "fast",
+            query_os: "fast",
+            query_git: "fast",
+            query_config: "fast",
+            query_browser: "fast",
+            query_autocode: "fast",
+            query_code: "context",
+            query_db: "context",
+            query_excel: "context",
+            query_text: "context",
+            query_web: "context",
+        })
+    })
+
     test("execute_rest prompt covers main tool and follow-up saved-response tools", () => {
         const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
         const prompt = String(agents.execute_rest?.prompt ?? "")
