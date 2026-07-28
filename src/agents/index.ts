@@ -164,6 +164,7 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_session_restart: "allow",
+            skill_learn: "allow",
             doom_loop: "ask",
             question: "allow",
             skill: {
