@@ -84,7 +84,7 @@ Reply format:
 - Trace start: file:line and entry symbol.
 - Numbered flow with file:line evidence for each step.
 - Branches and outcomes only when supported by code evidence.
-- Mermaid diagrams only when user requests a diagram or the trace is otherwise hard to follow.
+- Diagrams only on ser request.
 
 ## 4. Configuration Impact
 

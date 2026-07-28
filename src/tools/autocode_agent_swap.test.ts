@@ -30,8 +30,8 @@ type PrimaryAgentTierCase = [AutocodeSessionCreateAgent, ModelTier, string]
 const primaryAgentTierCases: PrimaryAgentTierCase[] = [
     ["assist", "balanced", "Handle the current task."],
     ["auto", "smart", "Continue execution."],
-    ["design", "smart", "Update the design."],
-    ["research", "smart", "Research the current risk."],
+    ["design", "balanced", "Update the design."],
+    ["research", "balanced", "Research the current risk."],
 ]
 
 describe("autocode_agent_swap tool", () => {

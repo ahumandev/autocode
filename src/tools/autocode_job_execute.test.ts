@@ -177,13 +177,13 @@ describe("autocode_job_execute tool", () => {
         expect(parsed).toEqual({
             result_type: "session_created",
             job_name: "test_job",
-            current_status: "assist",
-            file_path: ".agents/jobs/assist/test_job/plan.md",
-            job_path: ".agents/jobs/assist/test_job/",
+            current_status: "executing",
+            file_path: ".agents/jobs/executing/test_job/plan.md",
+            job_path: ".agents/jobs/executing/test_job/",
             session_id: "new-session",
-            session_title: "Test Job (assist)",
+            session_title: "Test Job (executing)",
         })
-        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/assist/test_job")
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/executing/test_job")
         expect(getPromptAsyncBodies(client).map((body) => body.agent)).toEqual(["assist"])
         expect(getPromptAsyncBodies(client).map((body) => body.parts[0]?.text)).toEqual(["# Problem\n\nShip title-based execution\n"])
         expect(client.session.create).toHaveBeenCalledTimes(1)
@@ -212,13 +212,13 @@ describe("autocode_job_execute tool", () => {
         expect(parsed).toEqual({
             result_type: "session_created",
             job_name: "test_job",
-            current_status: "assist",
-            file_path: ".agents/jobs/assist/test_job/plan.md",
-            job_path: ".agents/jobs/assist/test_job/",
+            current_status: "executing",
+            file_path: ".agents/jobs/executing/test_job/plan.md",
+            job_path: ".agents/jobs/executing/test_job/",
             session_id: "new-session",
-            session_title: "Test Job (assist)",
+            session_title: "Test Job (executing)",
         })
-        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/assist/test_job")
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/executing/test_job")
         expect(getPromptAsyncBodies(client).map((body) => body.agent)).toEqual(["assist"])
         expect(getPromptAsyncBodies(client).map((body) => body.parts[0]?.text)).toEqual(["# Problem\n\nShip resolved execution\n"])
         expect(client.session.create).toHaveBeenCalledTimes(1)
@@ -294,13 +294,13 @@ describe("autocode_job_execute tool", () => {
         expect(parsed).toEqual({
             result_type: "session_created",
             job_name: "review_job",
-            current_status: "review",
-            file_path: ".agents/jobs/review/review_job/plan.md",
-            job_path: ".agents/jobs/review/review_job/",
+            current_status: "executing",
+            file_path: ".agents/jobs/executing/review_job/plan.md",
+            job_path: ".agents/jobs/executing/review_job/",
             session_id: "new-session",
-            session_title: "Review Job (review)",
+            session_title: "Review Job (executing)",
         })
-        expect(fs.rename).not.toHaveBeenCalled()
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/review_job", "/workspace/.agents/jobs/executing/review_job")
         expect(getPromptAsyncBodies(client).map((body) => body.agent)).toEqual(["assist"])
         expect(getPromptAsyncBodies(client).map((body) => body.parts[0]?.text)).toEqual(["# Problem\n\nReview execution\n"])
         expect(client.session.create).toHaveBeenCalledTimes(1)
@@ -347,7 +347,7 @@ describe("autocode_job_execute tool", () => {
         expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/auto_job/session.yml", "session_id: new-session\n")
     })
 
-    test("uses a persisted existing session for an executing job", async () => {
+    test("creates isolated session instead of reusing persisted session with old messages", async () => {
         const fs = createMockFs()
         const prompts: string[] = []
         const agents: string[] = []
@@ -374,17 +374,24 @@ describe("autocode_job_execute tool", () => {
             current_status: "executing",
             file_path: ".agents/jobs/executing/auto_job/plan.md",
             job_path: ".agents/jobs/executing/auto_job/",
-            session_id: "existing-session",
+            session_id: "new-session",
             session_title: "Auto Job (executing)",
         })
-        expect(client.session.get).toHaveBeenCalledWith({ path: { id: "existing-session" }, query: { directory: "/workspace" } })
-        expect(client.session.create).not.toHaveBeenCalled()
+        expect(client.session.get).not.toHaveBeenCalledWith({ path: { id: "existing-session" }, query: { directory: "/workspace" } })
+        expect(client.session.create).toHaveBeenCalledWith({
+            query: { directory: "/workspace" },
+            body: { title: "Auto Job (executing)" },
+        })
         expect(client.session.update).not.toHaveBeenCalled()
         expect(getPromptAsyncBodies(client)).toContainEqual({
             agent: "auto",
             parts: [{ type: "text", text: "# Problem\n\nResume auto execution\n" }],
         })
-        expect(fs.writeFile).not.toHaveBeenCalled()
+        expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
+            path: { id: "new-session" },
+            query: { directory: "/workspace" },
+        }))
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/auto_job/session.yml", "session_id: new-session\n")
     })
 
     test("creates a new session when the persisted session is not retrievable", async () => {
@@ -421,6 +428,7 @@ describe("autocode_job_execute tool", () => {
             session_id: "new-session",
             session_title: "Auto Job (executing)",
         })
+        expect(client.session.get).not.toHaveBeenCalledWith({ path: { id: "deleted-session" }, query: { directory: "/workspace" } })
         expect(client.session.create).toHaveBeenCalledTimes(1)
         expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/auto_job/session.yml", "session_id: new-session\n")
     })
@@ -543,13 +551,13 @@ describe("autocode_job_execute tool", () => {
         expect(parsed).toEqual({
             result_type: "session_created",
             job_name: "shared_job",
-            current_status: "assist",
-            file_path: ".agents/jobs/assist/shared_job/plan.md",
-            job_path: ".agents/jobs/assist/shared_job/",
+            current_status: "executing",
+            file_path: ".agents/jobs/executing/shared_job/plan.md",
+            job_path: ".agents/jobs/executing/shared_job/",
             session_id: "new-session",
-            session_title: "Shared Job (assist)",
+            session_title: "Shared Job (executing)",
         })
-        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/shared_job", "/workspace/.agents/jobs/assist/shared_job")
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/shared_job", "/workspace/.agents/jobs/executing/shared_job")
         expect(getPromptAsyncBodies(client).map((body) => body.agent)).toEqual(["assist"])
         expect(getPromptAsyncBodies(client).map((body) => body.parts[0]?.text)).toEqual(["# Problem\n\nDraft duplicate wins\n"])
         expect(client.session.create).toHaveBeenCalledTimes(1)
@@ -680,11 +688,11 @@ describe("autocode_job_execute tool", () => {
         expect(parsed).toEqual({
             result_type: "session_created",
             job_name: "test_job",
-            current_status: "assist",
-            file_path: ".agents/jobs/assist/test_job/plan.md",
-            job_path: ".agents/jobs/assist/test_job/",
+            current_status: "executing",
+            file_path: ".agents/jobs/executing/test_job/plan.md",
+            job_path: ".agents/jobs/executing/test_job/",
             session_id: "new-session",
-            session_title: "Test Job (assist)",
+            session_title: "Test Job (executing)",
         })
         expect(client.session.update).not.toHaveBeenCalled()
     })

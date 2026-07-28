@@ -23,10 +23,10 @@ export type AutocodeSandboxConfig = {
 }
 
 export type SkillCategory = "bash" | "code" | "design" | "test"
-export type SkillsConfig = Partial<Record<SkillCategory, string[]>> & { freeze?: boolean }
-
 export type LearnedConfig = { max?: number }
+export type SkillsConfig = Partial<Record<SkillCategory, string[]>> & { freeze?: boolean, learned?: LearnedConfig }
 const DEFAULT_LEARNED_MAX = 10
+const DEFAULT_SKILLS: SkillsConfig = { ...defaultAutocodeConfig.autocode.skills, learned: { max: DEFAULT_LEARNED_MAX } }
 
 export interface ConfigFileSystem {
     readFileSync(path: string, encoding: "utf-8"): string
@@ -53,7 +53,7 @@ const DEFAULT_AUTOCODE_CONFIG =
             ...defaultAutocodeConfig,
             autocode: {
                 ...defaultAutocodeConfig.autocode,
-                learned: { max: DEFAULT_LEARNED_MAX },
+                skills: DEFAULT_SKILLS,
             },
         },
         null,
@@ -66,7 +66,6 @@ type AutocodeJsoncNew = {
         tiers?: Record<string, unknown>
         sandbox?: unknown
         skills?: unknown
-        learned?: unknown
     }
     permission?: {
         external_directory?: unknown
@@ -89,7 +88,6 @@ type ParsedAutocodeConfig = {
     taskExternalRules?: TaskExternalRules
     sandbox?: AutocodeSandboxConfig
     skills?: SkillsConfig
-    learned?: LearnedConfig
 }
 
 function stripJsoncComments(raw: string): string {
@@ -201,6 +199,8 @@ function collectSkills(value: unknown): SkillsConfig | undefined {
             result.freeze = value.freeze
         }
     }
+    const learned = collectLearned(value.learned)
+    if (learned) result.learned = learned
 
     if (SKILL_CATEGORIES.some((category) => Array.isArray(value[category]))) {
         warnLegacySkillsConfig()
@@ -220,7 +220,7 @@ function warnLegacySkillsConfig(): void {
 function collectLearned(value: unknown): LearnedConfig | undefined {
     if (value === undefined) return undefined
     if (!isRecord(value)) {
-        console.warn(`autocode: invalid learned config (expected object, got ${Array.isArray(value) ? "array" : typeof value})`)
+        console.warn(`autocode: invalid skills.learned config (expected object, got ${Array.isArray(value) ? "array" : typeof value})`)
         return undefined
     }
     const result: LearnedConfig = {}
@@ -228,7 +228,7 @@ function collectLearned(value: unknown): LearnedConfig | undefined {
         const max = value.max
         if (typeof max !== "number" || !Number.isFinite(max) || !Number.isInteger(max) || max <= 0) {
             console.warn(
-                `autocode: invalid learned.max (expected positive integer, got ${JSON.stringify(max)}); falling back to ${DEFAULT_LEARNED_MAX}`,
+                `autocode: invalid skills.learned.max (expected positive integer, got ${JSON.stringify(max)}); falling back to ${DEFAULT_LEARNED_MAX}`,
             )
             result.max = DEFAULT_LEARNED_MAX
         } else {
@@ -236,29 +236,6 @@ function collectLearned(value: unknown): LearnedConfig | undefined {
         }
     }
     return Object.keys(result).length > 0 ? result : undefined
-}
-
-function mergeTiers(
-    base: Partial<Record<ModelTier, TierConfig>>,
-    next: Partial<Record<ModelTier, TierConfig>>,
-): Partial<Record<ModelTier, TierConfig>> {
-    const merged = { ...base }
-    for (const tier of MODEL_TIERS) {
-        if (next[tier]) merged[tier] = { ...merged[tier], ...next[tier] }
-    }
-    return merged
-}
-
-function mergeProviderTiers(
-    base: Record<string, Partial<Record<ModelTier, TierConfig>>>,
-    availableTiers: Record<string, unknown>,
-): Record<string, Partial<Record<ModelTier, TierConfig>>> {
-    const merged = { ...base }
-    for (const [provider, value] of Object.entries(availableTiers)) {
-        const providerTiers = collectTiers(value)
-        if (providerTiers) merged[provider] = mergeTiers(merged[provider] ?? {}, providerTiers)
-    }
-    return merged
 }
 
 export function mergeExternalDirectoryRules(base: ExternalDirectoryRules, next: ExternalDirectoryRules): ExternalDirectoryRules {
@@ -287,9 +264,8 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
     const taskExternalRules = collectTaskExternalRules(parsed.permission?.task_external)
     const sandbox = collectSandboxConfig(ac?.sandbox)
     const skills = collectSkills(ac?.skills)
-    const learned = collectLearned(ac?.learned)
 
-    if (!ac) return { externalDirectories, taskExternalRules, sandbox, skills, learned }
+    if (!ac) return { externalDirectories, taskExternalRules, sandbox, skills }
 
     if (isRecord(ac.tiers)) {
         return {
@@ -299,12 +275,11 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
             taskExternalRules,
             sandbox,
             skills,
-            learned,
         }
     }
 
     if (typeof ac.tier === "string") {
-        return { tier: ac.tier, externalDirectories, taskExternalRules, sandbox, skills, learned }
+        return { tier: ac.tier, externalDirectories, taskExternalRules, sandbox, skills }
     }
 
     // legacy shape: autocode.model.<tier> + optional autocode.variant.<tier>
@@ -316,10 +291,10 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
                 result[tier] = { model, variant: ac.variant?.[tier] }
             }
         }
-        return { legacyTiers: result, externalDirectories, taskExternalRules, sandbox, skills, learned }
+        return { legacyTiers: result, externalDirectories, taskExternalRules, sandbox, skills }
     }
 
-    return { externalDirectories, taskExternalRules, sandbox, skills, learned }
+    return { externalDirectories, taskExternalRules, sandbox, skills }
 }
 
 function addCandidate(candidates: string[], path: string): void {
@@ -385,12 +360,34 @@ function readFirstConfig(fs: ConfigFileSystem, paths: readonly string[]): { path
     return undefined
 }
 
+function mergeTiers(
+    base: Partial<Record<ModelTier, TierConfig>>,
+    next: Partial<Record<ModelTier, TierConfig>>,
+): Partial<Record<ModelTier, TierConfig>> {
+    const merged = { ...base }
+    for (const tier of MODEL_TIERS) {
+        if (next[tier]) merged[tier] = { ...merged[tier], ...next[tier] }
+    }
+    return merged
+}
+
+function mergeProviderTiers(
+    base: Record<string, Partial<Record<ModelTier, TierConfig>>>,
+    availableTiers: Record<string, unknown>,
+): Record<string, Partial<Record<ModelTier, TierConfig>>> {
+    const merged = { ...base }
+    for (const [provider, value] of Object.entries(availableTiers)) {
+        const providerTiers = collectTiers(value)
+        if (providerTiers) merged[provider] = mergeTiers(merged[provider] ?? {}, providerTiers)
+    }
+    return merged
+}
 
 export async function loadAutocodeConfig(
     worktree: string,
     directory: string,
     fs: ConfigFileSystem = defaultFs,
-): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined, learned: LearnedConfig }> {
+): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined }> {
     const globalConfigDirectory = join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode")
     const globalConfigPath = join(globalConfigDirectory, "autocode.jsonc")
     const candidates: string[][] = []
@@ -410,7 +407,6 @@ export async function loadAutocodeConfig(
     let externalDirectories: ExternalDirectoryRules = {}
     let sandbox: AutocodeSandboxConfig = {}
     let skills: SkillsConfig | undefined
-    let learned: LearnedConfig = { max: DEFAULT_LEARNED_MAX }
     for (const candidate of candidates) {
         const config = readFirstConfig(fs, candidate)
         if (!config) continue
@@ -453,9 +449,6 @@ export async function loadAutocodeConfig(
         if (parsed.skills) {
             skills = { ...(skills ?? {}), ...parsed.skills }
         }
-        if (parsed.learned) {
-            learned = { ...learned, ...parsed.learned }
-        }
         if (parsed.legacyTiers) {
             tiers = mergeTiers(tiers, parsed.legacyTiers)
         }
@@ -467,7 +460,7 @@ export async function loadAutocodeConfig(
     //   - parsed root is a record
     //   - `autocode` section is itself a record (never an array / primitive)
     //   - `skills` key is entirely absent from `autocode`
-    // Any other section (tiers, sandbox, learned, ...) is NEVER touched.
+    // Any other section (tiers, sandbox, ...) is NEVER touched.
     // If `skills` already exists with any value (including null / arrays / scalars),
     // it is left alone. If `autocode` is not a record, seeding is skipped entirely
     // so the user's custom configuration can never be replaced.
@@ -477,7 +470,7 @@ export async function loadAutocodeConfig(
             const parsed = JSON.parse(stripJsoncComments(raw)) as { autocode?: Record<string, unknown> }
             const ac = parsed.autocode
             if (isRecord(parsed) && isRecord(ac) && !("skills" in ac)) {
-                const defaultSkills: SkillsConfig = defaultAutocodeConfig.autocode.skills
+                const defaultSkills = DEFAULT_SKILLS
                 const editor = createJsoncDocumentEditor(raw)
                 editor.apply({ kind: "create", path: ["autocode", "skills"], value: defaultSkills, index: null })
                 fs.writeFileSync(globalConfigPath, editor.toString())
@@ -489,5 +482,10 @@ export async function loadAutocodeConfig(
         }
     }
 
-    return { tiers, externalDirectories, sandbox, skills, learned }
+    return {
+        tiers,
+        externalDirectories,
+        sandbox,
+        skills,
+    }
 }

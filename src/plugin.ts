@@ -124,7 +124,7 @@ async function createPluginHooks(
     if (autocodeConfig.skills?.freeze !== true) {
         try {
             const agentsRoot = resolveAgentsStorageRoot({ worktree: input.worktree, directory: input.directory })
-            await cleanupLearnedSkills(agentsRoot, autocodeConfig.learned.max ?? 10)
+            await cleanupLearnedSkills(agentsRoot, autocodeConfig.skills?.learned?.max ?? 10)
         } catch (err) {
             console.warn(`autocode: cleanup learned skills failed: ${err instanceof Error ? err.message : String(err)}`)
         }

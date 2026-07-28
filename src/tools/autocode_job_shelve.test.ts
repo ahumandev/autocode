@@ -107,6 +107,17 @@ describe("autocode_job_shelve tool", () => {
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature")
     })
 
+    test("returns no-op when no lifecycle job directory exists", async () => {
+        const tool = createAutocodeJobShelveTool(createClient("My Feature (review)"), createMockFs())
+
+        const result = JSON.parse(await tool.execute({}, createToolContext()) as string)
+
+        expect(result).toEqual({ result_type: "no_job" })
+        expect(result).not.toHaveProperty("error")
+        expect(result).not.toHaveProperty("failedAction")
+        expect(result).not.toHaveProperty("instruction")
+    })
+
     test("resolves current planned job, shelves it, logs assistant actions, updates title, and archives sandboxes", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string, options?: { withFileTypes?: boolean }) => {

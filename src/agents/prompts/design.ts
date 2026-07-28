@@ -23,8 +23,8 @@ Reactions user interruptions:
 - REQUIREMENTS unclear? Follow STEP 2 (ask with \`question\` tool)
 - CONSTRAINTS unclear? Follow STEP 3 (\`task\` subagent to find facts)
 - User concerned about RISK? Follow STEP 4 (\`task\` subagent to find facts)
-- User need clarification? Explain known info with simulated examples or mermaid graphs
-- User add REQUIREMENT/CONSTRAINT? 
+- User need clarification? Explain known info with simulated examples or TD mermaid graphs
+- User add REQUIREMENT/CONSTRAINT?
 
 ---
 
@@ -80,7 +80,7 @@ For each requirement in REQUIREMENTS:
     3. Verify each limit by tasking your subagents (see INFO SOURCE GUIDE below)
     4. If verification results contain:
         - verified limits -> Include facts as CONSTRAINTS associated with REQUIREMENTS
-        - uncertainties/assumptions/blockers -> Include these as RISKS associated with REQUIREMENTS   
+        - uncertainties/assumptions/blockers -> Include these as RISKS associated with REQUIREMENTS
 
 ### STEP 4: Analyze RISKS to confirm CONSTRAINTS
 
@@ -93,10 +93,10 @@ For each assumed RISK in RISKS:
 
 ### STEP 5: Analyze APPROACHES
 
-1. If PROPOSAL already in INSTRUCTIONS: critically evaluate if INSTRUCTED PROPOSAL is feasible? 
+1. If PROPOSAL already in INSTRUCTIONS: critically evaluate if INSTRUCTED PROPOSAL is feasible?
     - If INSTRUCTIONS reference sources that influence design and uncertain: validate feasibility by tasking \`query*\` subagents to investigate (skip \`task\` tool if info is already verified)
     - Then, for every design flaw or improvement opportunity in INSTRUCTED PROPOSAL:
-        1. Name potential flow improvement opportunity with formatted examples / mermaid diagram (if applicable) and why it is better than user APPROACH with comparison table (if applicable)
+        1. Name potential flow improvement opportunity with formatted examples / TD mermaid diagram (if applicable) and why it is better than user APPROACH with comparison table (if applicable)
         2. After responding with improvement suggestion, call \`question\` tool with 2-4 alternative options: labels=describe alternatives, descriptions=influence on plan if option is chosen; last option = original user APPROACH
         3. User answer is *TOP APPROACH* for now
         4. Base alternative APPROACHES as variants on user answer

@@ -637,7 +637,7 @@ describe("agent workflow wiring", () => {
 })
 
 describe("learned config", () => {
-    test("freshly created global config file contains learned default max=10", async () => {
+    test("freshly created global config file contains skills.learned default max=10", async () => {
         const files: Record<string, string> = {}
         const createdPaths: string[] = []
 
@@ -649,18 +649,18 @@ describe("learned config", () => {
         expect(content).toContain('"max": 10')
     })
 
-    test("loadAutocodeConfig returns learned.max from local config", async () => {
+    test("loadAutocodeConfig returns skills.learned.max from local config", async () => {
         const fs = makeFs({
             "/wt/.opencode/autocode.jsonc": JSON.stringify({
                 autocode: {
-                    learned: { max: 3 },
+                    skills: { learned: { max: 3 } },
                 },
             }),
         })
 
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
-        expect(result.learned).toEqual({ max: 3 })
+        expect(result.skills?.learned).toEqual({ max: 3 })
     })
 
     test("loadAutocodeConfig falls back to default max=10 when max is invalid", async () => {
@@ -668,18 +668,18 @@ describe("learned config", () => {
             const fs = makeFs({
                 "/wt/.opencode/autocode.jsonc": JSON.stringify({
                     autocode: {
-                        learned: { max: invalid },
+                        skills: { learned: { max: invalid } },
                     },
                 }),
             })
 
             const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
-            expect(result.learned).toEqual({ max: 10 })
+            expect(result.skills?.learned).toEqual({ max: 10 })
         }
     })
 
-    test("loadAutocodeConfig omits learned when absent from any config (uses default)", async () => {
+    test("loadAutocodeConfig defaults skills.learned when absent from local config", async () => {
         const fs = makeFs({
             "/wt/.opencode/autocode.jsonc": JSON.stringify({
                 autocode: {
@@ -690,23 +690,20 @@ describe("learned config", () => {
 
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
-        expect(result.learned).toEqual({ max: 10 })
+        expect(result.skills?.learned).toEqual({ max: 10 })
     })
 })
 
-
 describe("context tier config", () => {
-    test("loadAutocodeConfig merges and selects canonical provider context config", async () => {
+    test("loadAutocodeConfig reapplies selected provider tiers after direct merges", async () => {
         const fs = makeFs({
             [globalAutocodeConfigPath()]: JSON.stringify({
                 autocode: {
                     tier: "anthropic",
                     tiers: {
-                        openai: {
-                            context: { model: "openai/gpt-5", variant: "standard" },
-                        },
                         anthropic: {
                             context: { model: "anthropic/claude-opus-4-5", variant: "standard" },
+                            operator: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
                         },
                     },
                 },
@@ -714,6 +711,7 @@ describe("context tier config", () => {
             "/wt/.opencode/autocode.jsonc": JSON.stringify({
                 autocode: {
                     tiers: {
+                        context: { model: "openai/gpt-5-context", variant: "high" },
                         anthropic: {
                             context: { variant: "thinking" },
                         },
@@ -723,9 +721,10 @@ describe("context tier config", () => {
         })
 
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
-
+        
         expect(result.tiers).toEqual({
             context: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
+            operator: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
         })
     })
 })

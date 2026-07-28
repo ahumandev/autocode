@@ -16,6 +16,57 @@ const executeOpencodeAllowedSkillNames = ["author-agent", "author-command", "cus
 const queryAutocodeAllowedPermissionKeys = ["autocode_config_read", "autocode_md_read", "autocode_md_frontmatter_read", "webfetch", "websearch*"]
 const queryAutocodeForbiddenWritePermissionKeys = ["apply_patch", "bash", "edit", "execute", "patch", "task", "task_external", "write"]
 const queryAutocodeAllowedSkillNames = ["author-agent", "author-command", "skill-write"]
+const managedAgentTiers = {
+    compaction: "context",
+    title: "cheap",
+    assist: "balanced",
+    auto: "smart",
+    design: "balanced",
+    edit: "balanced",
+    research: "balanced",
+    assist_browser: "operator",
+    assist_git_conflict: "balanced",
+    auto_design: "smart",
+    auto_feature: "smart",
+    auto_general: "balanced",
+    auto_refactor: "smart",
+    auto_research: "smart",
+    auto_review_api: "smart",
+    auto_review_ui: "smart",
+    auto_test: "balanced",
+    auto_troubleshoot: "smart",
+    document_agents: "balanced",
+    document_conventions: "balanced",
+    document_code: "balanced",
+    document_env: "balanced",
+    document_install: "balanced",
+    document_prd: "balanced",
+    document_ux: "balanced",
+    execute_author: "balanced",
+    execute_code: "balanced",
+    execute_debug: "balanced",
+    execute_document: "balanced",
+    execute_os: "balanced",
+    execute_script: "balanced",
+    execute_ssh: "balanced",
+    execute_config: "operator",
+    execute_excel: "operator",
+    execute_opencode: "operator",
+    execute_rest: "operator",
+    execute_sandbox: "operator",
+    query_autocode: "fast",
+    query_browser: "fast",
+    query_config: "fast",
+    query_git: "fast",
+    query_os: "fast",
+    query_skills: "fast",
+    query_ssh: "fast",
+    query_code: "context",
+    query_db: "context",
+    query_excel: "context",
+    query_text: "context",
+    query_web: "context",
+} as const
 
 describe("agent policies", () => {
     test("applies external-directory rules to external_directory and task_external permissions", () => {
@@ -138,9 +189,6 @@ describe("agent policies", () => {
         expect(agents.assist?.tier).toBe("balanced")
         expect(permissionRule(agents.assist?.permission, "autocode_dependencies")).toBe("allow")
         expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
-        expect(permissionRule(agents.temp_review_reject?.permission, "autocode_job_shelve")).toBe("allow")
-        expect(permissionRule(agents.temp_review_reject?.permission, "git_reset")).toBe("allow")
-        expect(permissionRule(agents.temp_shelve?.permission, "git_reset")).toBeUndefined()
     })
 
     test("allows every primary agent to restart the current session", () => {
@@ -244,36 +292,12 @@ describe("agent policies", () => {
         expect(prompt).toContain("You MUST NOT edit source code, scripts, package/config files, or Markdown outside the allowed paths")
     })
 
-    test("buildAgents assigns operator tier to operator-tier workers (edit, assist_browser, execute_config, execute_excel, execute_rest, execute_sandbox)", () => {
+    test("buildAgents assigns every managed agent its current tier", () => {
         const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
 
-        for (const agentName of ["edit", "assist_browser", "execute_config", "execute_excel", "execute_rest", "execute_sandbox"]) {
-            expect((agents as Record<string, { tier?: string }>)[agentName]?.tier).toBe("operator")
+        for (const [agentName, tier] of Object.entries(managedAgentTiers)) {
+            expect((agents as Record<string, { tier?: string }>)[agentName]?.tier).toBe(tier)
         }
-    })
-
-    test("buildAgents assigns exact tiers to managed query agents", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
-        const queryAgentTiers = Object.fromEntries(
-            Object.entries(agents)
-                .filter(([name]) => name.startsWith("query_"))
-                .map(([name, agent]) => [name, agent.tier]),
-        )
-
-        expect(queryAgentTiers).toEqual({
-            query_skills: "fast",
-            query_ssh: "fast",
-            query_os: "fast",
-            query_git: "fast",
-            query_config: "fast",
-            query_browser: "fast",
-            query_autocode: "fast",
-            query_code: "context",
-            query_db: "context",
-            query_excel: "context",
-            query_text: "context",
-            query_web: "context",
-        })
     })
 
     test("execute_rest prompt covers main tool and follow-up saved-response tools", () => {

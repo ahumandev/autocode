@@ -85,7 +85,7 @@ Replace placeholders in README.md as follows:
     - Max 80 words
     - No definitions in this section
     - Use only common words, not project specific terminology (except for naming components)
-- [FEATURES]: Advertise core features in markdown bullets as follows: 
+- [FEATURES]: Advertise core features in markdown bullets as follows:
     - 1 feature per bullet
     - Unique emoji per feature
     - Max 40 words per feature
@@ -93,7 +93,7 @@ Replace placeholders in README.md as follows:
     - Use only common words, not project specific terminology (except for naming components)
 - [INTEGRATION]: Explain how project integration with external systems (like miroservices):
     - Title summarize how it integrations (max 7 words), like "REST Integration" or "Microservice Architecture"
-    - Include high-level Mermaid diagram of how it integrates
+    - Include high-level TD Mermaid diagram of how it integrates
     - Only include [INTEGRATION] section if this project does integrate with external systems
 - [PREREQUISITES]: System requirements and dependencies needed before installation as follows:
     - List prerequisites as bullet points: 1 per dependency
@@ -128,11 +128,11 @@ Replace placeholders in README.md as follows:
     - ONLY include known (proven) configuration (no guessing)
     - Only include this section if project has custom configuration
 - [ARCHITECTURE]: Explain how project fulfill its purpose describe in [PURPOSE] as follow:
-    - If project is full stack: Include high-level Mermaid diagram of how different components of project interact with each other
-    - If project contains complex event system: Include high-level Mermaid diagram of how events/data flow 
-    - If project contains multiple pages of static web content: Include high-level Mermaid diagram of primary pages link to each other (sitemap)
-    - If project is library or monolithic application: Include high-level Mermaid diagram of primary internal components and how they relate to each other
-    - If project is CLI tool: Include high-level Mermaid diagram of how data typically flow through this tool: inputs -> processes -> outputs
+    - If project is full stack: Include high-level TD Mermaid diagram of how different components of project interact with each other
+    - If project contains complex event system: Include high-level TD Mermaid diagram of how events/data flow 
+    - If project contains multiple pages of static web content: Include high-level TD Mermaid diagram of primary pages link to each other (sitemap)
+    - If project is library or monolithic application: Include high-level TD Mermaid diagram of primary internal components and how they relate to each other
+    - If project is CLI tool: Include high-level TD Mermaid diagram of how data typically flow through this tool: inputs -> processes -> outputs
     - Project may solve more than 1 problem (multi-purpose project): In such case identify each primary goal, then for each goal:
         - Write 1 paragraph per goal (max 200 words) how it solves that specific goal
         - Include markdown links in text to core source files responsible for solution or where additional documentation could be found

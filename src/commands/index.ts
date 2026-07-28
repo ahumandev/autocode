@@ -5,7 +5,7 @@ import { documentCommandTemplate as docsCommandTemplate } from "./docs"
 import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { fixCommandTemplate } from "./fix"
-import { gitCommitCommandTemplate } from "./git-commit"
+import { gitCommitCommandTemplate } from "./commit"
 import { gitConflictCommandTemplate } from "./git-conflict"
 import { installCommand } from "./install"
 import { jobConceptsCommandTemplate } from "./job-concepts"
@@ -14,7 +14,6 @@ import { jobDraftCommandTemplate } from "./job-draft"
 import { jobExecuteCommandTemplate } from "./job-execute"
 import { jobExecuteAssistCommandTemplate } from "./job-execute_assist"
 import { jobExecuteAutoCommandTemplate } from "./job-execute_auto"
-import { jobReviewCommitCommandTemplate } from "./job-review-commit"
 import { learnCommand } from "./learn"
 import { newAssistCommandTemplate } from "./assist"
 import { newAutoCommandTemplate } from "./auto"
@@ -42,8 +41,6 @@ import { reportCommandTemplate } from "./report"
  */
 
 type CommandMap = NonNullable<Config["command"]>
-
-const shelveCommandTemplate = "Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`, then stop."
 
 export const commands: CommandMap = {
 
@@ -90,25 +87,11 @@ export const commands: CommandMap = {
         template: jobExecuteCommandTemplate,
     },
 
-    "job-review-commit": {
-        agent: "auto",
-        description: "Commit and shelve reviewed job from .agents/jobs/review/{name}/",
-        subtask: false,
-        template: jobReviewCommitCommandTemplate,
-    },
-
-    "job-shelve": {
-        agent: "temp_shelve",
-        description: "Shelve current job and move job to .agents/jobs/shelved/{name}/",
-        subtask: false,
-        template: shelveCommandTemplate,
-    },
-
     "shelve": {
         agent: "temp_shelve",
         description: "Shelve current job and move job to .agents/jobs/shelved/{name}/",
         subtask: false,
-        template: shelveCommandTemplate,
+        template: "Call `autocode_job_shelve` tool, then stop.",
     },
 
     // Ad-hoc commands
@@ -131,6 +114,12 @@ Report to user:
         description: "Author a professional article/report.",
         subtask: false,
         template: authorArticleCommandTemplate,
+    },
+
+    "commit": {
+        description: "Commit added changes to Git and shelve job: args = reason for commit",
+        subtask: false,
+        template: gitCommitCommandTemplate,
     },
 
     "docs": {
@@ -187,12 +176,6 @@ Report to user:
         description: "Fix errors or requested issues",
         subtask: false,
         template: fixCommandTemplate,
-    },
-
-    "git-commit": {
-        description: "Commit added changes to Git: args = reason for commit",
-        subtask: false,
-        template: gitCommitCommandTemplate,
     },
 
     "git-conflict": {

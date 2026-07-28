@@ -16,12 +16,11 @@ describe("commands", () => {
             "job-execute-assist",
             "job-execute-auto",
             "job-execute",
-            "job-review-commit",
-            "job-shelve",
             "shelve",
             "autocode-install",
             "autocode-version",
             "author-article",
+            "commit",
             "docs",
             "docs-conventions",
             "docs-code",
@@ -30,7 +29,6 @@ describe("commands", () => {
             "docs-ux",
             "explain",
             "fix",
-            "git-commit",
             "git-conflict",
             "init",
             "install",
@@ -56,7 +54,7 @@ describe("commands", () => {
             if ("model" in command) expect(command.model).toEqual(expect.any(String))
         }
 
-        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "help", "rename", "review"] as const) {
+        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "job-review-commit", "job-shelve", "rename", "review", "act", "ask"] as const) {
             expect(commands[commandName]).toBeUndefined()
         }
 
@@ -134,18 +132,23 @@ describe("commands", () => {
         }
     })
 
-    test("keeps key command template substrings stable without legacy command", () => {
+    test("keeps key command template substrings stable", () => {
         expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
         expect(commands["job-draft"]?.template).toContain("Call `autocode_plan_save` tool with planned sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, RISKS, CONSTRAINTS, and user chosen PROPOSAL.")
         expect(commands["job-draft"]?.template).not.toContain("OBSERVATION")
         expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_execute` once with selected `job_name` and selected `agent`, then evaluate tool output:")
         expect(commands["job-execute"]?.template).toContain('output includes `current_status`')
         expect(commands["job-execute"]?.template).toContain('Continue job in [agent] session.')
-        expect(commands["job-review-commit"]?.template).toContain("`git-commit` skill")
-        expect(commands["job-review-commit"]?.template).toContain("autocode_job_shelve")
-        expect(commands["job-shelve"]?.template).toContain("Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
-        expect(commands["shelve"]?.template).toContain("Call `autocode_job_shelve` to shelve job into `.agents/jobs/shelved/{name}/`")
-        expect(commands["resume"]?.template).toContain("Call `task_resume` tool")
+        expect(commands.commit?.description).toBe("Commit added changes to Git and shelve job: args = reason for commit")
+        expect(commands.commit?.subtask).toBe(false)
+        expect(commands.commit?.template).toContain("$ARGUMENTS")
+        expect(commands.commit?.template).toContain("git_commit")
+        expect(commands.commit?.template).toContain("autocode_job_shelve")
+        expect(commands.commit?.template).toContain("NEVER any other tool")
+        expect(commands.shelve?.template).toContain("Call `autocode_job_shelve` tool, then stop.")
+        expect(commands.resume?.description).toBe("Resume interrupted session.")
+        expect(commands.resume?.subtask).toBe(false)
+        expect(commands.resume?.template).toContain("You were interrupted. Call `task_resume` tool, then resume your own work.")
     })
 
     test("keeps init documentation-only", () => {

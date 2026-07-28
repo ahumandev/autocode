@@ -80,7 +80,7 @@ flowchart TD
 3. Run `/job-draft` to save the plan in `.agents/jobs/drafts/{job_name}/plan.md`.
 4. Run `/job-execute-assist` to execute with human steering, or `/job-execute-auto` to execute autonomously.
 5. Review the completed work from `.agents/jobs/review`.
-6. Run `/job-review-commit` to accept (git commit) and shelve (clean up files) the job, or `/job-shelve` (alias `/shelve`) to close it without acceptance.
+6. Both `/commit` and `/shelve` will clean up temporary files and shelve the job, but `/commit` will also commit changes to Git repo.
 
 ### Reference
 

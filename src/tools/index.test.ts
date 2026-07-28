@@ -548,11 +548,11 @@ describe("auto resume wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["job-review-commit"]?.agent).toBe("auto")
-                expect(cfg.command["job-review-commit"]?.template).toContain("autocode_job_shelve")
-                expect(cfg.command["job-shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
-                expect(cfg.command["job-shelve"]?.agent).toBe("temp_shelve")
-                expect(cfg.command["job-shelve"]?.template).toContain("autocode_job_shelve")
+                expect(cfg.command["job-review-commit"]?.agent).toBeUndefined()
+                expect(cfg.command["job-review-commit"]?.template).toBeUndefined()
+                expect(cfg.command["job-review-commit"]?.description).toBeUndefined()
+                expect(cfg.command["job-shelve"]?.agent).toBeUndefined()
+                expect(cfg.command["job-shelve"]?.template).toBeUndefined()
                 expect(cfg.command["shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
                 expect(cfg.command["shelve"]?.agent).toBe("temp_shelve")
                 expect(cfg.command["shelve"]?.template).toContain("autocode_job_shelve")
@@ -2352,6 +2352,7 @@ describe("loadAutocodeConfig", () => {
                             smart: { model: "openai/gpt-5.5", variant: "thinking" },
                             balanced: { model: "openai/gpt-5" },
                             fast: { model: "openai/gpt-5-mini" },
+                            context: { model: "openai/gpt-5-context", variant: "high" },
                         },
                         google: {
                             smart: { model: "google/gemini" },
@@ -2364,6 +2365,7 @@ describe("loadAutocodeConfig", () => {
         expect(result.tiers.smart).toEqual({ model: "openai/gpt-5.5", variant: "thinking" })
         expect(result.tiers.balanced).toEqual({ model: "openai/gpt-5" })
         expect(result.tiers.fast).toEqual({ model: "openai/gpt-5-mini" })
+        expect(result.tiers.context).toEqual({ model: "openai/gpt-5-context", variant: "high" })
     })
 
     test("provider-selected cheap tier config is parsed", async () => {
@@ -2390,7 +2392,7 @@ describe("loadAutocodeConfig", () => {
         expect(result.tiers.fast).toEqual({ model: "openai/gpt-5-mini" })
     })
 
-    test("operator tier config is parsed alongside other tiers", async () => {
+    test("current direct tier schema is parsed", async () => {
         const fs = makeFs({
             "/wt/.opencode/autocode.jsonc": JSON.stringify({
                 autocode: {
@@ -2398,6 +2400,7 @@ describe("loadAutocodeConfig", () => {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
                         fast: { model: "anthropic/claude-haiku-4-5", variant: "quick" },
                         operator: { model: "openai/gpt-5", variant: "standard" },
+                        context: { model: "openai/gpt-5-context", variant: "high" },
                         balanced: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
                         smart: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
                     },
@@ -2410,6 +2413,7 @@ describe("loadAutocodeConfig", () => {
         expect(result.tiers.cheap).toEqual({ model: "openai/gpt-5-nano", variant: "economy" })
         expect(result.tiers.fast).toEqual({ model: "anthropic/claude-haiku-4-5", variant: "quick" })
         expect(result.tiers.operator).toEqual({ model: "openai/gpt-5", variant: "standard" })
+        expect(result.tiers.context).toEqual({ model: "openai/gpt-5-context", variant: "high" })
         expect(result.tiers.balanced).toEqual({ model: "anthropic/claude-sonnet-4-5", variant: "standard" })
         expect(result.tiers.smart).toEqual({ model: "anthropic/claude-opus-4-5", variant: "thinking" })
     })
@@ -2567,15 +2571,17 @@ describe("loadAutocodeConfig", () => {
         expect(result.tiers.fast).toEqual({ model: "anthropic/claude-haiku-4-5" })
     })
 
-    test("direct tier-map cheap config is parsed", async () => {
+    test("direct tier-map supports every current tier", async () => {
         const fs = makeFs({
             "/wt/.opencode/autocode.jsonc": JSON.stringify({
                 autocode: {
                     tiers: {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
+                        fast: { model: "anthropic/claude-haiku-4-5" },
+                        operator: { model: "openai/gpt-5", variant: "standard" },
+                        context: { model: "openai/gpt-5-context", variant: "high" },
                         smart: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
                         balanced: { model: "anthropic/claude-sonnet-4-5" },
-                        fast: { model: "anthropic/claude-haiku-4-5" },
                     },
                 },
             }),
@@ -2584,9 +2590,11 @@ describe("loadAutocodeConfig", () => {
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
         expect(result.tiers.cheap).toEqual({ model: "openai/gpt-5-nano", variant: "economy" })
+        expect(result.tiers.fast).toEqual({ model: "anthropic/claude-haiku-4-5" })
+        expect(result.tiers.operator).toEqual({ model: "openai/gpt-5", variant: "standard" })
+        expect(result.tiers.context).toEqual({ model: "openai/gpt-5-context", variant: "high" })
         expect(result.tiers.smart).toEqual({ model: "anthropic/claude-opus-4-5", variant: "thinking" })
         expect(result.tiers.balanced).toEqual({ model: "anthropic/claude-sonnet-4-5" })
-        expect(result.tiers.fast).toEqual({ model: "anthropic/claude-haiku-4-5" })
     })
 
     test("legacy shape: reads model and variant from model/variant maps", async () => {
@@ -2750,6 +2758,7 @@ describe("plugin.config tier wiring", () => {
                         smart: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
                         balanced: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
                         fast: { model: "anthropic/claude-haiku-4-5", variant: "quick" },
+                        context: { model: "openai/gpt-5-context", variant: "high" },
                     },
                 })
 
@@ -2761,16 +2770,18 @@ describe("plugin.config tier wiring", () => {
                 expect(cfg.small_model).toBe("openai/gpt-5-nano")
                 expect(getAgentField(cfg, "auto_general", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "auto_general", "variant")).toBe("standard")
-                expect(getAgentField(cfg, "compaction", "model")).toBe("anthropic/claude-haiku-4-5")
-                expect(getAgentField(cfg, "compaction", "variant")).toBe("quick")
-                expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-opus-4-5")
-                expect(getAgentField(cfg, "design", "variant")).toBe("thinking")
+                expect(getAgentField(cfg, "compaction", "model")).toBe("openai/gpt-5-context")
+                expect(getAgentField(cfg, "compaction", "variant")).toBe("high")
+                expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-sonnet-4-5")
+                expect(getAgentField(cfg, "design", "variant")).toBe("standard")
                 expect(getAgentField(cfg, "auto", "model")).toBe("anthropic/claude-opus-4-5")
-                expect(getAgentField(cfg, "research", "model")).toBe("anthropic/claude-opus-4-5")
+                expect(getAgentField(cfg, "research", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "execute_code", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "execute_code", "variant")).toBe("standard")
                 expect(getAgentField(cfg, "query_git", "model")).toBe("anthropic/claude-haiku-4-5")
                 expect(getAgentField(cfg, "query_git", "variant")).toBe("quick")
+                expect(getAgentField(cfg, "query_code", "model")).toBe("openai/gpt-5-context")
+                expect(getAgentField(cfg, "query_code", "variant")).toBe("high")
                 expect(getAgentField(cfg, "general", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "prompt")).toBeUndefined()
@@ -2819,9 +2830,9 @@ describe("plugin.config tier wiring", () => {
                 await configurePlugin(plugin, cfg)
 
                 expect(cfg.small_model).toBeUndefined()
-                expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-opus-4-5")
+                expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "auto", "model")).toBe("anthropic/claude-opus-4-5")
-                expect(getAgentField(cfg, "research", "model")).toBe("anthropic/claude-opus-4-5")
+                expect(getAgentField(cfg, "research", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "execute_code", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "query_git", "model")).toBe("anthropic/claude-haiku-4-5")
             } finally {
@@ -2837,7 +2848,7 @@ describe("plugin.config tier wiring", () => {
                 writeAutocodeTierConfig(worktree, {
                     tiers: {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
-                        smart: { model: "anthropic/claude-opus-4-5" },
+                        smart: { model: "anthropic/claude-sonnet-4-5" },
                         balanced: { model: "anthropic/claude-sonnet-4-5" },
                         fast: { model: "anthropic/claude-haiku-4-5" },
                     },
@@ -2866,7 +2877,7 @@ describe("plugin.config tier wiring", () => {
                 writeAutocodeTierConfig(worktree, {
                     tiers: {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
-                        smart: { model: "anthropic/claude-opus-4-5" },
+                        smart: { model: "anthropic/claude-sonnet-4-5" },
                         balanced: { model: "anthropic/claude-sonnet-4-5" },
                         fast: { model: "anthropic/claude-haiku-4-5" },
                     },
@@ -2894,7 +2905,7 @@ describe("plugin.config tier wiring", () => {
                 writeAutocodeTierConfig(worktree, {
                     tiers: {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
-                        smart: { model: "anthropic/claude-opus-4-5" },
+                        smart: { model: "anthropic/claude-sonnet-4-5" },
                         balanced: { model: "anthropic/claude-sonnet-4-5" },
                         fast: { model: "anthropic/claude-haiku-4-5" },
                     },
@@ -2921,16 +2932,17 @@ describe("plugin.config tier wiring", () => {
         })
     })
 
-    test("explicit compaction agent model overrides fast tier model", async () => {
+    test("explicit compaction agent model overrides context tier model", async () => {
         await withIsolatedConfigHome(async () => {
             const worktree = mkdtempSync(join(tmpdir(), "autocode-test-"))
             try {
                 writeAutocodeTierConfig(worktree, {
                     tiers: {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
-                        smart: { model: "anthropic/claude-opus-4-5" },
+                        smart: { model: "anthropic/claude-sonnet-4-5" },
                         balanced: { model: "anthropic/claude-sonnet-4-5" },
                         fast: { model: "anthropic/claude-haiku-4-5", variant: "quick" },
+                        context: { model: "openai/gpt-5-context", variant: "high" },
                     },
                 })
 
@@ -2947,7 +2959,7 @@ describe("plugin.config tier wiring", () => {
                 await configurePlugin(plugin, cfg)
 
                 expect(getAgentField(cfg, "compaction", "model")).toBe("user/compaction-model")
-                expect(getAgentField(cfg, "compaction", "variant")).toBe("quick")
+                expect(getAgentField(cfg, "compaction", "variant")).toBe("high")
                 expect(getAgentField(cfg, "compaction", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "prompt")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "permission")).toBeUndefined()

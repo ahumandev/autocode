@@ -12,82 +12,25 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 
 ### Configuration keys
 
-| Key                                  | Type             | Description                                                                                                                        | Default                                          |
-| ------------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `autocode.learned.max`               | integer          | Limits how many learned skills are kept per category before oldest are pruned.                                                     | `10`                                             |
-| `autocode.skills.freeze`              | boolean          | Strictly skips first-run extraction and all generated-root mutation; stale generated skills remain.                              | `false`                                          |
-| `autocode.sandbox.sync_method`       | string           | Sandbox sync strategy. Valid values are `auto`, `overlayfs`, `reflink`, and `copy`.                                                | Unset.                                           |
-| `autocode.sandbox.distro.cache_path` | string           | Optional sandbox distribution cache path.                                                                                          | Unset.                                           |
-| `autocode.sandbox.distro.expire`     | string or number | Optional sandbox distribution expiry value.                                                                                        | Unset.                                           |
-| `autocode.tier`                      | string           | Selects a named tier set from `autocode.tiers`.                                                                                    | No selected set.                                 |
-| `autocode.tiers`                     | object           | Either a direct map of `cheap`, `fast`, `operator`, `context`, `balanced`, and `smart` tier settings, or a map of named tier sets containing those tiers. | No overrides.                                    |
-| `autocode.tiers.<tier>.model`        | string           | Optional model override for a tier.                                                                                                | Uses the agent or OpenCode default when omitted. |
-| `autocode.tiers.<tier>.variant`      | string           | Optional variant override for a tier.                                                                                              | Uses the agent or OpenCode default when omitted. |
-| `permission.external_directory`      | object or string | Path-pattern permissions for external-directory access. Values are `allow`, `ask`, or `deny`.                                      | `{}`                                             |
-
-Recognised model tiers are `cheap`, `fast`, `operator`, `context`, `balanced`, and `smart`. The `context` tier falls back to selected provider `operator` model and variant when either context value is omitted. The `operator` tier sits between `balanced` and `fast` and requires explicit user configuration (no default). The `cheap` tier is also used as the `small_model` fallback for OpenCode title generation and compaction when OpenCode has no explicit `small_model`.
-
-Legacy external skill arrays are ignored.
-
-#### Generated skills
-
-Set `autocode.skills.freeze` to `true` to strictly skip first-run extraction and every generated-root mutation. Existing stale generated skills remain until manually removed or a later unfrozen startup updates them.
-
-For example:
-
-```jsonc
-{
-  "autocode": {
-    "tier": "go",
-    "tiers": {
-      "go": {
-        "smart":    { "model": "opencode-go/glm-5.2", "variant": "high" },
-        "balanced": { "model": "opencode-go/minimax-m3", "variant": "high" },
-        "operator": { "model": "opencode-go/minimax-m3", "variant": "low" },
-        "fast":     { "model": "opencode-go/deepseek-v4-flash", "variant": "low" },
-        "cheap":    { "model": "opencode/deepseek-v4-flash-free", "variant": "low" }
-      },
-      "openai": {
-        "smart":    { "model": "openai/gpt-5.6-sol", "variant": "high" },
-        "balanced": { "model": "openai/gpt-5.6-terra", "variant": "medium" },
-        "operator": { "model": "openai/gpt-5.6-terra", "variant": "low" },
-        "context":  { "model": "openai/gpt-5.6-luna", "variant": "low" },
-        "fast":     { "model": "openai/gpt-5.6-luna", "variant": "low" },
-        //"fast":   { "model": "openai/gpt-5.3-codex-spark", "variant": "low" },
-        "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "none" }
-      },
-      "zai": {
-        "smart":    { "model": "zai/glm-5.2", "variant": "high" },
-        "balanced": { "model": "zai/glm-5.2", "variant": "medium" },
-        "operator": { "model": "zai/glm-5.2", "variant": "low" },
-        "fast":     { "model": "zai/glm-4.7", "variant": "low" },
-        "cheap":    { "model": "zai/glm-4.7-flash", "variant": "low" }
-      },
-      "zai-coding-plan": {
-        "smart":    { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
-        "balanced": { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
-        "operator": { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
-        "fast":     { "model": "zai-coding-plan/glm-4.7", "variant": "low" },
-        "cheap":    { "model": "zai-coding-plan/glm-4.5-air", "variant": "low" }
-      }
-    }
-  },
-  "permission": {
-    "external_directory": {
-      "/tmp/safe/**": "allow",
-      "/tmp/safe/specific": "deny"
-    }
-  }
-}
-```
-
-Existing configurations that relied on `autocode.tiers.balanced` may need review because some agents now use the `operator` tier. Add an `autocode.tiers.operator` entry to your tier set for best results.
+| Key                                   | Type             | Description                                                                                         | Default                                          |
+| ------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `autocode.learned.max`                | integer          | Limits how many learned skills are kept per category before oldest are pruned.                      | `10`                                             |
+| `autocode.skills.freeze`              | boolean          | Strictly skips first-run extraction and all generated-root mutation; stale generated skills remain. | `false`                                          |
+| `autocode.sandbox.sync_method`        | string           | Sandbox sync strategy. Valid values are `auto`, `overlayfs`, `reflink`, and `copy`.                 | Unset.                                           |
+| `autocode.sandbox.distro.cache_path`  | string           | Optional sandbox distribution cache path.                                                           | Unset.                                           |
+| `autocode.sandbox.distro.expire`      | string or number | Optional sandbox distribution expiry value.                                                         | Unset.                                           |
+| `autocode.tier`                       | string           | Selects a named tier set from `autocode.tiers`.                                                     | No selected set.                                 |
+| `autocode.tiers.<set>.<tier>.model`   | string           | Optional model override for a tier in a tier set.                                                   | Uses the agent or OpenCode default when omitted. |
+| `autocode.tiers.<set>.<tier>.variant` | string           | Optional variant override for a tier in a tier set.                                                 | Uses the agent or OpenCode default when omitted. |
+| `permission.external_directory`       | object or string | Path-pattern permissions for external-directory access. Values are `allow`, `ask`, or `deny`.       | `{}`                                             |
 
 OpenCode applies a last-matching-rule-wins model to external-directory permissions. Place broad defaults first and more specific overrides later.
 
 See [OpenCode Go documentation](https://opencode.ai/docs/go#endpoints) for supported model names.
 
-#### Learned skills
+#### Skills
+
+Set `autocode.skills.freeze` to `true` to strictly skip first-run extraction and every generated-root mutation. Existing stale generated skills remain until manually removed or a later unfrozen startup updates them.
 
 `autocode.learned.max` caps how many learned skills AutoCode retains in each category. Each category is pruned independently:
 
@@ -105,8 +48,64 @@ For example:
 ```jsonc
 {
   "autocode": {
-    "learned": {
-      "max": 25
+    "skills": {
+      "freeze": false,
+      "learned": {
+        "max": 25
+      }
+    }
+  }
+}
+```
+
+#### Tiers
+
+Tier assignment requirements:
+
+| Tier       | Intelligence | Reasoning | Context | Usage                                                        |
+| ---------- | ------------ | --------- | ------- | ------------------------------------------------------------ |
+| `smart`    | Frontier     | high      | large   | Autonomous planning, orchestration and troubleshooting       |
+| `balanced` | Strong       | medium    | large   | Interact with users and agents (capable, faster, affordable) |
+| `operator` | Strong       | low       | large   | Complex high risk tool calls (operate systems)               |
+| `context`  | Basic        | low       | large   | Gather and summarize large volumes of data                   |
+| `fast`     | Fast         | none      | small   | Frequent low risk tool calls                                 |
+| `cheap`    | Cheap        | none      | small   | Formatting text (session titles)                             |
+
+#### Complete Configuration Example
+
+```jsonc
+{
+  "autocode": {
+    "skills": {
+      "freeze": false,
+      "learned": {
+        "max": 25
+      },
+    },
+    "tier": "openai",
+    "tiers": {
+      "openai": {
+        "smart":    { "model": "openai/gpt-5.6-sol", "variant": "high" },
+        "balanced": { "model": "openai/gpt-5.6-terra", "variant": "medium" },
+        "operator": { "model": "openai/gpt-5.6-terra", "variant": "low" },
+        "context":  { "model": "openai/gpt-5.6-luna", "variant": "low" },
+        "fast":     { "model": "openai/gpt-5.3-codex-spark", "variant": "low" },
+        "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "none" }
+      },
+      "zai-coding-plan": {
+        "smart":    { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
+        "balanced": { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
+        "operator": { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
+        "context":  { "model": "zai-coding-plan/glm-4.7", "variant": "low" },
+        "fast":     { "model": "zai-coding-plan/glm-4.5-air", "variant": "low" },
+        "cheap":    { "model": "zai-coding-plan/glm-4.5-air", "variant": "low" }
+      }
+    }
+  },
+  "permission": {
+    "external_directory": {
+      "/tmp/safe/**": "allow",
+      "/tmp/safe/specific": "deny"
     }
   }
 }

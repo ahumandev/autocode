@@ -37,8 +37,8 @@ function createMissingIdentityRetryResponse(): string {
     return createLifecycleJobRequiredRetryResponse("shelve job")
 }
 
-function createMissingJobRetryResponse(jobName: string): string {
-    return createLifecycleJobRequiredRetryResponse("shelve job", `job ${jobName}`)
+function createNoJobResponse(): string {
+    return JSON.stringify({ result_type: "no_job" })
 }
 
 function getIdentityRetryResponse(identity: PlannedJobIdentityResolution): string {
@@ -47,7 +47,7 @@ function getIdentityRetryResponse(identity: PlannedJobIdentityResolution): strin
             return createRetryResponse("shelve job", `Planned job lifecycle collision: ${identity.job_name}`, "Resolve duplicate active lifecycle directories for this job before shelving.")
         }
         if (identity.resolution === "missing") {
-            return createMissingJobRetryResponse(identity.job_name)
+            return createNoJobResponse()
         }
     }
 
@@ -107,7 +107,7 @@ export function createAutocodeJobShelveTool(clientOrFileSystem?: OpencodeClient 
                     assistantResponseText: reportContentResult.text,
                 })
                 if (shelved.type === "missing") {
-                    return createMissingJobRetryResponse(jobName)
+                    return createNoJobResponse()
                 }
                 if (shelved.type === "collision") {
                     return createRetryResponse("shelve job", `Planned job lifecycle collision: ${jobName}`, "Resolve duplicate active lifecycle directories for this job before shelving.")

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
 import autocode from "./plugin"
+import { commands } from "./commands"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 const tempRoots: string[] = []
@@ -143,7 +144,7 @@ describe("autocode plugin config", () => {
                 variant: "high",
             }))
             expect(cfg.agent?.title?.options?.reasoningEffort).toBeUndefined()
-            expect(cfg.agent?.compaction?.model).toBe("fast-model")
+            expect(cfg.agent?.compaction?.model).toBeUndefined()
             expect(cfg.command?.["job-execute-auto"]).toEqual(expect.objectContaining({
                 description: "user description",
                 template: "user template",
@@ -151,13 +152,24 @@ describe("autocode plugin config", () => {
             }))
             expect(cfg.command?.["job-execute-auto"]?.agent).toBe("design")
             expect(cfg.command?.["job-execute-assist"]?.template).toContain("autocode_job_execute")
+            expect(Object.keys(cfg.command ?? {})).toEqual(["job-execute-auto", "job-concepts", "job-design", "job-draft", "job-execute-assist", "job-execute", "shelve", "autocode-install", "autocode-version", "author-article", "commit", "docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux", "explain", "fix", "git-conflict", "init", "install", "assist", "auto", "design", "research", "troubleshoot", "learn", "repeat-as-md", "repeat-as-wiki", "report", "resume", "tests"])
+            for (const [name, commandDef] of Object.entries(commands)) {
+                if (name === "job-execute-auto") continue
+                expect(cfg.command?.[name]).toEqual(commandDef)
+            }
+            expect(cfg.command?.["job-execute-auto"]).toEqual({
+                ...commands["job-execute-auto"],
+                description: "user description",
+                template: "user template",
+                subtask: true,
+            })
             expect(cfg.agent?.assist?.model).toBe("user-model")
             expect(cfg.agent?.assist?.variant).toBe("balanced-variant")
             const assist = cfg.agent?.assist
             const design = cfg.agent?.design
             const assistPermission = assist?.permission
             expect(((assist ?? {}) as Record<string, unknown>).tier).toBeUndefined()
-            expect(cfg.agent?.design?.model).toBe("smart-model")
+            expect(cfg.agent?.design?.model).toBe("balanced-model")
             expect(((design ?? {}) as Record<string, unknown>).tier).toBeUndefined()
             expect(((assistPermission ?? {}) as Record<string, unknown>).external_directory).toEqual({
                 "*": "ask",

@@ -45,13 +45,11 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | `/job-execute`        | Selects and executes a job in the current session with either `auto` or `assist`.           |
 | `/job-execute-assist` | Moves an approved draft to `.agents/jobs/assist/{job_name}/` and starts an assist session.  |
 | `/job-execute-auto`   | Moves an approved draft to `.agents/jobs/executing/{job_name}/` and starts an auto session. |
-| `/job-review-commit`  | Accepts reviewed work, commits when applicable, and shelves the job.                        |
-| `/job-shelve`         | Moves the current or selected job to `.agents/jobs/shelved/{job_name}/`.                    |
 
 ### Handover commands
 
-| Command         | Purpose                                                                  |
-| --------------- | ------------------------------------------------------------------------ |
+| Command         | Purpose                                                           |
+| --------------- | ----------------------------------------------------------------- |
 | `/research`     | Resets research session from recent context.                      |
 | `/design`       | Resets design session for a solution plan.                        |
 | `/assist`       | Resets assist session for interactive implementation.             |
@@ -71,21 +69,21 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 
 ### Utility commands
 
-| Command             | Purpose                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| `/autocode-version` | Prints currently installed versions of OpenCode and AutoCode.                        |
-| `/author-article`   | Authors a professional article or report from the supplied context.                  |
-| `/context`          | Report current session context.                                                      |
-| `/explain`          | Explain code or project context.                                                     |
-| `/fix`              | Fix errors or requested issues.                                                      |
-| `/git-commit`       | Creates a commit message and commits staged changes through the git commit subagent. |
-| `/git-conflict`     | Handles git merge conflict work through the git conflict subagent.                   |
-| `/repeat-as-md`     | Repeats the last response inside a fenced Markdown code block.                       |
-| `/repeat-as-wiki`   | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting.           |
-| `/report`           | Summarize session as report.                                                         |
-| `/resume`           | Resumes an interrupted session by calling the resume tool.                           |
-| `/shelve`           | Clean up sandbox files (if any). Alias for `/job-shelve`.                            |
-| `/tests`            | Generate or improve tests.                                                           |
+| Command             | Purpose                                                                    |
+| ------------------- | -------------------------------------------------------------------------- |
+| `/autocode-version` | Prints currently installed versions of OpenCode and AutoCode.              |
+| `/author-article`   | Authors a professional article or report from the supplied context.        |
+| `/commit`           | Commit changes to Git repo and shelve job.                                 |
+| `/context`          | Report current session context.                                            |
+| `/explain`          | Explain code or project context.                                           |
+| `/fix`              | Fix errors or requested issues.                                            |
+| `/git-conflict`     | Handles git merge conflict work through the git conflict subagent.         |
+| `/repeat-as-md`     | Repeats the last response inside a fenced Markdown code block.             |
+| `/repeat-as-wiki`   | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting. |
+| `/report`           | Summarize session as report.                                               |
+| `/resume`           | Resumes an interrupted session by calling the resume tool.                 |
+| `/shelve`           | Clean up sandbox files (if any). Alias for `/job-shelve`.                  |
+| `/tests`            | Generate or improve tests.                                                 |
 
 ### Job files
 
@@ -94,7 +92,6 @@ Jobs are stored in `.agents/jobs/{status}/{job_name}/`. The valid statuses are `
 | Path           | Purpose                                                                                       |
 | -------------- | --------------------------------------------------------------------------------------------- |
 | `concept.md`   | Copy of the concept used to design the plan.                                                  |
-| `criteria.yml` | Acceptance criteria mappings with IDs such as `C1`, `C2`, and `C3`.                           |
 | `plan.md`      | Solution plan covering problems, requirements, constraints, risks, and the selected proposal. |
 | `session.yml`  | OpenCode session IDs used for resume functionality.                                           |
 | `solution.md`  | Chronological implementation and audit log.                                                   |

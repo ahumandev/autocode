@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
-import { createAutocodeSessionPrompt, resolveAutocodeAgentSessionSettings, swapCurrentAutocodeSession } from "@/utils/agent_swap"
+import { createAutocodeSessionPrompt, resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
 import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, getStorageRelativePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
@@ -54,56 +54,12 @@ function createMissingResolvedJobFileRetryResponse(jobName: string): string {
     )
 }
 
-function getExecutionStatus(agent: string, currentStatus: JobStatus): JobStatus {
-    if (agent === "assist") {
-        return currentStatus === "review" ? "review" : "assist"
-    }
-
-    return currentStatus === "review" ? "review" : "executing"
-}
-
 function isExecutionAgent(agent: string): agent is "auto" | "assist" {
     return agent === "auto" || agent === "assist"
 }
 
 async function persistJobSessionID(fileSystem: Pick<FileSystem, "writeFile">, worktree: string, job: { directory: JobStatus }, jobName: string, sessionID: string): Promise<void> {
     await fileSystem.writeFile(getJobFilePath(worktree, job.directory, jobName, "session.yml"), `session_id: ${sessionID}\n`)
-}
-
-function parseJobSessionID(content: string): string | undefined {
-    const sessionID = content.match(/^\s*session_id\s*:\s*(\S+)\s*$/m)?.[1]?.trim()
-
-    return sessionID || undefined
-}
-
-async function readPersistedJobSessionID(fileSystem: Pick<FileSystem, "readFile">, worktree: string, job: { directory: JobStatus }, jobName: string): Promise<string | undefined> {
-    try {
-        const content = await fileSystem.readFile(getJobFilePath(worktree, job.directory, jobName, "session.yml"), "utf8")
-
-        return parseJobSessionID(content)
-    }
-    catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        if (code === "ENOENT") {
-            return undefined
-        }
-
-        throw error
-    }
-}
-
-async function hasExistingSession(client: OpencodeClient, directory: string, sessionID: string): Promise<boolean> {
-    try {
-        const response = await client.session.get({
-            path: { id: sessionID },
-            query: { directory },
-        })
-
-        return !response.error && !!response.data
-    }
-    catch {
-        return false
-    }
 }
 
 export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem) {
@@ -128,7 +84,7 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
 
                     if (resolved.type === "found") {
                         try {
-                            const startStatus = getExecutionStatus(args.agent, resolved.job.status)
+                            const startStatus: JobStatus = "executing"
                             const planPath = getJobFilePath(storageRoot, resolved.job.directory, resolvedJobName, "plan.md")
                             const plan = await fileSystem.readFile(planPath, "utf8")
 
@@ -141,26 +97,16 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                                 return createAbortResponse("autocode_job_execute", sessionSettings.error)
                             }
 
-                            const persistedSessionID = await readPersistedJobSessionID(fileSystem, storageRoot, resolved.job, resolvedJobName)
-                            const existingSessionID = persistedSessionID && await hasExistingSession(client, context.directory, persistedSessionID) ? persistedSessionID : undefined
                             const sessionTitle = formatJobSessionTitle(resolvedJobName, startStatus)
-                            const promptResponse = existingSessionID
-                                ? await swapCurrentAutocodeSession(
-                                    client,
-                                    context.directory,
-                                     existingSessionID,
-                                     args.agent,
-                                     plan,
-                                     sessionSettings.resolvedModel,
-                                 )
-                                : await createAutocodeSessionPrompt(
-                                    client,
-                                    context.directory,
-                                    args.agent,
-                                    plan,
-                                    sessionTitle,
-                                    sessionSettings.resolvedModel,
-                                )
+                            // New session is required because OpenCode exposes no message-clear API.
+                            const promptResponse = await createAutocodeSessionPrompt(
+                                client,
+                                context.directory,
+                                args.agent,
+                                plan,
+                                sessionTitle,
+                                sessionSettings.resolvedModel,
+                            )
                             if ("error" in promptResponse) {
                                 return createAbortResponse("autocode_job_execute", promptResponse.error)
                             }
@@ -179,9 +125,7 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                             }
 
                             const { job } = startResult
-                            if (!existingSessionID) {
-                                await persistJobSessionID(fileSystem, storageRoot, job, resolvedJobName, promptResponse.sessionID)
-                            }
+                            await persistJobSessionID(fileSystem, storageRoot, job, resolvedJobName, promptResponse.sessionID)
 
                             const planFilePath = getJobFilePath(storageRoot, job.directory, resolvedJobName, "plan.md")
 

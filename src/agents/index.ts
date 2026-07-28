@@ -91,7 +91,7 @@ const baseAgents: AgentMap = {
     },
 
     compaction: {
-        tier: "fast",
+        tier: "context",
     },
 
     title: {
@@ -164,6 +164,7 @@ const baseAgents: AgentMap = {
         permission: {
             "*": "deny",
             autocode_agent_swap: "allow",
+            autocode_job_shelve: "allow",
             autocode_job_status: "allow",
             autocode_session_restart: "allow",
             git_commit: "allow",
@@ -200,6 +201,7 @@ const baseAgents: AgentMap = {
             autocode_concept_list: "allow",
             autocode_concept_read: "allow",
             autocode_job_execute: "allow",
+            autocode_job_list: "allow",
             autocode_plan_save: "allow",
             autocode_session_restart: "allow",
             doom_loop: "ask",
@@ -221,7 +223,7 @@ const baseAgents: AgentMap = {
         },
         prompt: designPrompt,
         temperature: 0.7,
-        tier: "smart",
+        tier: "balanced",
     },
 
     edit: {
@@ -259,7 +261,7 @@ const baseAgents: AgentMap = {
             "skill_learn": "allow"
         },
         prompt: editPrompt,
-        tier: "operator"
+        tier: "balanced"
     },
 
     research: {
@@ -288,7 +290,7 @@ const baseAgents: AgentMap = {
         },
         prompt: researchPrompt,
         temperature: 0.7,
-        tier: "smart",
+        tier: "balanced",
     },
 
     // Secondary Orchestrators
@@ -409,7 +411,7 @@ const baseAgents: AgentMap = {
         },
         prompt: autoFeaturePrompt,
         temperature: 0.3,
-        tier: "balanced",
+        tier: "smart",
     },
 
     auto_general: {
@@ -473,7 +475,7 @@ const baseAgents: AgentMap = {
         },
         prompt: buildRefactorPrompt,
         temperature: 0.3,
-        tier: "balanced",
+        tier: "smart",
     },
 
     auto_research: {
@@ -557,8 +559,6 @@ const baseAgents: AgentMap = {
         mode: "subagent",
         permission: {
             "*": "deny",
-            autocode_sandbox_create: "allow",
-            autocode_sandbox_delete: "allow",
             edit: "allow",
             skill: {
                 "*": "deny",
@@ -1327,35 +1327,6 @@ const baseAgents: AgentMap = {
         prompt: queryWebPrompt,
         temperature: 0.5,
         tier: "context",
-    },
-
-    // Temporary agents: execute 1 task then move out of the way so that original agent can continue
-
-    temp_review_reject: {
-        color: colorWritableWorker,
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_job_shelve: "allow",
-            git_reset: "allow",
-        },
-        prompt: "---",
-        temperature: 0.5,
-        tier: "fast",
-    },
-
-    temp_shelve: {
-        color: colorWritableWorker,
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_job_shelve: "allow",
-        },
-        prompt: "---",
-        temperature: 0.5,
-        tier: "fast",
     },
 
 }
