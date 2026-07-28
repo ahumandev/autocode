@@ -11,6 +11,7 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 | 🤖   | `auto`     | Autonomously executes drafted jobs from solution plans.                     |
 | 🧑‍💻   | `assist`   | Interactively executes immediate tasks with human control                   |
 | ✏️   | `edit`     | Make fast, targeted edits directly in-session without spawning subagents    |
+| 🎓   | `teach`    | Find answer and teach how to manually fix problems |
 
 ### Typical job workflow
 

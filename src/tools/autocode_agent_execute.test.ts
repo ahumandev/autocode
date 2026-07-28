@@ -103,6 +103,24 @@ describe("autocode_agent_execute tool", () => {
         expect(client.session.promptAsync).not.toHaveBeenCalled()
     })
 
+    test("rejects teach without job lookup or execution side effects", async () => {
+        const fs = createMockFs()
+        const client = createMockClient()
+        const tool = createAutocodeAgentExecuteTool(client, fs)
+
+        const parsed = parseToolResult(await tool.execute({ job_name: "manual_practice", agent: "teach" }, createToolContext()))
+
+        expect(parsed).toEqual({
+            failedAction: "autocode_agent_execute",
+            error: "Invalid agent: teach",
+            instruction: "Provide agent as one of: assist, auto.",
+        })
+        expect(fs.readdir).not.toHaveBeenCalled()
+        expect(fs.readFile).not.toHaveBeenCalled()
+        expect(fs.rename).not.toHaveBeenCalled()
+        expect(client.session.promptAsync).not.toHaveBeenCalled()
+    })
+
     test("returns only current_status after successful handoff", async () => {
         const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-execute-"))
         try {

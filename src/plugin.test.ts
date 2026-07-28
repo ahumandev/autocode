@@ -152,7 +152,8 @@ describe("autocode plugin config", () => {
             }))
             expect(cfg.command?.["job-execute-auto"]?.agent).toBe("design")
             expect(cfg.command?.["job-execute-assist"]?.template).toContain("autocode_job_execute")
-            expect(Object.keys(cfg.command ?? {})).toEqual(["job-execute-auto", "job-concepts", "job-design", "job-draft", "job-execute-assist", "job-execute", "shelve", "autocode-install", "autocode-version", "author-article", "commit", "docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux", "explain", "fix", "git-conflict", "init", "install", "assist", "auto", "design", "research", "troubleshoot", "learn", "repeat-as-md", "repeat-as-wiki", "report", "resume", "tests"])
+            expect(Object.keys(cfg.command ?? {})).toEqual(["job-execute-auto", "job-concepts", "job-design", "job-draft", "job-execute-assist", "job-execute", "shelve", "autocode-install", "autocode-version", "author-article", "commit", "docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux", "explain", "fix", "git-conflict", "init", "install", "assist", "auto", "design", "research", "teach", "troubleshoot", "learn", "repeat-as-md", "repeat-as-wiki", "report", "resume", "tests"])
+            expect(cfg.command?.teach).toEqual(commands.teach)
             for (const [name, commandDef] of Object.entries(commands)) {
                 if (name === "job-execute-auto") continue
                 expect(cfg.command?.[name]).toEqual(commandDef)

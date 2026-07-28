@@ -43,6 +43,7 @@ import { queryOsPrompt } from "./prompts/query_os";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
 import { researchPrompt } from "./prompts/research";
+import { teachPrompt } from "./prompts/teach";
 import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
@@ -146,13 +147,44 @@ const baseAgents: AgentMap = {
                 build: "deny",
                 "document*": "deny",
                 plan: "deny",
-                "temp*": "deny"
             },
             task_external: "ask",
             task_resume: "allow",
             "todo*": "allow"
         },
         prompt: assistPrompt,
+        tier: "balanced",
+    },
+
+    teach: {
+        color: colorReadOnlyInteractiveOrchestrator,
+        description: "Teach manual practice without project implementation.",
+        hidden: false,
+        mode: "primary",
+        permission: {
+            "*": "deny",
+            autocode_session_restart: "allow",
+            doom_loop: "ask",
+            question: "allow",
+            skill: {
+                "*": "deny",
+                "assist-*": "allow",
+                "codebase-design": "allow", // From mattpocock/skills
+                "git-commit": "allow",
+                "learned-permissions*": "allow",
+                "primary-manual*": "allow",
+                "vue-best-practices": "allow",
+                "ui-craft": "allow",
+            },
+            task: {
+                "*": "deny",
+                auto_research: "allow",
+                "query*": "allow",
+            },
+            task_resume: "allow",
+            "todo*": "allow",
+        },
+        prompt: teachPrompt,
         tier: "balanced",
     },
 

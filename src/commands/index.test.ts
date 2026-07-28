@@ -5,6 +5,7 @@ import { explainCommandTemplate } from "./explain"
 import { fixCommandTemplate } from "./fix"
 import { commands } from "./index"
 import { learnCommand } from "./learn"
+import { newTeachCommandTemplate } from "./teach"
 import { testsCommandTemplate } from "./tests"
 
 describe("commands", () => {
@@ -36,6 +37,7 @@ describe("commands", () => {
             "auto",
             "design",
             "research",
+            "teach",
             "troubleshoot",
             "learn",
             "repeat-as-md",
@@ -117,6 +119,10 @@ describe("commands", () => {
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
+
+        for (const commandName of ["docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux"] as const) {
+            expect(commands[commandName]?.agent).not.toBe("teach")
+        }
     })
 
     test("keeps duplicated job execution command template intent", () => {
@@ -215,6 +221,7 @@ describe("commands", () => {
             "auto": { agent: "auto", response: "Autonomous task execution" },
             "design": { agent: "design", response: "Design guidance" },
             "research": { agent: "research", response: "Research" },
+            "teach": { agent: "teach", response: "Teach manual practice" },
             "troubleshoot": { agent: "assist", response: "Troubleshooting" },
         }
 
@@ -230,6 +237,14 @@ describe("commands", () => {
         expect(commands["assist"]?.template).toContain("# STEP 2: Respond to user:")
         expect(commands["assist"]?.template).not.toContain("separate session")
         expect(commands["assist"]?.template).not.toContain("new title")
+    })
+
+    test("registers teach as a same-session manual-practice command", () => {
+        expect(commands.teach).toEqual({
+            description: "Continue manual practice guidance in same session.",
+            subtask: false,
+            template: newTeachCommandTemplate,
+        })
     })
 
     test("keeps repeat_as_md template intent independent of stale description", () => {

@@ -24,7 +24,6 @@ For DANGEROUS OPERATIONS (user responsible):
 
 - Written in Concise English.
 - Steps must be placed in correct sequential order
-- Entire tutorial < 400 lines (remove trivial examples if necessary)
 - Where user can decide on different workflow paths, format each workflow as different subsection (explain difference)
 - Warn about common pitfalls
 - Emojis highlight important info and start of step.

@@ -19,6 +19,7 @@ import { newAssistCommandTemplate } from "./assist"
 import { newAutoCommandTemplate } from "./auto"
 import { newDesignCommandTemplate } from "./design"
 import { newResearchCommandTemplate } from "./research"
+import { newTeachCommandTemplate } from "./teach"
 import { newTroubleshootCommandTemplate } from "./troubleshoot"
 import { repeatAsMdCommandTemplate } from "./repeat-as-md"
 import { repeatAsWikiCommandTemplate } from "./repeat-as-wiki"
@@ -216,6 +217,12 @@ Report to user:
         description: "Continue topic research in same session.",
         subtask: false,
         template: newResearchCommandTemplate,
+    },
+
+    "teach": {
+        description: "Continue manual practice guidance in same session.",
+        subtask: false,
+        template: newTeachCommandTemplate,
     },
 
     "troubleshoot": {

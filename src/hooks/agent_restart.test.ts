@@ -9,7 +9,7 @@ import type {
     readCurrentJobPlan,
     summarizeAutocodeAgentSession,
 } from "@/hooks/agent_restart"
-import { RESTART_ASSIST_PROMPT, RESTART_AUTO_PROMPT } from "@/hooks/agent_restart_prompt"
+import { RESTART_ASSIST_PROMPT, RESTART_AUTO_PROMPT, RESTART_TEACH_PROMPT } from "@/hooks/agent_restart_prompt"
 import { dispatchAutocodeAgentPrompt } from "@/utils/agent_swap"
 import type { resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
 
@@ -141,6 +141,17 @@ describe("restartAutocodeAgentInSession", () => {
         dispatchMock.mockClear()
         await restartAutocodeAgentInSession(input("auto"), dependencies())
         expect(dispatchMock.mock.calls[0][4]).toBe(RESTART_AUTO_PROMPT)
+    })
+
+    test("restarts teach in the same session with manual-only prompt and no job-plan lookup", async () => {
+        await restartAutocodeAgentInSession(input("teach"), dependencies())
+
+        expect(dispatchMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID, "teach", RESTART_TEACH_PROMPT, {
+            model: { providerID: "openai", modelID: "gpt-5" },
+            variant: "high",
+        })
+        expect(readCurrentJobPlanMock).not.toHaveBeenCalled()
+        expect(sessionCreateMock).not.toHaveBeenCalled()
     })
 
     test("blocks dispatch and reports structured compaction failure", async () => {

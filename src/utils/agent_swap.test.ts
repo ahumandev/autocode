@@ -98,7 +98,7 @@ describe("agent swap utilities", () => {
         })
     })
 
-    test("validates session creation with primary agents only", () => {
+    test("validates session creation with primary agents including teach", () => {
         expect(validateAutocodeSessionCreateInput("  Continue the task.  ", " auto ")).toEqual({
             prompt: "Continue the task.",
             agent: "auto",
@@ -106,11 +106,16 @@ describe("agent swap utilities", () => {
         })
         expect(validateAutocodeSessionCreateInput("Continue the task.", "hidden_worker")).toEqual({
             error: "Invalid agent: hidden_worker",
-            instruction: "Provide agent as one of: assist, auto, research, design.",
+            instruction: "Provide agent as one of: assist, teach, auto, research, design.",
         })
         expect(validateAutocodeSessionCreateInput("Continue the task.", "invalid-agent")).toEqual({
             error: "Invalid agent: invalid-agent",
-            instruction: "Provide agent as one of: assist, auto, research, design.",
+            instruction: "Provide agent as one of: assist, teach, auto, research, design.",
+        })
+        expect(validateAutocodeSessionCreateInput("  Teach me manual debugging.  ", " teach ")).toEqual({
+            prompt: "Teach me manual debugging.",
+            agent: "teach",
+            title: "Teach me manual debugging.",
         })
     })
 

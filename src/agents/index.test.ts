@@ -1,11 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, type AutocodeAgentConfig } from "./index"
+import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, getAgentPermission, type AutocodeAgentConfig } from "./index"
 import { executeOpencodePrompt } from "./prompts/execute_opencode"
 import { queryAutocodePrompt } from "./prompts/query-autocode"
+import { teachPrompt } from "./prompts/teach"
 
 function permissionRule(permission: AutocodeAgentConfig["permission"], key: string): unknown {
     if (!permission || typeof permission === "string") return undefined
     return (permission as Record<string, unknown>)[key]
+}
+
+function resolvePermissionRule(rules: Record<string, unknown>, name: string): unknown {
+    if (name in rules) return rules[name]
+    const wildcard = Object.entries(rules).find(([pattern]) => pattern !== "*" && pattern.endsWith("*") && name.startsWith(pattern.slice(0, -1)))
+    return wildcard?.[1] ?? rules["*"]
 }
 
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]
@@ -20,6 +27,7 @@ const managedAgentTiers = {
     compaction: "context",
     title: "cheap",
     assist: "balanced",
+    teach: "balanced",
     auto: "smart",
     design: "balanced",
     edit: "balanced",
@@ -194,9 +202,72 @@ describe("agent policies", () => {
     test("allows every primary agent to restart the current session", () => {
         const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
 
-        for (const agentName of ["assist", "auto", "design", "edit", "research"] as const) {
+        for (const agentName of ["assist", "teach", "auto", "design", "edit", "research"] as const) {
             expect(agents[agentName]?.mode).toBe("primary")
             expect(permissionRule(agents[agentName]?.permission, "autocode_session_restart")).toBe("allow")
+        }
+    })
+
+    test("buildAgents exposes teach as manual-only primary with deny-first research delegation", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const permission = agents.teach?.permission
+        const taskPermission = permissionRule(permission, "task") as Record<string, unknown>
+        const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
+
+        expect(agents.teach?.hidden).toBe(false)
+        expect(agents.teach?.mode).toBe("primary")
+        expect(agents.teach?.tier).toBe("balanced")
+        expect(agents.teach?.prompt).toBe(teachPrompt)
+        expect(permissionRule(permission, "*")).toBe("deny")
+        expect(taskPermission).toEqual({
+            "*": "deny",
+            "query*": "allow",
+            auto_research: "allow",
+        })
+        for (const agentName of ["query_code", "query_autocode", "auto_research"]) {
+            expect(resolvePermissionRule(taskPermission, agentName)).toBe("allow")
+        }
+        for (const agentName of ["inquiry_code", "research", "auto_researcher", "execute_code", "execute_*"]) {
+            expect(resolvePermissionRule(taskPermission, agentName)).toBe("deny")
+        }
+        for (const toolName of [
+            "autocode_job_execute",
+            "autocode_agent_execute",
+            "write",
+            "edit",
+            "bash",
+            "apply_patch",
+            "autocode_agent_swap",
+        ]) {
+            expect(resolvePermissionRule(permission as Record<string, unknown>, toolName)).toBe("deny")
+        }
+        for (const capability of ["question", "todo*", "task_resume", "autocode_session_restart", "skill_learn"]) {
+            expect(permissionRule(permission, capability)).toBe("allow")
+        }
+        expect(skillPermission["learned-permissions*"]).toBe("allow")
+    })
+
+    test("getAgentPermission restricts direct auto execution to assist and auto", () => {
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const teachPermission = getAgentPermission("teach")
+        const assistTaskPermission = permissionRule(getAgentPermission("assist"), "task") as Record<string, unknown>
+        const autoTaskPermission = permissionRule(getAgentPermission("auto"), "task") as Record<string, unknown>
+
+        for (const toolName of ["autocode_job_execute", "autocode_agent_execute", "write", "edit", "bash", "apply_patch"]) {
+            expect(resolvePermissionRule(teachPermission as Record<string, unknown>, toolName)).toBe("deny")
+        }
+        expect(resolvePermissionRule(assistTaskPermission, "assist_browser")).toBe("allow")
+        expect(resolvePermissionRule(autoTaskPermission, "auto_feature")).toBe("allow")
+        for (const [agentName, agent] of Object.entries(agents)) {
+            if (agentName === "assist" || agentName === "auto") continue
+            if (agent.permission === undefined) continue
+            const taskPermission = permissionRule(agent.permission, "task")
+            const taskRules = typeof taskPermission === "object" && taskPermission !== null
+                ? taskPermission as Record<string, unknown>
+                : { "*": permissionRule(agent.permission, "*") }
+
+            expect(resolvePermissionRule(taskRules, "assist_browser")).toBe("deny")
+            expect(resolvePermissionRule(taskRules, "auto_feature")).toBe("deny")
         }
     })
 

@@ -1,11 +1,24 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
-import { createAutocodeSessionPrompt, resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
-import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, getStorageRelativePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
+import { dispatchAutocodeAgentPrompt, resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
+import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, getStorageRelativePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, updateCurrentSessionTitleToJobName, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type FileSystem = JobToolFileSystem
+
+type SessionMessage = {
+    info: {
+        id: string
+    }
+}
+
+type SessionMessageClearClient = {
+    session: {
+        messages?: (args: { path: { id: string }, query: { directory: string, limit: number } }) => Promise<{ data?: SessionMessage[], error?: unknown }>
+        deleteMessage?: (args: { sessionID: string, messageID: string, directory: string }) => Promise<{ error?: unknown }>
+    }
+}
 
 
 async function readDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
@@ -58,6 +71,39 @@ function isExecutionAgent(agent: string): agent is "auto" | "assist" {
     return agent === "auto" || agent === "assist"
 }
 
+function createAgentExecutePrompt(jobName: string, plan: string): string {
+    return `Selected job: ${jobName}\n\nplan.md:\n${plan}`
+}
+
+async function clearCurrentSessionMessages(client: OpencodeClient, sessionID: string, directory: string): Promise<void> {
+    const sessionClient = client as unknown as SessionMessageClearClient
+    if (!sessionClient.session.messages) {
+        throw new Error("Unable to clear current session messages: session.messages is unavailable")
+    }
+    if (!sessionClient.session.deleteMessage) {
+        throw new Error("Unable to clear current session messages: session.deleteMessage is unavailable")
+    }
+
+    const messagesResponse = await sessionClient.session.messages({
+        path: { id: sessionID },
+        query: { directory, limit: 200 },
+    })
+    if (messagesResponse.error) {
+        throw messagesResponse.error
+    }
+
+    for (const message of messagesResponse.data ?? []) {
+        const deleteResponse = await sessionClient.session.deleteMessage({
+            sessionID,
+            messageID: message.info.id,
+            directory,
+        })
+        if (deleteResponse.error) {
+            throw deleteResponse.error
+        }
+    }
+}
+
 async function persistJobSessionID(fileSystem: Pick<FileSystem, "writeFile">, worktree: string, job: { directory: JobStatus }, jobName: string, sessionID: string): Promise<void> {
     await fileSystem.writeFile(getJobFilePath(worktree, job.directory, jobName, "session.yml"), `session_id: ${sessionID}\n`)
 }
@@ -92,19 +138,22 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                                 return createAbortResponse("autocode_job_execute", "Unable to continue execution session: client is unavailable")
                             }
 
+                            await updateCurrentSessionTitleToJobName(client, context, resolvedJobName, startStatus)
+
                             const sessionSettings = await resolveAutocodeAgentSessionSettings(args.agent, context.worktree, context.directory)
                             if ("error" in sessionSettings) {
                                 return createAbortResponse("autocode_job_execute", sessionSettings.error)
                             }
 
+                            await clearCurrentSessionMessages(client, context.sessionID, context.directory)
+
                             const sessionTitle = formatJobSessionTitle(resolvedJobName, startStatus)
-                            // New session is required because OpenCode exposes no message-clear API.
-                            const promptResponse = await createAutocodeSessionPrompt(
+                            const promptResponse = await dispatchAutocodeAgentPrompt(
                                 client,
                                 context.directory,
+                                context.sessionID,
                                 args.agent,
-                                plan,
-                                sessionTitle,
+                                createAgentExecutePrompt(resolvedJobName, plan),
                                 sessionSettings.resolvedModel,
                             )
                             if ("error" in promptResponse) {
@@ -125,7 +174,7 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                             }
 
                             const { job } = startResult
-                            await persistJobSessionID(fileSystem, storageRoot, job, resolvedJobName, promptResponse.sessionID)
+                            await persistJobSessionID(fileSystem, storageRoot, job, resolvedJobName, context.sessionID)
 
                             const planFilePath = getJobFilePath(storageRoot, job.directory, resolvedJobName, "plan.md")
 
@@ -135,7 +184,7 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                                 current_status: job.status,
                                 file_path: getStorageRelativePath(storageRoot, planFilePath),
                                 job_path: job.job_path,
-                                session_id: promptResponse.sessionID,
+                                session_id: context.sessionID,
                                 session_title: sessionTitle,
                             })
                         }

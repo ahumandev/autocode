@@ -4,8 +4,8 @@ import type { ModelTier, TierConfig } from "@/config"
 import { loadAutocodeConfig } from "@/config"
 import { flattenError } from "@/utils/tools"
 
-export const primaryAutocodeAgents = ["assist", "auto", "design", "research"] as const
-export const allowedAutocodeSessionCreateAgents = ["assist", "auto", "research", "design"] as const
+export const primaryAutocodeAgents = ["assist", "teach", "auto", "design", "research"] as const
+export const allowedAutocodeSessionCreateAgents = ["assist", "teach", "auto", "research", "design"] as const
 export const allowedAutocodeSessionCreateAgentsText = allowedAutocodeSessionCreateAgents.join(", ")
 
 export type AutocodeSessionCreateAgent = typeof allowedAutocodeSessionCreateAgents[number]

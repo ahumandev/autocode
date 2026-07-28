@@ -14,12 +14,14 @@ const RESTART_RESEARCH_PROMPT = "Research possibilities regarding recent discuss
 const RESTART_DESIGN_PROMPT = "Design solution to improve project."
 export const RESTART_ASSIST_PROMPT = "Continue with most urgent unblocked GOAL as next ASSIGNMENT."
 export const RESTART_AUTO_PROMPT = "Autonomously meet all user REQUIREMENTS."
+export const RESTART_TEACH_PROMPT = "Continue manual practice guidance without project implementation."
 
 const restartPromptByTarget: Record<PrimaryAutocodeAgent, string> = {
     assist: RESTART_ASSIST_PROMPT,
     auto: RESTART_AUTO_PROMPT,
     design: RESTART_DESIGN_PROMPT,
     research: RESTART_RESEARCH_PROMPT,
+    teach: RESTART_TEACH_PROMPT,
 }
 
 export function createAgentRestartPrompt(input: AgentRestartPromptInput): string {
