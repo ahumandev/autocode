@@ -11,6 +11,11 @@ type FileSystem = {
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
 }
 
+type ConceptListEntry = {
+    label: string
+    path: string
+}
+
 const defaultFileSystem: FileSystem = {
     readdir,
     readFile,
@@ -31,6 +36,16 @@ async function readDirectoryEntries(fileSystem: FileSystem, directory: string): 
     }
 }
 
+async function readDescription(fileSystem: FileSystem, filePath: string): Promise<string> {
+    try {
+        return getDescription(await fileSystem.readFile(filePath, "utf8"))
+    }
+    catch (error) {
+        if (isMissingFile(error)) return ""
+        throw error
+    }
+}
+
 export function createAutocodeConceptListTool(fileSystem: FileSystem = defaultFileSystem) {
     return tool({
         description: "List available concepts.",
@@ -38,18 +53,28 @@ export function createAutocodeConceptListTool(fileSystem: FileSystem = defaultFi
         async execute(_, context) {
             const conceptsDirectory = path.join(resolveAgentsStorageRoot(context), ".agents", "jobs", "concepts")
             try {
-                const entries = await readDirectoryEntries(fileSystem, conceptsDirectory)
-                const backlog = await Promise.all(entries
+                const storageRoot = resolveAgentsStorageRoot(context)
+                const conceptEntries = (await readDirectoryEntries(fileSystem, conceptsDirectory))
                     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-                    .map((entry) => entry.name)
-                    .sort((left, right) => left.localeCompare(right))
-                    .map(async (fileName) => {
-                        const source = await fileSystem.readFile(path.join(conceptsDirectory, fileName), "utf8")
-                        return {
-                            label: fileName.slice(0, -3),
-                            description: getDescription(source),
-                        }
+                    .map((entry): ConceptListEntry => ({
+                        label: entry.name.slice(0, -3),
+                        path: path.join(conceptsDirectory, entry.name),
                     }))
+                const jobEntries = (await Promise.all(["drafts", "executing", "facilitate"].map(async (directory) => {
+                    const jobDirectory = path.join(storageRoot, ".agents", "jobs", directory)
+                    return (await readDirectoryEntries(fileSystem, jobDirectory))
+                        .filter((entry) => entry.isDirectory())
+                        .map((entry): ConceptListEntry => ({
+                            label: entry.name,
+                            path: path.join(jobDirectory, entry.name, "plan.md"),
+                        }))
+                }))).flat()
+                const backlog = await Promise.all([...conceptEntries, ...jobEntries]
+                    .sort((left, right) => left.label.localeCompare(right.label) || left.path.localeCompare(right.path))
+                    .map(async (entry) => ({
+                        label: entry.label,
+                        description: await readDescription(fileSystem, entry.path),
+                    })))
 
                 return JSON.stringify({ backlog })
             }

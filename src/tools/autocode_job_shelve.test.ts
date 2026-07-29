@@ -40,7 +40,7 @@ function createMockFs() {
     }
 }
 
-function createClient(title: string | null | undefined, assistantText = "Shelving job after accepted review."): OpencodeClient & { session: { update: ReturnType<typeof mock>, promptAsync: ReturnType<typeof mock> } } {
+    function createClient(title: string | null | undefined): OpencodeClient & { session: { update: ReturnType<typeof mock>, promptAsync: ReturnType<typeof mock> } } {
     return {
         session: {
             get: mock(async (args: { path: { id: string }, query: { directory: string } }) => ({
@@ -48,12 +48,6 @@ function createClient(title: string | null | undefined, assistantText = "Shelvin
             })),
             update: mock(async (args: { path: { id: string }, query: { directory: string }, body: { title: string } }) => ({
                 data: { id: args.path.id, title: args.body.title, directory: args.query.directory },
-            })),
-            messages: mock(async () => ({
-                data: [{
-                    info: { id: "assistant-1", role: "assistant", time: { created: 2 } },
-                    parts: assistantText ? [{ type: "text", text: assistantText, messageID: "assistant-1" }] : [],
-                }],
             })),
             promptAsync: mock(async () => ({})),
         },
@@ -118,7 +112,7 @@ describe("autocode_job_shelve tool", () => {
         expect(result).not.toHaveProperty("instruction")
     })
 
-    test("resolves current planned job, shelves it, logs assistant actions, updates title, and archives sandboxes", async () => {
+    test("resolves current planned job, shelves it, updates title, and archives sandboxes", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string, options?: { withFileTypes?: boolean }) => {
             if (dirPath === "/workspace/.agents/jobs/review") return ["my_feature"]
@@ -131,7 +125,7 @@ describe("autocode_job_shelve tool", () => {
             if (filePath === "/workspace/.agents/jobs/shelved/my_feature/sandboxes/dev") throw createMissingError()
             return { mtimeMs: Date.now() }
         })
-        const client = createClient("My Feature (review)", "Accepted review. Action: archive sandbox and shelve job.")
+        const client = createClient("My Feature (review)")
         const tool = createAutocodeJobShelveTool(client, fs, () => new Date("2026-05-27T10:11:12Z"))
 
         const parsed = JSON.parse(await tool.execute({}, createToolContext()) as string)
@@ -140,13 +134,11 @@ describe("autocode_job_shelve tool", () => {
             job_name: "my_feature",
             current_status: "shelved",
             job_path: ".agents/jobs/shelved/my_feature/",
-            solution_path: ".agents/jobs/shelved/my_feature/solution.md",
             sandbox_archive: expect.objectContaining({ ok: true, status: "archived", archived: 1, job_name: "my_feature" }),
             next_action: "Shelve complete; the job has no active lifecycle directory.",
         })
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/shelved/my_feature/solution.md", expect.stringContaining("# 26-05-27 10:11:12 - Update Status To shelved"))
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/shelved/my_feature/solution.md", expect.stringContaining("Accepted review. Action: archive sandbox and shelve job."))
+        expect(fs.writeFile).not.toHaveBeenCalled()
         expect(client.session.update).toHaveBeenCalledWith({
             path: { id: "session-1" },
             query: { directory: "/workspace" },
@@ -155,19 +147,21 @@ describe("autocode_job_shelve tool", () => {
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/sandboxes/my_feature/dev", "/workspace/.agents/jobs/shelved/my_feature/sandboxes/dev")
     })
 
-    test("requires latest assistant response text before moving lifecycle directory", async () => {
+    test("shelves without session messages", async () => {
         const fs = createMockFs()
         fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/review" ? ["my_feature"] : [])
-        const tool = createAutocodeJobShelveTool(createClient("My Feature (review)", ""), fs)
+        const client = {
+            session: {
+                get: mock(async () => ({ data: { id: "session-1", title: "My Feature (review)", directory: "/workspace" } })),
+                update: mock(async () => ({ data: {} })),
+            },
+        } as unknown as OpencodeClient
+        const tool = createAutocodeJobShelveTool(client, fs)
 
-        const result = await tool.execute({}, createToolContext())
+        const result = JSON.parse(await tool.execute({}, createToolContext()) as string)
 
-        expect(result).toBe(createRetryResponse(
-            "shelve job",
-            "No assistant response text was found in the current session.",
-            "First present the user-facing lifecycle update in assistant text with concrete actions and a separate reason/evidence summary, then call autocode_job_shelve again."
-        ))
-        expect(fs.rename).not.toHaveBeenCalled()
+        expect(result.current_status).toBe("shelved")
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature")
         expect(fs.writeFile).not.toHaveBeenCalled()
     })
 
@@ -221,13 +215,12 @@ describe("autocode_job_shelve tool", () => {
             job_name: "my_feature_26-05-27_10-11-12",
             current_status: "shelved",
             job_path: ".agents/jobs/shelved/my_feature_26-05-27_10-11-12/",
-            solution_path: ".agents/jobs/shelved/my_feature_26-05-27_10-11-12/solution.md",
             sandbox_archive: expect.objectContaining({ ok: true, status: "archived", archived: 1, job_name: "my_feature_26-05-27_10-11-12" }),
             next_action: "Shelve complete; the job has no active lifecycle directory.",
         })
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature")
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature_26-05-27_10-11-12")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/shelved/my_feature_26-05-27_10-11-12/solution.md", expect.stringContaining("# 26-05-27 10:11:12 - Update Status To shelved"))
+        expect(fs.writeFile).not.toHaveBeenCalled()
         expect(client.session.update).toHaveBeenCalledWith({
             path: { id: "session-1" },
             query: { directory: "/workspace" },
@@ -249,7 +242,7 @@ describe("autocode_job_shelve tool", () => {
             if (filePath === "/workspace/.agents/jobs/shelved/my_feature/sandboxes/dev") throw createMissingError()
             return { mtimeMs: Date.now() }
         })
-        const client = createClient("My Feature (review)", "Accepted review. Action: archive sandbox and shelve job.")
+        const client = createClient("My Feature (review)")
         const tool = createAutocodeJobShelveTool(client, fs, () => new Date("2026-05-27T10:11:12Z"))
 
         const parsed = JSON.parse(await tool.execute({}, createToolContext()) as string)

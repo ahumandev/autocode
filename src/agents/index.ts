@@ -235,7 +235,7 @@ const baseAgents: AgentMap = {
             autocode_concept_read: "allow",
             autocode_job_execute: "allow",
             autocode_job_list: "allow",
-            autocode_plan_save: "allow",
+            autocode_job_draft: "allow",
             autocode_session_restart: "allow",
             doom_loop: "ask",
             external_directory: "ask",

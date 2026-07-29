@@ -92,7 +92,7 @@ describe("jobs utilities", () => {
 
         expect(getCanonicalDirectoryForStatus("concepts")).toBe("concepts")
         expect(getCanonicalDirectoryForStatus("drafts")).toBe("drafts")
-        expect(getCanonicalDirectoryForStatus("assist")).toBe("assist")
+        expect(getCanonicalDirectoryForStatus("facilitate")).toBe("facilitate")
         expect(getCanonicalDirectoryForStatus("executing")).toBe("executing")
         expect(getCanonicalDirectoryForStatus("facilitate")).toBe("facilitate")
         expect(getCanonicalDirectoryForStatus("review")).toBe("review")
@@ -133,7 +133,7 @@ describe("jobs utilities", () => {
 
     test("appends required status suffixes to derived job titles", () => {
         expect(deriveJobTitleFromFileName("Some_Job_Name.md", "drafts")).toBe("Some Job Name (drafts)")
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "assist")).toBe("Some Job Name (assist)")
+        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "facilitate")).toBe("Some Job Name (facilitate)")
         expect(deriveJobTitleFromFileName("Some_Job_Name.md", "executing")).toBe("Some Job Name (executing)")
         expect(deriveJobTitleFromFileName("Some_Job_Name.md", "facilitate")).toBe("Some Job Name (facilitate)")
         expect(deriveJobTitleFromFileName("Some_Job_Name.md", "review")).toBe("Some Job Name (review)")

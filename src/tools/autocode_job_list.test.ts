@@ -110,19 +110,17 @@ describe("autocode_job_list tool", () => {
         ])
     })
 
-    for (const filter of ["concepts", "drafts", "assist", "executing", "facilitate", "review"] as const) {
+    for (const filter of ["concepts", "drafts", "facilitate", "executing", "review"] as const) {
         test(`filters jobs to ${filter}`, async () => {
             const fs = createMockFs()
             fs.readdir.mockImplementation(async (dirPath: string) => {
                 if (dirPath === "/workspace/.agents/jobs/concepts") return ["concepts-job"]
                 if (dirPath === "/workspace/.agents/jobs/drafts") return ["drafts-job"]
-                if (dirPath === "/workspace/.agents/jobs/assist") return ["assist-job"]
                 if (dirPath === "/workspace/.agents/jobs/executing") return ["executing-job"]
                 if (dirPath === "/workspace/.agents/jobs/facilitate") return ["facilitate-job"]
                 if (dirPath === "/workspace/.agents/jobs/review") return ["review-job"]
                 if (dirPath === "/workspace/.agents/jobs/concepts/concepts-job") return []
                 if (dirPath === "/workspace/.agents/jobs/drafts/drafts-job") return []
-                if (dirPath === "/workspace/.agents/jobs/assist/assist-job") return []
                 if (dirPath === "/workspace/.agents/jobs/executing/executing-job") return []
                 if (dirPath === "/workspace/.agents/jobs/facilitate/facilitate-job") return []
                 if (dirPath === "/workspace/.agents/jobs/review/review-job") return []
@@ -131,7 +129,6 @@ describe("autocode_job_list tool", () => {
             fs.readFile.mockImplementation(async (filePath: string) => {
                 if (filePath.endsWith("concepts-job/plan.md")) return "# Problem\n\nConcepts problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Concepts Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
                 if (filePath.endsWith("drafts-job/plan.md")) return "# Problem\n\nDrafts problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Drafts Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-                if (filePath.endsWith("assist-job/plan.md")) return "# Problem\n\nAssist problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Assist Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
                 if (filePath.endsWith("executing-job/plan.md")) return "# Problem\n\nExecuting problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Executing Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
                 if (filePath.endsWith("facilitate-job/plan.md")) return "# Problem\n\nFacilitate problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Facilitate Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
                 if (filePath.endsWith("review-job/plan.md")) return "# Problem\n\nReview problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Review Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Risks\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
@@ -155,7 +152,7 @@ describe("autocode_job_list tool", () => {
         expect(result).toBe(createRetryResponse(
             "list jobs",
             "Invalid filter: drafting",
-            "Omit to view all or provide one of these status filters: concepts, drafts, assist, executing, facilitate, review"
+            "Omit to view all or provide one of these status filters: concepts, drafts, facilitate, executing, review"
         ))
         expect(fs.readFile).not.toHaveBeenCalled()
         expect(fs.readdir).not.toHaveBeenCalled()

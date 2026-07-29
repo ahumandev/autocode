@@ -1,15 +1,10 @@
-export function newSessionCommandTemplate(agent: string, responsePrefix: string): string {
+export function restartSessionTemplate(agent: string, prompt: string): string {
     return `
 $ARGUMENTS
 
 __________
 
-# STEP 1: Call \`autocode_session_restart\` with \`agent\` = \`${agent}\`.
-
-# STEP 2: Respond to user:
-
-\`\`\`markdown
-${responsePrefix} continues in same session.
-\`\`\`
+1. First call \`autocode_session_restart\` with \`agent\` = \`${agent}\`.
+2. Then: ${prompt}
 `
 }

@@ -4,7 +4,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { stripLeadingYamlFrontMatter } from "@/utils/frontmatter"
-import { deriveJobNameFromTitle, getRelativeConceptFilePath, isMissingFile, resolveAgentsStorageRoot, updateCurrentSessionTitleToJobName } from "@/utils/jobs"
+import { deriveJobNameFromTitle, findExistingJobFile, getJobDirectoryPath, getRelativeConceptFilePath, isMissingFile, resolveAgentsStorageRoot, updateCurrentSessionTitleToJobName } from "@/utils/jobs"
 
 type FileSystem = {
     mkdir?: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
@@ -49,8 +49,8 @@ export function createAutocodeConceptReadTool(clientOrFileSystem?: OpencodeClien
             label: tool.schema.string().describe("Label of concept to read."),
         },
         async execute(args, context) {
+            const storageRoot = resolveAgentsStorageRoot(context)
             try {
-                const storageRoot = resolveAgentsStorageRoot(context)
                 const conceptPath = getBacklogPath(storageRoot, args.label)
                 const conceptContent = await fileSystem.readFile(conceptPath, "utf8")
                 const jobName = deriveJobNameFromTitle(args.label.replace(/\.md$/i, ""))
@@ -59,7 +59,7 @@ export function createAutocodeConceptReadTool(clientOrFileSystem?: OpencodeClien
                     return createErrorResponse("read concept", `Unable to derive job_name from concept label: ${args.label}`, "Rename the concept label to include letters or numbers.")
                 }
 
-                const draftDirectory = path.join(storageRoot, ".agents", "jobs", "drafts", jobName)
+                const draftDirectory = getJobDirectoryPath(storageRoot, "drafts", jobName)
                 await (fileSystem.mkdir ?? (async () => { throw new Error("File system mkdir is unavailable.") }))(draftDirectory, { recursive: true })
                 await (fileSystem.rename ?? (async () => { throw new Error("File system rename is unavailable.") }))(conceptPath, path.join(draftDirectory, "concept.md"))
                 await updateCurrentSessionTitleToJobName(client, context, jobName)
@@ -67,10 +67,29 @@ export function createAutocodeConceptReadTool(clientOrFileSystem?: OpencodeClien
                 return stripLeadingYamlFrontMatter(conceptContent)
             }
             catch (error) {
-                if (isMissingFile(error)) {
+                if (!isMissingFile(error)) return createAbortResponse("read concept", error)
+            }
+
+            try {
+                const jobName = deriveJobNameFromTitle(args.label.replace(/\.md$/i, ""))
+                if (!jobName) {
+                    return createErrorResponse("read concept", `Concept not found: ${args.label}`, "Ask the user to choose another concept or provide their requirement directly.")
+                }
+                const draftDirectory = getJobDirectoryPath(storageRoot, "drafts", jobName)
+                const existingPlan = await findExistingJobFile(fileSystem, storageRoot, jobName, "plan.md", ["drafts", "executing", "facilitate"])
+                if (!existingPlan) {
                     return createErrorResponse("read concept", `Concept not found: ${args.label}`, "Ask the user to choose another concept or provide their requirement directly.")
                 }
 
+                if (existingPlan.directory !== "drafts") {
+                    await (fileSystem.mkdir ?? (async () => { throw new Error("File system mkdir is unavailable.") }))(getJobDirectoryPath(storageRoot, "drafts", ""), { recursive: true })
+                    await (fileSystem.rename ?? (async () => { throw new Error("File system rename is unavailable.") }))(getJobDirectoryPath(storageRoot, existingPlan.directory, jobName), draftDirectory)
+                }
+                await updateCurrentSessionTitleToJobName(client, context, jobName)
+
+                return stripLeadingYamlFrontMatter(existingPlan.content)
+            }
+            catch (error) {
                 return createAbortResponse("read concept", error)
             }
         },

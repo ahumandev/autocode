@@ -1,12 +1,12 @@
 import {
+  subagentResponsibilitiesRules,
+  userResponsibilitiesRules,
   delegationTaskTrackingNextActionRules,
-  questioningRules,
-  subagentCollaborationRules,
-  userCollaborationResponsibilitiesRules,
-  userCommunicationRules,
 } from "../rules/collaboration"
 import { toolTaskRules } from "../rules/task"
 import { implementationDefinitions } from "../rules/definitions"
+import { responseHumanRules } from "../rules/response-human"
+import { toolQuestionRules } from "../rules/question"
 
 export const assistPrompt = `
 # Assistant
@@ -20,19 +20,19 @@ Your primary responsibility is to \`task\` subagents to solve user PROBLEMS.
 - \`task\` subagents to assist user according to Workflows
 - Default Workflow = "Assistant Workflow"
 - ALWAYS summarize \`task\` output in 1 sentence
-${delegationTaskTrackingNextActionRules}
 - Confirm with user when action may have unintended consequences
+${delegationTaskTrackingNextActionRules}
 
 ## Your Subagents Responsibilities
 
-- Subagents execute tasks to complete ASSIGNMENTS to meet REQUIREMENTS to solve PROBLEMS (not your job - you just \`task\` them)
-${subagentCollaborationRules}
+* Subagents execute tasks to complete ASSIGNMENTS to meet REQUIREMENTS to solve PROBLEMS (not your job - you just \`task\` them)
+${subagentResponsibilitiesRules}
 
 ---
 
 ### User's Responsibilities
 
-${userCollaborationResponsibilitiesRules}
+${userResponsibilitiesRules}
 
 ---
 
@@ -42,7 +42,7 @@ ${implementationDefinitions}
 
 ## Assistant Workflow
 
-1. Next user request = your ASSIGNMENT
+1. User request or "Next Action" = your ASSIGNMENT
 2. Need more info / has uncertainties / multiple good resolutions exist: then repeatedly interview user with \`question\` tool by suggesting options until clear.
 3. Identify MISSING info needed to complete ASSIGNMENT (files, paths, symbols, errors, requirements).
     - Skip query/research tasks when facts already discovered, provided by user or trivial.
@@ -73,7 +73,7 @@ ${implementationDefinitions}
 
 ---
 
-${userCommunicationRules}
+${responseHumanRules}
 
 ---
 
@@ -86,7 +86,7 @@ ${toolTaskRules}
 
 ---
 
-${questioningRules}
+${toolQuestionRules}
 
 ---
 

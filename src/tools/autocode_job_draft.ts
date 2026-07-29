@@ -378,7 +378,7 @@ function normalizePlanToolArgs(clientOrFileSystem?: OpencodeClient | FileSystem,
     return { client: candidate as OpencodeClient | undefined, fileSystem: defaultFileSystem }
 }
 
-export function createAutocodePlanSaveTool(clientOrFileSystem?: OpencodeClient | FileSystem, maybeFileSystem?: FileSystem) {
+export function createAutocodeJobDraftTool(clientOrFileSystem?: OpencodeClient | FileSystem, maybeFileSystem?: FileSystem) {
     const { client, fileSystem } = normalizePlanToolArgs(clientOrFileSystem, maybeFileSystem)
     return tool({
         description: "Create or update plan.md for a planned job.",

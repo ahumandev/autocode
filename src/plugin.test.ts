@@ -120,7 +120,7 @@ describe("autocode plugin config", () => {
                     },
                 },
                 command: {
-                    "job-execute-auto": {
+                    "job-execute": {
                         description: "user description",
                         template: "user template",
                         subtask: true,
@@ -145,21 +145,20 @@ describe("autocode plugin config", () => {
             }))
             expect(cfg.agent?.title?.options?.reasoningEffort).toBeUndefined()
             expect(cfg.agent?.compaction?.model).toBeUndefined()
-            expect(cfg.command?.["job-execute-auto"]).toEqual(expect.objectContaining({
+            expect(cfg.command?.["job-execute"]).toEqual(expect.objectContaining({
                 description: "user description",
                 template: "user template",
                 subtask: true,
             }))
-            expect(cfg.command?.["job-execute-auto"]?.agent).toBe("design")
-            expect(cfg.command?.["job-execute-assist"]?.template).toContain("autocode_job_execute")
-            expect(Object.keys(cfg.command ?? {})).toEqual(["job-execute-auto", "job-concepts", "job-design", "job-draft", "job-execute-assist", "job-execute", "shelve", "autocode-install", "autocode-version", "author-article", "commit", "docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux", "explain", "fix", "git-conflict", "init", "install", "assist", "auto", "design", "research", "teach", "troubleshoot", "learn", "repeat-as-md", "repeat-as-wiki", "report", "resume", "tests"])
-            expect(cfg.command?.teach).toEqual(commands.teach)
+            expect(cfg.command?.["job-execute"]?.agent).toBe("design")
+            expect(cfg.command?.["job-facilitate"]?.template).toContain("autocode_job_execute")
+            expect(Object.keys(cfg.command ?? {})).toEqual(["job-execute", "job-concepts", "job-design", "job-draft", "job-facilitate", "job-shelve", "assist", "auto", "design", "research", "teach", "autocode-install", "autocode-version", "author", "commit", "docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux", "explain", "fix", "git-conflict", "init", "install", "learn", "repeat-as-md", "repeat-as-wiki", "report", "resume", "tests"])
             for (const [name, commandDef] of Object.entries(commands)) {
-                if (name === "job-execute-auto") continue
+                if (name === "job-execute") continue
                 expect(cfg.command?.[name]).toEqual(commandDef)
             }
-            expect(cfg.command?.["job-execute-auto"]).toEqual({
-                ...commands["job-execute-auto"],
+            expect(cfg.command?.["job-execute"]).toEqual({
+                ...commands["job-execute"],
                 description: "user description",
                 template: "user template",
                 subtask: true,

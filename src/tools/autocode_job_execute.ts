@@ -2,24 +2,16 @@ import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { dispatchAutocodeAgentPrompt, resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
-import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, getStorageRelativePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, updateCurrentSessionTitleToJobName, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
+import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, updateCurrentSessionTitleToJobName, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type FileSystem = JobToolFileSystem
 
-type SessionMessage = {
-    info: {
-        id: string
-    }
-}
-
-type SessionMessageClearClient = {
-    session: {
-        messages?: (args: { path: { id: string }, query: { directory: string, limit: number } }) => Promise<{ data?: SessionMessage[], error?: unknown }>
-        deleteMessage?: (args: { sessionID: string, messageID: string, directory: string }) => Promise<{ error?: unknown }>
-    }
-}
-
+const executionAgentStatuses = {
+    assist: "facilitate",
+    teach: "facilitate",
+    auto: "executing",
+} as const satisfies Record<"auto" | "assist" | "teach", JobStatus>
 
 async function readDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
     return options?.withFileTypes ? readdir(dirPath, { withFileTypes: true }) : readdir(dirPath)
@@ -67,40 +59,23 @@ function createMissingResolvedJobFileRetryResponse(jobName: string): string {
     )
 }
 
-function isExecutionAgent(agent: string): agent is "auto" | "assist" {
-    return agent === "auto" || agent === "assist"
+function isExecutionAgent(agent: string): agent is "auto" | "assist" | "teach" {
+    return agent === "auto" || agent === "assist" || agent === "teach"
 }
 
 function createAgentExecutePrompt(jobName: string, plan: string): string {
-    return `Selected job: ${jobName}\n\nplan.md:\n${plan}`
+    return `Selected job: ${jobName}\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan.md:\n${plan}`
 }
 
-async function clearCurrentSessionMessages(client: OpencodeClient, sessionID: string, directory: string): Promise<void> {
-    const sessionClient = client as unknown as SessionMessageClearClient
-    if (!sessionClient.session.messages) {
-        throw new Error("Unable to clear current session messages: session.messages is unavailable")
-    }
-    if (!sessionClient.session.deleteMessage) {
-        throw new Error("Unable to clear current session messages: session.deleteMessage is unavailable")
-    }
-
-    const messagesResponse = await sessionClient.session.messages({
+async function compactSessionForJob(client: OpencodeClient, sessionID: string, directory: string, model: { providerID: string, modelID: string }): Promise<void> {
+    const body = { ...model, auto: false }
+    const response = await client.session.summarize({
         path: { id: sessionID },
-        query: { directory, limit: 200 },
+        query: { directory },
+        body,
     })
-    if (messagesResponse.error) {
-        throw messagesResponse.error
-    }
-
-    for (const message of messagesResponse.data ?? []) {
-        const deleteResponse = await sessionClient.session.deleteMessage({
-            sessionID,
-            messageID: message.info.id,
-            directory,
-        })
-        if (deleteResponse.error) {
-            throw deleteResponse.error
-        }
+    if (response.error) {
+        throw response.error
     }
 }
 
@@ -112,12 +87,12 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
     return tool({
         description: "Execute job.",
         args: {
-            agent: tool.schema.string().describe("Agent to run: auto or assist."),
+            agent: tool.schema.string().describe("Agent to run: auto, assist, or teach."),
         },
         async execute(args, context) {
             try {
                 if (!isExecutionAgent(args.agent)) {
-                    return createRetryResponse("autocode_job_execute", `Invalid agent: ${args.agent}`, "Provide agent as one of: auto, assist.")
+                    return createRetryResponse("autocode_job_execute", `Invalid agent: ${args.agent}`, "Provide agent as one of: auto, assist, teach.")
                 }
 
                 const storageRoot = resolveAgentsStorageRoot(context)
@@ -130,22 +105,21 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
 
                     if (resolved.type === "found") {
                         try {
-                            const startStatus: JobStatus = "executing"
-                            const planPath = getJobFilePath(storageRoot, resolved.job.directory, resolvedJobName, "plan.md")
-                            const plan = await fileSystem.readFile(planPath, "utf8")
-
                             if (!client) {
                                 return createAbortResponse("autocode_job_execute", "Unable to continue execution session: client is unavailable")
                             }
 
-                            await updateCurrentSessionTitleToJobName(client, context, resolvedJobName, startStatus)
+                            const planPath = getJobFilePath(storageRoot, resolved.job.directory, resolvedJobName, "plan.md")
+                            const plan = await fileSystem.readFile(planPath, "utf8")
 
+                            const startStatus = executionAgentStatuses[args.agent]
+                            await updateCurrentSessionTitleToJobName(client, context, resolvedJobName, startStatus)
                             const sessionSettings = await resolveAutocodeAgentSessionSettings(args.agent, context.worktree, context.directory)
                             if ("error" in sessionSettings) {
                                 return createAbortResponse("autocode_job_execute", sessionSettings.error)
                             }
 
-                            await clearCurrentSessionMessages(client, context.sessionID, context.directory)
+                            await compactSessionForJob(client, context.sessionID, context.directory, sessionSettings.resolvedModel.model!)
 
                             const sessionTitle = formatJobSessionTitle(resolvedJobName, startStatus)
                             const promptResponse = await dispatchAutocodeAgentPrompt(
@@ -176,14 +150,9 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                             const { job } = startResult
                             await persistJobSessionID(fileSystem, storageRoot, job, resolvedJobName, context.sessionID)
 
-                            const planFilePath = getJobFilePath(storageRoot, job.directory, resolvedJobName, "plan.md")
-
                             return JSON.stringify({
                                 result_type: "session_created",
                                 job_name: resolvedJobName,
-                                current_status: job.status,
-                                file_path: getStorageRelativePath(storageRoot, planFilePath),
-                                job_path: job.job_path,
                                 session_id: context.sessionID,
                                 session_title: sessionTitle,
                             })

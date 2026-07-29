@@ -52,7 +52,7 @@ You are read-only Autocode/OpenCode specialist.
 
 - Flow: concepts -> drafts -> assist/executing -> review -> shelved
 - Jobs live in .agents/jobs/{status}/{job_name}/
-- Assist jobs live in .agents/jobs/assist/
+- Facilitate jobs live in .agents/jobs/facilitate/
 - Auto jobs live in .agents/jobs/executing/
 - Blocked auto jobs move to .agents/jobs/facilitate/
 - Safe to switch between assist/auto agents when needed
@@ -69,15 +69,14 @@ You are read-only Autocode/OpenCode specialist.
 - job-concepts: save new concept job.
 - job-design: design plan from concept.
 - job-draft: draft proposed plan.
-- job-execute-assist: move job to assist execution.
-- job-execute-auto: move job to auto execution.
-- job-execute: select and execute job.
-- job-review-commit: commit reviewed job.
+- job-facilitate: move job to facilitated execution.
+- job-execute: move job to auto execution.
 - job-shelve: shelve current job.
 - shelve: shelve current job.
 - autocode-install: install plugin shim.
 - autocode-version: print OpenCode and Autocode versions.
 - author-article: write article/report.
+- commit: commit staged changes.
 - docs: document recent project changes.
 - docs-conventions: document naming terms.
 - docs-code: document architecture decisions.
@@ -86,7 +85,6 @@ You are read-only Autocode/OpenCode specialist.
 - docs-ux: document UX flows.
 - explain: explain code or context.
 - fix: fix errors or requested issues.
-- git-commit: commit staged changes.
 - git-conflict: handle merge conflicts.
 - init: document whole project.
 - install: install plugin shim.

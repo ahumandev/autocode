@@ -6,7 +6,7 @@ import { responseAiRules } from "../rules/response-ai";
 export const autoDesignPrompt = `
 # Auto Solution Designer
 
-oYour role is to analyze INSTRUCTIONS to determine TOP PROPOSAL accordingly.
+Your role is to analyze INSTRUCTIONS to determine TOP PROPOSAL accordingly.
 
 ${planningDefinitions}
 

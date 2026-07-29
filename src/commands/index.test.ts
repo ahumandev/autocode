@@ -5,7 +5,6 @@ import { explainCommandTemplate } from "./explain"
 import { fixCommandTemplate } from "./fix"
 import { commands } from "./index"
 import { learnCommand } from "./learn"
-import { newTeachCommandTemplate } from "./teach"
 import { testsCommandTemplate } from "./tests"
 
 describe("commands", () => {
@@ -14,13 +13,17 @@ describe("commands", () => {
             "job-concepts",
             "job-design",
             "job-draft",
-            "job-execute-assist",
-            "job-execute-auto",
             "job-execute",
-            "shelve",
+            "job-facilitate",
+            "job-shelve",
+            "assist",
+            "auto",
+            "design",
+            "research",
+            "teach",
             "autocode-install",
             "autocode-version",
-            "author-article",
+            "author",
             "commit",
             "docs",
             "docs-conventions",
@@ -33,12 +36,6 @@ describe("commands", () => {
             "git-conflict",
             "init",
             "install",
-            "assist",
-            "auto",
-            "design",
-            "research",
-            "teach",
-            "troubleshoot",
             "learn",
             "repeat-as-md",
             "repeat-as-wiki",
@@ -56,7 +53,7 @@ describe("commands", () => {
             if ("model" in command) expect(command.model).toEqual(expect.any(String))
         }
 
-        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "job-review-commit", "job-shelve", "rename", "review", "act", "ask"] as const) {
+        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "rename", "review", "act", "ask"] as const) {
             expect(commands[commandName]).toBeUndefined()
         }
 
@@ -126,32 +123,27 @@ describe("commands", () => {
     })
 
     test("keeps duplicated job execution command template intent", () => {
-        expect(commands["job-execute-assist"]?.template).toContain("Call `autocode_job_execute` with `agent` = `assist`")
-        expect(commands["job-execute-auto"]?.template).toContain("Call `autocode_job_execute` with `agent` = `auto`")
-        for (const commandName of ["job-execute-assist", "job-execute-auto"] as const) {
+        expect(commands["job-facilitate"]?.template).toContain("Call `autocode_job_execute` with `agent` = `assist`")
+        for (const commandName of ["job-facilitate", "job-execute"] as const) {
             const template = commands[commandName]?.template ?? ""
             expect(template).toContain('`result_type == "draft_required"`')
             expect(template).toContain('`result_type == "no_plans"`')
             expect(template).toContain('`result_type == "session_created"`')
-            expect(template).toContain('Follow job at new session called: "[session_title]".')
-            expect(template).toContain("Replace [session_title] with `session_title` value from `autocode_job_execute` tool response.")
         }
     })
 
     test("keeps key command template substrings stable", () => {
         expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
-        expect(commands["job-draft"]?.template).toContain("Call `autocode_plan_save` tool with planned sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, RISKS, CONSTRAINTS, and user chosen PROPOSAL.")
+        expect(commands["job-draft"]?.template).toContain("Call `autocode_job_draft` tool with planned sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, RISKS, CONSTRAINTS, and user chosen PROPOSAL.")
         expect(commands["job-draft"]?.template).not.toContain("OBSERVATION")
-        expect(commands["job-execute"]?.template).toContain("Call `autocode_agent_execute` once with selected `job_name` and selected `agent`, then evaluate tool output:")
-        expect(commands["job-execute"]?.template).toContain('output includes `current_status`')
-        expect(commands["job-execute"]?.template).toContain('Continue job in [agent] session.')
+        expect(commands["job-execute"]?.template).toContain("Call `autocode_job_execute` with `agent` = `auto`")
         expect(commands.commit?.description).toBe("Commit added changes to Git and shelve job: args = reason for commit")
         expect(commands.commit?.subtask).toBe(false)
         expect(commands.commit?.template).toContain("$ARGUMENTS")
         expect(commands.commit?.template).toContain("git_commit")
         expect(commands.commit?.template).toContain("autocode_job_shelve")
         expect(commands.commit?.template).toContain("NEVER any other tool")
-        expect(commands.shelve?.template).toContain("Call `autocode_job_shelve` tool, then stop.")
+        expect(commands["job-shelve"]?.template).toContain("Call `autocode_job_shelve` tool, then stop.")
         expect(commands.resume?.description).toBe("Resume interrupted session.")
         expect(commands.resume?.subtask).toBe(false)
         expect(commands.resume?.template).toContain("You were interrupted. Call `task_resume` tool, then resume your own work.")
@@ -213,38 +205,6 @@ describe("commands", () => {
         expect(template).not.toContain("document_prd")
         expect(template).not.toContain("document_ux")
         expect(template).not.toContain("README")
-    })
-
-    test("keeps duplicated same-session continuation command template intent", () => {
-        const sessionCommands = {
-            "assist": { agent: "assist", response: "Assist task execution" },
-            "auto": { agent: "auto", response: "Autonomous task execution" },
-            "design": { agent: "design", response: "Design guidance" },
-            "research": { agent: "research", response: "Research" },
-            "teach": { agent: "teach", response: "Teach manual practice" },
-            "troubleshoot": { agent: "assist", response: "Troubleshooting" },
-        }
-
-        for (const [commandName, expectation] of Object.entries(sessionCommands)) {
-            const template = commands[commandName]?.template ?? ""
-            expect(template).toContain(`Call \`autocode_session_restart\` with \`agent\` = \`${expectation.agent}\``)
-            expect(template).toContain(`${expectation.response} continues in same session.`)
-            expect(template).not.toContain("autocode_session_create")
-            expect(template).not.toContain("[session_title]")
-            expect(template).not.toContain("new session")
-        }
-
-        expect(commands["assist"]?.template).toContain("# STEP 2: Respond to user:")
-        expect(commands["assist"]?.template).not.toContain("separate session")
-        expect(commands["assist"]?.template).not.toContain("new title")
-    })
-
-    test("registers teach as a same-session manual-practice command", () => {
-        expect(commands.teach).toEqual({
-            description: "Continue manual practice guidance in same session.",
-            subtask: false,
-            template: newTeachCommandTemplate,
-        })
     })
 
     test("keeps repeat_as_md template intent independent of stale description", () => {

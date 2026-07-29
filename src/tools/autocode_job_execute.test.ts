@@ -54,9 +54,9 @@ type PromptCall = {
 type MockClient = OpencodeClient & {
     session: {
         create: ReturnType<typeof mock>
-        deleteMessage: ReturnType<typeof mock>
         messages: ReturnType<typeof mock>
         promptAsync: ReturnType<typeof mock>
+        summarize: ReturnType<typeof mock>
         update: ReturnType<typeof mock>
     }
 }
@@ -73,9 +73,9 @@ function createMockClient(events: string[], messageIDs = ["user-1", "assistant-1
                     parts: [],
                 })),
             })),
-            deleteMessage: mock(async (args: { sessionID: string, messageID: string, directory: string }) => {
-                events.push(`delete:${args.messageID}`)
-                return {}
+            summarize: mock(async () => {
+                events.push("summarize")
+                return { data: undefined, error: undefined }
             }),
             update: mock(async (args: { body: { title: string } }) => {
                 events.push(`title:${args.body.title}`)
@@ -114,7 +114,7 @@ describe("autocode_job_execute tool", () => {
         if (xdgConfigHome) rmSync(xdgConfigHome, { recursive: true, force: true })
     })
 
-    test("clears current session, retitles it, dispatches selected plan, and persists same session", async () => {
+    test("compacts current session, retitles it, dispatches selected plan, and persists same session", async () => {
         const fs = createMockFs()
         const events: string[] = []
         configureResolvedDraft(fs)
@@ -125,29 +125,19 @@ describe("autocode_job_execute tool", () => {
         expect(parsed).toEqual({
             result_type: "session_created",
             job_name: "test_job",
-            current_status: "executing",
-            file_path: ".agents/jobs/executing/test_job/plan.md",
-            job_path: ".agents/jobs/executing/test_job/",
             session_id: "session-1",
-            session_title: "Test Job (executing)",
+            session_title: "Test Job (facilitate)",
         })
-        expect(client.session.deleteMessage).toHaveBeenCalledTimes(3)
-        expect(client.session.deleteMessage.mock.calls.map((call) => call[0])).toEqual([
-            { sessionID: "session-1", messageID: "user-1", directory: "/workspace" },
-            { sessionID: "session-1", messageID: "assistant-1", directory: "/workspace" },
-            { sessionID: "session-1", messageID: "assistant-2", directory: "/workspace" },
-        ])
+        expect(client.session.summarize).toHaveBeenCalledTimes(1)
         expect(events).toEqual([
-            "title:Test Job (executing)",
-            "delete:user-1",
-            "delete:assistant-1",
-            "delete:assistant-2",
+            "title:Test Job (facilitate)",
+            "summarize",
             "dispatch",
         ])
         expect(client.session.update).toHaveBeenCalledWith({
             path: { id: "session-1" },
             query: { directory: "/workspace" },
-            body: { title: "Test Job (executing)" },
+            body: { title: "Test Job (facilitate)" },
         })
         expect(client.session.create).not.toHaveBeenCalled()
         expect(client.session.promptAsync).toHaveBeenCalledWith({
@@ -155,11 +145,35 @@ describe("autocode_job_execute tool", () => {
             query: { directory: "/workspace" },
             body: {
                 agent: "assist",
-                parts: [{ type: "text", text: "Selected job: test_job\n\nplan.md:\n# Problem\n\nShip execution\n" }],
+                parts: [{ type: "text", text: "Selected job: test_job\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan.md:\n# Problem\n\nShip execution\n" }],
             },
         })
-        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/executing/test_job")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/test_job/session.yml", "session_id: session-1\n")
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/facilitate/test_job")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: session-1\n")
+    })
+
+    test("compacts current session and dispatches plan with teach", async () => {
+        const fs = createMockFs()
+        const events: string[] = []
+        configureResolvedDraft(fs, "# Lesson\n\nExplain this change\n")
+        const client = createMockClient(events)
+
+        await createAutocodeJobExecuteTool(client, fs).execute({ agent: "teach" }, createToolContext())
+
+        expect(events).toEqual([
+            "title:Test Job (facilitate)",
+            "summarize",
+            "dispatch",
+        ])
+        expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
+            path: { id: "session-1" },
+            body: expect.objectContaining({
+                agent: "teach",
+                parts: [{ type: "text", text: "Selected job: test_job\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan.md:\n# Lesson\n\nExplain this change\n" }],
+            }),
+        }))
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/facilitate/test_job")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: session-1\n")
     })
 
     test("dispatches assist with balanced model and omits standard variant in current session", async () => {
@@ -187,6 +201,8 @@ describe("autocode_job_execute tool", () => {
                 }),
             }))
             expect(client.session.create).not.toHaveBeenCalled()
+            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/test_job`, `${worktree}/.agents/jobs/facilitate/test_job`)
+            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/facilitate/test_job/session.yml`, "session_id: session-1\n")
         } finally {
             rmSync(worktree, { recursive: true, force: true })
         }
@@ -217,6 +233,8 @@ describe("autocode_job_execute tool", () => {
                 }),
             }))
             expect(client.session.create).not.toHaveBeenCalled()
+            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/test_job`, `${worktree}/.agents/jobs/executing/test_job`)
+            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/executing/test_job/session.yml`, "session_id: session-1\n")
         } finally {
             rmSync(worktree, { recursive: true, force: true })
         }
@@ -248,7 +266,7 @@ describe("autocode_job_execute tool", () => {
             "Resolved planned job is missing a required file: test_job",
             "Restore the planned job plan.md file under .agents/jobs/ before retrying execution."
         ))
-        expect(client.session.deleteMessage).not.toHaveBeenCalled()
+        expect(client.session.summarize).not.toHaveBeenCalled()
         expect(client.session.update).not.toHaveBeenCalled()
         expect(client.session.create).not.toHaveBeenCalled()
     })
@@ -257,15 +275,15 @@ describe("autocode_job_execute tool", () => {
         const fs = createMockFs()
         const client = createMockClient([])
 
-        const result = await createAutocodeJobExecuteTool(client, fs).execute({ agent: "teach" }, createToolContext())
+        const result = await createAutocodeJobExecuteTool(client, fs).execute({ agent: "invalid" }, createToolContext())
 
         expect(result).toBe(createRetryResponse(
             "autocode_job_execute",
-            "Invalid agent: teach",
-            "Provide agent as one of: auto, assist."
+            "Invalid agent: invalid",
+            "Provide agent as one of: auto, assist, teach."
         ))
         expect(fs.readdir).not.toHaveBeenCalled()
-        expect(client.session.deleteMessage).not.toHaveBeenCalled()
+        expect(client.session.summarize).not.toHaveBeenCalled()
         expect(client.session.create).not.toHaveBeenCalled()
         expect(client.session.promptAsync).not.toHaveBeenCalled()
     })

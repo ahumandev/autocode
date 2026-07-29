@@ -1,16 +1,17 @@
 export const jobDraftCommandTemplate = `
-1. Call \`autocode_plan_save\` tool with planned sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, RISKS, CONSTRAINTS, and user chosen PROPOSAL.
+1. Call \`autocode_job_draft\` tool with planned sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, RISKS, CONSTRAINTS, and user chosen PROPOSAL.
 2. Respond with:
 
 \`\`\`markdown
 Your plan is saved at: \`[job_path]\`
 
 Enter:
-- \`/job-execute-assist\` 👨‍💻 to execute the planned job assistively
-- \`/job-execute-auto\`   🤖 to execute the planned job autonomously
+- \`/job-execute\` 🤖 to execute the planned job autonomously
+- \`/job-facilitate\` 👨‍💻 to facilitate planned job execution
+- \`/job-teach\` 🎓 to learn planned job execution
 \`\`\`
 
-Replace [job_path] with \`job_path\` value from \`autocode_plan_save\` tool response.
+Replace [job_path] with \`job_path\` value from \`autocode_job_draft\` tool response.
 
 # Plan Formatting Rules
 

@@ -1,6 +1,6 @@
 ---
 name: author-readme
-description: Use `author-readme` skill when reviewing/editing README.md file.
+description: Use `author-readme` skill when creating or rewriting README.md file.
 ---
 
 ## README.md Layout
@@ -164,15 +164,15 @@ Replace placeholders in README.md as follows:
 
 ## Rules for Updates
 
-- Use README.md Layout only for a new README or user-requested full rewrite.
 - For target update, keep existing README structure.
 - Before edit, record hero, logo, H1, badges, header HTML, and section anchors.
-- Edit only requested anchors or anchors with factually outdated content.
-- Never remove or replace hero, logo, H1, badges, or header HTML in partial update.
+- Add missing sections like [HERO], [PURPOSE], etc. but never add guessed or "coming soon" content.
+- Edit only requested sections with outdated content.
 - If `autocode_logo_find` failed, preserve existing logo; never remove or substitute it.
-- After write, verify recorded hero, logo, H1, badges, header HTML, and unrelated sections are unchanged.
-- Remove empty sections without factual content; do not add guessed or "coming soon" content.
+- After write, verify outline and fix errors.
+- Remove empty sections without factual content
 - Validate markdown links; update factually outdated information.
 - Avoid duplicate content; link to existing sections instead.
 - Define non-standard acronyms and terms once at first use.
 - Never mention deprecated tools or configs; keep examples current.
+- Never mention todos, vulnerabilities, code smells or incomplete features.

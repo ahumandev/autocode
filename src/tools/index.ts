@@ -28,7 +28,7 @@ import { createAutocodeJobStatusTool } from "./autocode_job_status"
 import { createAutocodeKillTool } from "./autocode_kill"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
-import { createAutocodePlanSaveTool } from "./autocode_plan_save"
+import { createAutocodeJobDraftTool } from "./autocode_job_draft"
 import { createAutocodeRestTool } from "./autocode_rest"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
@@ -80,7 +80,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_md_remove: createAutocodeMdRemoveTool(),
         autocode_md_update: createAutocodeMdUpdateTool(),
         autocode_plan_read: createAutocodePlanReadTool(client),
-        autocode_plan_save: createAutocodePlanSaveTool(client),
+        autocode_job_draft: createAutocodeJobDraftTool(client),
         autocode_rest: createAutocodeRestTool(client),
         autocode_sandbox_cli: createAutocodeSandboxCliTool(client),
         autocode_sandbox_config_edit: createAutocodeSandboxConfigEditTool(client),

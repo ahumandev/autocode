@@ -269,13 +269,13 @@ async function resolveCurrentJobRestDirectory(action: string, fileSystem: RestTo
     const identity = await resolvePlannedJobIdentity(directoryFileSystem, client, context)
 
     // Ad-hoc auto-provision: when no planned job matches the session title, spin up
-    // .agents/jobs/assist/<slug>/ so autocode_rest is usable without manual
-    // /job-draft or /job-execute-assist setup. Other resolutions keep their retry error.
+    // .agents/jobs/facilitate/<slug>/ so autocode_rest is usable without manual
+    // /job-draft or /job-facilitate setup. Other resolutions keep their retry error.
     if (identity.resolution === "missing" && identity.session_title) {
         const slug = identity.title_derived_candidate || deriveJobNameFromTitle(identity.session_title)
         if (slug) {
             const storageRoot = resolveAgentsStorageRoot(context)
-            const jobDir = getJobDirectoryPath(storageRoot, "assist", slug)
+            const jobDir = getJobDirectoryPath(storageRoot, "facilitate", slug)
             await ensurePlannedJobFiles(directoryFileSystem, jobDir)
             const restDir = path.join(jobDir, "rest")
             await ensurePlannedJobFiles(directoryFileSystem, restDir)

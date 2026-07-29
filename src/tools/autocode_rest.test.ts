@@ -396,7 +396,7 @@ describe("autocode_rest tools", () => {
         expect(abortReceived?.name).toBe("AbortError")
     })
 
-    test("auto-creates assist job dir when no planned job matches the session title", async () => {
+    test("auto-creates facilitate job dir when no planned job matches the session title", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient({ "session-1": { title: "My REST Query" } }), fileSystem)
 
@@ -413,7 +413,7 @@ describe("autocode_rest tools", () => {
         expect(parsed.response_id).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
         expect(typeof parsed.response_time).toBe("number")
 
-        const jobDir = "/workspace/.agents/jobs/assist/my_rest_query"
+        const jobDir = "/workspace/.agents/jobs/facilitate/my_rest_query"
         expect(fileSystem.getFile(`${jobDir}/session.yml`)).toBe("session_id: session-1\n")
         await expect(fileSystem.stat(`${jobDir}/rest`)).resolves.toEqual({ mtimeMs: 1 })
     })
@@ -430,10 +430,10 @@ describe("autocode_rest tools", () => {
         expect(errored.failedAction).toBe("autocode_rest")
         expect(errored.error).toContain("No active planned job context was found for current session.")
 
-        await expect(fileSystem.stat("/workspace/.agents/jobs/assist")).rejects.toMatchObject({ code: "ENOENT" })
+        await expect(fileSystem.stat("/workspace/.agents/jobs/facilitate")).rejects.toMatchObject({ code: "ENOENT" })
     })
 
-    test("does not auto-create assist dir when an existing planned job is resolved", async () => {
+    test("does not auto-create facilitate dir when an existing planned job is resolved", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
 
@@ -450,8 +450,8 @@ describe("autocode_rest tools", () => {
         expect(typeof parsed.response_time).toBe("number")
         const allFiles = fileSystem.listFiles()
         expect(allFiles).toContain("/workspace/.agents/jobs/drafts/my_job/session.yml")
-        expect(allFiles.some(f => f.includes("/assist/"))).toBe(false)
-        await expect(fileSystem.stat("/workspace/.agents/jobs/assist")).rejects.toMatchObject({ code: "ENOENT" })
+        expect(allFiles.some(f => f.includes("/facilitate/"))).toBe(false)
+        await expect(fileSystem.stat("/workspace/.agents/jobs/facilitate")).rejects.toMatchObject({ code: "ENOENT" })
     })
 
     test("uses raw Authorization environment value", async () => {

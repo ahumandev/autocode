@@ -13,7 +13,7 @@ import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createTaskResumeTool } from "./task_resume"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
-import { composePlanMarkdown, createAutocodePlanSaveTool } from "./autocode_plan_save"
+import { composePlanMarkdown, createAutocodeJobDraftTool } from "./autocode_job_draft"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
 import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { applySandboxPlatformPolicy } from "@/agents"
@@ -21,7 +21,7 @@ import { createTools } from "./index"
 import { createToolContext } from "./test_context"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
-const PROMPT_TASK_RESUME = "You have been interrupted, therefore you MUST:\n1. Use `task_resume` tool to resume previous interrupted task sessions\n2. Then resume your own work"
+const PROMPT_TASK_RESUME = "You have been interrupted, therefore you MUST:\n\n1. For each previous `task` call that were interrupted (no output when due):\n    - Call `task_resume` tool with same `task_id` used in previous `task` call.\n2. Then resume your own work"
 const PROMPT_WORK_RESUME = "Resume"
 
 type PermissionRule = "ask" | "allow" | "deny"
@@ -127,7 +127,7 @@ function toolSurfaceText(tool: any) {
     return [tool?.description ?? "", ...argDescriptions].join("\n")
 }
 
-function executePlanSave(tool: ReturnType<typeof createAutocodePlanSaveTool>, args: Record<string, string>) {
+function executePlanDraft(tool: ReturnType<typeof createAutocodeJobDraftTool>, args: Record<string, string>) {
     return tool.execute(args as never, createToolContext())
 }
 
@@ -421,11 +421,11 @@ describe("auto resume wiring", () => {
                 await configurePlugin(plugin, cfg)
 
                 expect(cfg.command["job-draft"]?.agent).toBe("design")
-                expect(cfg.command["job-draft"]?.template).toContain("autocode_plan_save")
+                expect(cfg.command["job-draft"]?.template).toContain("autocode_job_draft")
                 expect(cfg.command["job-draft"]?.template).toContain("Your plan is saved at: `[job_path]`")
-                expect(cfg.command["job-draft"]?.template).toContain("Replace [job_path] with `job_path` value from `autocode_plan_save` tool response.")
-                expect(cfg.command["job-draft"]?.template).toContain("/job-execute-auto")
-                expect(cfg.command["job-draft"]?.template).toContain("/job-execute-assist")
+                expect(cfg.command["job-draft"]?.template).toContain("Replace [job_path] with `job_path` value from `autocode_job_draft` tool response.")
+                expect(cfg.command["job-draft"]?.template).toContain("/job-execute")
+                expect(cfg.command["job-draft"]?.template).toContain("/job-facilitate")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -436,7 +436,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("registers job-execute-auto command for planned autonomous execution", async () => {
+    test("registers job-execute command for planned autonomous execution", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -446,12 +446,12 @@ describe("auto resume wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["job-execute-auto"]?.agent).toBe("design")
-                expect(cfg.command["job-execute-auto"]?.template).toContain("autocode_job_execute")
-                expect(cfg.command["job-execute-auto"]?.template).toContain("`agent` = `auto`")
-                expect(cfg.command["job-execute-auto"]?.template).toContain("draft_required")
-                expect(cfg.command["job-execute-auto"]?.template).not.toContain("list_plans")
-                expect(cfg.command["job-execute-auto"]?.template).not.toContain("result_type == \"workflow\"")
+                expect(cfg.command["job-execute"]?.agent).toBe("design")
+                expect(cfg.command["job-execute"]?.template).toContain("autocode_job_execute")
+                expect(cfg.command["job-execute"]?.template).toContain("`agent` = `auto`")
+                expect(cfg.command["job-execute"]?.template).toContain("draft_required")
+                expect(cfg.command["job-execute"]?.template).not.toContain("list_plans")
+                expect(cfg.command["job-execute"]?.template).not.toContain("result_type == \"workflow\"")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -462,7 +462,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("registers job-execute-assist command for planned assistive execution", async () => {
+    test("registers job-facilitate command for planned facilitated execution", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -472,13 +472,13 @@ describe("auto resume wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["job-execute-assist"]?.agent).toBe("design")
-                expect(cfg.command["job-execute-assist"]?.description).toContain(".agents/jobs/assist")
-                expect(cfg.command["job-execute-assist"]?.template).toContain("autocode_job_execute")
-                expect(cfg.command["job-execute-assist"]?.template).toContain("`agent` = `assist`")
-                expect(cfg.command["job-execute-assist"]?.template).toContain("draft_required")
-                expect(cfg.command["job-execute-assist"]?.template).not.toContain("list_plans")
-                expect(cfg.command["job-execute-assist"]?.template).not.toContain("result_type == \"workflow\"")
+                expect(cfg.command["job-facilitate"]?.agent).toBe("design")
+                expect(cfg.command["job-facilitate"]?.description).toContain(".agents/jobs/facilitate")
+                expect(cfg.command["job-facilitate"]?.template).toContain("autocode_job_execute")
+                expect(cfg.command["job-facilitate"]?.template).toContain("`agent` = `assist`")
+                expect(cfg.command["job-facilitate"]?.template).toContain("draft_required")
+                expect(cfg.command["job-facilitate"]?.template).not.toContain("list_plans")
+                expect(cfg.command["job-facilitate"]?.template).not.toContain("result_type == \"workflow\"")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -489,7 +489,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("registers job-execute selection command", async () => {
+    test("registers job-execute command as autonomous execution", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -501,10 +501,8 @@ describe("auto resume wiring", () => {
 
                 expect(cfg.command["job-execute"]?.agent).toBe("design")
                 expect(cfg.command["job-execute"]?.subtask).toBe(false)
-                expect(cfg.command["job-execute"]?.template).toContain("autocode_job_list")
-                expect(cfg.command["job-execute"]?.template).toContain("question")
-                expect(cfg.command["job-execute"]?.template).toContain("autocode_agent_execute")
-                expect(cfg.command["job-execute"]?.template).toContain('output includes `current_status`')
+                expect(cfg.command["job-execute"]?.template).toContain("autocode_job_execute")
+                expect(cfg.command["job-execute"]?.template).toContain("`agent` = `auto`")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -538,7 +536,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("routes accept, reject, shelve, and legacy command to the current lifecycle agents", async () => {
+    test("registers canonical commit and shelve lifecycle commands", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -548,14 +546,12 @@ describe("auto resume wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["job-review-commit"]?.agent).toBeUndefined()
-                expect(cfg.command["job-review-commit"]?.template).toBeUndefined()
-                expect(cfg.command["job-review-commit"]?.description).toBeUndefined()
-                expect(cfg.command["job-shelve"]?.agent).toBeUndefined()
-                expect(cfg.command["job-shelve"]?.template).toBeUndefined()
-                expect(cfg.command["shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
-                expect(cfg.command["shelve"]?.agent).toBe("temp_shelve")
-                expect(cfg.command["shelve"]?.template).toContain("autocode_job_shelve")
+                expect(cfg.command.commit?.description).toBe("Commit added changes to Git and shelve job: args = reason for commit")
+                expect(cfg.command.commit?.template).toContain("git_commit")
+                expect(cfg.command.commit?.template).toContain("autocode_job_shelve")
+                expect(cfg.command["job-shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
+                expect(cfg.command["job-shelve"]?.agent).toBe("auto")
+                expect(cfg.command["job-shelve"]?.template).toContain("autocode_job_shelve")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -1064,7 +1060,8 @@ describe("autocode_concept_list tool", () => {
     test("returns sorted backlog JSON with names and first non-heading text descriptions after optional front-matter", async () => {
         const reads: string[] = []
         const tool = createAutocodeConceptListTool({
-            async readdir(): Promise<Dirent[]> {
+            async readdir(filePath): Promise<Dirent[]> {
+                if (!String(filePath).endsWith("/concepts")) return []
                 return [
                     createDirent("zeta.md", "file"),
                     createDirent("notes.txt", "file"),
@@ -1123,6 +1120,33 @@ describe("autocode_concept_list tool", () => {
         const result = await tool.execute({}, createToolContext())
 
         expect(result).toBe(JSON.stringify({ backlog: [] }))
+    })
+
+    test("includes draft, executing, and facilitate jobs", async () => {
+        const tool = createAutocodeConceptListTool({
+            async readdir(filePath): Promise<Dirent[]> {
+                const directory = String(filePath)
+                if (directory.endsWith("/concepts")) return [createDirent("idea.md", "file")]
+                if (directory.endsWith("/drafts")) return [createDirent("draft_job")]
+                if (directory.endsWith("/executing")) return [createDirent("executing_job")]
+                if (directory.endsWith("/facilitate")) return [createDirent("facilitate_job")]
+                return []
+            },
+            async readFile(filePath) {
+                return `Description for ${String(filePath).split("/").at(-2)}`
+            },
+        })
+
+        const result = await tool.execute({}, createToolContext())
+
+        expect(parseToolResult(result)).toEqual({
+            backlog: [
+                { label: "draft_job", description: "Description for draft_job" },
+                { label: "executing_job", description: "Description for executing_job" },
+                { label: "facilitate_job", description: "Description for facilitate_job" },
+                { label: "idea", description: "Description for concepts" },
+            ],
+        })
     })
 })
 
@@ -1218,6 +1242,28 @@ describe("autocode_concept_read tool", () => {
         const result = await tool.execute({ label: "missing-item" }, createToolContext())
 
         expect(result).toBe(createErrorResponse("read concept", "Concept not found: missing-item", "Ask the user to choose another concept or provide their requirement directly."))
+    })
+
+    test("restores executing job to drafts and returns plan body without front matter", async () => {
+        const worktree = mkdtempSync(join(tmpdir(), "autocode-concept-read-"))
+        const executingDirectory = join(worktree, ".agents", "jobs", "executing", "existing_job")
+        const draftDirectory = join(worktree, ".agents", "jobs", "drafts", "existing_job")
+        mkdirSync(executingDirectory, { recursive: true })
+        writeFileSync(join(executingDirectory, "plan.md"), "---\nsource: test\n---\n\n# Existing Job\n\nPlan body")
+
+        try {
+            const result = await createAutocodeConceptReadTool().execute({ label: "existing_job" }, {
+                ...createToolContext(),
+                directory: worktree,
+                worktree,
+            })
+
+            expect(result).toBe("# Existing Job\n\nPlan body")
+            expect(existsSync(executingDirectory)).toBe(false)
+            expect(readFileSync(join(draftDirectory, "plan.md"), "utf8")).toContain("Plan body")
+        } finally {
+            rmSync(worktree, { recursive: true, force: true })
+        }
     })
 
     test("uses the default file system when called with a client only", async () => {
@@ -1351,7 +1397,7 @@ describe("shared tool error handling", () => {
     })
 })
 
-describe("autocode_plan_save tool", () => {
+describe("autocode_job_draft tool", () => {
     test("registers consolidated plan tools and grants plan permission", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -1378,7 +1424,7 @@ describe("autocode_plan_save tool", () => {
                     "autocode_md_frontmatter_read",
                     "autocode_md_frontmatter_edit",
                     "autocode_plan_read",
-                    "autocode_plan_save",
+                    "autocode_job_draft",
                     "autocode_db_table",
                     "autocode_db_table_read",
                     "autocode_db_tables",
@@ -1438,16 +1484,16 @@ describe("autocode_plan_save tool", () => {
                 ].sort())
                 expect(plugin.tool?.autocode_draft_job_create).toBeUndefined()
                 expect(plugin.tool?.autocode_draft_job_update).toBeUndefined()
-                expect(plugin.tool?.autocode_plan_save).toBeDefined()
+                expect(plugin.tool?.autocode_job_draft).toBeDefined()
                 expect(plugin.tool?.autocode_plan_read).toBeDefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Create or update plan.md for a planned job.")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Define observed wrong/missing project behavior or missing info.")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Define expected outcome from user perspective.")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).toContain("Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).not.toContain("job_name")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).not.toContain("suggested_name")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).not.toContain("concept_label")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_save)).not.toContain("Compatibility alias")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).toContain("Create or update plan.md for a planned job.")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).toContain("Define observed wrong/missing project behavior or missing info.")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).toContain("Define expected outcome from user perspective.")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).toContain("Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).not.toContain("job_name")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).not.toContain("suggested_name")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).not.toContain("concept_label")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).not.toContain("Compatibility alias")
                 expect(toolSurfaceText(plugin.tool?.autocode_plan_read)).toContain("Read your solution plan of your job.")
                 expect(toolSurfaceText(plugin.tool?.autocode_plan_read)).toContain("Planned job_name if known, otherwise omit to look it up.")
                 expect(plugin.tool?.autocode_plan_load_problem).toBeUndefined()
@@ -1455,7 +1501,7 @@ describe("autocode_plan_save tool", () => {
                 expect(plugin.tool?.autocode_draft_job_read).toBeUndefined()
                 expect(plugin.tool?.autocode_job_list).toBeDefined()
                 expect(plugin.tool?.autocode_job_status).toBeDefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_job_status)).toContain("Update canonical lifecycle statuses for jobs under .agents/jobs/*.")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_status)).toContain("Update current job status.\ndrafts, executing, facilitate, review, shelved")
                 expect(toolSurfaceText(plugin.tool?.autocode_job_status)).not.toContain("agent=assist")
                 expect(toolSurfaceText(plugin.tool?.autocode_job_status)).not.toContain("job_name")
                 expect(toolSurfaceText(plugin.tool?.autocode_job_status)).not.toContain("report_content")
@@ -1464,7 +1510,7 @@ describe("autocode_plan_save tool", () => {
                 expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("List active drafts/jobs.")
                 expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("Optional filter limits results to one active status")
                 expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("omit to list all active jobs")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("Omit to view all or provide one of these status filters: concepts, drafts, assist, executing, facilitate, review")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("Omit to view all or provide one of these status filters: concepts, drafts, facilitate, executing, review")
                 expect(plugin.tool?.autocode_act_prompt).toBeUndefined()
                 expect(plugin.tool?.autocode_act).toBeUndefined()
                 expect(plugin.tool?.autocode_agent_execute).toBeDefined()
@@ -1506,7 +1552,7 @@ describe("autocode_plan_save tool", () => {
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_swap")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_plan_save")).toBe("allow")
+                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_draft")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_restart")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBeUndefined()
@@ -1528,7 +1574,7 @@ describe("autocode_plan_save tool", () => {
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_review")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_job_list")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_read")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_save")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_job_draft")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_draft_job_create")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_agent_swap")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_restart")).toBe("allow")
@@ -1537,10 +1583,10 @@ describe("autocode_plan_save tool", () => {
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_list")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_status")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_auto_start")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_plan_save")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_draft")).toBeUndefined()
                 expect(Object.keys(cfg.agent).filter((name) => name.startsWith("auto-") || name.startsWith("assist-"))).toEqual([])
                 expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
-                expect(cfg.agent.design?.prompt).toContain("autocode_plan_save")
+                expect(cfg.agent.design?.prompt).toContain("autocode_job_draft")
                 expect(cfg.agent.design?.prompt).toContain("autocode_job_execute")
                 expect(cfg.agent.research?.prompt).toContain("Research Workflow")
                 expect(cfg.agent.research?.prompt).toContain("Task `query*` subagents")
@@ -1709,7 +1755,7 @@ describe("autocode_logo_find tool", () => {
     })
 })
 
-describe("autocode_plan_save behaviour", () => {
+describe("autocode_job_draft behaviour", () => {
     function createMockFs(readdirResult: { name: string, type?: "file" | "directory" }[][] = []) {
         let readdirCallCount = 0
         const readdir: ReaddirWithFileTypes = async (_dirPath, _opts) => {
@@ -1748,8 +1794,8 @@ describe("autocode_plan_save behaviour", () => {
     test("creates a new draft plan from the current session title", async () => {
         const fs = createMockFs()
         const client = createPlanSaveClient("My Feature")
-        const tool = createAutocodePlanSaveTool(client, fs)
-        const parsed = parseToolResult(await executePlanSave(tool, { problems: "Problem text" }))
+        const tool = createAutocodeJobDraftTool(client, fs)
+        const parsed = parseToolResult(await executePlanDraft(tool, { problems: "Problem text" }))
 
         expect(parsed).toEqual({
             job_name: "my_feature",
@@ -1771,9 +1817,9 @@ describe("autocode_plan_save behaviour", () => {
     test("saves current problems arg", async () => {
         const fs = createMockFs()
         const client = createPlanSaveClient("My Feature")
-        const tool = createAutocodePlanSaveTool(client, fs)
+        const tool = createAutocodeJobDraftTool(client, fs)
 
-        await executePlanSave(tool, { problems: "Legacy problem text" })
+        await executePlanDraft(tool, { problems: "Legacy problem text" })
 
         expect(fs.writeFile).toHaveBeenCalledWith(
             "/workspace/.agents/jobs/drafts/my_feature/plan.md",
@@ -1791,7 +1837,7 @@ describe("autocode_plan_save behaviour", () => {
             error.code = "ENOENT"
             throw error
         })
-        const tool = createAutocodePlanSaveTool(createPlanSaveClient("My Feature"), fs)
+        const tool = createAutocodeJobDraftTool(createPlanSaveClient("My Feature"), fs)
         const parsed = parseToolResult(await tool.execute({ problems: "Updated problem" }, createToolContext()))
 
         expect(parsed).toEqual({
@@ -1803,14 +1849,14 @@ describe("autocode_plan_save behaviour", () => {
 
     test("uses session-title slug derivation for special characters and truncation", async () => {
         const fs = createMockFs()
-        const parsed = parseToolResult(await executePlanSave(createAutocodePlanSaveTool(createPlanSaveClient("Hello World! Test--Case"), fs), { problems: "Problem text" }))
+        const parsed = parseToolResult(await executePlanDraft(createAutocodeJobDraftTool(createPlanSaveClient("Hello World! Test--Case"), fs), { problems: "Problem text" }))
         expect(parsed).toEqual({
             job_name: "hello_world_test_case",
             job_path: "/workspace/.agents/jobs/drafts/hello_world_test_case/plan.md",
         })
 
         const longTitle = "a".repeat(150)
-        const parsed2 = parseToolResult(await executePlanSave(createAutocodePlanSaveTool(createPlanSaveClient(longTitle), createMockFs()), { problems: "Problem text" }))
+        const parsed2 = parseToolResult(await executePlanDraft(createAutocodeJobDraftTool(createPlanSaveClient(longTitle), createMockFs()), { problems: "Problem text" }))
         expect(parsed2.job_name).toBe("a".repeat(100))
         expect(parsed2.job_path).toBe(`/workspace/.agents/jobs/drafts/${"a".repeat(100)}/plan.md`)
     })
@@ -1825,7 +1871,7 @@ describe("autocode_plan_save behaviour", () => {
             error.code = "ENOENT"
             throw error
         })
-        const tool = createAutocodePlanSaveTool(createPlanSaveClient("My Feature"), fs)
+        const tool = createAutocodeJobDraftTool(createPlanSaveClient("My Feature"), fs)
         const parsed = parseToolResult(await tool.execute({ constraints: "### Constraint Two\nChange this" }, createToolContext()))
 
         expect(parsed).toEqual({
@@ -1841,7 +1887,7 @@ describe("autocode_plan_save behaviour", () => {
 
     test("returns retry response when the current session title cannot produce a valid job_name", async () => {
         const fs = createMockFs()
-        const tool = createAutocodePlanSaveTool(createPlanSaveClient("***"), fs)
+        const tool = createAutocodeJobDraftTool(createPlanSaveClient("***"), fs)
         const parsed = parseToolResult(await tool.execute({ problems: "Problem text" }, createToolContext()))
 
         expect(parsed.failedAction).toBe("save plan")
@@ -1850,16 +1896,16 @@ describe("autocode_plan_save behaviour", () => {
 
     test("missing content returns retry response", async () => {
         const fs = createMockFs()
-        const tool = createAutocodePlanSaveTool(createPlanSaveClient("My Feature"), fs)
-        const parsed = parseToolResult(await executePlanSave(tool, {}))
+        const tool = createAutocodeJobDraftTool(createPlanSaveClient("My Feature"), fs)
+        const parsed = parseToolResult(await executePlanDraft(tool, {}))
         expect(parsed.error).toBe("Missing required plan content")
     })
 
     test("save still succeeds when session title update fails", async () => {
         const fs = createMockFs()
         const client = createPlanSaveClient("My Feature", async () => ({ error: "update failed" }))
-        const tool = createAutocodePlanSaveTool(client, fs)
-        const parsed = parseToolResult(await executePlanSave(tool, { problems: "Problem text" }))
+        const tool = createAutocodeJobDraftTool(client, fs)
+        const parsed = parseToolResult(await executePlanDraft(tool, { problems: "Problem text" }))
 
         expect(parsed).toEqual({
             job_name: "my_feature",
@@ -1870,7 +1916,7 @@ describe("autocode_plan_save behaviour", () => {
     test("writes plan under context.directory when worktree is filesystem root", async () => {
         const fs = createMockFs()
         const client = createPlanSaveClient("My Feature")
-        const tool = createAutocodePlanSaveTool(client, fs)
+        const tool = createAutocodeJobDraftTool(client, fs)
 
         const parsed = parseToolResult(await tool.execute({ problems: "Problem text" }, {
             ...createToolContext(),
@@ -1899,8 +1945,8 @@ describe("autocode_plan_save behaviour", () => {
             stat: mock(async () => ({ mtimeMs: Date.now() })),
             readdir: mock(readdir),
         }
-        const tool = createAutocodePlanSaveTool(createPlanSaveClient("My Feature"), fsErr)
-        const parsed = parseToolResult(await executePlanSave(tool, { problems: "Problem text" }))
+        const tool = createAutocodeJobDraftTool(createPlanSaveClient("My Feature"), fsErr)
+        const parsed = parseToolResult(await executePlanDraft(tool, { problems: "Problem text" }))
         expect(parsed.instruction).toContain("ABORT")
     })
 })
@@ -1955,9 +2001,9 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodePlanSaveTool(client, fs)
+        const tool = createAutocodeJobDraftTool(client, fs)
 
-        const result = await executePlanSave(tool, { problems: "Problem text" })
+        const result = await executePlanDraft(tool, { problems: "Problem text" })
 
         const parsed = parseToolResult(result)
         expect(parsed).toEqual({
@@ -2020,9 +2066,9 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodePlanSaveTool(client, fs)
+        const tool = createAutocodeJobDraftTool(client, fs)
 
-        const result = await executePlanSave(tool, { constraints: "### Constraint One\nChanged constraints" })
+        const result = await executePlanDraft(tool, { constraints: "### Constraint One\nChanged constraints" })
 
         expect(parseToolResult(result)).toEqual({
             job_name: "my_feature",
@@ -2055,9 +2101,9 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodePlanSaveTool(client, fs)
+        const tool = createAutocodeJobDraftTool(client, fs)
 
-        await executePlanSave(tool, { proposal: "## Proposed Solution\nShip it\n## Solution\nAgain" })
+        await executePlanDraft(tool, { proposal: "## Proposed Solution\nShip it\n## Solution\nAgain" })
 
         expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("## Proposal\n\nShip it"))
         expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("Again\n"))
@@ -2230,11 +2276,11 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodePlanSaveTool(client, fs)
+        const tool = createAutocodeJobDraftTool(client, fs)
 
-        const functionalResult = await executePlanSave(tool, { requirements: "### First Requirement\n- list item\n> quote\n```json\n{ \"key\": \"value\" }\n```\n### Second Requirement\nAcceptance detail" })
-        const constraintsResult = await executePlanSave(tool, { constraints: "### First Constraint\n```yaml\ncache: true\n```" })
-        const riskResult = await executePlanSave(tool, { risks: "### Existing Risk\nMitigation details" })
+        const functionalResult = await executePlanDraft(tool, { requirements: "### First Requirement\n- list item\n> quote\n```json\n{ \"key\": \"value\" }\n```\n### Second Requirement\nAcceptance detail" })
+        const constraintsResult = await executePlanDraft(tool, { constraints: "### First Constraint\n```yaml\ncache: true\n```" })
+        const riskResult = await executePlanDraft(tool, { risks: "### Existing Risk\nMitigation details" })
 
         expect(parseToolResult(functionalResult)).toEqual({ job_name: "my_feature", job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md" })
         expect(parseToolResult(constraintsResult)).toEqual({ job_name: "my_feature", job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md" })

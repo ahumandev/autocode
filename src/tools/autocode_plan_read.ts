@@ -4,7 +4,7 @@ import type { Dirent } from "node:fs"
 import { readFile, readdir } from "node:fs/promises"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { findExistingJobFile, isCompatibleJobName, resolveAgentsStorageRoot, resolvePlannedJobIdentity, updateCurrentSessionTitleToJobName, type DirectoryFileSystem } from "@/utils/jobs"
-import { parsePlanMarkdown } from "./autocode_plan_save"
+import { parsePlanMarkdown } from "./autocode_job_draft"
 
 type FileSystem = {
     readFile: (filePath: string, encoding: "utf8") => Promise<string>

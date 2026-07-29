@@ -2,7 +2,7 @@ import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { createAbortResponse, createLifecycleJobRequiredRetryResponse, createRetryResponse } from "@/utils/tools"
-import { createDirectoryFileSystem, readLatestAssistantResponseText, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type PlannedJobIdentityResolution } from "@/utils/jobs"
+import { createDirectoryFileSystem, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type PlannedJobIdentityResolution } from "@/utils/jobs"
 import { shelveResolvedPlannedJob } from "@/utils/shelve"
 
 async function readDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
@@ -81,21 +81,6 @@ export function createAutocodeJobShelveTool(clientOrFileSystem?: OpencodeClient 
                     return createAbortResponse("shelve job", "Unable to move planned job lifecycle directory: rename is unavailable")
                 }
 
-                const reportContentResult = await readLatestAssistantResponseText(client, context)
-                if (reportContentResult.error) {
-                    return createAbortResponse("inspect current session messages", reportContentResult.error)
-                }
-                if (reportContentResult.limitation) {
-                    return createAbortResponse("inspect current session messages", reportContentResult.limitation)
-                }
-                if (!reportContentResult.text?.trim()) {
-                    return createRetryResponse(
-                        "shelve job",
-                        "No assistant response text was found in the current session.",
-                        "First present the user-facing lifecycle update in assistant text with concrete actions and a separate reason/evidence summary, then call autocode_job_shelve again."
-                    )
-                }
-
                 const shelved = await shelveResolvedPlannedJob({
                     storageRoot,
                     client,
@@ -104,7 +89,6 @@ export function createAutocodeJobShelveTool(clientOrFileSystem?: OpencodeClient 
                     moveFileSystem: { ...directoryFileSystem, rename: directoryFileSystem.rename },
                     now,
                     resolvedJob,
-                    assistantResponseText: reportContentResult.text,
                 })
                 if (shelved.type === "missing") {
                     return createNoJobResponse()
@@ -123,7 +107,6 @@ export function createAutocodeJobShelveTool(clientOrFileSystem?: OpencodeClient 
                     job_name: shelved.moved.job.job_name,
                     current_status: "shelved",
                     job_path: shelved.moved.job.job_path,
-                    solution_path: shelved.solution.relativeSolutionPath,
                     sandbox_archive: shelved.sandbox_archive,
                     title_warning: shelved.title.warning,
                     next_action: "Shelve complete; the job has no active lifecycle directory.",

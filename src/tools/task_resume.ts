@@ -4,7 +4,12 @@ import type { PermissionConfig } from "@opencode-ai/sdk/v2"
 import { getAllowedPermissionValue } from "@/utils/delegate"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
-const PROMPT_TASK_RESUME = "You have been interrupted, therefore you MUST:\n1. Use `task_resume` tool to resume previous interrupted task sessions\n2. Then resume your own work"
+const PROMPT_TASK_RESUME = `You have been interrupted, therefore you MUST:
+
+1. For each previous \`task\` call that were interrupted (no output when due):
+    - Call \`task_resume\` tool with same \`task_id\` used in previous \`task\` call.
+2. Then resume your own work`
+
 const PROMPT_WORK_RESUME = "Resume"
 
 type SessionMessage = {

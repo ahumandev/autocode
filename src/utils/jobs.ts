@@ -1,14 +1,13 @@
 import path from "node:path"
-import type { AssistantMessage, Message, OpencodeClient, Part } from "@opencode-ai/sdk"
+import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import type { Dirent } from "node:fs"
-import { readLatestSolutionStatus } from "./solution"
 
-export const activeJobLifecycleDirectories = ["concepts", "drafts", "assist", "executing", "facilitate", "review"] as const
+export const activeJobLifecycleDirectories = ["concepts", "drafts", "facilitate", "executing", "review"] as const
 export const completedJobLifecycleDirectory = "shelved" as const
-export const jobStatuses = ["concepts", "drafts", "assist", "executing", "facilitate", "review", "shelved"] as const
-export const listedActiveJobStatuses = ["concepts", "drafts", "assist", "executing", "facilitate", "review"] as const satisfies readonly JobStatus[]
-export const selectableExecutionJobStatuses = ["drafts", "assist", "executing"] as const satisfies readonly JobStatus[]
+export const jobStatuses = ["concepts", "drafts", "facilitate", "executing", "review", "shelved"] as const
+export const listedActiveJobStatuses = ["concepts", "drafts", "facilitate", "executing", "review"] as const satisfies readonly JobStatus[]
+export const selectableExecutionJobStatuses = ["drafts", "facilitate", "executing"] as const satisfies readonly JobStatus[]
 
 export type ActiveJobLifecycleDirectory = typeof activeJobLifecycleDirectories[number]
 export type CompletedJobLifecycleDirectory = typeof completedJobLifecycleDirectory
@@ -334,8 +333,6 @@ export function getCanonicalDirectoryForStatus(status: JobStatus): ActiveJobLife
             return "concepts"
         case "drafts":
             return "drafts"
-        case "assist":
-            return "assist"
         case "executing":
             return "executing"
         case "facilitate":
@@ -353,8 +350,6 @@ export function getDefaultStatusForDirectory(directory: JobDirectory): JobStatus
             return "concepts"
         case "drafts":
             return "drafts"
-        case "assist":
-            return "assist"
         case "executing":
             return "executing"
         case "facilitate":
@@ -481,30 +476,17 @@ async function inferLogicalStatus(
     jobName: string,
 ): Promise<JobStatus> {
     if (directory === "concepts") {
-        const solutionStatus = await readLatestSolutionStatusFile(fileSystem, getJobFilePath(worktree, directory, jobName, "solution.md"), ["concepts"])
-        return solutionStatus
-            ?? (await readLatestStatusReport(fileSystem, getJobDirectoryPath(worktree, directory, jobName), ["concepts"]))?.status
+        return (await readLatestStatusReport(fileSystem, getJobDirectoryPath(worktree, directory, jobName), ["concepts"]))?.status
             ?? "concepts"
     }
 
     if (directory === "drafts") {
-        const solutionStatus = await readLatestSolutionStatusFile(fileSystem, getJobFilePath(worktree, directory, jobName, "solution.md"), ["drafts"])
-        return solutionStatus
-            ?? (await readLatestStatusReport(fileSystem, getJobDirectoryPath(worktree, directory, jobName), ["drafts"]))?.status
+        return (await readLatestStatusReport(fileSystem, getJobDirectoryPath(worktree, directory, jobName), ["drafts"]))?.status
             ?? "drafts"
     }
 
-    if (directory === "assist") {
-        const solutionStatus = await readLatestSolutionStatusFile(fileSystem, getJobFilePath(worktree, directory, jobName, "solution.md"), ["assist"])
-        return solutionStatus
-            ?? (await readLatestStatusReport(fileSystem, getJobDirectoryPath(worktree, directory, jobName), ["assist"]))?.status
-            ?? "assist"
-    }
-
     if (directory === "facilitate") {
-        const solutionStatus = await readLatestSolutionStatusFile(fileSystem, getJobFilePath(worktree, directory, jobName, "solution.md"), ["facilitate"])
-        return solutionStatus
-            ?? (await readLatestStatusReport(fileSystem, getJobDirectoryPath(worktree, directory, jobName), ["facilitate"]))?.status
+        return (await readLatestStatusReport(fileSystem, getJobDirectoryPath(worktree, directory, jobName), ["facilitate"]))?.status
             ?? "facilitate"
     }
 
@@ -527,21 +509,6 @@ async function createResolvedPlannedJob(
         absolute_path: getJobDirectoryPath(worktree, directory, jobName),
         job_path: relative_job_path,
         relative_job_path,
-    }
-}
-
-async function readLatestSolutionStatusFile(
-    fileSystem: Pick<DirectoryFileSystem, "readFile">,
-    solutionPath: string,
-    statuses: readonly JobStatus[],
-): Promise<JobStatus | undefined> {
-    try {
-        const status = readLatestSolutionStatus(await fileSystem.readFile(solutionPath, "utf8"), statuses)
-        return status as JobStatus | undefined
-    }
-    catch (error) {
-        if (isMissingFile(error)) return undefined
-        throw error
     }
 }
 
@@ -788,10 +755,6 @@ async function getRootSessionTitleForPlannedJobLookup(client: OpencodeClient | u
     }
 }
 
-function isAssistantMessage(message: Message): message is AssistantMessage {
-    return message.role === "assistant"
-}
-
 function isUserMessage(message: Message): boolean {
     return message.role === "user"
 }
@@ -814,25 +777,6 @@ function getPartTimestamp(part: Part): number | undefined {
         default:
             return undefined
     }
-}
-
-function getLatestAssistantResponseText(messages: SessionMessage[]): string | undefined {
-    const latestAssistantMessage = [...messages]
-        .filter((message) => isAssistantMessage(message.info))
-        .sort((left, right) => left.info.time.created - right.info.time.created)
-        .at(-1)
-
-    if (!latestAssistantMessage || !isAssistantMessage(latestAssistantMessage.info)) {
-        return undefined
-    }
-
-    const text = latestAssistantMessage.parts
-        .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text" && (part.messageID === undefined || part.messageID === latestAssistantMessage.info.id))
-        .sort((left, right) => (getPartTimestamp(left) ?? 0) - (getPartTimestamp(right) ?? 0))
-        .map((part) => part.text)
-        .join("")
-
-    return text.length > 0 ? text : undefined
 }
 
 function getMessageText(message: SessionMessage): string | undefined {
@@ -887,37 +831,6 @@ async function getFallbackSessionTitle(client: OpencodeClient | undefined, conte
     return { title: formatSessionTitleFallbackTimestamp() }
 }
 
-export async function readLatestAssistantResponseText(client: OpencodeClient | undefined, context: Pick<SessionJobContext, "sessionID" | "directory">): Promise<{ text?: string, limitation?: string, error?: unknown }> {
-    const sessionClient = client as SessionMessagesClient | undefined
-    if (!sessionClient?.session.messages) {
-        return {
-            limitation: "Current session message lookup is unavailable; autocode_job_status cannot persist the last assistant response on this runtime.",
-        }
-    }
-
-    try {
-        const response = await sessionClient.session.messages({
-            path: { id: context.sessionID },
-            query: {
-                directory: context.directory,
-                limit: 30,
-            },
-        })
-
-        if (response.error || !response.data) {
-            return {
-                limitation: `Unable to read current session messages: ${response.error ?? context.sessionID}`,
-            }
-        }
-
-        return {
-            text: getLatestAssistantResponseText(response.data),
-        }
-    }
-    catch (error) {
-        return { error }
-    }
-}
 
 export async function countCurrentSessionUserMessages(client: OpencodeClient | undefined, context: Pick<SessionJobContext, "sessionID" | "directory">): Promise<{ count?: number, limitation?: string, error?: unknown }> {
     const sessionClient = client as SessionMessagesClient | undefined

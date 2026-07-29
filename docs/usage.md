@@ -7,57 +7,85 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 |     | Agent      | Purpose                                                                     |
 | --- | ---------- | --------------------------------------------------------------------------- |
 | 🔎   | `research` | Gathers evidence and produces Research Reports.                             |
-| 🧠   | `design`   | Creates solution plans from conversation and optional Research Report data. |
+| 🗺️   | `design`   | Creates solution plans from conversation and optional Research Report data. |
 | 🤖   | `auto`     | Autonomously executes drafted jobs from solution plans.                     |
 | 🧑‍💻   | `assist`   | Interactively executes immediate tasks with human control                   |
 | ✏️   | `edit`     | Make fast, targeted edits directly in-session without spawning subagents    |
-| 🎓   | `teach`    | Find answer and teach how to manually fix problems |
+| 🎓   | `teach`    | Find answer and teach how to manually fix problems                          |
 
-### Typical job workflow
+### Autonomous Job Workflow
 
 ```mermaid
 flowchart TD
-  Concepts[🔎 .agents/jobs/concepts] --🧠 design-->  Drafts[.agents/jobs/drafts]
-  Drafts --🧑‍💻 assist --> Assist[.agents/jobs/assist]
+  Research([🔎 research results]) --🗺️ design--> Drafts[.agents/jobs/drafts]
+  Concepts[ .agents/jobs/concepts] --🗺️ design--> Drafts
   Drafts --🤖 auto --> Executing[.agents/jobs/executing]
   Executing --> Review[.agents/jobs/review]
+  Review --> Shelved
   Executing -.blocked.-> Facilitate[.agents/jobs/facilitate]
   Facilitate -.unblocked.-> Executing
-  Assist --> Shelved[.agents/jobs/shelved]
-  Review --> Shelved
 ```
 
-1. Create or select a concept in `.agents/jobs/concepts`.
-2. Run `/job-design` to create a solution plan from the selected concept or current planning context.
-3. Run `/job-draft` to save the plan in `.agents/jobs/drafts/{job_name}/plan.md`.
-4. Run `/job-execute-assist` to execute with human steering, or `/job-execute-auto` to execute autonomously.
-5. Review the completed work from `.agents/jobs/review`.
-6. Run `/job-review-commit` to accept (git commit) and shelve (clean up files) the job, or `/job-shelve` (alias `/shelve`) to close it without acceptance.
+1. 🔎 `research` possibilities or create concept md document in `.agents/jobs/concepts`.
+2. Run `/job-design` to investigate feasibility, design best approach and draft solution plan in `.agents/jobs/drafts/{job_name}/plan.md`.
+3. Revise draft `plan.md` before autonomous handover.
+4. Run `/job-execute` to execute `plan.md` fully autonomously.
+5. The job will move automatically to `.agents/jobs/executing` while busy, `.agents/jobs/facilitate` if blocked and then to `.agents/jobs/review` when done.
+6. When done, do manual testing, then:
+   - *Reject* job with `/job-shelve` to shelve (clean up files) job or
+   - *Accept* job with `/commit` to commit to git and shelve.
 
-### Workflow commands
+### Assisted Workflow
 
-Normal prompts can start or resume work. Slash commands are convenience wrappers around the same lifecycle.
+```mermaid
+flowchart TD
+  Research([🔎 research results]) --🗺️ design--> Drafts[.agents/jobs/drafts]
+  Concepts[ .agents/jobs/concepts] --🗺️ design--> Drafts
+  Drafts --🧑‍💻 assist --> Facilitate[.agents/jobs/facilitate]
+  Drafts --🎓 teach --> Facilitate
+  Facilitate -.completed.-> Shelved[.agents/jobs/shelved]
+```
 
-| Command               | Purpose                                                                                     |
-| --------------------- | ------------------------------------------------------------------------------------------- |
-| `/job-concepts`       | Saves concept Markdown files in `.agents/jobs/concepts/`.                                   |
-| `/job-design`         | Designs a solution plan from a selected concept or current planning context.                |
-| `/job-draft`          | Saves a solution plan as a draft in `.agents/jobs/drafts/{job_name}/plan.md`.               |
-| `/job-execute`        | Selects and executes a job in the current session with either `auto` or `assist`.           |
-| `/job-execute-assist` | Moves an approved draft to `.agents/jobs/assist/{job_name}/` and starts an assist session.  |
-| `/job-execute-auto`   | Moves an approved draft to `.agents/jobs/executing/{job_name}/` and starts an auto session. |
+1. 🔎 `research` possibilities or create concept md document in `.agents/jobs/concepts`.
+2. Run `/job-design` to investigate feasibility, design best approach and draft solution plan in `.agents/jobs/drafts/{job_name}/plan.md`.
+3. Run one of these commands:
+   - `/job-facilitate`: Execute `plan.md` semi-autonomously with assistant (you make decisions, assistant do work).
+   - `/job-teach`: Execute `plan.md` manually with guiding teacher.
+5. If `/job-execute` was chosen, then job will move automatically to `.agents/jobs/executing` while busy and then to `.agents/jobs/review` when done.
+6. When done, do manual testing, then:
+   - *Reject* job with `/job-shelve` to shelve (clean up files) job or
+   - *Accept* job with `/commit` to commit to git and shelve.
 
-### Handover commands
+### Hybrid Workflow
 
-| Command         | Purpose                                                           |
-| --------------- | ----------------------------------------------------------------- |
-| `/research`     | Resets research session from recent context.                      |
-| `/design`       | Resets design session for a solution plan.                        |
-| `/assist`       | Resets assist session for interactive implementation.             |
-| `/auto`         | Resets auto session for autonomous implementation.                |
-| `/troubleshoot` | Resets troubleshooting session from recent symptoms and evidence. |
+Combinations of Autonomous and Assisted Workflows are also possible as you can switch any time between `auto`, `assist`, `teach` agents.
 
-### Documentation commands
+For example you may start in `assist` mode and then later when you get busy, switch to `auto` mode so that agent can continue with your plan without your presence or vice versa.
+
+### Job Commands
+
+Normal prompts can start or resume work. Slash commands are convenience wrappers around same lifecycle.
+
+| Command                    | Purpose                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `/job-concepts`            | Saves concept Markdown files in `.agents/jobs/concepts/`.                                   |
+| `/job-design`              | Design draft plan to `.agents/jobs/drafts/{name}/`.                                         |
+| `/job-execute`             | Moves reviewed draft to `.agents/jobs/executing/{name}/` and starts 🤖 auto agent.             |
+| `/job-facilitate`          | Moves reviewed draft to `.agents/jobs/facilitate/{name}/` and start 🧑‍💻 assist agent.     |
+| `/job-teach`          | Moves reviewed draft to `.agents/jobs/facilitate/{name}/` and start 🎓 teach agent.               |
+| `/job-shelve`              | Moves reviewed job to `.agents/jobs/shelve/{name}/`.                                        |
+
+### Modes
+
+| Command         | Purpose                                                                       |
+| --------------- | ----------------------------------------------------------------------------- |
+| `/research`     | Switch to 🔎 research mode to answer question at hand.                           |
+| `/design`       | Switch to 🗺️ design mode to design solution to problem.                          |
+| `/auto`         | Switch to 🤖 auto mode to autonomously solve problems (according to design plan) |
+| `/assist`       | Switch to 🧑‍💻 assist mode to semi-autonomously assist with problems/improvements. |
+| `/teach`        | Switch to 🎓 teach mode to teach you how to solve problems (provide commands).   |
+
+### Documentation Commands
 
 | Command             | Purpose                                                                |
 | ------------------- | ---------------------------------------------------------------------- |
@@ -66,9 +94,9 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | `/docs-conventions` | Documents recent naming conventions and project terminology.           |
 | `/docs-prd`         | Documents recently updated product requirements and user roles.        |
 | `/docs-ux`          | Documents recently updated UX flows, navigation, and styling patterns. |
-| `/init`             | Documents the entire project.                                          |
+| `/init`             | Alias to `/docs`.                                                      |
 
-### Utility commands
+### Utility Commands
 
 | Command             | Purpose                                                                    |
 | ------------------- | -------------------------------------------------------------------------- |
@@ -81,21 +109,20 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | `/git-conflict`     | Handles git merge conflict work through the git conflict subagent.         |
 | `/repeat-as-md`     | Repeats the last response inside a fenced Markdown code block.             |
 | `/repeat-as-wiki`   | Repeats the last response in Atlassian Wiki Markup for Jira-style pasting. |
-| `/report`           | Summarize session as report.                                               |
+| `/report`           | Provide detailed report of recent research or actions.                     |
 | `/resume`           | Resumes an interrupted session by calling the resume tool.                 |
 | `/shelve`           | Clean up sandbox files (if any). Alias for `/job-shelve`.                  |
 | `/tests`            | Generate or improve tests.                                                 |
 
 ### Job files
 
-Jobs are stored in `.agents/jobs/{status}/{job_name}/`. The valid statuses are `concepts`, `drafts`, `assist`, `executing`, `facilitate`, `review`, and `shelved`.
+Jobs are stored in `.agents/jobs/{status}/{job_name}/`. Valid statuses are `drafts`, `executing`, `facilitate`, `review`, and `shelved`.
 
-| Path           | Purpose                                                                                       |
-| -------------- | --------------------------------------------------------------------------------------------- |
-| `concept.md`   | Copy of the concept used to design the plan.                                                  |
-| `plan.md`      | Solution plan covering problems, requirements, constraints, risks, and the selected proposal. |
-| `session.yml`  | OpenCode session IDs used for resume functionality.                                           |
-| `solution.md`  | Chronological implementation and audit log.                                                   |
+| Path          | Purpose                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `concept.md`  | Copy of the concept used to design the plan.                                                  |
+| `plan.md`     | Solution plan covering problems, requirements, constraints, risks, and the selected proposal. |
+| `session.yml` | Persists the OpenCode session ID linked to this job (fallback identity lookup).               |
 
 ### Database inspection
 

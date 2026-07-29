@@ -7,7 +7,7 @@ import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type FileSystem = JobToolFileSystem
 
-type ExecutionAgent = "assist" | "auto"
+type ExecutionAgent = "assist" | "auto" | "teach"
 
 async function readDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
     return options?.withFileTypes ? readdir(dirPath, { withFileTypes: true }) : readdir(dirPath)
@@ -24,11 +24,11 @@ const defaultFileSystem: FileSystem = {
 }
 
 function isExecutionAgent(agent: unknown): agent is ExecutionAgent {
-    return agent === "assist" || agent === "auto"
+    return agent === "assist" || agent === "auto" || agent === "teach"
 }
 
 function getTargetStatus(agent: ExecutionAgent, _currentStatus: JobStatus): JobStatus {
-    return agent === "assist" ? "assist" : "executing"
+    return agent === "auto" ? "executing" : "facilitate"
 }
 
 function createAgentExecutePrompt(jobName: string, plan: string): string {
@@ -80,7 +80,7 @@ export function createAutocodeAgentExecuteTool(client?: OpencodeClient, fileSyst
         description: "Move selected job to execution status and swap current session to selected agent with plan.md injected.",
         args: {
             job_name: tool.schema.string().describe("Selected planned job_name in safe snake_case."),
-            agent: tool.schema.string().describe("Execution agent: assist or auto."),
+            agent: tool.schema.string().describe("Execution agent: assist, auto, or teach."),
         },
         async execute(args, context) {
             const requestedJobName = args.job_name?.trim()
@@ -93,7 +93,7 @@ export function createAutocodeAgentExecuteTool(client?: OpencodeClient, fileSyst
             }
 
             if (!isExecutionAgent(args.agent)) {
-                return createRetryResponse("autocode_agent_execute", `Invalid agent: ${args.agent}`, "Provide agent as one of: assist, auto.")
+                return createRetryResponse("autocode_agent_execute", `Invalid agent: ${args.agent}`, "Provide agent as one of: assist, auto, teach.")
             }
 
             if (!client) {

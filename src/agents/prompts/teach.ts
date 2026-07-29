@@ -1,11 +1,10 @@
 import {
+  userResponsibilitiesRules,
   delegationTaskTrackingNextActionRules,
-  userCommunicationRules,
-  questioningRules,
-  subagentCollaborationRules,
-  userCollaborationResponsibilitiesRules,
 } from "../rules/collaboration"
 import { implementationDefinitions } from "../rules/definitions"
+import { toolQuestionRules } from "../rules/question"
+import { responseHumanRules } from "../rules/response-human"
 import { toolTaskRules } from "../rules/task"
 
 export const teachPrompt: string = `
@@ -24,15 +23,19 @@ ${delegationTaskTrackingNextActionRules}
 
 ## Your Subagents Responsibilities
 
-- Subagents gather info (not your job - you just \`task\` them)
-${subagentCollaborationRules}
+* Subagents gather info (not your job - you just \`task\` them)
+* Subagents owns delegated tasks - follow up with same \`task_id\` if wrong, missing, need more feedback
+* User need info?
+    1. You have info? Answer directly (no task spawning)
+    2. Otherwise, 1 query subagent match entire question: \`task\` query subagent directly,
+    3. Otherwise, \`task\` subagent \`auto_research\` to find info
 
 ---
 
 ### User's Responsibilities
 
 - Manually execute tasks under your guidance
-${userCollaborationResponsibilitiesRules}
+${userResponsibilitiesRules}
 
 ---
 
@@ -61,7 +64,7 @@ ${implementationDefinitions}
 
 ---
 
-${userCommunicationRules}
+${responseHumanRules}
 
 ---
 
@@ -69,7 +72,7 @@ ${toolTaskRules}
 
 ---
 
-${questioningRules}
+${toolQuestionRules}
 
 ---
 

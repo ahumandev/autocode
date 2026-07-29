@@ -103,25 +103,7 @@ describe("autocode_agent_execute tool", () => {
         expect(client.session.promptAsync).not.toHaveBeenCalled()
     })
 
-    test("rejects teach without job lookup or execution side effects", async () => {
-        const fs = createMockFs()
-        const client = createMockClient()
-        const tool = createAutocodeAgentExecuteTool(client, fs)
-
-        const parsed = parseToolResult(await tool.execute({ job_name: "manual_practice", agent: "teach" }, createToolContext()))
-
-        expect(parsed).toEqual({
-            failedAction: "autocode_agent_execute",
-            error: "Invalid agent: teach",
-            instruction: "Provide agent as one of: assist, auto.",
-        })
-        expect(fs.readdir).not.toHaveBeenCalled()
-        expect(fs.readFile).not.toHaveBeenCalled()
-        expect(fs.rename).not.toHaveBeenCalled()
-        expect(client.session.promptAsync).not.toHaveBeenCalled()
-    })
-
-    test("returns only current_status after successful handoff", async () => {
+    test("hands off teach to facilitate lifecycle status", async () => {
         const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-execute-"))
         try {
             const fs = createMockFs()
@@ -131,26 +113,26 @@ describe("autocode_agent_execute tool", () => {
                     balanced: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
                 },
             })
-            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs/drafts` ? ["assist_job"] : [])
+            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs/drafts` ? ["teach_job"] : [])
             fs.readFile.mockImplementation(async (filePath: string) => {
-                if (filePath === `${worktree}/.agents/jobs/drafts/assist_job/plan.md`) return "# Problem\n\nAssist execution\n"
+                if (filePath === `${worktree}/.agents/jobs/drafts/teach_job/plan.md`) return "# Problem\n\nTeach execution\n"
                 throw createMissingError()
             })
 
             const tool = createAutocodeAgentExecuteTool(client, fs)
-            const parsed = parseToolResult(await tool.execute({ job_name: "assist_job", agent: "assist" }, createToolContext({ directory: worktree, worktree })))
+            const parsed = parseToolResult(await tool.execute({ job_name: "teach_job", agent: "teach" }, createToolContext({ directory: worktree, worktree })))
 
             expect(parsed).toEqual({
-                current_status: "assist",
+                current_status: "facilitate",
             })
-            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/assist_job`, `${worktree}/.agents/jobs/assist/assist_job`)
+            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/teach_job`, `${worktree}/.agents/jobs/facilitate/teach_job`)
             expect(client.session.promptAsync).toHaveBeenCalledWith({
                 path: { id: "session-1" },
                 query: { directory: worktree },
                 body: {
-                    agent: "assist",
+                    agent: "teach",
                     model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
-                    parts: [{ type: "text", text: "Selected job: assist_job\n\nplan.md:\n# Problem\n\nAssist execution\n" }],
+                    parts: [{ type: "text", text: "Selected job: teach_job\n\nplan.md:\n# Problem\n\nTeach execution\n" }],
                 },
             })
         } finally {

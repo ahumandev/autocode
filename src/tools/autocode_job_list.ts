@@ -33,7 +33,7 @@ export function createAutocodeJobListTool(fileSystem: FileSystem = defaultFileSy
     return tool({
         description: "List active drafts/jobs.",
         args: {
-            filter: tool.schema.string().optional().describe("Optional filter limits results to one active status; omit to list all active jobs. Omit to view all or provide one of these status filters: concepts, drafts, assist, executing, facilitate, review"),
+            filter: tool.schema.string().optional().describe("Optional filter limits results to one active status; omit to list all active jobs. Omit to view all or provide one of these status filters: concepts, drafts, facilitate, executing, review"),
         },
         async execute(args, context) {
             const requestedFilter = args.filter
@@ -45,7 +45,7 @@ export function createAutocodeJobListTool(fileSystem: FileSystem = defaultFileSy
                 return createRetryResponse(
                     "list jobs",
                     `Invalid filter: ${requestedFilter}`,
-                    "Omit to view all or provide one of these status filters: concepts, drafts, assist, executing, facilitate, review"
+                    "Omit to view all or provide one of these status filters: concepts, drafts, facilitate, executing, review"
                 )
             }
 
