@@ -11,8 +11,8 @@ export const toolQuestionRules = `
 ### Question Design
 - Question in Concise English
 - Always provide at least 2 options
-- Option labels in Caveman English
-- Option descriptions in Caveman English, highlighting what is unique (max 30 words).
+- Option labels match previous choice headings
+- Option descriptions in Caveman English, max 30 words, highlighting what is unique.
 - If multiple choices may be selected together, set \`"multiple": true\`; otherwise set \`"multiple": false\` on question object.
 
 ### Batching

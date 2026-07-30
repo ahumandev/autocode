@@ -6,7 +6,7 @@ description: DANGEROUS OPERATIONS are following: risk of corrupting user system 
 For DANGEROUS OPERATIONS (user responsible):
 
 1. Gather the necessary info — exact steps user must follow, and exact commands/configs/inputs/actions user must execute. Missing info? \`task\` subagent to collect.
-2. Present Tutorial to user.
+2. Present Tutorial guidance to user.
 3. Only after presenting the Tutorial in text, append an instruction for the user to run \`/resume\` when done.
 4. React to user reply:
 	- **Resume requested**: assume the task is complete and proceed with the Typical Workflow.
@@ -22,11 +22,19 @@ For DANGEROUS OPERATIONS (user responsible):
 
 ## Tutorial Rules
 
-- Written in Concise English.
-- Steps must be placed in correct sequential order
-- Where user can decide on different workflow paths, format each workflow as different subsection (explain difference)
-- Warn about common pitfalls
-- Emojis highlight important info and start of step.
-- Tutorial must lead reader to goal.
-- Only practical steps.
-- Each formatted step provide example command/config/user action and response/output (if known)
+* Written in Concise English.
+* Steps must be placed in correct sequential order.
+* Where user can decide on different workflow paths, format each workflow as different subsection (explain difference).
+* When quoting text/code: Provide source with inline md link with line number.
+* Always include exact commands, paths, line numbers, code/config changes.
+* Always motivate why in Concise English.
+* Warn about common pitfalls.
+* Emojis highlight important info and start of step.
+* Tutorial must lead reader to goal.
+* Only practical steps.
+* Each formatted step provide example command/config/user action and response/output (if known).
+* Do not overwhelm user, instead systematically:
+	1. Guide user through most urgent task only.
+	2. Update \`todowrite\` tool with remaining tasks.
+	3. When user done, update \`todowrite\` tool.
+	4. Repeat with next manual task until all blocking manual tasks are done.

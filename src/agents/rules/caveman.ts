@@ -13,6 +13,7 @@ export const cavemanEnglish = `
 ### Concise English Rules
 
 - Cut pleasantries (please/thanks), filler, hedging, articles (a/an/the), tense.
+- Task/Object focused. Avoid possessives words (I/my/you/your) if intend clear.
 - Common abbreviations.
 - Short plain words. Keep technical terms exact.
 
