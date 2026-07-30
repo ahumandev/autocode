@@ -115,7 +115,7 @@ const baseAgents: AgentMap = {
 
     assist: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Assist with general tasks.",
+        description: "Assist interactively with problems.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -156,42 +156,9 @@ const baseAgents: AgentMap = {
         tier: "balanced",
     },
 
-    teach: {
-        color: colorReadOnlyInteractiveOrchestrator,
-        description: "Teach manual practice without project implementation.",
-        hidden: false,
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            autocode_session_restart: "allow",
-            skill_learn: "allow",
-            doom_loop: "ask",
-            question: "allow",
-            skill: {
-                "*": "deny",
-                "assist-*": "allow",
-                "codebase-design": "allow", // From mattpocock/skills
-                "git-commit": "allow",
-                "learned-permissions*": "allow",
-                "primary-manual*": "allow",
-                "vue-best-practices": "allow",
-                "ui-craft": "allow",
-            },
-            task: {
-                "*": "deny",
-                auto_research: "allow",
-                "query*": "allow",
-            },
-            task_resume: "allow",
-            "todo*": "allow",
-        },
-        prompt: teachPrompt,
-        tier: "balanced",
-    },
-
     auto: {
         color: colorAutonomousOrchestrator,
-        description: "Autonomously follow plan to solve a problem.",
+        description: "Autonomously solve problems.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -323,6 +290,41 @@ const baseAgents: AgentMap = {
         },
         prompt: researchPrompt,
         temperature: 0.7,
+        tier: "balanced",
+    },
+
+    teach: {
+        color: colorReadOnlyInteractiveOrchestrator,
+        description: "Teach how to manually fix problems.",
+        hidden: false,
+        mode: "primary",
+        permission: {
+            "*": "deny",
+            autocode_job_status: "allow",
+            autocode_session_restart: "allow",
+            doom_loop: "ask",
+            git_commit: "ask",
+            question: "allow",
+            skill: {
+                "*": "deny",
+                "assist-*": "allow",
+                "codebase-design": "allow", // From mattpocock/skills
+                "git-commit": "allow",
+                "learned-permissions*": "allow",
+                "primary-manual*": "allow",
+                "vue-best-practices": "allow",
+                "ui-craft": "allow",
+            },
+            skill_learn: "ask",
+            task: {
+                "*": "deny",
+                auto_research: "allow",
+                "query*": "allow",
+            },
+            task_resume: "allow",
+            "todo*": "allow",
+        },
+        prompt: teachPrompt,
         tier: "balanced",
     },
 

@@ -4,14 +4,14 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 
 ### Primary Agents
 
-|     | Agent      | Purpose                                                                     |
-| --- | ---------- | --------------------------------------------------------------------------- |
-| 🔎   | `research` | Gathers evidence and produces Research Reports.                             |
-| 🗺️   | `design`   | Creates solution plans from conversation and optional Research Report data. |
-| 🤖   | `auto`     | Autonomously executes drafted jobs from solution plans.                     |
-| 🧑‍💻   | `assist`   | Interactively executes immediate tasks with human control                   |
-| ✏️   | `edit`     | Make fast, targeted edits directly in-session without spawning subagents    |
-| 🎓   | `teach`    | Find answer and teach how to manually fix problems                          |
+|     | Agent      | Purpose                                 |
+| --- | ---------- | --------------------------------------- |
+| 🔎   | `research` | Research topics & answer questions.     |
+| 🗺️   | `design`   | Design and propose solutions.           |
+| 🤖   | `auto`     | **Autonomously** solve problems.        |
+| 🧑‍💻   | `assist`   | Assist **interactively** with problems. |
+| 🎓   | `teach`    | Teach how to **manually** fix problems. |
+| ✏️   | `edit`     | Edit files directly (fast & cheap).     |
 
 ### Autonomous Job Workflow
 
@@ -66,24 +66,24 @@ For example you may start in `assist` mode and then later when you get busy, swi
 
 Normal prompts can start or resume work. Slash commands are convenience wrappers around same lifecycle.
 
-| Command                    | Purpose                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------- |
-| `/job-concepts`            | Saves concept Markdown files in `.agents/jobs/concepts/`.                                   |
-| `/job-design`              | Design draft plan to `.agents/jobs/drafts/{name}/`.                                         |
-| `/job-execute`             | Moves reviewed draft to `.agents/jobs/executing/{name}/` and starts 🤖 auto agent.             |
-| `/job-facilitate`          | Moves reviewed draft to `.agents/jobs/facilitate/{name}/` and start 🧑‍💻 assist agent.     |
-| `/job-teach`          | Moves reviewed draft to `.agents/jobs/facilitate/{name}/` and start 🎓 teach agent.               |
-| `/job-shelve`              | Moves reviewed job to `.agents/jobs/shelve/{name}/`.                                        |
+| Command           | Purpose                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `/job-concepts`   | Saves concept Markdown files in `.agents/jobs/concepts/`.                           |
+| `/job-design`     | Design draft plan to `.agents/jobs/drafts/{name}/`.                                 |
+| `/job-execute`    | Moves reviewed draft to `.agents/jobs/executing/{name}/` and starts 🤖 auto agent.   |
+| `/job-facilitate` | Moves reviewed draft to `.agents/jobs/facilitate/{name}/` and start 🧑‍💻 assist agent. |
+| `/job-teach`      | Moves reviewed draft to `.agents/jobs/facilitate/{name}/` and start 🎓 teach agent.  |
+| `/job-shelve`     | Moves reviewed job to `.agents/jobs/shelve/{name}/`.                                |
 
 ### Modes
 
-| Command         | Purpose                                                                       |
-| --------------- | ----------------------------------------------------------------------------- |
-| `/research`     | Switch to 🔎 research mode to answer question at hand.                           |
-| `/design`       | Switch to 🗺️ design mode to design solution to problem.                          |
-| `/auto`         | Switch to 🤖 auto mode to autonomously solve problems (according to design plan) |
-| `/assist`       | Switch to 🧑‍💻 assist mode to semi-autonomously assist with problems/improvements. |
-| `/teach`        | Switch to 🎓 teach mode to teach you how to solve problems (provide commands).   |
+| Command     | Purpose                                                                         |
+| ----------- | ------------------------------------------------------------------------------- |
+| `/research` | Switch to 🔎 research mode to answer question at hand.                           |
+| `/design`   | Switch to 🗺️ design mode to design solution to problem.                          |
+| `/auto`     | Switch to 🤖 auto mode to autonomously solve problems (according to design plan) |
+| `/assist`   | Switch to 🧑‍💻 assist mode to semi-autonomously assist with problems/improvements. |
+| `/teach`    | Switch to 🎓 teach mode to teach you how to solve problems (provide commands).   |
 
 ### Documentation Commands
 

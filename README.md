@@ -41,14 +41,14 @@ AutoCode is an OpenCode plugin. It is not a standalone application and does not 
 
 ### Primary Agents
 
-|     | Agent      | Purpose                                                                     |
-| --- | ---------- | --------------------------------------------------------------------------- |
-| 🔎   | `research` | Gathers evidence and produces Research Reports.                             |
-| 🧠   | `design`   | Creates solution plans from conversation and optional Research Report data. |
-| 🤖   | `auto`     | Autonomously executes drafted jobs from solution plans.                     |
-| 🧑‍💻   | `assist`   | Interactively executes immediate tasks with human control                   |
-| ✏️   | `edit`     | Make fast, targeted edits directly in-session without spawning subagents    |
-| 🎓   | `teach`    | Find answer and teach how to manually fix problems |
+|     | Agent      | Purpose                                 |
+| --- | ---------- | --------------------------------------- |
+| 🔎   | `research` | Research topics & answer questions.     |
+| 🗺️   | `design`   | Design and propose solutions.           |
+| 🤖   | `auto`     | **Autonomously** solve problems.        |
+| 🧑‍💻   | `assist`   | Assist **interactively** with problems. |
+| 🎓   | `teach`    | Teach how to **manually** fix problems. |
+| ✏️   | `edit`     | Edit files directly (fast & cheap).     |
 
 ### Autonomous Job Workflow
 
