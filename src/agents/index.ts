@@ -1186,6 +1186,7 @@ const baseAgents: AgentMap = {
     query_config: {
         color: colorReadOnlyWorker,
         description: "task query_config to read config or data file values or outlines: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; No other file types supported.",
+        hidden: true,
         mode: "subagent",
         permission: {
             "*": "deny",

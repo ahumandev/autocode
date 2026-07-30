@@ -4,26 +4,26 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 
 ### Primary Agents
 
-|     | Agent      | Purpose                                 |
-| --- | ---------- | --------------------------------------- |
-| 🔎   | `research` | Research topics & answer questions.     |
-| 🗺️   | `design`   | Design and propose solutions.           |
-| 🤖   | `auto`     | **Autonomously** solve problems.        |
-| 🧑‍💻   | `assist`   | Assist **interactively** with problems. |
-| 🎓   | `teach`    | Teach how to **manually** fix problems. |
-| ✏️   | `edit`     | Edit files directly (fast & cheap).     |
+| Agent        | Purpose                                     |
+| ------------ | ------------------------------------------- |
+| 🔎 `research` | Research topics & answer questions.         |
+| 🗺️ `design`   | Design and propose solutions.               |
+| 🤖 `auto`     | **Autonomously** solve problems.            |
+| 🧑‍💻 `assist`   | Assist **interactively** to solve problems. |
+| 🎓 `teach`    | Teach how to **manually** solve problems.   |
+| ✏️ `edit`     | Edit files directly (fast & cheap).         |
 
 ### Autonomous Job Workflow
 
 ```mermaid
 flowchart TD
-  Research([🔎 research results]) --🗺️ design--> Drafts[.agents/jobs/drafts]
-  Concepts[ .agents/jobs/concepts] --🗺️ design--> Drafts
-  Drafts --🤖 auto --> Executing[.agents/jobs/executing]
-  Executing --> Review[.agents/jobs/review]
-  Review --> Shelved
-  Executing -.blocked.-> Facilitate[.agents/jobs/facilitate]
-  Facilitate -.unblocked.-> Executing
+  Research([🔎 research results]) --🗺️ design--> drafts
+  concepts --🗺️ design--> drafts
+  drafts --🤖 auto --> executing
+  executing -.blocked.-> facilitate
+  facilitate -.unblocked.-> executing
+  executing --> review
+  review --> shelved
 ```
 
 1. 🔎 `research` possibilities or create concept md document in `.agents/jobs/concepts`.
@@ -39,11 +39,11 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  Research([🔎 research results]) --🗺️ design--> Drafts[.agents/jobs/drafts]
-  Concepts[ .agents/jobs/concepts] --🗺️ design--> Drafts
-  Drafts --🧑‍💻 assist --> Facilitate[.agents/jobs/facilitate]
-  Drafts --🎓 teach --> Facilitate
-  Facilitate -.completed.-> Shelved[.agents/jobs/shelved]
+  Research([🔎 research results]) --🗺️ design--> drafts
+  concepts --🗺️ design--> drafts
+  drafts --🧑‍💻 assist --> facilitate
+  drafts --🎓 teach --> facilitate
+  facilitate --> shelved
 ```
 
 1. 🔎 `research` possibilities or create concept md document in `.agents/jobs/concepts`.
