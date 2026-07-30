@@ -18,18 +18,18 @@ const planSectionContentDescriptions: Record<PlanSection, string> = {
     problems: "Define observed wrong/missing project behavior or missing info. Include exact key names, values, paths, codes, and user provided examples.",
     impact: "Define why problem matters. Describe affected user, system, or workflow impact.",
     expectations: "Define expected outcome from user perspective. Include target behavior or research goal.",
-    requirements: `
-Define 1 requirement per H3 subsection.
-Define each requirement section as follows:
-    - Every requirement must contain 1 or more clearly defined criteria (how to measure if requirement was meet)
-    - Put each requirement's criteria in bullet point list in requirement sub-section body
-    - Requirements may include input/output examples or technical key details like (names, keys, values, paths, codes, etc.)
+    requirements:
+`* Derive missing EXPECTATIONS from opposites of PROBLEMS taking IMPACT into account.
+* Define each REQUIREMENT as H3 sub-section:
+    - Every REQUIREMENT must contain 1+ clearly defined CRITERIA (how to measure if requirement was meet)
+    - Each CRITERIA in bullet list in REQUIREMENT sub-section body
+    - Include input/output examples or technical key details like (names, keys, values, paths, codes, etc.)
     - Include all relevant examples, configs, quotes, acceptance details, and original user-request content inside the matching subsection body.
 `,
     risks: "Define 1 assumed risk per H3 subsection",
     constraints: "Define 1 factual constraint per H3 subsection",
-    proposal: `
-Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:
+    proposal:
+`Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:
     - Provide sequence of GOALS (planned project changes) according to PROPOSAL
     - Each GOAL must briefly describe overview of STEP to reach GOAL
     - Describe as high-level conceptual design instead of implementation details
