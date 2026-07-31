@@ -9,16 +9,42 @@ describe("platform capabilities", () => {
         expect(createPlatformCapabilities("linux").isWindows).toBe(false)
         expect(createPlatformCapabilities("darwin").isWindows).toBe(false)
     })
+
+    test("detects PowerShell only on Windows", () => {
+        expect(createPlatformCapabilities("win32", { PSModulePath: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules" }).windowsShell).toBe("powershell")
+        expect(createPlatformCapabilities("win32", {}).windowsShell).toBe("cmd")
+        expect(createPlatformCapabilities("linux", { PSModulePath: "present" }).windowsShell).toBeUndefined()
+    })
+
+    test("detects PowerShell from non-empty markers and executable shell paths", () => {
+        expect(createPlatformCapabilities("win32", { PSModulePath: "   " }).windowsShell).toBe("cmd")
+        expect(createPlatformCapabilities("win32", { SHELL: "C:\\Program Files\\PowerShell\\7\\pwsh.exe" }).windowsShell).toBe("powershell")
+        expect(createPlatformCapabilities("win32", { SHELL: "/usr/bin/powershell" }).windowsShell).toBe("powershell")
+        expect(createPlatformCapabilities("win32", { SHELL: "C:\\Windows\\System32\\cmd.exe" }).windowsShell).toBe("cmd")
+    })
 })
 
 describe("OS prompts", () => {
     test("buildExecuteOsPrompt uses Windows CMD guidance without positive Bash guidance", () => {
-        const prompt = buildExecuteOsPrompt(createPlatformCapabilities("win32"))
+        const prompt = buildExecuteOsPrompt(createPlatformCapabilities("win32", {}))
 
         expect(prompt).toMatch(/running on windows/i)
         expect(prompt).toMatch(/cmd commands/i)
+        expect(prompt).toContain("`where <command>`")
+        expect(prompt).toContain("`%PATH%`")
         expect(prompt).toMatch(/never use bash/i)
         expect(prompt).not.toMatch(/always use the `bash` tool/i)
+    })
+
+    test("buildExecuteOsPrompt uses PowerShell diagnostics on Windows PowerShell", () => {
+        const prompt = buildExecuteOsPrompt(createPlatformCapabilities("win32", { PSModulePath: "present" }))
+
+        expect(prompt).toMatch(/windows powershell/i)
+        expect(prompt).toContain("`Get-Command <command> -ErrorAction SilentlyContinue`")
+        expect(prompt).toContain("`$env:Path -split ';'`")
+        expect(prompt).toContain("`powershell -NoProfile -Command \"<command>\"`")
+        expect(prompt).not.toContain("`cmd.exe`")
+        expect(prompt).not.toContain("`which`")
     })
 
     test("buildExecuteOsPrompt keeps Bash guidance outside Windows", () => {

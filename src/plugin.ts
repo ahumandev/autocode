@@ -126,7 +126,7 @@ async function createPluginHooks(
     input: PluginInputWithSandboxSupportOverride,
     registerSkills?: (path: string) => void,
 ): Promise<Hooks> {
-    const capabilities = createPlatformCapabilities(input.platformOverride ?? process.platform)
+    const capabilities = createPlatformCapabilities(input.platformOverride ?? process.platform, process.env)
     const commandDefinitions = createCommands(capabilities)
     const path = capabilities.isWindows ? win32 : posix
     const home = input.homeOverride ?? homedir()
