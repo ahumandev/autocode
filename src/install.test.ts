@@ -17,7 +17,7 @@ describe("install plugin shim", () => {
     })
 
     test("getShimPath uses derived shim filename in plugin path", () => {
-        expect(getShimPath("/tmp/home", "@ahumandev/autocode")).toBe(join("/tmp/home", ".config", "opencode", "plugins", "autocode.js"))
+        expect(getShimPath("/tmp/home", "@ahumandev/autocode", { platform: "linux", env: {} })).toBe(join("/tmp/home", ".config", "opencode", "plugins", "autocode.js"))
     })
 
     test("installPluginShim writes shim under OPENCODE_CONFIG_DIR", async () => {

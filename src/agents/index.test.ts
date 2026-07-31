@@ -235,7 +235,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents keeps sandbox registrations and guidance on Linux", () => {
-        const agents = buildAgents({}, undefined, [], createPlatformCapabilities("linux"))
+        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true }, [], createPlatformCapabilities("linux"))
 
         expect(agents.execute_sandbox).toBeDefined()
         for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
