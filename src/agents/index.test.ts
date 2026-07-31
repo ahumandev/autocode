@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, getAgentPermission, type AutocodeAgentConfig } from "./index"
 import { executeOpencodePrompt } from "./prompts/execute_opencode"
+import { buildExecuteOsPrompt } from "./prompts/execute_os"
 import { queryAutocodePrompt } from "./prompts/query-autocode"
+import { buildQueryOsPrompt } from "./prompts/query_os"
 import { teachPrompt } from "./prompts/teach"
+import { createPlatformCapabilities } from "../utils/platform"
 
 function permissionRule(permission: AutocodeAgentConfig["permission"], key: string): unknown {
     if (!permission || typeof permission === "string") return undefined
@@ -199,6 +202,54 @@ describe("agent policies", () => {
         expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
     })
 
+    test("buildAgents registers OS prompts from supplied platform capabilities", () => {
+        for (const platform of ["win32", "linux"] as const) {
+            const capabilities = createPlatformCapabilities(platform)
+            const agents = buildAgents({}, undefined, [], capabilities)
+
+            expect(agents.execute_os?.prompt).toBe(buildExecuteOsPrompt(capabilities))
+            expect(agents.query_os?.prompt).toBe(buildQueryOsPrompt(capabilities))
+        }
+    })
+
+    test("buildAgents removes sandbox agents, permissions, tasks, and guidance on Windows", () => {
+        const agents = buildAgents({}, undefined, [], createPlatformCapabilities("win32"))
+
+        expect(agents.execute_sandbox).toBeUndefined()
+        for (const agent of Object.values(agents)) {
+            for (const toolName of sandboxToolNames) {
+                expect(permissionRule(agent.permission, toolName)).toBeUndefined()
+            }
+
+            const taskPermission = permissionRule(agent.permission, "task")
+            const taskRules = typeof taskPermission === "object" && taskPermission !== null ? taskPermission as Record<string, unknown> : undefined
+            expect(taskRules?.execute_sandbox).toBeUndefined()
+            expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toContain("execute_sandbox")
+            expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toContain("autocode_sandbox")
+        }
+
+        for (const agentName of ["auto_review_api", "auto_review_ui", "auto_troubleshoot", "execute_script", "assist"] as const) {
+            expect(agents[agentName]).toBeDefined()
+            expect(permissionRule(agents[agentName]?.permission, "task")).not.toEqual(expect.objectContaining({ execute_sandbox: "allow" }))
+        }
+    })
+
+    test("buildAgents keeps sandbox registrations and guidance on Linux", () => {
+        const agents = buildAgents({}, undefined, [], createPlatformCapabilities("linux"))
+
+        expect(agents.execute_sandbox).toBeDefined()
+        for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
+            expect(permissionRule(agents.execute_sandbox?.permission, toolName)).toBe("allow")
+        }
+        expect(permissionRule(agents.execute_sandbox?.permission, "autocode_sandbox_copy")).toEqual({ sandbox_target: "allow", local_target: "allow" })
+        for (const agentName of ["auto_review_api", "auto_review_ui", "auto_troubleshoot"] as const) {
+            expect(permissionRule(agents[agentName]?.permission, "task")).toEqual(expect.objectContaining({ execute_sandbox: "allow" }))
+        }
+        expect(agents.execute_sandbox?.description).toContain("execute_sandbox")
+        expect(agents.assist?.prompt).toContain("sandbox")
+        expect(agents.auto_troubleshoot?.prompt).toContain("sandbox")
+    })
+
     test("allows every primary agent to restart the current session", () => {
         const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
 
@@ -218,6 +269,9 @@ describe("agent policies", () => {
         expect(agents.teach?.mode).toBe("primary")
         expect(agents.teach?.tier).toBe("balanced")
         expect(agents.teach?.prompt).toBe(teachPrompt)
+        expect(teachPrompt).toContain("Discover solution before giving implementation steps")
+        expect(teachPrompt).toContain("Do not ask user to make a project change until solution is clear")
+        expect(teachPrompt).toContain("Teach clear solution as manual tutorial")
         expect(permissionRule(permission, "*")).toBe("deny")
         expect(taskPermission).toEqual({
             "*": "deny",
@@ -241,9 +295,10 @@ describe("agent policies", () => {
         ]) {
             expect(resolvePermissionRule(permission as Record<string, unknown>, toolName)).toBe("deny")
         }
-        for (const capability of ["question", "todo*", "task_resume", "autocode_session_restart", "skill_learn"]) {
+        for (const capability of ["question", "todo*", "task_resume", "autocode_session_restart"]) {
             expect(permissionRule(permission, capability)).toBe("allow")
         }
+        expect(permissionRule(permission, "skill_learn")).toBe("ask")
         expect(skillPermission["learned-permissions*"]).toBe("allow")
     })
 

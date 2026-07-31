@@ -43,7 +43,7 @@ export type SandboxCommandResult = {
     stderr: string
 }
 
-export type SandboxSpawn = (command: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv, cwd?: string }) => Promise<SandboxCommandResult>
+export type SandboxSpawn = (command: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv, cwd?: string, shell?: boolean }) => Promise<SandboxCommandResult>
 
 export type SandboxCommandChecker = (command: string) => Promise<boolean>
 
@@ -281,9 +281,9 @@ export function getManualRootfsDownload(distro: SandboxDistro, architecture: str
         : { ok: true, distro, architecture: download.architecture, url: download.url, archive_format: download.archive_format, strip_components: download.strip_components }
 }
 
-async function defaultSpawn(command: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv, cwd?: string }): Promise<SandboxCommandResult> {
+async function defaultSpawn(command: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv, cwd?: string, shell?: boolean }): Promise<SandboxCommandResult> {
     return new Promise((resolve, reject) => {
-        const child = spawn(command, [...args], { env: options?.env, cwd: options?.cwd })
+        const child = spawn(command, [...args], { env: options?.env, cwd: options?.cwd, ...(options?.shell === undefined ? {} : { shell: options.shell }) })
         const stdout: Buffer[] = []
         const stderr: Buffer[] = []
 

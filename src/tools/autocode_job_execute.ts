@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
-import { dispatchAutocodeAgentPrompt, resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
+import { dispatchAutocodeAgentPromptAfterTurn, resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
 import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, updateCurrentSessionTitleToJobName, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
@@ -122,18 +122,6 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                             await compactSessionForJob(client, context.sessionID, context.directory, sessionSettings.resolvedModel.model!)
 
                             const sessionTitle = formatJobSessionTitle(resolvedJobName, startStatus)
-                            const promptResponse = await dispatchAutocodeAgentPrompt(
-                                client,
-                                context.directory,
-                                context.sessionID,
-                                args.agent,
-                                createAgentExecutePrompt(resolvedJobName, plan),
-                                sessionSettings.resolvedModel,
-                            )
-                            if ("error" in promptResponse) {
-                                return createAbortResponse("autocode_job_execute", promptResponse.error)
-                            }
-
                             if (!directoryFileSystem.rename) {
                                 return createAbortResponse("autocode_job_execute", "Unable to start planned job execution: rename is unavailable")
                             }
@@ -149,6 +137,15 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
 
                             const { job } = startResult
                             await persistJobSessionID(fileSystem, storageRoot, job, resolvedJobName, context.sessionID)
+
+                            dispatchAutocodeAgentPromptAfterTurn(
+                                client,
+                                context.directory,
+                                context.sessionID,
+                                args.agent,
+                                createAgentExecutePrompt(resolvedJobName, plan),
+                                sessionSettings.resolvedModel,
+                            )
 
                             return JSON.stringify({
                                 result_type: "session_created",

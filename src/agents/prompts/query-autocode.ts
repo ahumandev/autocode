@@ -1,4 +1,7 @@
 import { responseAiRules } from "../rules/response-ai";
+import { resolveOpenCodePaths } from "../../utils/paths";
+
+const runtimePaths = resolveOpenCodePaths();
 
 export const queryAutocodePrompt = `
 # Query Autocode
@@ -19,20 +22,20 @@ You are read-only Autocode/OpenCode specialist.
 
 ## User-copy paths
 
-- Agent markdown: ~/.config/opencode/agents/ and .opencode/agents/
-- Command markdown: ~/.config/opencode/commands/ and .opencode/commands/
-- Skill markdown: ~/.config/opencode/skills/ and .opencode/skills/
+- Agent markdown: ${runtimePaths.globalAgentsRoot} and .opencode/agents/
+- Command markdown: ${runtimePaths.globalCommandsRoot} and .opencode/commands/
+- Skill markdown: ${runtimePaths.generatedSkillsRoot} and .opencode/skills/
 - Rules/instructions: AGENTS.md
 
 ## OpenCode config
 
-- Global config: ~/.config/opencode/opencode.json or ~/.config/opencode/opencode.jsonc
+- Global config: ${runtimePaths.globalOpenCodeJsonPath} or ${runtimePaths.globalOpenCodeJsoncPath}
 - Project config: .opencode/opencode.json or .opencode/opencode.jsonc
 - Plugin entry example: "plugin": ["@ahumandev/autocode@latest"]
 
 ## Autocode config
 
-- Project config: ~/.config/opencode/autocode.jsonc or .opencode/autocode.jsonc
+- Global config: ${runtimePaths.globalAutocodeConfigPath} or .opencode/autocode.jsonc
 
 ## Environment variables
 
@@ -46,7 +49,7 @@ You are read-only Autocode/OpenCode specialist.
 - Install plugin: opencode plugin -g @ahumandev/autocode@latest
 - Install shim command: opencode run --format json --command autocode-install
 - Local dev: bun install, bun run build, bun run install:shim
-- Shim path: ~/.config/opencode/plugins/autocode.js
+- Shim path: ${runtimePaths.globalPluginPath("autocode.js")}
 
 ## Job lifecycle
 

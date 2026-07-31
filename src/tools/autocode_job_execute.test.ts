@@ -33,6 +33,10 @@ function parseToolResult(result: string | { output: string }): Record<string, un
     return JSON.parse(typeof result === "string" ? result : result.output) as Record<string, unknown>
 }
 
+function waitForPostTurnDispatch(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 function createMockFs() {
     return {
         readFile: mock(async (_path: string, _encoding: "utf-8" | "utf8"): Promise<string> => { throw createMissingError() }),
@@ -114,7 +118,7 @@ describe("autocode_job_execute tool", () => {
         if (xdgConfigHome) rmSync(xdgConfigHome, { recursive: true, force: true })
     })
 
-    test("compacts current session, retitles it, dispatches selected plan, and persists same session", async () => {
+    test("compacts current session, retitles it, persists same session, then dispatches selected plan", async () => {
         const fs = createMockFs()
         const events: string[] = []
         configureResolvedDraft(fs)
@@ -132,14 +136,20 @@ describe("autocode_job_execute tool", () => {
         expect(events).toEqual([
             "title:Test Job (facilitate)",
             "summarize",
-            "dispatch",
         ])
+        expect(client.session.promptAsync).not.toHaveBeenCalled()
         expect(client.session.update).toHaveBeenCalledWith({
             path: { id: "session-1" },
             query: { directory: "/workspace" },
             body: { title: "Test Job (facilitate)" },
         })
         expect(client.session.create).not.toHaveBeenCalled()
+        await waitForPostTurnDispatch()
+        expect(events).toEqual([
+            "title:Test Job (facilitate)",
+            "summarize",
+            "dispatch",
+        ])
         expect(client.session.promptAsync).toHaveBeenCalledWith({
             path: { id: "session-1" },
             query: { directory: "/workspace" },
@@ -160,6 +170,12 @@ describe("autocode_job_execute tool", () => {
 
         await createAutocodeJobExecuteTool(client, fs).execute({ agent: "teach" }, createToolContext())
 
+        expect(events).toEqual([
+            "title:Test Job (facilitate)",
+            "summarize",
+        ])
+        expect(client.session.promptAsync).not.toHaveBeenCalled()
+        await waitForPostTurnDispatch()
         expect(events).toEqual([
             "title:Test Job (facilitate)",
             "summarize",
@@ -193,6 +209,8 @@ describe("autocode_job_execute tool", () => {
 
             await createAutocodeJobExecuteTool(client, fs).execute({ agent: "assist" }, createToolContext({ directory: worktree, worktree }))
 
+            expect(client.session.promptAsync).not.toHaveBeenCalled()
+            await waitForPostTurnDispatch()
             expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
                 path: { id: "session-1" },
                 body: expect.objectContaining({
@@ -225,6 +243,8 @@ describe("autocode_job_execute tool", () => {
 
             await createAutocodeJobExecuteTool(client, fs).execute({ agent: "auto" }, createToolContext({ directory: worktree, worktree }))
 
+            expect(client.session.promptAsync).not.toHaveBeenCalled()
+            await waitForPostTurnDispatch()
             expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
                 path: { id: "session-1" },
                 body: expect.objectContaining({
@@ -240,7 +260,7 @@ describe("autocode_job_execute tool", () => {
         }
     })
 
-    test("does not move job when current-session dispatch fails", async () => {
+    test("starts job when post-turn current-session dispatch fails", async () => {
         const fs = createMockFs()
         configureResolvedDraft(fs)
         const client = createMockClient([])
@@ -248,10 +268,17 @@ describe("autocode_job_execute tool", () => {
 
         const parsed = parseToolResult(await createAutocodeJobExecuteTool(client, fs).execute({ agent: "auto" }, createToolContext()))
 
-        expect(parsed.error).toBe("Autocode session API failed (stage=prompt_dispatch, directory=/workspace, session/title=session-1, agent=auto): prompt failed")
+        expect(parsed).toMatchObject({
+            result_type: "session_created",
+            job_name: "test_job",
+            session_id: "session-1",
+        })
         expect(client.session.create).not.toHaveBeenCalled()
-        expect(fs.rename).not.toHaveBeenCalled()
-        expect(fs.writeFile).not.toHaveBeenCalled()
+        expect(client.session.promptAsync).not.toHaveBeenCalled()
+        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/executing/test_job")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/test_job/session.yml", "session_id: session-1\n")
+        await waitForPostTurnDispatch()
+        expect(client.session.promptAsync).toHaveBeenCalledTimes(1)
     })
 
     test("returns retry without session changes when resolved plan is missing", async () => {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { expandGlob } from "./glob"
+import { absoluteScanCwd, expandGlob } from "./glob"
 
 const tempPaths: string[] = []
 
@@ -83,6 +83,27 @@ describe("expandGlob", () => {
             expect(result).toEqual([])
         } finally {
             await rm(dir, { recursive: true, force: true }).catch(() => {})
+        }
+    })
+})
+
+describe("absoluteScanCwd", () => {
+    test("returns parent of first glob segment for absolute path styles", async () => {
+        const cases: Array<{ pattern: string; expected: string }> = [
+            { pattern: "/a/*.ts", expected: "/a" },
+            { pattern: "/*.ts", expected: "/" },
+            { pattern: "/a/foo*.ts", expected: "/a" },
+            { pattern: "/a/{one,two}/*.ts", expected: "/a" },
+            { pattern: "C:\\*.ts", expected: "C:\\" },
+            { pattern: "C:\\a\\*.ts", expected: "C:\\a" },
+            { pattern: "C:\\a\\foo*.ts", expected: "C:\\a" },
+            { pattern: "\\\\server\\share\\*.ts", expected: "\\\\server\\share\\" },
+            { pattern: "\\\\server\\share\\a\\*.ts", expected: "\\\\server\\share\\a" },
+            { pattern: "C:/a\\b/*.ts", expected: "C:\\a\\b" },
+        ]
+
+        for (const { pattern, expected } of cases) {
+            expect(absoluteScanCwd(pattern)).toBe(expected)
         }
     })
 })

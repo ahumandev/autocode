@@ -228,6 +228,32 @@ describe("external directory config", () => {
         })
     })
 
+    test("loadAutocodeConfig discovers sibling global configs under OPENCODE_CONFIG_DIR", async () => {
+        const originalConfigDir = process.env.OPENCODE_CONFIG_DIR
+        const originalXdgConfigHome = process.env.XDG_CONFIG_HOME
+        const configRoot = "/override/OpenCode Config"
+        process.env.OPENCODE_CONFIG_DIR = configRoot
+        process.env.XDG_CONFIG_HOME = "/ignored-xdg"
+
+        try {
+            const fs = makeFs({
+                [join(configRoot, "opencode.json")]: JSON.stringify({ permission: { task_external: { "/json/*": "deny" } } }),
+                [join(configRoot, "opencode.jsonc")]: JSON.stringify({ permission: { task_external: { "/jsonc/*": "allow" } } }),
+                [join(configRoot, "autocode.jsonc")]: JSON.stringify({ permission: { external_directory: { "/autocode/*": "ask" } } }),
+            })
+
+            const result = await loadAutocodeConfig("/wt", "/wt", fs)
+
+            expect(result.externalDirectories).toEqual({ "/jsonc/*": "allow", "/autocode/*": "ask" })
+        } finally {
+            if (originalConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
+            else process.env.OPENCODE_CONFIG_DIR = originalConfigDir
+
+            if (originalXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME
+            else process.env.XDG_CONFIG_HOME = originalXdgConfigHome
+        }
+    })
+
     test("loadAutocodeConfig ignores invalid external_directory actions", async () => {
         const fs = makeFs({
             "/wt/.opencode/autocode.jsonc": JSON.stringify({

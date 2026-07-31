@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, utimesSync } from "node:fs"
 import { mkdtemp } from "node:fs/promises"
-import { homedir, tmpdir } from "node:os"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import { cleanupLearnedSkills, ensureGeneratedSkills, getGeneratedGitHubSkillsRoot, getGeneratedSkillsRoot, managedSkills, reconcileGeneratedSkills } from "./index"
 
@@ -47,8 +47,9 @@ function sourceSkillsRoot(): string {
 
 async function withIsolatedSkillConfigHome<T>(fn: (home: string, xdgConfigHome: string) => Promise<T>): Promise<T> {
     const home = await mkdtemp(path.join(tmpdir(), "autocode-skills-home-"))
-    const xdgConfigHome = path.join(home, ".config")
+    const xdgConfigHome = await mkdtemp(path.join(tmpdir(), "autocode-skills-xdg-"))
     tempRoots.push(home)
+    tempRoots.push(xdgConfigHome)
 
     process.env.HOME = home
     process.env.XDG_CONFIG_HOME = xdgConfigHome
@@ -101,13 +102,14 @@ describe("managed skills", () => {
         }
     })
 
-    test("ensureGeneratedSkills writes all managed skills under isolated config home", async () => {
-        await withIsolatedSkillConfigHome(async (_home, xdgConfigHome) => {
-            const expectedRoot = path.join(xdgConfigHome, "skills", "autocode")
+    test("ensureGeneratedSkills writes all managed skills under home agents root despite XDG config", async () => {
+        await withIsolatedSkillConfigHome(async (home, xdgConfigHome) => {
+            const expectedRoot = path.join(home, ".agents", "skills", "autocode")
 
-            expect(getGeneratedSkillsRoot()).toBe(expectedRoot)
+            expect(getGeneratedSkillsRoot({ home })).toBe(expectedRoot)
+            expect(getGeneratedSkillsRoot({ home })).not.toContain(xdgConfigHome)
 
-            const generatedRoot = await ensureGeneratedSkills()
+            const generatedRoot = await ensureGeneratedSkills({ home })
 
             expect(generatedRoot).toBe(expectedRoot)
             expect(existsSync(path.join(generatedRoot, "skill-write", "SKILL.md"))).toBe(true)
@@ -123,13 +125,14 @@ describe("managed skills", () => {
 })
 
 describe("generated skill reconciliation", () => {
-    test("uses XDG config root or HOME agents fallback", async () => {
-        await withIsolatedSkillConfigHome(async (_home, xdgConfigHome) => {
-            expect(getGeneratedSkillsRoot()).toBe(path.join(xdgConfigHome, "skills", "autocode"))
-            expect(getGeneratedGitHubSkillsRoot()).toBe(path.join(xdgConfigHome, "skills", "github"))
+    test("uses HOME agents root regardless of XDG config", async () => {
+        await withIsolatedSkillConfigHome(async (home, xdgConfigHome) => {
+            expect(getGeneratedSkillsRoot({ home })).toBe(path.join(home, ".agents", "skills", "autocode"))
+            expect(getGeneratedGitHubSkillsRoot({ home })).toBe(path.join(home, ".agents", "skills", "github"))
+            expect(getGeneratedSkillsRoot({ home })).not.toContain(xdgConfigHome)
             delete process.env.XDG_CONFIG_HOME
-            expect(getGeneratedSkillsRoot()).toBe(path.join(homedir(), ".agents", "skills", "autocode"))
-            expect(getGeneratedGitHubSkillsRoot()).toBe(path.join(homedir(), ".agents", "skills", "github"))
+            expect(getGeneratedSkillsRoot({ home })).toBe(path.join(home, ".agents", "skills", "autocode"))
+            expect(getGeneratedGitHubSkillsRoot({ home })).toBe(path.join(home, ".agents", "skills", "github"))
         })
     })
 
@@ -148,14 +151,14 @@ describe("generated skill reconciliation", () => {
     })
 
     test("extracts each missing GitHub skill root independently", async () => {
-        await withIsolatedSkillConfigHome(async () => {
-            const root = getGeneratedGitHubSkillsRoot()
+        await withIsolatedSkillConfigHome(async (home) => {
+            const root = getGeneratedGitHubSkillsRoot({ home })
             const present = path.join(root, "angular", "skills", "angular-developer")
             const missing = path.join(root, "angular", "skills", "angular-new-app")
             mkdirSync(present, { recursive: true })
             writeFileSync(path.join(present, "SKILL.md"), "user skill")
 
-            const result = await reconcileGeneratedSkills()
+            const result = await reconcileGeneratedSkills({ home })
 
             expect(result.changedPaths).toContain(missing)
             expect(readFileSync(path.join(missing, "SKILL.md"), "utf8")).toContain("angular-new-app")
@@ -164,13 +167,13 @@ describe("generated skill reconciliation", () => {
     })
 
     test("skips a present skill root missing SKILL.md", async () => {
-        await withIsolatedSkillConfigHome(async () => {
-            const root = getGeneratedSkillsRoot()
+        await withIsolatedSkillConfigHome(async (home) => {
+            const root = getGeneratedSkillsRoot({ home })
             const destination = path.join(root, "author-agent")
             mkdirSync(destination, { recursive: true })
             writeFileSync(path.join(destination, "user-file"), "keep")
 
-            const result = await reconcileGeneratedSkills()
+            const result = await reconcileGeneratedSkills({ home })
 
             expect(result.changedPaths).not.toContain(destination)
             expect(existsSync(path.join(destination, "SKILL.md"))).toBe(false)
@@ -179,9 +182,9 @@ describe("generated skill reconciliation", () => {
     })
 
     test("skipExtraction returns generated root without creating or changing it", async () => {
-        await withIsolatedSkillConfigHome(async () => {
-            const expectedRoot = getGeneratedSkillsRoot()
-            const result = await reconcileGeneratedSkills({ skipExtraction: true })
+        await withIsolatedSkillConfigHome(async (home) => {
+            const expectedRoot = getGeneratedSkillsRoot({ home })
+            const result = await reconcileGeneratedSkills({ skipExtraction: true, home })
 
             expect(result.root).toBe(expectedRoot)
             expect(result.changedPaths).toEqual([])

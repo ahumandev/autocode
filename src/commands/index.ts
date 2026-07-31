@@ -1,5 +1,6 @@
 import type { Config } from "@opencode-ai/sdk/v2"
 import packageJson from "../../package.json"
+import type { PlatformCapabilities } from "../utils/platform"
 import { authorArticleCommandTemplate } from "./author-article"
 import { documentCommandTemplate as docsCommandTemplate } from "./docs"
 import { docsSubagentCommandTemplate } from "./docs-subagent"
@@ -7,7 +8,7 @@ import { explainCommandTemplate } from "./explain"
 import { fixCommandTemplate } from "./fix"
 import { gitCommitCommandTemplate } from "./commit"
 import { gitConflictCommandTemplate } from "./git-conflict"
-import { installCommand } from "./install"
+import { createInstallCommand } from "./install"
 import { jobConceptsCommandTemplate } from "./job-concepts"
 import { jobDesignCommandTemplate } from "./job-design"
 import { jobDraftCommandTemplate } from "./job-draft"
@@ -22,7 +23,9 @@ import { restartSessionTemplate } from "./restart-session"
 
 type CommandMap = NonNullable<Config["command"]>
 
-export const commands: CommandMap = {
+export function createCommands(capabilities: PlatformCapabilities): CommandMap {
+    const installCommand = createInstallCommand(capabilities)
+    return {
 
     // Job lifecycle commands
 
@@ -69,4 +72,7 @@ Report to user:
     "report": { description: "Summarize session as report.", subtask: false, template: reportCommandTemplate },
     "resume": { description: "Resume interrupted session.", subtask: false, template: "You were interrupted. Call `task_resume` tool, then resume your own work." },
     "tests": { agent: "auto_test", description: "Generate or improve tests", subtask: false, template: testsCommandTemplate }
+    }
 }
+
+export const commands: CommandMap = createCommands({ isWindows: false })

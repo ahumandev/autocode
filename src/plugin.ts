@@ -1,22 +1,28 @@
 import { define } from "@opencode-ai/plugin/v2/promise"
+import { homedir } from "node:os"
+import { posix, win32 } from "node:path"
 import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin"
 import type { AgentConfig, Config } from "@opencode-ai/sdk/v2"
-import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, injectExternalSkillPermissions, type AutocodeAgentConfig } from "./agents"
+import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, applyWindowsSandboxPolicy, buildAgents, injectExternalSkillPermissions, type AutocodeAgentConfig } from "./agents"
 import { collectExternalDirectories, collectTaskExternalRules, loadAutocodeConfig, mergeExternalDirectoryRules } from "./config"
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
-import { commands } from "./commands"
+import { createCommands } from "./commands"
 import { cleanupLearnedSkills, reconcileGeneratedSkills } from "./skills"
 import { createTools } from "./tools"
+import { createPlatformCapabilities, type PlatformCapabilities } from "./utils/platform"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 type PluginAgentConfig = AutocodeAgentConfig
 type ConfigWithSubagentDepth = Config & { subagent_depth?: number }
+type CommandMap = NonNullable<Config["command"]>
 type PluginInputWithSandboxSupportOverride = {
     client: Parameters<typeof createTools>[0]
     directory: string
     worktree: string
     sandboxSupportOverride?: SandboxPlatformSupportOptions
+    platformOverride?: NodeJS.Platform
+    homeOverride?: string
     serverUrl?: URL
 }
 
@@ -40,11 +46,12 @@ function preparePluginAgentsAfterOverrides(
     externalDirectories: ExternalDirectoryRules,
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
     externalSkills: Parameters<typeof injectExternalSkillPermissions>[1] = [],
+    capabilities: PlatformCapabilities = { isWindows: false },
 ): Record<string, Omit<PluginAgentConfig, "tier">> {
     const externalDirectoryFinalizedAgents = applyExternalDirectoryPolicy(agents, externalDirectories)
     const sandboxFinalizedAgents = applySandboxPlatformPolicy(externalDirectoryFinalizedAgents, sandboxSupportOverride ?? {})
     injectExternalSkillPermissions(sandboxFinalizedAgents, externalSkills)
-    return Object.fromEntries(Object.entries(sandboxFinalizedAgents).map(([name, agent]) => [
+    return Object.fromEntries(Object.entries(applyWindowsSandboxPolicy(sandboxFinalizedAgents, capabilities)).map(([name, agent]) => [
         name,
         stripRuntimeAgentTier(agent),
     ]))
@@ -55,6 +62,8 @@ async function mergeConfig(
     input: PluginInputWithSandboxSupportOverride,
     autocodeConfig: Awaited<ReturnType<typeof loadAutocodeConfig>>,
     generatedSkills: Awaited<ReturnType<typeof reconcileGeneratedSkills>>,
+    capabilities: PlatformCapabilities,
+    commandDefinitions: CommandMap,
 ): Promise<void> {
     const { tiers, externalDirectories } = autocodeConfig
     const nativeExternalDirectories = typeof cfg.permission === "object" && cfg.permission !== null
@@ -77,7 +86,7 @@ async function mergeConfig(
     cfg.subagent_depth = Math.max(cfg.subagent_depth ?? 0, 4)
 
     cfg.agent = cfg.agent ?? {}
-    const agents = buildAgents(agentExternalDirectories, input.sandboxSupportOverride, generatedSkills.externalSkills)
+    const agents = buildAgents(agentExternalDirectories, input.sandboxSupportOverride, generatedSkills.externalSkills, capabilities)
     const mergedAgents: Record<string, PluginAgentConfig> = {}
     for (const [name, agentDef] of Object.entries(agents)) {
         const userOverride = cfg.agent[name]
@@ -89,14 +98,18 @@ async function mergeConfig(
         agentExternalDirectories,
         input.sandboxSupportOverride,
         generatedSkills.externalSkills,
+        capabilities,
     )
+    if (capabilities.isWindows) {
+        delete (cfg.agent as Record<string, unknown>).execute_sandbox
+    }
     for (const [name, agent] of Object.entries(finalAgents)) {
         ;(cfg.agent as Record<string, unknown>)[name] = agent
     }
 
     cfg.command = cfg.command ?? {}
     const mergedCommandCache = new WeakMap<object, NonNullable<Config["command"]>[string]>()
-    for (const [name, commandDef] of Object.entries(commands)) {
+    for (const [name, commandDef] of Object.entries(commandDefinitions)) {
         const userOverride = cfg.command[name]
         if (userOverride === undefined) {
             const cachedCommand = mergedCommandCache.get(commandDef)
@@ -113,13 +126,18 @@ async function createPluginHooks(
     input: PluginInputWithSandboxSupportOverride,
     registerSkills?: (path: string) => void,
 ): Promise<Hooks> {
-    const home = process.env.HOME ?? ""
-    const bunBin = `${home}/.bun/bin`
-    process.env.BUN_INSTALL = `${home}/.bun`
-    process.env.PATH = process.env.PATH ? `${bunBin}:${process.env.PATH}` : bunBin
+    const capabilities = createPlatformCapabilities(input.platformOverride ?? process.platform)
+    const commandDefinitions = createCommands(capabilities)
+    const path = capabilities.isWindows ? win32 : posix
+    const home = input.homeOverride ?? homedir()
+    const bunRoot = path.join(home, ".bun")
+    const bunBin = path.join(bunRoot, "bin")
+    const originalPath = process.env.PATH
+    process.env.BUN_INSTALL = bunRoot
+    process.env.PATH = originalPath ? `${bunBin}${path.delimiter}${originalPath}` : bunBin
 
     const autocodeConfig = await loadAutocodeConfig(input.worktree, input.directory)
-    const generatedSkills = await reconcileGeneratedSkills({ skipExtraction: autocodeConfig.skills?.freeze === true })
+    const generatedSkills = await reconcileGeneratedSkills({ home, skipExtraction: autocodeConfig.skills?.freeze === true })
     registerSkills?.(generatedSkills.root)
     if (autocodeConfig.skills?.freeze !== true) {
         try {
@@ -132,9 +150,9 @@ async function createPluginHooks(
 
     return {
         async config(cfg: ConfigWithSubagentDepth) {
-            await mergeConfig(cfg, input, autocodeConfig, generatedSkills)
+            await mergeConfig(cfg, input, autocodeConfig, generatedSkills, capabilities, commandDefinitions)
         },
-        tool: createTools(input.client, autocodeConfig.sandbox, { serverUrl: input.serverUrl }),
+        tool: createTools(input.client, autocodeConfig.sandbox, { home, serverUrl: input.serverUrl }, capabilities),
     }
 }
 

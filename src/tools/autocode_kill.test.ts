@@ -41,6 +41,15 @@ type CreateDepsOptions = {
     platform?: NodeJS.Platform
     commandExists?: boolean | ((command: string) => boolean | Promise<boolean>)
     signalProcess?: (pid: number, signal: NodeJS.Signals) => void
+    windowsNetstat?: WindowsCommandResult
+    windowsTasklist?: WindowsCommandResult
+    windowsTaskkill?: WindowsCommandResult
+}
+
+type WindowsCommandResult = {
+    exitCode: number | null
+    stdout: string
+    stderr: string
 }
 
 const defaultSsLines = [
@@ -97,6 +106,18 @@ function createDeps(projectRoot: string, entries: Record<string, FakeEntry>, opt
         if (command === "ps" && args[0] === "-o") {
             const pid = args.at(-1) ?? ""
             return { exitCode: 0, stdout: options.processInfo?.[pid] ?? "alice node\n", stderr: "" }
+        }
+
+        if (command === "netstat.exe") {
+            return options.windowsNetstat ?? { exitCode: 0, stdout: "  TCP    127.0.0.1:3000     0.0.0.0:0      LISTENING       3000\r\n", stderr: "" }
+        }
+
+        if (command === "tasklist.exe") {
+            return options.windowsTasklist ?? { exitCode: 0, stdout: "node.exe                     3000 Console                    1     10,000 K\r\n", stderr: "" }
+        }
+
+        if (command === "taskkill.exe") {
+            return options.windowsTaskkill ?? { exitCode: 0, stdout: "SUCCESS: Sent termination signal to process with PID 3000.\r\n", stderr: "" }
         }
 
         return { exitCode: 127, stdout: "", stderr: "not found" }
@@ -346,5 +367,90 @@ describe("autocode_kill", () => {
         expect(output.candidates?.map((candidate) => candidate.port).sort((left, right) => left - right)).toEqual([3000, 9000])
         expect(output.candidates?.map((candidate) => candidate.process_name)).toEqual(["node", "node"])
         expect(deps.signalProcess).not.toHaveBeenCalled()
+    })
+
+    test("kills verified Windows IPv4 and IPv6 listeners with safe commands", async () => {
+        const projectRoot = "/workspace/project"
+        for (const [endpoint, lineEnding, pid, name] of [
+            ["127.0.0.1:3000", "\r\n", "3000", "node.exe"],
+            ["[::1]:3000", "\n", "3001", "bun.exe"],
+        ]) {
+            const deps = createDeps(projectRoot, {}, {
+                platform: "win32",
+                windowsNetstat: { exitCode: 0, stdout: `  TCP    ${endpoint}     0.0.0.0:0      LISTENING       ${pid}${lineEnding}`, stderr: "" },
+                windowsTasklist: { exitCode: 0, stdout: `${name}                     ${pid} Console                    1     10,000 K${lineEnding}`, stderr: "" },
+            })
+
+            const output = parseResult(await runAutocodeKill({ port: 3000, name }, { cwd: projectRoot }, deps))
+
+            expect(output).toMatchObject({ ok: true, mode: "kill", action: "kill", port: 3000, name, pid: Number(pid) })
+            expect(deps.spawn).toHaveBeenNthCalledWith(1, "netstat.exe", ["-ano"], { shell: false })
+            expect(deps.spawn).toHaveBeenNthCalledWith(2, "tasklist.exe", ["/FI", `PID eq ${pid}`], { shell: false })
+            expect(deps.spawn).toHaveBeenNthCalledWith(3, "taskkill.exe", ["/PID", pid, "/T"], { shell: false })
+            expect(deps.spawn).toHaveBeenCalledTimes(3)
+            expect(deps.spawn).not.toHaveBeenCalledWith("ss", expect.anything())
+            expect(deps.spawn).not.toHaveBeenCalledWith("ps", expect.anything())
+            expect(deps.signalProcess).not.toHaveBeenCalled()
+        }
+    })
+
+    test("does not kill unsafe Windows listener targets", async () => {
+        const projectRoot = "/workspace/project"
+        const cases: Array<{ name: string, netstat: string, tasklist?: string, expectedName?: string, calls: number }> = [
+            { name: "no listener", netstat: "", calls: 1 },
+            { name: "ambiguous listener", netstat: "  TCP    127.0.0.1:3000     0.0.0.0:0      LISTENING       3000\r\n  TCP    [::1]:3000          [::]:0           LISTENING       3001\r\n", calls: 1 },
+            { name: "invalid listener PID", netstat: "  TCP    127.0.0.1:3000     0.0.0.0:0      LISTENING       not-a-pid\r\n", calls: 1 },
+            { name: "missing tasklist PID", netstat: "  TCP    127.0.0.1:3000     0.0.0.0:0      LISTENING       3000\r\n", tasklist: "INFO: No tasks are running which match the specified criteria.\r\n", calls: 2 },
+            { name: "name mismatch", netstat: "  TCP    127.0.0.1:3000     0.0.0.0:0      LISTENING       3000\r\n", tasklist: "node.exe                     3000 Console                    1     10,000 K\r\n", expectedName: "vite.exe", calls: 2 },
+        ]
+
+        for (const scenario of cases) {
+            const deps = createDeps(projectRoot, {}, {
+                platform: "win32",
+                windowsNetstat: { exitCode: 0, stdout: scenario.netstat, stderr: "" },
+                ...(scenario.tasklist === undefined ? {} : { windowsTasklist: { exitCode: 0, stdout: scenario.tasklist, stderr: "" } }),
+            })
+
+            const output = parseResult(await runAutocodeKill({ port: 3000, ...(scenario.expectedName === undefined ? {} : { name: scenario.expectedName }) }, { cwd: projectRoot }, deps))
+
+            expect(output.ok).toBeUndefined()
+            expect(output.failedAction).toBe("kill listener on port 3000")
+            expect(deps.spawn).toHaveBeenCalledTimes(scenario.calls)
+            expect(deps.spawn).toHaveBeenNthCalledWith(1, "netstat.exe", ["-ano"], { shell: false })
+            if (scenario.calls === 2) expect(deps.spawn).toHaveBeenNthCalledWith(2, "tasklist.exe", ["/FI", "PID eq 3000"], { shell: false })
+            expect(deps.spawn).not.toHaveBeenCalledWith("taskkill.exe", expect.anything(), expect.anything())
+            expect(deps.spawn).not.toHaveBeenCalledWith("ss", expect.anything())
+            expect(deps.spawn).not.toHaveBeenCalledWith("ps", expect.anything())
+            expect(deps.signalProcess).not.toHaveBeenCalled()
+        }
+    })
+
+    test("stops Windows command sequence when command exit code fails", async () => {
+        const projectRoot = "/workspace/project"
+        const cases: Array<{ command: "netstat.exe" | "tasklist.exe" | "taskkill.exe", result: WindowsCommandResult, expectedCalls: number }> = [
+            { command: "netstat.exe", result: { exitCode: 1, stdout: "", stderr: "netstat failed" }, expectedCalls: 1 },
+            { command: "netstat.exe", result: { exitCode: null, stdout: "", stderr: "netstat missing exit code" }, expectedCalls: 1 },
+            { command: "tasklist.exe", result: { exitCode: 1, stdout: "", stderr: "tasklist failed" }, expectedCalls: 2 },
+            { command: "tasklist.exe", result: { exitCode: null, stdout: "", stderr: "tasklist missing exit code" }, expectedCalls: 2 },
+            { command: "taskkill.exe", result: { exitCode: 1, stdout: "", stderr: "taskkill failed" }, expectedCalls: 3 },
+            { command: "taskkill.exe", result: { exitCode: null, stdout: "", stderr: "taskkill missing exit code" }, expectedCalls: 3 },
+        ]
+
+        for (const scenario of cases) {
+            const deps = createDeps(projectRoot, {}, { platform: "win32", [scenario.command === "netstat.exe" ? "windowsNetstat" : scenario.command === "tasklist.exe" ? "windowsTasklist" : "windowsTaskkill"]: scenario.result })
+
+            const output = parseResult(await runAutocodeKill({ port: 3000 }, { cwd: projectRoot }, deps))
+
+            expect(output.ok).toBeUndefined()
+            expect(output.failedAction).toBe("kill listener on port 3000")
+            expect(output.error).toContain(scenario.result.stderr)
+            expect(deps.spawn).toHaveBeenCalledTimes(scenario.expectedCalls)
+            expect(deps.spawn).toHaveBeenNthCalledWith(1, "netstat.exe", ["-ano"], { shell: false })
+            if (scenario.expectedCalls >= 2) expect(deps.spawn).toHaveBeenNthCalledWith(2, "tasklist.exe", ["/FI", "PID eq 3000"], { shell: false })
+            if (scenario.expectedCalls >= 3) expect(deps.spawn).toHaveBeenNthCalledWith(3, "taskkill.exe", ["/PID", "3000", "/T"], { shell: false })
+            expect(deps.spawn).not.toHaveBeenCalledWith("ss", expect.anything())
+            expect(deps.spawn).not.toHaveBeenCalledWith("ps", expect.anything())
+            expect(deps.signalProcess).not.toHaveBeenCalled()
+        }
     })
 })

@@ -1,18 +1,21 @@
 import { describe, expect, test } from "bun:test"
+import { resolveOpenCodePaths } from "../../utils/paths"
 import { queryAutocodePrompt } from "./query-autocode"
+
+const runtimePaths = resolveOpenCodePaths()
 
 const requiredPromptGroups = [
     [
-        "~/.config/opencode/agents/",
+        runtimePaths.globalAgentsRoot,
         ".opencode/agents/",
-        "~/.config/opencode/commands/",
+        runtimePaths.globalCommandsRoot,
         ".opencode/commands/",
-        "~/.config/opencode/skills/",
+        runtimePaths.generatedSkillsRoot,
         "AGENTS.md",
     ],
     [
-        "~/.config/opencode/opencode.json",
-        "~/.config/opencode/opencode.jsonc",
+        runtimePaths.globalOpenCodeJsonPath,
+        runtimePaths.globalOpenCodeJsoncPath,
         ".opencode/opencode.json",
         ".opencode/opencode.jsonc",
         "JSONC permits comments and trailing commas for AutoCode and OpenCode jsonc files.",
@@ -31,7 +34,7 @@ const requiredPromptGroups = [
         "opencode plugin -g @ahumandev/autocode@latest",
         "opencode run --format json --command autocode-install",
         "bun install, bun run build, bun run install:shim",
-        "~/.config/opencode/plugins/autocode.js",
+        runtimePaths.globalPluginPath("autocode.js"),
         "concepts -> drafts -> assist/executing -> review -> shelved",
         ".agents/jobs/{status}/{job_name}/",
     ],
@@ -118,13 +121,20 @@ describe("queryAutocodePrompt", () => {
         }
     })
 
+    test("uses resolver paths without trailing slashes", () => {
+        for (const path of [runtimePaths.globalAgentsRoot, runtimePaths.globalCommandsRoot, runtimePaths.generatedSkillsRoot]) {
+            expect(path).not.toMatch(/[\\/]$/)
+            expect(queryAutocodePrompt).toContain(path)
+        }
+    })
+
     test("accepts custom user markdown review paths as read-only advice sources", () => {
         expectPromptContainsAll([
             "You may read custom user markdown/config files for review and advice only.",
             "You may read user/project agent md, command md, skill md, and rules/instructions via AGENTS.md.",
-            "Agent markdown: ~/.config/opencode/agents/ and .opencode/agents/",
-            "Command markdown: ~/.config/opencode/commands/ and .opencode/commands/",
-            "Skill markdown: ~/.config/opencode/skills/ and .opencode/skills/",
+            `Agent markdown: ${runtimePaths.globalAgentsRoot} and .opencode/agents/`,
+            `Command markdown: ${runtimePaths.globalCommandsRoot} and .opencode/commands/`,
+            `Skill markdown: ${runtimePaths.generatedSkillsRoot} and .opencode/skills/`,
             "Rules/instructions: AGENTS.md",
         ])
     })

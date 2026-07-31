@@ -16,16 +16,18 @@
  * a TS6059 compile error. Moving it here keeps the compilation root clean.
  */
 
-import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { resolveOpenCodePaths, type OpenCodePathResolverDependencies } from "./utils/paths"
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
 export interface InstallPluginShimOptions {
   rootDir?: string;
   homeDir?: string;
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
 }
 
 export function deriveShimFilename(packageName: string): string {
@@ -37,17 +39,21 @@ export function deriveShimFilename(packageName: string): string {
   return `${safeBasename || "plugin"}.js`
 }
 
-export function getShimPath(homeDir: string, packageName: string): string {
-  return join(homeDir, ".config", "opencode", "plugins", deriveShimFilename(packageName))
+export function getShimPath(
+  homeDir: string | undefined,
+  packageName: string,
+  dependencies: Omit<OpenCodePathResolverDependencies, "home"> = {},
+): string {
+  return resolveOpenCodePaths({ ...dependencies, home: homeDir }).globalPluginPath(deriveShimFilename(packageName))
 }
 
 export async function installPluginShim(options: InstallPluginShimOptions = {}): Promise<string> {
   const installRootDir = options.rootDir ?? rootDir
-  const installHomeDir = options.homeDir ?? homedir()
+  const installHomeDir = options.homeDir
   const packageJsonPath = join(installRootDir, "package.json")
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"))
   const distPluginPath = resolve(installRootDir, "dist", "plugin.js")
-  const shimPath = getShimPath(installHomeDir, packageJson.name)
+  const shimPath = getShimPath(installHomeDir, packageJson.name, options)
   const shimContents = `export { default } from ${JSON.stringify(pathToFileURL(distPluginPath).href)}\n`
 
   await mkdir(dirname(shimPath), { recursive: true })

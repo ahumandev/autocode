@@ -17,10 +17,22 @@ function patternToRegExp(pattern: string): RegExp {
     return new RegExp(`${source}$`)
 }
 
+function hasWindowsPathSemantics(absolutePath: string): boolean {
+    return /^[a-z]:[\\/]/i.test(absolutePath) || /^(?:\\\\|\/\/)/.test(absolutePath)
+}
+
+function normalizeWindowsPath(path: string): string {
+    return path.replaceAll("\\", "/").toLowerCase()
+}
+
 function patternMatches(pattern: string, absolutePath: string): boolean {
-    if (pattern === absolutePath) return true
-    if (absolutePath.startsWith(`${pattern}/`)) return true
-    return patternToRegExp(pattern).test(absolutePath)
+    const isWindowsPath = hasWindowsPathSemantics(absolutePath)
+    const matchPattern = isWindowsPath ? normalizeWindowsPath(pattern) : pattern
+    const matchPath = isWindowsPath ? normalizeWindowsPath(absolutePath) : absolutePath
+
+    if (matchPattern === matchPath) return true
+    if (matchPath.startsWith(`${matchPattern}/`)) return true
+    return patternToRegExp(matchPattern).test(matchPath)
 }
 
 export function matchExternalDirectoryAction(rules: ExternalDirectoryRules, absolutePath: string): PermissionAction | undefined {

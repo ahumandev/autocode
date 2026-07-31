@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createShelvedCollisionJobName, deriveJobNameFromTitle, deriveJobTitleFromFileName, formatJobSessionTitle, getCanonicalDirectoryForStatus, getCanonicalDirectoryPathForStatus, getCurrentSessionTitle, getDefaultStatusForDirectory, getStorageRelativePath, isCompatibleJobName, isJobStatus, jobStatuses, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity } from "./jobs"
+import { createShelvedCollisionJobName, deriveJobNameFromTitle, deriveJobTitleFromFileName, formatJobSessionTitle, getCanonicalDirectoryForStatus, getCanonicalDirectoryPathForStatus, getCurrentSessionTitle, getDefaultStatusForDirectory, getRelativeConceptFilePath, getStorageRelativePath, isCompatibleJobName, isJobStatus, jobStatuses, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity } from "./jobs"
 
 function createFileSystem(activeJobs: Record<string, string[]> = {}, files: Record<string, string> = {}) {
     return {
@@ -117,6 +117,24 @@ describe("jobs utilities", () => {
         expect(resolveAgentsStorageRoot({ worktree: "/workspace/project", directory: "/other" })).toBe("/workspace/project")
         expect(resolveAgentsStorageRoot({ worktree: "/", directory: "/" })).toBe("/")
         expect(getStorageRelativePath("/workspace/project", "/workspace/project/.agents/jobs/drafts/my_feature/plan.md")).toBe(".agents/jobs/drafts/my_feature/plan.md")
+    })
+
+    test("resolves safe concept labels and rejects portable path escapes", () => {
+        expect(getRelativeConceptFilePath("example-item")).toBe(".agents/jobs/concepts/example-item.md")
+
+        for (const label of [
+            ".",
+            "..",
+            "../outside",
+            "..\\outside",
+            "/outside",
+            "C:\\outside",
+            "C:outside",
+            "\\\\server\\share\\outside",
+            "../concepts-sibling/outside",
+        ]) {
+            expect(() => getRelativeConceptFilePath(label)).toThrow(`Invalid concept label: ${label}`)
+        }
     })
 
     test("derives job titles from timestamped filenames with extensions", () => {

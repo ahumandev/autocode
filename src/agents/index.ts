@@ -1,5 +1,6 @@
 import type { AgentConfig } from "@opencode-ai/sdk/v2"
 import type { ExternalDirectoryRules, ModelTier, PermissionAction, SkillCategory } from "@/config"
+import type { PlatformCapabilities } from "@/utils/platform"
 import type { ExternalSkill } from "../utils/external"
 import { assistBrowserPrompt } from "./prompts/assist_browser";
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
@@ -27,7 +28,7 @@ import { executeCodePrompt } from "./prompts/execute_code";
 import { executeDebugPrompt } from "./prompts/execute_debug";
 import { executeDocumentPrompt } from "./prompts/execute_document"
 import { executeExcelPrompt } from "./prompts/execute_excel";
-import { executeOsPrompt } from "./prompts/execute_os";
+import { buildExecuteOsPrompt } from "./prompts/execute_os";
 import { executeOpencodePrompt } from "./prompts/execute_opencode";
 import { executeRestPrompt } from "./prompts/execute_rest";
 import { executeScriptPrompt } from "./prompts/execute_script";
@@ -39,7 +40,7 @@ import { queryCodePrompt } from "./prompts/query_code";
 import { queryDbPrompt } from "./prompts/query_db";
 import { queryExcelPrompt } from "./prompts/query_excel";
 import { queryGitPrompt } from "./prompts/query_git";
-import { queryOsPrompt } from "./prompts/query_os";
+import { buildQueryOsPrompt } from "./prompts/query_os";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
 import { researchPrompt } from "./prompts/research";
@@ -974,7 +975,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn: "allow",
         },
-        prompt: executeOsPrompt,
+        prompt: buildExecuteOsPrompt({ isWindows: false }),
         temperature: 0.1,
         tier: "balanced",
     },
@@ -1051,7 +1052,7 @@ const baseAgents: AgentMap = {
             skill_learn: "allow",
             "todo*": "allow",
         },
-        prompt: executeOsPrompt,
+        prompt: buildExecuteOsPrompt({ isWindows: false }),
         temperature: 0.1,
         tier: "operator",
     },
@@ -1275,7 +1276,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn: "allow",
         },
-        prompt: queryOsPrompt,
+        prompt: buildQueryOsPrompt({ isWindows: false }),
         temperature: 0.1,
         tier: "fast",
     },
@@ -1500,6 +1501,53 @@ export function applySandboxPlatformPolicy(agents: AgentMap, options: SandboxPla
     }))
 }
 
+export function applyWindowsSandboxPolicy(agents: AgentMap, capabilities: PlatformCapabilities): AgentMap {
+    if (!capabilities.isWindows) return agents
+
+    return Object.fromEntries(Object.entries(agents)
+        .filter(([agentName]) => agentName !== "execute_sandbox")
+        .map(([agentName, agent]) => [agentName, removeWindowsSandboxReferences(agent)]))
+}
+
+function removeWindowsSandboxReferences(agent: AutocodeAgentConfig): AutocodeAgentConfig {
+    const permission = agent.permission
+    const prompt = typeof agent.prompt === "string" ? removeWindowsSandboxPromptGuidance(agent.prompt) : agent.prompt
+
+    return {
+        ...agent,
+        permission: permission && typeof permission !== "string"
+            ? removeWindowsSandboxPermissionRules(permission)
+            : permission,
+        prompt,
+    }
+}
+
+function removeWindowsSandboxPermissionRules(permission: PermissionObject): PermissionObject {
+    return Object.fromEntries(Object.entries(permission).flatMap(([key, rule]) => {
+        if (isSandboxReference(key)) return []
+        return [[key, removeWindowsSandboxPermissionRule(rule)] as const]
+    })) as PermissionObject
+}
+
+function removeWindowsSandboxPermissionRule(
+    rule: AutocodePermissionRule | AutocodeTaskPermissionRules | undefined,
+): AutocodePermissionRule | AutocodeTaskPermissionRules | undefined {
+    if (rule === undefined || typeof rule === "string") return rule
+
+    return Object.fromEntries(Object.entries(rule).flatMap(([key, nestedRule]) => {
+        if (isSandboxReference(key)) return []
+        return [[key, removeWindowsSandboxPermissionRule(nestedRule)] as const]
+    })) as PermissionTargetRules | AutocodeTaskPermissionRules
+}
+
+function removeWindowsSandboxPromptGuidance(prompt: string): string {
+    return prompt.split("\n").filter((line) => !isSandboxReference(line)).join("\n")
+}
+
+function isSandboxReference(value: string): boolean {
+    return value.toLowerCase().includes("sandbox")
+}
+
 function normalizeSandboxPlatformPolicyOptions(options: SandboxPlatformPolicyOptions): SandboxPlatformSupportOptions {
     return typeof options === "string" ? { platform: options } : options
 }
@@ -1557,10 +1605,14 @@ export function buildAgents(
     externalDirectories: ExternalDirectoryRules = {},
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
     externalSkills: ExternalSkill[] = [],
+    capabilities: PlatformCapabilities = { isWindows: false },
 ): AgentMap {
     const agents = applyBundledAgentPolicy(baseAgents, externalDirectories, sandboxSupportOverride)
+    agents.execute_os = { ...agents.execute_os, prompt: buildExecuteOsPrompt(capabilities) }
+    agents.execute_sandbox = { ...agents.execute_sandbox, prompt: buildExecuteOsPrompt(capabilities) }
+    agents.query_os = { ...agents.query_os, prompt: buildQueryOsPrompt(capabilities) }
     injectExternalSkillPermissions(agents, externalSkills)
-    return agents
+    return applyWindowsSandboxPolicy(agents, capabilities)
 }
 
 export function getAgentPermission(agentName: string, externalDirectories: ExternalDirectoryRules = {}): AutocodeAgentConfig["permission"] {

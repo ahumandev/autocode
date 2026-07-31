@@ -374,6 +374,18 @@ export function getRelativeJobFilePath(directory: JobDirectory, job: string, fil
 }
 
 export function getRelativeConceptFilePath(label: string): string {
+    if (
+        label === "."
+        || label === ".."
+        || label.includes("/")
+        || label.includes("\\")
+        || path.isAbsolute(label)
+        || path.win32.isAbsolute(label)
+        || /^[a-zA-Z]:/.test(label)
+    ) {
+        throw new Error(`Invalid concept label: ${label}`)
+    }
+
     const fileName = label.endsWith(".md") ? label : `${label}.md`
     return `.agents/jobs/concepts/${fileName}`
 }

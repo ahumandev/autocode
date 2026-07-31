@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import {
     activeContextIncludesMarkerHash,
     buildAutocodeSkillLoadHash,
@@ -36,9 +36,10 @@ type ActiveContextClient = {
     }
 }
 
-function withTempSkillRoots<T>(fn: (roots: { root: string, configHome: string, worktree: string }) => Promise<T>): Promise<T> {
+function withTempSkillRoots<T>(fn: (roots: { root: string, configHome: string, generatedRoot: string, worktree: string }) => Promise<T>): Promise<T> {
     const root = mkdtempSync(join(tmpdir(), "autocode-skill-load-"))
     const configHome = join(root, "config")
+    const generatedRoot = join(root, ".agents", "skills", "autocode")
     const worktree = join(root, "worktree")
     const oldHome = process.env.HOME
     const oldXdgConfigHome = process.env.XDG_CONFIG_HOME
@@ -47,7 +48,7 @@ function withTempSkillRoots<T>(fn: (roots: { root: string, configHome: string, w
     process.env.XDG_CONFIG_HOME = configHome
     mkdirSync(worktree, { recursive: true })
 
-    return fn({ root, configHome, worktree }).finally(() => {
+    return fn({ root, configHome, generatedRoot, worktree }).finally(() => {
         if (oldHome === undefined) delete process.env.HOME
         else process.env.HOME = oldHome
 
@@ -122,7 +123,8 @@ function skillMarkdown(name: string, content: string): string {
 }
 
 function writeGeneratedSkill(configHome: string, name = "code-typescript", content = "Generated skill content."): string {
-    const dir = join(configHome, "skills", "autocode", name)
+    const generatedRoot = join(configHome, "..", ".agents", "skills", "autocode")
+    const dir = join(generatedRoot, name)
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, "SKILL.md"), skillMarkdown(name, content))
     return dir
@@ -144,7 +146,8 @@ function writeLearnedSkill(worktree: string, subject = "learned-corrections", ag
 }
 
 async function executeSkillLoad(worktree: string, client: OpencodeClient | undefined = undefined, args: Record<string, unknown> = { name: "code-typescript" }, agent = "pair", sessionID: string | null = "session-1"): Promise<JsonObject> {
-    const tool = createSkillTool(client)
+    const root = dirname(worktree)
+    const tool = createSkillTool(client, undefined, { home: root })
     const result = await tool.execute(args as never, createToolContext({
         agent,
         directory: worktree,
@@ -156,7 +159,8 @@ async function executeSkillLoad(worktree: string, client: OpencodeClient | undef
 }
 
 async function executeSkillAlias(worktree: string, client: OpencodeClient | undefined = undefined, args: Record<string, unknown> = { name: "code-typescript" }, agent = "pair"): Promise<JsonObject> {
-    const tool = createSkillTool(client)
+    const root = dirname(worktree)
+    const tool = createSkillTool(client, undefined, { home: root })
     const result = await tool.execute(args as never, createToolContext({
         agent,
         directory: worktree,
@@ -614,9 +618,9 @@ describe("skill tool", () => {
     })
 
     test("root markdown skill loads with native name fallback", async () => {
-        await withTempSkillRoots(async ({ configHome, worktree }) => {
-            const rootSkill = join(configHome, "skills", "autocode", "standalone.md")
-            mkdirSync(join(configHome, "skills", "autocode"), { recursive: true })
+        await withTempSkillRoots(async ({ configHome, generatedRoot, worktree }) => {
+            const rootSkill = join(generatedRoot, "standalone.md")
+            mkdirSync(generatedRoot, { recursive: true })
             writeFileSync(rootSkill, "---\ndescription: Standalone skill\n---\n\nStandalone guidance.")
 
             const result = await executeSkillLoad(worktree, undefined, { name: "standalone" })
@@ -637,14 +641,14 @@ describe("skill tool", () => {
     })
 
     test("skill loading I/O error returns retry guidance", async () => {
-        await withTempSkillRoots(async ({ worktree }) => {
+        await withTempSkillRoots(async ({ root, worktree }) => {
             const fileSystem = {
                 readFile: async (): Promise<string> => "",
                 readdir: async (): Promise<never> => {
                     throw new Error("I/O failure")
                 },
             }
-            const tool = createSkillTool(undefined, fileSystem)
+            const tool = createSkillTool(undefined, fileSystem, { home: root })
             const result = parseToolResult(await tool.execute({ name: "code-typescript" } as never, createToolContext({
                 agent: "pair",
                 directory: worktree,

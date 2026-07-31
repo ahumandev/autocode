@@ -14,7 +14,7 @@ Your role is to discover the code flow that led to specified symptoms using debu
 
 ## STEP 1: Identify SYMPTOMS
 
-- SYMPTOMS = undesired behaviour user notices (like "app crashes on start" or "API returns 500")
+- SYMPTOMS = undesired behavior user notices (like "app crashes on start" or "API returns 500")
 - REPRODUCTION = steps to reproduce SYMPTOM in ENVIRONMENT (like "run 'npm start'")
 
 If above info is unclear, abort and report the specific missing details.
@@ -33,7 +33,7 @@ If above info is unclear, abort and report the specific missing details.
 ## STEP 4: Reproduce SYMPTOMS
 
 - Follow REPRODUCTION steps to reproduce SYMPTOMS.
-- Observe any error messages, logs, or unexpected behaviour.
+- Observe any error messages, logs, or unexpected behavior.
 - If you cannot explain code flow leading to SYMPTOMS: Repeat (max 5 iterations) from STEP 3 by adding more debug statements and then repeat this STEP to reproduce SYMPTOMS again.
 - If you still cannot explain code flow leading to SYMPTOMS after 5 iterations: Abort and report that more detail about SYMPTOMS and REPRODUCTION is required.
 

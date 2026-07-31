@@ -96,6 +96,7 @@ type ExperimentalContextRequest = {
 }
 
 type SkillLoadRuntime = {
+    home?: string
     serverUrl?: string | URL
 }
 
@@ -298,14 +299,15 @@ async function loadSkillsFromRoot(fileSystem: FileSystem, root: string, inferNes
     return skills
 }
 
-async function loadSkill(fileSystem: FileSystem, context: SkillLoadContext, name: string): Promise<LoadedSkill | undefined> {
+async function loadSkill(fileSystem: FileSystem, context: SkillLoadContext, name: string, runtime?: SkillLoadRuntime): Promise<LoadedSkill | undefined> {
+    const generatedSkillsRoot = path.resolve(getGeneratedSkillsRoot({ home: runtime?.home }))
     const roots = [
         // Narrow autocode root first so loose .md files at its root are collected.
-        { path: path.resolve(getGeneratedSkillsRoot()), inferNestedNames: false },
+        { path: generatedSkillsRoot, inferNestedNames: false },
         // Search the parent of all plugin skill installs so ANY plugin's skills
         // (e.g. ~/.agents/skills/autocode/..., ~/.agents/skills/<other-plugin>/...) are loadable.
         // Permission filtering stays in the framework's permission.skill block.
-        { path: path.dirname(path.resolve(getGeneratedSkillsRoot())), inferNestedNames: true },
+        { path: path.dirname(generatedSkillsRoot), inferNestedNames: true },
         { path: path.resolve(resolveAgentsStorageRoot(context), ".agents", "skills"), inferNestedNames: true },
         { path: path.resolve(resolveAgentsStorageRoot(context), ".opencode", "skills"), inferNestedNames: false },
     ]
@@ -495,7 +497,7 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
             const skillContext = context as SkillLoadContext
             let skill: LoadedSkill | undefined
             try {
-                skill = await loadSkill(fileSystem, skillContext, validatedArgs.name)
+                skill = await loadSkill(fileSystem, skillContext, validatedArgs.name, runtime)
             }
             catch {
                 return createRetryResponse(

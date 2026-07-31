@@ -263,6 +263,19 @@ export async function dispatchAutocodeAgentPrompt(
     return { sessionID }
 }
 
+export function dispatchAutocodeAgentPromptAfterTurn(
+    client: AutocodeSessionApi,
+    directory: string,
+    sessionID: string,
+    agent: string,
+    prompt: string,
+    resolvedModel: ResolvedAgentModel = {}
+): void {
+    setTimeout(() => {
+        void dispatchAutocodeAgentPrompt(client, directory, sessionID, agent, prompt, resolvedModel)
+    }, 0)
+}
+
 export async function resolveAutocodeAgentSessionSettings(
     agent: string,
     worktree: string,

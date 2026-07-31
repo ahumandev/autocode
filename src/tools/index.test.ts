@@ -23,6 +23,7 @@ import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 const PROMPT_TASK_RESUME = "You have been interrupted, therefore you MUST:\n\n1. For each previous `task` call that were interrupted (no output when due):\n    - Call `task_resume` tool with same `task_id` used in previous `task` call.\n2. Then resume your own work"
 const PROMPT_WORK_RESUME = "Resume"
+const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]
 
 type PermissionRule = "ask" | "allow" | "deny"
 type ExternalDirectoryPermission = PermissionRule | Record<string, PermissionRule>
@@ -605,6 +606,21 @@ describe("auto resume wiring", () => {
         expect(skill.description).toContain("skill")
         expect(Object.keys(skill.args)).toEqual(["name", "reference"])
         expect(Object.keys(skill.args)).not.toContain("subjects")
+    })
+
+    test("createTools omits every sandbox tool on Windows", () => {
+        const tools = createTools(createMockClient(), {}, undefined, { isWindows: true })
+
+        for (const toolName of sandboxToolNames) {
+            expect(tools).not.toHaveProperty(toolName)
+        }
+        expect(Object.keys(tools).filter((toolName) => toolName.startsWith("autocode_sandbox_"))).toEqual([])
+    })
+
+    test("createTools keeps every sandbox tool on Linux", () => {
+        const tools = createTools(createMockClient(), {}, undefined, { isWindows: false })
+
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(sandboxToolNames))
     })
 
     test("createTools exposes remote SSH file suite tools", () => {
@@ -1228,6 +1244,29 @@ describe("autocode_concept_read tool", () => {
             query: { directory: "/workspace" },
             body: { title: "Example Item" },
         })
+    })
+
+    test("rejects portable concept path escapes before file operations", async () => {
+        const readFile = mock(async (_filePath: string, _encoding: "utf8") => "# Outside concept")
+        const rename = mock(async (_oldPath: string, _newPath: string) => { })
+        const tool = createAutocodeConceptReadTool({ readFile, rename })
+
+        for (const label of [
+            ".",
+            "..",
+            "../outside",
+            "..\\outside",
+            "/outside",
+            "C:\\outside",
+            "C:outside",
+            "\\\\server\\share\\outside",
+            "../concepts-sibling/outside",
+        ]) {
+            await tool.execute({ label }, createToolContext())
+        }
+
+        expect(readFile).not.toHaveBeenCalled()
+        expect(rename).not.toHaveBeenCalled()
     })
 
     test("returns a plain text message when the backlog file does not exist", async () => {

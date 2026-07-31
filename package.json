@@ -39,9 +39,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "rm -rf dist && bun build src/plugin.ts --outdir dist --target bun --external cpu-features && tsc --project tsconfig.build.json --emitDeclarationOnly --noEmit false && bun run copy:skills",
+    "build": "bun scripts/build.ts build",
     "install:shim": "bun src/install.ts",
-    "watch": "rm -rf dist && bun run copy:skills && bun build src/plugin.ts --outdir dist --target bun --watch & tsc --project tsconfig.build.json --emitDeclarationOnly --noEmit false --watch",
+    "watch": "bun scripts/build.ts watch",
     "copy:skills": "bun scripts/copy-skill-sources.ts",
     "skill:sync": "bun scripts/sync-github-skills.ts",
     "test": "bun test src --isolate",

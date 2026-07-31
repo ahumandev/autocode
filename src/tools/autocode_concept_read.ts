@@ -21,7 +21,13 @@ const defaultFileSystem: FileSystem = {
 }
 
 function getBacklogPath(worktree: string, label: string): string {
-    return path.join(worktree, getRelativeConceptFilePath(label))
+    const conceptsRoot = path.resolve(worktree, ".agents", "jobs", "concepts")
+    const conceptPath = path.resolve(worktree, getRelativeConceptFilePath(label))
+    if (!conceptPath.startsWith(`${conceptsRoot}${path.sep}`)) {
+        throw new Error(`Invalid concept path: ${label}`)
+    }
+
+    return conceptPath
 }
 
 function isFileSystem(candidate: OpencodeClient | FileSystem | undefined): candidate is FileSystem {

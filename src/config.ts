@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { homedir } from "node:os"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 
 import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json" }
+import { resolveOpenCodePaths } from "./utils/paths"
 import { createJsoncDocumentEditor } from "./tools/config/json"
 
 const MODEL_TIERS = ["cheap", "fast", "operator", "context", "balanced", "smart"] as const
@@ -388,7 +388,7 @@ export async function loadAutocodeConfig(
     directory: string,
     fs: ConfigFileSystem = defaultFs,
 ): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined }> {
-    const globalConfigDirectory = join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode")
+    const globalConfigDirectory = resolveOpenCodePaths().globalConfigRoot
     const globalConfigPath = join(globalConfigDirectory, "autocode.jsonc")
     const candidates: string[][] = []
 

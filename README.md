@@ -1,16 +1,33 @@
 ## Features
 
-- 🧭 **Structured lifecycle** — move work through drafts, facilitate or executing, review, and shelved phases.
-- 📚 **Self-learning memory** — auto capture corrections, environment quirks, permissions, and user preferences as skills for future sessions.
+### Implementation Modes
+
+- 🤖 **Auto mode** — *autonomous*: agent oversee full lifecycle of structured jobs until completion.
+- 🧑‍💻 **Assist mode** — *interactive*: you make decisions, agent orchestration do the work, manage job lifecycle and suggest next steps.
+- 🎓 **Teach mode** — *manual*: agents discover solutions, then guide manual implementation with step-by-step tutorials.
+
+### Workflow Optimizations
+
+- 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in external directories.
+- 🪙 **Cost-saving workflows** — improve performance and reduce token usage with smart orchestration, tiered agent models, Caveman English.
+- 🔒 **Secret-safe tools** — agents never see passwords or secrets; predefined keys resolve credentials at tool runtime.
 - ⚠️ **Safe hand-offs** — provide a thorough manual task tutorial when an operation is unsafe.
-- 🪙 **Token-optimized workflows** — smart orchestrators delegate to faster specialists to improve performance and reduce token use.
-- 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
-- 🧪 **Sandboxed execution** — run supported risky commands in Linux bubblewrap sandboxes when the host supports user namespaces.
-- 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in other directories after permission checks.
-- 🔐 **SSH tool suite** — run remote commands and manage files through environment-keyed tools.
+- 📚 **Self-learning memory** — auto capture corrections, environment quirks, permissions, and user preferences as skills for future sessions.
 - 🧹 **Agent cleanup** — agents remove temporary files and stop stray processes they started after debugging.
 
+### Build-in Tools
+
+- 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
+- 🌐 **HTTP REST client** — simulate API calls for troubleshooting.
+- 🧪 **Sandbox isolation** — agents automatically manage and experiment in their own isolated sandboxes.
+- 🔐 **SSH tools** — run remote commands and manage files through environment-keyed tools.
+- 🔀 **Git tools** — inspect changes and commit updates to Git repositories.
+
+As well as [OpenCode bundled tools](https://opencode.ai/docs/tools/).
+
 ## Installation
+
+Install AutoCode as public OpenCode plugin. AI agents use [installation guide](docs/installation.md); humans use [human guide](docs/index.md#installation-for-humans).
 
 ### Prerequisites
 
@@ -20,24 +37,42 @@
 #### Optional
 
 - [Bubblewrap](https://github.com/containers/bubblewrap) is required only for Linux sandbox execution.
-- [Bun](https://bun.sh) is required only to build the plugin from source or run tests.
+- [Bun](https://bun.sh) is required only to build the plugin from source, run tests, or install the local shim.
 - [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) is required only for Chrome DevTools MCP server support.
 
 ### Installation for LLM Agents
 
-Fetch installation guide and follow it:
+Fetch this guide and follow its OS branch.
+
+**Windows CMD**
+
+```cmd
+curl -s https://raw.githubusercontent.com/ahumandev/autocode/refs/heads/main/docs/installation.md
+```
+
+**Linux Bash**
 
 ```bash
 curl -s https://raw.githubusercontent.com/ahumandev/autocode/refs/heads/main/docs/installation.md
 ```
 
+The guide detects OS at startup: use CMD for Windows agents and Bash for Linux agents.
+
 ### Installation for Humans
 
-Follow this [installation guide](docs/index.md#installation-for-humans).
+Use [human installation guide](docs/index.md#installation-for-humans).
+
+Windows route uses native CMD. Linux route uses Bash and includes optional Bubblewrap setup. Both install the public plugin with:
+
+```text
+opencode plugin -g @ahumandev/autocode@latest
+```
 
 ## Usage
 
-AutoCode is an OpenCode plugin. It is not a standalone application and does not start a web server or expose a local URL. It registers managed agents, slash commands, generated skills, and tools.
+AutoCode is an OpenCode plugin. It does not start a web server or expose a local URL. It registers managed agents, slash commands, generated skills, and tools.
+
+At startup, AutoCode detects OS. Agents use CMD on Windows and Bash on Linux. Windows does not register sandbox agents or tools; Linux sandbox execution uses Bubblewrap when available. Generated skills are written to `<home>/.agents/skills`.
 
 ### Primary Agents
 
@@ -101,12 +136,9 @@ For example you may start in `assist` mode and then later when you get busy, swi
 
 ## Reference
 
-- [Configuration](docs/configuration.md) — config locations, keys, model tiers, and DB/SSH environment variables.
-- [Usage](docs/usage.md) — more details on how to use AutoCode.
-- [Self Learned Skills](docs/skill.md) — reusable guidance files that extend AutoCode behavior.
-- [Terminology](docs/terminology.md) — glossary of AutoCode concepts.
+- [Installation](docs/installation.md) — AI installation guide with native CMD and Bash branches.
+- [Documentation](docs/index.md) — human installation, verification, update, uninstall, and troubleshooting.
 
 ## Development
 
-- [Development](development.md) — architecture, local setup, commands, testing, and local plugin deployment.
-- [Distribution Guide](distribution.md) — distributing AutoCode on public registries.
+Build and local shim installation use cross-platform Bun scripts. Bun is required for source builds and tests, not public plugin installation.

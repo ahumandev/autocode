@@ -1,5 +1,7 @@
 import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { ToolDefinition } from "@opencode-ai/plugin"
 import type { AutocodeSandboxConfig } from "../config"
+import type { PlatformCapabilities } from "../utils/platform"
 import { createAutocodeAgentExecuteTool } from "./autocode_agent_execute"
 import { createAutocodeAgentSwapTool } from "./autocode_agent_swap"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
@@ -46,13 +48,35 @@ import { createTaskProjectTool as createTaskExternalTool } from "./task_external
 import { createTaskResumeTool } from "./task_resume"
 
 type ToolRuntime = {
+    home?: string
     serverUrl?: string | URL
 }
 
-export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandboxConfig = {}, runtime?: ToolRuntime) {
+type ToolMap = Record<string, ToolDefinition>
+
+export function createTools(
+    client: OpencodeClient,
+    sandboxConfig: AutocodeSandboxConfig = {},
+    runtime?: ToolRuntime,
+    capabilities: PlatformCapabilities = { isWindows: false },
+): ToolMap {
+    const sandboxTools: ToolMap = capabilities.isWindows ? {} : {
+        autocode_sandbox_cli: createAutocodeSandboxCliTool(client),
+        autocode_sandbox_config_edit: createAutocodeSandboxConfigEditTool(client),
+        autocode_sandbox_config_read: createAutocodeSandboxConfigReadTool(client),
+        autocode_sandbox_config_remove: createAutocodeSandboxConfigRemoveTool(client),
+        autocode_sandbox_copy: createAutocodeSandboxCopyTool(client),
+        autocode_sandbox_create: createAutocodeSandboxCreateTool(client, undefined, sandboxConfig),
+        autocode_sandbox_delete: createAutocodeSandboxDeleteTool(client),
+        autocode_sandbox_edit: createAutocodeSandboxEditTool(client),
+        autocode_sandbox_glob: createAutocodeSandboxGlobTool(client),
+        autocode_sandbox_grep: createAutocodeSandboxGrepTool(client),
+        autocode_sandbox_read: createAutocodeSandboxReadTool(client),
+    }
+
     return {
         ...createGitTools(),
-
+        ...sandboxTools,
         autocode_agent_execute: createAutocodeAgentExecuteTool(client),
         autocode_agent_swap: createAutocodeAgentSwapTool(client),
         autocode_concept_create: createAutocodeConceptCreateTool(client),
@@ -65,7 +89,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_db_table: createAutocodeDbTableTool(),
         autocode_db_table_read: createAutocodeDbTableReadTool(),
         autocode_db_tables: createAutocodeDbTablesTool(),
-        autocode_dependencies: createAutocodeDependenciesTool(),
+        autocode_dependencies: createAutocodeDependenciesTool(undefined, capabilities),
         autocode_job_execute: createAutocodeJobExecuteTool(client),
         autocode_job_list: createAutocodeJobListTool(),
         autocode_job_shelve: createAutocodeJobShelveTool(client),
@@ -82,17 +106,7 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         autocode_plan_read: createAutocodePlanReadTool(client),
         autocode_job_draft: createAutocodeJobDraftTool(client),
         autocode_rest: createAutocodeRestTool(client),
-        autocode_sandbox_cli: createAutocodeSandboxCliTool(client),
-        autocode_sandbox_config_edit: createAutocodeSandboxConfigEditTool(client),
-        autocode_sandbox_config_read: createAutocodeSandboxConfigReadTool(client),
-        autocode_sandbox_config_remove: createAutocodeSandboxConfigRemoveTool(client),
-        autocode_sandbox_copy: createAutocodeSandboxCopyTool(client),
-        autocode_sandbox_create: createAutocodeSandboxCreateTool(client, undefined, sandboxConfig),
-        autocode_sandbox_delete: createAutocodeSandboxDeleteTool(client),
-        autocode_sandbox_edit: createAutocodeSandboxEditTool(client),
-        autocode_sandbox_glob: createAutocodeSandboxGlobTool(client),
-        autocode_sandbox_grep: createAutocodeSandboxGrepTool(client),
-        autocode_sandbox_read: createAutocodeSandboxReadTool(client),
+        
         autocode_session_context: createAutocodeSessionContextTool(client),
         autocode_session_restart: createAutocodeSessionRestartTool(client),
         autocode_ssh_command: createAutocodeSshCommandTool(),
@@ -113,6 +127,6 @@ export function createTools(client: OpencodeClient, sandboxConfig: AutocodeSandb
         skill_learn: createSkillLearnTool(),
         skill_read: createAutocodeSkillReadTool(),
         task_external: createTaskExternalTool(),
-        task_resume: createTaskResumeTool(client),    
+        task_resume: createTaskResumeTool(client),
     }
 }

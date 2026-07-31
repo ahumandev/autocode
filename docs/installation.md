@@ -18,128 +18,108 @@ Goal: install AutoCode plugin for OpenCode.
 
 ## Installation Steps
 
-### Step 1: Check if OpenCode already exists
+### Step 1: Detect host OS
 
-Run this.
+1. Detect host OS before running commands.
+2. Use native CMD commands on Windows and Bash commands on Linux.
 
-```bash
+### Step 2: Check if OpenCode already exists
+
+Run commands for host OS.
+
+**With CMD (Windows)**
+
+```cmd
 opencode --version
+where opencode
 ```
 
-If you see a version, skip to Step 3.
-
-### Step 2: Install OpenCode
-
-Fetch official OpenCode install guidance here:
-
-- https://opencode.ai
-- https://opencode.ai/docs
-
-Do this:
-
-1. Find official install step for your OS.
-2. Use only official command or official package manager option.
-3. If docs offer package manager choices and user has a preference, use that one.
-4. If docs need `sudo` or system package changes, ask user first.
-
-After install, test again.
+**With Bash (Linux)**
 
 ```bash
 opencode --version
 command -v opencode
 ```
 
-Good output looks like this.
+If version prints, continue with Step 3.
 
-```text
-<version>
-/some/path/opencode
-```
+### Step 2: Install OpenCode
 
-If version works but `opencode` still fails in a new shell, see Fix PATH problem.
+1. Install OpenCode according to [OpenCode Installation Docs](https://opencode.ai).
+2. Use official OpenCode install command or package-manager option for that OS.
+3. Ask user before commands needing `sudo` or system changes.
+
+After installation, rerun Step 2.
 
 ### Step 3: Check npm and registry
 
-Run this
+Run commands for host OS.
+
+**With CMD (Windows)**
+
+```cmd
+npm --version
+npm ping
+where npm
+```
+
+**With Bash (Linux)**
 
 ```bash
 npm --version
 npm ping
-```
-
-Also check this.
-
-```bash
 command -v npm
 ```
 
-Good result:
-
-- `command -v npm` prints a real path.
-- `npm --version` prints a version.
-- npm registry access works.
-
-If `npm` command is missing, stop and use the blocked npm report from If blocked.
-
-If `npm ping` fails, stop and use the blocked internet/registry report from If blocked.
+Continue only when command path and version print and npm registry access works. If npm or registry is unavailable, report blocked dependency or network access; do not guess a package-manager command.
 
 ### Step 4: Install AutoCode plugin
 
-Run this.
+Run this in native CMD or Bash:
 
-```bash
+```text
 opencode plugin -g @ahumandev/autocode@latest
 ```
 
-`-g` installs the plugin in global OpenCode config.
+`-g` installs plugin in global OpenCode configuration. Default config directory is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` applies when `OPENCODE_CONFIG_DIR` is unset.
 
-### Step 5: Start AutoCode install command
+### Step 5: Start `/install`
 
-Run this.
+Start or restart OpenCode, then run:
 
-```bash
-opencode run --format json --command autocode-install
+```text
+/install
 ```
 
-- If output contains `"message":"Command not found: \"autocode-install\"`, then AutoCode plugin failed to register.
-- If output contains `"type":"step_start"`, then AutoCode plugin successfully registered and optional dependency installation started -> wait until done.
+At startup, AutoCode detects OS. Agents use native CMD on Windows and Bash on Linux. `/install` checks and remediates Windows dependencies only. It does not install Bubblewrap; on Linux, install Bubblewrap separately if sandbox execution is needed.
 
-If AutoCode dependency installation fails, AutoCode will still work.
-
----
+Generated skills are stored in `<home>/.agents/skills`. Windows does not register sandbox agents or sandbox tools.
 
 ## Correctable Obstacles
 
 ### Fix opencode PATH problem
 
-Use this if install worked but shell cannot find `opencode`.
+Use this if OpenCode install worked but shell cannot find `opencode`. Do not guess install directory.
 
-Check path again.
+**With CMD (Windows)**
+
+```cmd
+where opencode
+echo %PATH%
+set PATH=C:\path\from\opencode\install;%PATH%
+opencode --version
+```
+
+**With Bash (Linux)**
 
 ```bash
 command -v opencode || true
 echo "$PATH"
-```
-
-If `opencode` binary exists but is not in `PATH`:
-
-1. Find install location from official OpenCode install output.
-2. Add that location to shell startup file.
-3. Open a new shell.
-4. Test again with `opencode --version`.
-
-Common shell files:
-
-- Bash: `~/.bashrc`
-- Zsh: `~/.zshrc`
-
-Example line format:
-
-```bash
 export PATH="/path/from/opencode/install:$PATH"
+opencode --version
 ```
 
-Do not guess path. Use real path from official install result.
+Use real directory from official OpenCode install output. Persist PATH with OS shell or system settings after verifying it.
 
 ### Fix opencode config parse error
 
@@ -184,36 +164,52 @@ If current file uses comments or trailing commas, rename plan should be careful:
 
 Use this if OpenCode starts but cannot install AutoCode.
 
-Check these things:
+1. Run `opencode plugin -g @ahumandev/autocode@latest` again.
+2. Confirm OpenCode global config is valid and preserves unrelated settings.
+3. Restart OpenCode.
+4. Run `/install` after startup.
 
-- Install command uses `@ahumandev/autocode@latest`.
-- Config syntax is valid.
-- OpenCode was restarted after config change.
+Check configured directory first: default is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` when unset.
 
 ### Fix stale local shim
 
-Use this only for local repository development with a shim.
+Use only for local repository development with a shim. Build and install scripts are cross-platform Bun scripts.
 
-If OpenCode keeps loading an old local build, remove both shim filenames if present, then reinstall the shim.
+Remove stale current shim, then run shim install from AutoCode repository root.
 
-```bash
-rm -f ~/.config/opencode/plugins/autocode.js
+**With Bash (Linux)**
+
+```cmd
+del /f /q "%USERPROFILE%\.config\opencode\plugins\autocode.js"
 bun run install:shim
 ```
 
-- `autocode.js` is the current local shim filename.
-- Run this from the AutoCode repository root.
+**With Bash (Linux)**
 
----
+```bash
+rm -f "$HOME/.config/opencode/plugins/autocode.js"
+bun run install:shim
+```
+
+If config directory is overridden, replace default shim path with configured directory. `autocode.js` is current shim filename.
+
+### Official OpenCode Docs
+
+Still stuck? Read [Official OpenCode Docs](https://opencode.ai/docs).
 
 ## Success
 
-- `opencode run --format json --command autocode-install` starts and emits JSON events.
+Success checks:
 
----
+- `opencode --version` prints version.
+- `opencode plugin -g @ahumandev/autocode@latest` completes.
+- OpenCode starts and `/install` runs.
+- Generated skills, when created, are in `<home>/.agents/skills`.
+
+Do not claim a native Windows runtime test.
 
 ## Uninstall AutoCode
 
-Remove `@ahumandev/autocode` from `plugin` array.
+Remove `@ahumandev/autocode` from global OpenCode `plugin` array and restart OpenCode. Do not delete unrelated plugins or settings.
 
-Do not delete unrelated plugins or settings.
+For repository-only shim workflow, use `del /f /q` in Windows CMD or `rm -f` in Linux Bash for `autocode.js`; see [Fix stale local shim](#fix-stale-local-shim).

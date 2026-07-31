@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, statSync, type Dirent } from "node:fs"
 import { cp, mkdir, mkdtemp, readdir, rename, rm, stat } from "node:fs/promises"
-import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { resolveOpenCodePaths, type OpenCodePathResolverDependencies } from "@/utils/paths"
 import { isMissingFile } from "@/utils/jobs"
 import { loadGitHubSkillInventory } from "./github"
 import type { ExternalSkill } from "../utils/external"
@@ -14,7 +14,7 @@ export type ManagedSkillDefinition = {
     content: string
 }
 
-export type GeneratedSkillsOptions = {
+export type GeneratedSkillsOptions = OpenCodePathResolverDependencies & {
     skipExtraction?: boolean
 }
 
@@ -112,16 +112,12 @@ export const managedSkills: ManagedSkillDefinition[] = managedSkillDirectories.m
     parseSkillSource(skillSourceFile(skillSourceRoot, directory), directory)
 ))
 
-function getSkillsRoot(): string {
-    return path.join(process.env.XDG_CONFIG_HOME ?? path.join(homedir(), ".agents"), "skills")
+export function getGeneratedSkillsRoot(dependencies: OpenCodePathResolverDependencies = {}): string {
+    return resolveOpenCodePaths(dependencies).generatedSkillsRoot
 }
 
-export function getGeneratedSkillsRoot(): string {
-    return path.join(getSkillsRoot(), "autocode")
-}
-
-export function getGeneratedGitHubSkillsRoot(): string {
-    return path.join(getSkillsRoot(), "github")
+export function getGeneratedGitHubSkillsRoot(dependencies: OpenCodePathResolverDependencies = {}): string {
+    return resolveOpenCodePaths(dependencies).generatedGitHubSkillsRoot
 }
 
 function assertSafeRelativePath(relativePath: string): void {
@@ -186,7 +182,8 @@ function dedupeExternalSkills(skills: ExternalSkill[]): ExternalSkill[] {
 }
 
 export async function reconcileGeneratedSkills(options: GeneratedSkillsOptions = {}): Promise<GeneratedSkillsResult> {
-    const root = getGeneratedSkillsRoot()
+    const paths = resolveOpenCodePaths(options)
+    const root = paths.generatedSkillsRoot
     const bundle = await managedBundleItems()
     if (options.skipExtraction) return { root, changedPaths: [], externalSkills: bundle.externalSkills }
 
@@ -196,7 +193,7 @@ export async function reconcileGeneratedSkills(options: GeneratedSkillsOptions =
     for (const item of bundle.items) {
         const isGitHubSkill = item.relativePath.startsWith("github/")
         const destination = isGitHubSkill
-            ? path.join(getGeneratedGitHubSkillsRoot(), item.relativePath.slice("github/".length))
+            ? path.join(paths.generatedGitHubSkillsRoot, item.relativePath.slice("github/".length))
             : path.join(root, item.relativePath)
         if (skillRootExists(destination)) continue
         try {
@@ -216,9 +213,13 @@ export async function ensureGeneratedSkills(options: GeneratedSkillsOptions = {}
 const LEARNED_SKILL_CATEGORIES = ["corrections", "env", "permissions", "preferences"] as const
 const LEARNED_DEFAULT_MAX = 10
 
-export async function cleanupLearnedSkills(agentsRoot: string, max: number): Promise<void> {
+export async function cleanupLearnedSkills(
+    agentsRoot: string,
+    max: number,
+    dependencies: OpenCodePathResolverDependencies = {},
+): Promise<void> {
     const effectiveMax = Number.isInteger(max) && max > 0 ? max : LEARNED_DEFAULT_MAX
-    const skillsRoot = path.join(agentsRoot, ".agents", "skills")
+    const skillsRoot = resolveOpenCodePaths(dependencies).learnedSkillsRoot(agentsRoot)
 
     for (const category of LEARNED_SKILL_CATEGORIES) {
         const categoryDir = path.join(skillsRoot, `learned-${category}`)

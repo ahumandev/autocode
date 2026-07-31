@@ -5,7 +5,7 @@ import { inspectAutocodeDependencies, isAtLeastMinimumOpencodeVersion, parseTole
 import type { SandboxDependencies } from "@/utils/sandbox"
 
 type DependencyToolResult = Record<string, unknown> & {
-    bwrap: Record<string, unknown>
+    bwrap?: Record<string, unknown>
     dependencies?: Record<string, DependencyEntry>
     next_actions: string[]
     opencode: Record<string, unknown>
@@ -34,15 +34,18 @@ function createDeps(options?: {
     opencodeExit?: number | null
     opencodeStdout?: string
     opencodeStderr?: string
+    opencodeError?: Error
     bwrapExists?: boolean
     bwrapExit?: number | null
     commandMap?: CommandMap
     commandErrorMap?: Record<string, Error>
+    useCommandExists?: boolean
     fileMap?: Record<string, string>
     readdirMap?: Record<string, string[]>
 }): SandboxDependencies {
     const spawn = mock(async (command: string, args: readonly string[]) => {
         if (command === "opencode" && args[0] === "--version") {
+            if (options?.opencodeError) throw options.opencodeError
             return { exitCode: options?.opencodeExit ?? 0, stdout: options?.opencodeStdout ?? "opencode 1.17.9", stderr: options?.opencodeStderr ?? "" }
         }
         if (command === "bwrap") {
@@ -57,6 +60,23 @@ function createDeps(options?: {
                 const path = typeof commandEntry === "object" ? commandEntry.path : undefined
                 return { exitCode: 0, stdout: `${path ?? `/usr/bin/${match[1]}`}\n`, stderr: "" }
             }
+        }
+        if (command === "where.exe") {
+            const lookupCommand = args[0]
+            if (!lookupCommand) return { exitCode: 127, stdout: "", stderr: "not found" }
+            const commandError = options?.commandErrorMap?.[lookupCommand]
+            if (commandError) throw commandError
+            const commandEntry = options?.commandMap?.[lookupCommand]
+            if (!commandEntry) return { exitCode: 1, stdout: "", stderr: "not found" }
+
+            const path = typeof commandEntry === "object" ? commandEntry.path : undefined
+            return { exitCode: 0, stdout: path === "" ? "" : `${path ?? `C:\\tools\\${lookupCommand}.exe`}\r\n`, stderr: "" }
+        }
+        if (args[0] === "/d" && args[1] === "/v:off" && args[2] === "/s" && args[3] === "/c") {
+            const commandEntry = Object.values(options?.commandMap ?? {}).find((entry) => typeof entry === "object" && entry.path !== undefined && args[4] === `""${entry.path}" --version"`)
+            if (!commandEntry || typeof commandEntry !== "object") return { exitCode: 127, stdout: "", stderr: "not found" }
+
+            return { exitCode: 0, stdout: `${commandEntry.version ?? `${commandEntry.path} 1.0.0`}\n`, stderr: "" }
         }
         if (args[0] === "--version") {
             const commandEntry = options?.commandMap?.[command]
@@ -87,7 +107,7 @@ function createDeps(options?: {
             },
         },
         spawn,
-        async commandExists(command: string) {
+        commandExists: options?.useCommandExists === false ? undefined : async (command: string) => {
             const commandError = options?.commandErrorMap?.[command]
             if (commandError) throw commandError
             return command === "bwrap" && (options?.bwrapExists ?? true)
@@ -124,26 +144,149 @@ describe("autocode_dependencies", () => {
         expect(lower.next_actions).toContain("Run `opencode upgrade`.")
     })
 
+    test("preserves OpenCode version probe result fields", async () => {
+        const success = parseResult(await createAutocodeDependenciesTool(createDeps({ opencodeStdout: "opencode 1.18.0\n" })).execute({}, createToolContext()) as string)
+        const upgrade = parseResult(await createAutocodeDependenciesTool(createDeps({ opencodeStdout: "opencode 1.17.8" })).execute({}, createToolContext()) as string)
+        const spawnError = parseResult(await createAutocodeDependenciesTool(createDeps({ opencodeError: new Error("spawn denied") })).execute({}, createToolContext()) as string)
+        const nonzero = parseResult(await createAutocodeDependenciesTool(createDeps({ opencodeExit: 126, opencodeStdout: "probe output\n", opencodeStderr: "permission denied\n" })).execute({}, createToolContext()) as string)
+
+        expect(success.opencode.status).toBe("ok")
+        expect(success.opencode.command).toBe("opencode --version")
+        expect(success.opencode.version).toBe("1.18.0")
+        expect(success.opencode.minimum_version).toBe("1.17.9")
+        expect(success.opencode.output).toBe("opencode 1.18.0")
+        expect(upgrade.opencode.status).toBe("upgrade_required")
+        expect(upgrade.opencode.command).toBe("opencode --version")
+        expect(upgrade.opencode.version).toBe("1.17.8")
+        expect(upgrade.opencode.minimum_version).toBe("1.17.9")
+        expect(upgrade.opencode.output).toBe("opencode 1.17.8")
+        expect(spawnError.opencode.status).toBe("missing")
+        expect(spawnError.opencode.error).toBe("spawn denied")
+        expect(spawnError.opencode.output).toBeUndefined()
+        expect(spawnError.opencode.exit_code).toBeUndefined()
+        expect(nonzero.opencode.status).toBe("missing")
+        expect(nonzero.opencode.command).toBe("opencode --version")
+        expect(nonzero.opencode.minimum_version).toBe("1.17.9")
+        expect(nonzero.opencode.output).toBe("probe output\n\npermission denied")
+        expect(nonzero.opencode.exit_code).toBe(126)
+        expect(nonzero.opencode.suggested_fix).toBe("opencode upgrade")
+        expect(nonzero.opencode.guidance).toBe("Run `opencode upgrade`.")
+    })
+
     test("reports bwrap unsupported on non-linux and Termux", async () => {
         const darwin = parseResult(await createAutocodeDependenciesTool(createDeps({ platform: "darwin" })).execute({}, createToolContext()) as string)
         const termux = parseResult(await createAutocodeDependenciesTool(createDeps({ env: { TERMUX_VERSION: "1" } })).execute({}, createToolContext()) as string)
 
-        expect(darwin.bwrap.status).toBe("unsupported")
-        expect(darwin.bwrap.reason).toContain("macOS")
-        expect(termux.bwrap.status).toBe("unsupported")
-        expect(termux.bwrap.reason).toContain("Termux")
+        expect(darwin.bwrap!.status).toBe("unsupported")
+        expect(darwin.bwrap!.reason).toContain("macOS")
+        expect(termux.bwrap!.status).toBe("unsupported")
+        expect(termux.bwrap!.reason).toContain("Termux")
+    })
+
+    test("reports Windows dependencies without bwrap and uses where.exe lookup", async () => {
+        const deps = createDeps({
+            platform: "win32",
+            commandMap: { git: { path: "C:\\Program Files\\Git\\cmd\\git.exe", version: "git version 2.48.1.windows.1" } },
+        })
+        const result = parseResult(await createAutocodeDependenciesTool(deps, { isWindows: true }).execute({}, createToolContext()) as string)
+        const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
+
+        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"])
+        expect(Object.keys(result.optional_dependencies ?? {})).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"])
+        expect(result.bwrap).toBeUndefined()
+        expect(result.dependencies?.bwrap).toBeUndefined()
+        expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
+        expect(result.optional_dependencies?.git_cli?.path).toBe("C:\\Program Files\\Git\\cmd\\git.exe")
+        expect(calls).toContainEqual(["where.exe", ["git"], expect.anything()])
+        expect(calls).toContainEqual(["C:\\Program Files\\Git\\cmd\\git.exe", ["--version"], expect.anything()])
+        expect(calls.map(([command]) => command)).not.toContain("cmd.exe")
+        expect(calls.map(([command]) => command)).not.toContain("sh")
+        expect(result.required_ok).toBe(true)
+        expect(result.optional_ok).toBe(false)
+        expect(result.status).toBe("action_required")
+        expect(result.next_actions).toContain("Install or use `chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
+        expect(JSON.stringify(result)).not.toContain("bwrap")
+        expect(JSON.stringify(result)).not.toContain("bubblewrap")
+        expect(JSON.stringify(result)).not.toContain("apt-get")
+    })
+
+    test("keeps Linux bwrap dependency and shell command lookup", async () => {
+        const deps = createDeps({ platform: "linux", useCommandExists: false, commandMap: { bwrap: true, git: true } })
+        const result = parseResult(await createAutocodeDependenciesTool(deps).execute({}, createToolContext()) as string)
+        const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
+
+        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "bwrap", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"])
+        expect(result.dependencies?.bwrap).toEqual(result.bwrap)
+        expect(calls).toContainEqual(["sh", ["-c", "command -v git"], expect.anything()])
+        expect(calls).toContainEqual(["git", ["--version"], expect.anything()])
+        expect(calls.map(([command]) => command)).not.toContain("where.exe")
+        expect(result.required_ok).toBe(true)
+        expect(result.optional_ok).toBe(false)
+        expect(result.next_actions).toContain("Install or use `chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
+    })
+
+    test("treats Windows where missing, errors, and empty output as unavailable", async () => {
+        const missing = parseResult(await createAutocodeDependenciesTool(createDeps({ platform: "win32" }), { isWindows: true }).execute({}, createToolContext()) as string)
+        const failed = parseResult(await createAutocodeDependenciesTool(createDeps({ platform: "win32", commandErrorMap: { git: new Error("where failed") } }), { isWindows: true }).execute({}, createToolContext()) as string)
+        const empty = parseResult(await createAutocodeDependenciesTool(createDeps({ platform: "win32", commandMap: { git: { path: "" } } }), { isWindows: true }).execute({}, createToolContext()) as string)
+
+        expect(missing.optional_dependencies?.git_cli?.status).toBe("missing")
+        expect(failed.optional_dependencies?.git_cli?.status).toBe("missing")
+        expect(empty.optional_dependencies?.git_cli?.status).toBe("missing")
+    })
+
+    test("runs Windows cmd shims through controlled ComSpec with quoted resolved path", async () => {
+        const resolvedPath = "C:\\Program Files\\nodejs\\git.cmd"
+        const commandProcessor = "C:\\Windows\\System32\\cmd.exe"
+        const deps = createDeps({
+            platform: "win32",
+            env: { ComSpec: commandProcessor },
+            commandMap: { git: { path: resolvedPath, version: "git version 2.48.1.windows.1" } },
+        })
+        const result = parseResult(await createAutocodeDependenciesTool(deps, { isWindows: true }).execute({}, createToolContext()) as string)
+        const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
+
+        expect(calls).toContainEqual(["where.exe", ["git"], expect.anything()])
+        expect(calls).toContainEqual([commandProcessor, ["/d", "/v:off", "/s", "/c", `""${resolvedPath}" --version"`], expect.anything()])
+        expect(calls).not.toContainEqual(["git", ["--version"], expect.anything()])
+        expect(result.optional_dependencies?.git_cli?.version).toBe("git version 2.48.1.windows.1")
+    })
+
+    test("runs case-insensitive Windows bat shims through fallback cmd.exe", async () => {
+        const resolvedPath = "C:\\tools\\git.BaT"
+        const deps = createDeps({
+            platform: "win32",
+            env: { ComSpec: "C:\\other\\shell.exe" },
+            commandMap: { git: { path: resolvedPath, version: "git version 2.48.1.windows.1" } },
+        })
+        const result = parseResult(await createAutocodeDependenciesTool(deps, { isWindows: true }).execute({}, createToolContext()) as string)
+        const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
+
+        expect(calls).toContainEqual(["cmd.exe", ["/d", "/v:off", "/s", "/c", `""${resolvedPath}" --version"`], expect.anything()])
+        expect(calls.map(([command]) => command)).not.toContain(resolvedPath)
+        expect(result.optional_dependencies?.git_cli?.version).toBe("git version 2.48.1.windows.1")
+    })
+
+    test("keeps Windows lookup failures unavailable without bare version execution", async () => {
+        const deps = createDeps({ platform: "win32", commandErrorMap: { git: new Error("where failed") } })
+        const result = parseResult(await createAutocodeDependenciesTool(deps, { isWindows: true }).execute({}, createToolContext()) as string)
+        const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
+
+        expect(result.optional_dependencies?.git_cli?.status).toBe("missing")
+        expect(calls).toContainEqual(["where.exe", ["git"], expect.anything()])
+        expect(calls).not.toContainEqual(["git", ["--version"], expect.anything()])
     })
 
     test("reports bwrap missing and unusable with distro install guidance", async () => {
         const missing = parseResult(await createAutocodeDependenciesTool(createDeps({ bwrapExists: false, osRelease: "ID=ubuntu\n" })).execute({}, createToolContext()) as string)
         const unusable = parseResult(await createAutocodeDependenciesTool(createDeps({ bwrapExit: 1, osRelease: "ID=fedora\n" })).execute({}, createToolContext()) as string)
 
-        expect(missing.bwrap.status).toBe("missing")
-        expect(missing.bwrap.install_command).toBe("sudo apt-get install -y bubblewrap")
+        expect(missing.bwrap!.status).toBe("missing")
+        expect(missing.bwrap!.install_command).toBe("sudo apt-get install -y bubblewrap")
         expect(missing.next_actions).toContain("sudo apt-get install -y bubblewrap")
-        expect(unusable.bwrap.status).toBe("unusable")
-        expect(unusable.bwrap.install_command).toBe("sudo dnf install -y bubblewrap")
-        expect(unusable.bwrap.guidance).toContain("Fix bwrap usability")
+        expect(unusable.bwrap!.status).toBe("unusable")
+        expect(unusable.bwrap!.install_command).toBe("sudo dnf install -y bubblewrap")
+        expect(unusable.bwrap!.guidance).toContain("Fix bwrap usability")
     })
 
     test("is detect-only and never runs upgrade or package install commands", async () => {

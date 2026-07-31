@@ -1,103 +1,90 @@
-<div align="center">
-<img src="logo.webp" alt="AutoCode"/>
-<p><i>The workflow engine for traceable autonomous job execution</i></p>
-</div>
-
----
-
-AutoCode is an OpenCode plugin that turns rough conceptual ideas into completed solutions by means of structured workflow phases and optional review gates.
-
-Run jobs autonomously with **Auto mode**, or stay in control with **Assist mode**, where AutoCode does the safe hard work and separates dangerous operations into guided manual steps.
-
-No special UI required. AutoCode runs in OpenCode, keeps progress in version-controllable text files, and lets you track multiple jobs across their full lifecycle making it the ideal solution for remote development or server administration.
-
----
-
 ## Features
 
-- 🧭 **Structured lifecycle** — move researched work from concept to solution in phases: concept ➔ draft ➔ executing job ➔ review.
-- 📚 **Self-learning memory** — auto capture corrections, environment quirks, permissions, and user preferences as skills for future sessions.
+### Implementation Modes
+
+- 🤖 **Auto mode** — *autonomous*: agent oversee full lifecycle of structured jobs until completion.
+- 🧑‍💻 **Assist mode** — *interactive*: you make decisions, agent orchestration do the work, manage job lifecycle and suggest next steps.
+- 🎓 **Teach mode** — *manual*: agents discover solutions, then guide manual implementation with step-by-step tutorials.
+
+### Workflow Optimizations
+
+- 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in external directories.
+- 🪙 **Cost-saving workflows** — improve performance and reduce token usage with smart orchestration, tiered agent models, Caveman English.
+- 🔒 **Secret-safe tools** — agents never see passwords or secrets; predefined keys resolve credentials at tool runtime.
 - ⚠️ **Safe hand-offs** — provide a thorough manual task tutorial when an operation is unsafe.
-- 🪙 **Token-optimized workflows** — smart orchestrators delegate to faster specialists to improve performance and reduce token use.
-- 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
-- 🧪 **Sandboxed execution** — run supported risky commands in Linux bubblewrap sandboxes when the host supports user namespaces.
-- 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in other directories after permission checks.
-- 🔐 **SSH tool suite** — run remote commands and manage files through environment-keyed tools.
+- 📚 **Self-learning memory** — auto capture corrections, environment quirks, permissions, and user preferences as skills for future sessions.
 - 🧹 **Agent cleanup** — agents remove temporary files and stop stray processes they started after debugging.
 
-### Optimized Modes
+### Build-in Tools
 
-- 🔎 **Research mode** — safely gather read-only evidence on project or non-project topics without making changes.
-- 🧠 **Design mode** — brainstorm options, study feasibility, compare approaches, and report pros, cons, and risks before implementation starts.
-- 🤖 **Auto mode** — execute approved drafted jobs autonomously while keeping progress and review evidence in version-controllable files.
-- 🧑‍💻 **Assist mode** — keep a human in control while AutoCode reads the plan, recommends next steps, and tracks implementation progress.
-- ✏️ **Edit mode** — make fast, targeted edits directly in-session without spawning subagents.
+- 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
+- 🌐 **HTTP REST client** — simulate API calls for troubleshooting.
+- 🧪 **Sandbox isolation** — agents automatically manage and experiment in their own isolated sandboxes.
+- 🔐 **SSH tools** — run remote commands and manage files through environment-keyed tools.
+- 🔀 **Git tools** — inspect changes and commit updates to Git repositories.
+
+As well as [OpenCode bundled tools](https://opencode.ai/docs/tools/).
 
 ## Installation
+
+* AI agents: follow installation at [installation guide](installation.md).
+* Humans: Continue to read.
 
 ### Prerequisites
 
 - [OpenCode](https://opencode.ai) is required to load and use AutoCode.
 - The npm package / plugin entry is `@ahumandev/autocode`.
+- Use native CMD on Windows; use Bash on Linux.
+- [Bubblewrap](https://github.com/containers/bubblewrap) is optional on Linux for sandbox execution. It is not used on Windows.
+- [Bun](https://bun.sh) is needed only to build from source or install repository shim scripts.
 
 #### Optional
 
-- [Bubblewrap](https://github.com/containers/bubblewrap) is required only for Linux sandbox execution.
-- [Bun](https://bun.sh) is required only to build the plugin from source or run tests.
-- [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) is required only for Chrome DevTools MCP server support.
-
-### Installation for LLM Agents
-
-Fetch installation guide and follow it:
-
-```bash
-curl -s https://raw.githubusercontent.com/ahumandev/autocode/refs/heads/main/docs/installation.md
-```
+- Linux sandbox execution needs Bubblewrap and host user namespaces.
+- Windows does not use Bubblewrap. Sandbox agents and sandbox tools are not registered there.
+- Bun build and local shim installation scripts are cross-platform Bun scripts; Bun is not needed for public plugin installation.
 
 ### Installation for Humans
 
-OpenCode installs npm plugins automatically at startup when they are listed in the global plugin configuration.
+Run this in native CMD on Windows or Bash on Linux:
 
-Use the global OpenCode config at `~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`, then merge the plugin entry into the existing `plugin` array instead of overwriting the file.
-
-```json
-{
-  "plugin": ["@ahumandev/autocode"]
-}
+```text
+opencode plugin -g @ahumandev/autocode@latest
 ```
 
-If your config already contains other plugins or settings, keep them and add `@ahumandev/autocode` to the existing array.
+OpenCode loads global plugins at startup. Default config directory is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` applies when `OPENCODE_CONFIG_DIR` is unset.
+
+Start or restart OpenCode, then run `/install`. It checks and remediates Windows dependencies only. On Linux, install Bubblewrap separately when sandbox execution is needed. Generated skills are stored in `<home>/.agents/skills`.
 
 #### Verify installation
 
-1. Save the updated OpenCode config.
-2. Start or restart OpenCode.
-3. Confirm OpenCode loads AutoCode commands or agents after startup.
+1. Start or restart OpenCode after installation.
+2. Run `/install`.
+3. Confirm AutoCode commands or agents load after startup.
+4. Confirm generated skills appear in `<home>/.agents/skills/autocode` after first startup.
 
 ### Update the plugin version
 
-To update the public package version, change the plugin entry to `@ahumandev/autocode@latest` in your OpenCode config, save the file, and restart OpenCode.
+Update public plugin with native CMD on Windows or Bash on Linux:
 
-```jsonc
-{
-  "plugin": ["@ahumandev/autocode@latest"]
-}
+```text
+opencode plugin -g @ahumandev/autocode@latest
 ```
 
-OpenCode re-installs the requested npm plugin version during startup.
+Restart OpenCode after update. It detects OS at startup and uses CMD for Windows agents or Bash for Linux agents.
 
 ### Uninstall
 
-Remove `@ahumandev/autocode` from the OpenCode `plugin` array, save the config, and restart OpenCode.
-
-If you previously used the repository-only shim workflow, also remove `~/.config/opencode/plugins/autocode.js` if present.
+Remove `@ahumandev/autocode` from [global OpenCode config](https://opencode.ai/docs/config/) `plugin` array, save config, and restart OpenCode. Default config directory is `<home>/.config/opencode`.
 
 ### Troubleshooting
 
-- Confirm the config file is `~/.config/opencode/opencode.json` or `~/.config/opencode/opencode.jsonc`.
-- Confirm your JSON or JSONC stays valid after merging the plugin entry.
-- Confirm the plugin entry uses `@ahumandev/autocode` or `@ahumandev/autocode@latest` exactly.
-- Restart OpenCode after every config change so startup installation can run again.
+- Confirm `opencode --version` works; use `where opencode` in Windows CMD or `command -v opencode` in Linux Bash.
+- Confirm plugin install uses `opencode plugin -g @ahumandev/autocode@latest`.
+- Confirm config directory. Note that `OPENCODE_CONFIG_DIR` overrides default opencode config directory.
+- Keep JSON or JSONC valid and preserve unrelated config.
+- Restart OpenCode after config or plugin changes, then run `/install`.
+- Linux sandbox execution needs Bubblewrap; Windows does not use it and does not register sandbox agents or tools.
 
 ## Core
 

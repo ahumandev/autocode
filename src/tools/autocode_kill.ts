@@ -1,7 +1,7 @@
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import { tool, type ToolContext } from "@opencode-ai/plugin"
-import { defaultSandboxDependencies, type SandboxDependencies } from "@/utils/sandbox"
+import { defaultSandboxDependencies, type SandboxCommandResult, type SandboxDependencies } from "@/utils/sandbox"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type AutocodeKillArgs = {
@@ -105,6 +105,8 @@ async function commandExists(command: string, deps: AutocodeKillDependencies): P
 }
 
 async function validateAutocodeKillEnvironment(deps: AutocodeKillDependencies): Promise<string | undefined> {
+    if (deps.process.platform === "win32") return undefined
+
     if (deps.process.platform !== "linux") {
         return createAbortResponse(
             "validate autocode_kill environment",
@@ -298,6 +300,110 @@ async function killExplicitPort(port: number, expectedName: string | undefined, 
     })
 }
 
+function parseWindowsEndpointPort(endpoint: string): number | undefined {
+    const match = endpoint.startsWith("[")
+        ? /^\[[^\]]+\]:(\d{1,5})$/.exec(endpoint)
+        : /^(?:\d{1,3}\.){3}\d{1,3}:(\d{1,5})$/.exec(endpoint)
+    return match ? normalizePort(match[1]) : undefined
+}
+
+function parseWindowsListeners(output: string): Listener[] {
+    const listeners: Listener[] = []
+    for (const line of output.split(/\r?\n/)) {
+        const fields = line.trim().split(/\s+/)
+        if (fields.length < 5 || fields[0].toUpperCase() !== "TCP" || fields[3].toUpperCase() !== "LISTENING") continue
+        const port = parseWindowsEndpointPort(fields[1])
+        if (port === undefined) continue
+        listeners.push({ port, process_name: "", process_owner: "", pid: fields[4] })
+    }
+    return listeners
+}
+
+function parseWindowsTasklistName(output: string, pid: string): string | undefined {
+    const names = output.split(/\r?\n/).flatMap((line) => {
+        const fields = line.trim().split(/\s+/)
+        return fields.length >= 2 && fields[1] === pid ? [fields[0]] : []
+    })
+    return names.length === 1 ? names[0] : undefined
+}
+
+function getWindowsCommandFailure(command: string, result: SandboxCommandResult): string | undefined {
+    if (result.exitCode === 0) return undefined
+    const detail = result.stderr.trim() || result.stdout.trim()
+    return detail || `${command} exited with ${result.exitCode === null ? "no exit code" : `code ${result.exitCode}`}.`
+}
+
+async function killWindowsExplicitPort(port: number, expectedName: string | undefined, deps: AutocodeKillDependencies): Promise<string> {
+    const failedAction = `kill listener on port ${port}`
+    let netstat: SandboxCommandResult
+    try {
+        netstat = await deps.spawn("netstat.exe", ["-ano"], { shell: false })
+    }
+    catch (error) {
+        return createAbortResponse(failedAction, error)
+    }
+
+    const netstatFailure = getWindowsCommandFailure("netstat.exe", netstat)
+    if (netstatFailure !== undefined) return createAbortResponse(failedAction, netstatFailure)
+
+    const listeners = parseWindowsListeners(netstat.stdout).filter((listener) => listener.port === port)
+    if (listeners.length === 0) {
+        return createRetryResponse(
+            failedAction,
+            `No TCP listener found on port ${port}.`,
+            "Check the port and start the dev server if needed, then retry autocode_kill with the correct port."
+        )
+    }
+    if (listeners.length > 1) {
+        return createRetryResponse(
+            failedAction,
+            `Ambiguous listeners found on port ${port}.`,
+            "Stop the listeners manually or retry with a clearer target after only one listener remains on that port."
+        )
+    }
+
+    const pid = listeners[0].pid
+    if (pid === undefined || !/^\d+$/.test(pid)) {
+        return createAbortResponse(failedAction, `Unable to identify PID for listener on port ${port}.`)
+    }
+    const numericPid = Number(pid)
+    if (!Number.isSafeInteger(numericPid) || numericPid < 1) return createAbortResponse(failedAction, `Unable to identify PID for listener on port ${port}.`)
+
+    let tasklist: SandboxCommandResult
+    try {
+        tasklist = await deps.spawn("tasklist.exe", ["/FI", `PID eq ${pid}`], { shell: false })
+    }
+    catch (error) {
+        return createAbortResponse(failedAction, error)
+    }
+
+    const tasklistFailure = getWindowsCommandFailure("tasklist.exe", tasklist)
+    if (tasklistFailure !== undefined) return createAbortResponse(failedAction, tasklistFailure)
+
+    const processName = parseWindowsTasklistName(tasklist.stdout, pid)
+    if (processName === undefined) return createAbortResponse(failedAction, `Unable to verify PID ${pid} with tasklist.exe.`)
+    if (expectedName !== undefined && processName !== expectedName) {
+        return createRetryResponse(
+            failedAction,
+            `Process name mismatch for port ${port}. Expected name: ${expectedName}. Actual name: ${processName}.`,
+            "Check the port and process name, then retry autocode_kill with the exact listener name."
+        )
+    }
+
+    let taskkill: SandboxCommandResult
+    try {
+        taskkill = await deps.spawn("taskkill.exe", ["/PID", pid, "/T"], { shell: false })
+    }
+    catch (error) {
+        return createAbortResponse(failedAction, error)
+    }
+
+    const taskkillFailure = getWindowsCommandFailure("taskkill.exe", taskkill)
+    if (taskkillFailure !== undefined) return createAbortResponse(failedAction, taskkillFailure)
+
+    return JSON.stringify({ ok: true, mode: "kill", action: "kill", port, name: processName, pid: numericPid })
+}
+
 function mapCandidates(matches: PortMatch[], listeners: Listener[], processName?: string): KillCandidate[] {
     const listenersByPort = new Map<number, Listener>()
     for (const listener of listeners) {
@@ -329,7 +435,12 @@ export async function runAutocodeKill(rawArgs: AutocodeKillArgs = {}, context?: 
         }
 
         const expectedName = isBlank(rawArgs.name) ? undefined : rawArgs.name
+        if (deps.process.platform === "win32") return killWindowsExplicitPort(port, expectedName, deps)
         return killExplicitPort(port, expectedName, deps)
+    }
+
+    if (deps.process.platform === "win32") {
+        return createAbortResponse("list autocode_kill candidates", "Windows autocode_kill requires an explicit port.")
     }
 
     try {

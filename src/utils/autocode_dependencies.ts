@@ -1,5 +1,6 @@
 import { homedir } from "node:os"
 import path from "node:path"
+import type { PlatformCapabilities } from "@/utils/platform"
 import { flattenError } from "@/utils/tools"
 import { defaultSandboxDependencies, detectSandboxBackend, hasTermuxEnvironmentSignal, type SandboxDependencies } from "@/utils/sandbox"
 
@@ -500,7 +501,21 @@ async function inspectOpencode(deps: SandboxDependencies): Promise<DependencyRep
     }
 }
 
-async function commandExists(command: string, deps: SandboxDependencies): Promise<boolean> {
+function getFirstNonEmptyOutputLine(output: string): string | undefined {
+    return output.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length > 0)
+}
+
+async function commandExists(command: string, deps: SandboxDependencies, capabilities: PlatformCapabilities): Promise<boolean> {
+    if (capabilities.isWindows) {
+        try {
+            const result = await deps.spawn("where.exe", [command], { env: deps.process.env })
+            return result.exitCode === 0 && getFirstNonEmptyOutputLine(result.stdout) !== undefined
+        }
+        catch {
+            return false
+        }
+    }
+
     if (deps.commandExists) return deps.commandExists(command)
 
     try {
@@ -542,13 +557,13 @@ function getBwrapInstallSuggestion(osRelease: string | undefined): string {
     return "Install bubblewrap using your OS package manager."
 }
 
-async function inspectBwrap(deps: SandboxDependencies): Promise<DependencyReport> {
+async function inspectBwrap(deps: SandboxDependencies, capabilities: PlatformCapabilities): Promise<DependencyReport> {
     const backend = await detectSandboxBackend(deps)
     if (backend.backend === "bubblewrap") return { ok: true, status: "ok", backend: "bubblewrap", signals: backend.signals }
     if (deps.process.platform !== "linux" || hasTermuxEnvironmentSignal(deps.process.env)) return { ok: false, status: "unsupported", backend: backend.backend, reason: backend.reason, signals: backend.signals, guidance: backend.guidance ?? "Bubblewrap sandbox support requires Linux outside Termux/Android." }
 
     const suggestedFix = getBwrapInstallSuggestion(await readOsRelease(deps))
-    const status: DependencyStatus = await commandExists("bwrap", deps) ? "unusable" : "missing"
+    const status: DependencyStatus = await commandExists("bwrap", deps, capabilities) ? "unusable" : "missing"
     const guidance = status === "missing" ? suggestedFix : "Fix bwrap usability, then retry. Kernel/user namespace restrictions may block bubblewrap."
     return { ok: false, status, backend: backend.backend, reason: backend.reason, signals: backend.signals, install_command: suggestedFix, guidance }
 }
@@ -587,8 +602,14 @@ async function safeInspectOptional(name: string, dependency: string, fn: () => P
     }
 }
 
-async function resolveCommandPath(command: string, deps: SandboxDependencies): Promise<string | undefined> {
+async function resolveCommandPath(command: string, deps: SandboxDependencies, capabilities: PlatformCapabilities): Promise<string | undefined> {
     try {
+        if (capabilities.isWindows) {
+            const result = await deps.spawn("where.exe", [command], { env: deps.process.env })
+            const resolvedPath = getFirstNonEmptyOutputLine(result.stdout)
+            return result.exitCode === 0 ? resolvedPath : undefined
+        }
+
         const result = await deps.spawn("sh", ["-c", `command -v ${command}`], { env: deps.process.env })
         const resolvedPath = result.stdout.trim().split(/\r?\n/)[0]
         return result.exitCode === 0 && resolvedPath.length > 0 ? resolvedPath : undefined
@@ -598,9 +619,27 @@ async function resolveCommandPath(command: string, deps: SandboxDependencies): P
     }
 }
 
-async function readCommandVersion(command: string, deps: SandboxDependencies): Promise<string | undefined> {
+function isWindowsBatchCommand(commandPath: string): boolean {
+    return /\.(cmd|bat)$/i.test(commandPath)
+}
+
+function getWindowsCommandProcessor(env: NodeJS.ProcessEnv): string {
+    const comSpec = Object.entries(env).find(([name]) => name.toLowerCase() === "comspec")?.[1]?.trim()
+    return comSpec && /(^|[\\/])cmd\.exe$/i.test(comSpec) ? comSpec : "cmd.exe"
+}
+
+function quoteWindowsBatchVersionCommand(commandPath: string): string {
+    const escapedPath = commandPath.replace(/%/g, "%%")
+    return `""${escapedPath}" --version"`
+}
+
+async function readCommandVersion(command: string, resolvedPath: string | undefined, deps: SandboxDependencies, capabilities: PlatformCapabilities): Promise<string | undefined> {
     try {
-        const result = await deps.spawn(command, ["--version"], { env: deps.process.env })
+        const result = capabilities.isWindows && resolvedPath !== undefined
+            ? isWindowsBatchCommand(resolvedPath)
+                ? await deps.spawn(getWindowsCommandProcessor(deps.process.env), ["/d", "/v:off", "/s", "/c", quoteWindowsBatchVersionCommand(resolvedPath)], { env: deps.process.env })
+                : await deps.spawn(resolvedPath, ["--version"], { env: deps.process.env })
+            : await deps.spawn(command, ["--version"], { env: deps.process.env })
         const output = `${result.stdout}\n${result.stderr}`.trim()
         const firstLine = output.split(/\r?\n/).find((line) => line.trim().length > 0)
         return result.exitCode === 0 ? firstLine : undefined
@@ -610,14 +649,14 @@ async function readCommandVersion(command: string, deps: SandboxDependencies): P
     }
 }
 
-async function inspectFirstAvailableCommand(commands: readonly string[], deps: SandboxDependencies, dependency: string, emitDebug: DebugEmitter): Promise<CommandInspection | undefined> {
+async function inspectFirstAvailableCommand(commands: readonly string[], deps: SandboxDependencies, dependency: string, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<CommandInspection | undefined> {
     for (const command of commands) {
-        const exists = await commandExists(command, deps)
+        const exists = await commandExists(command, deps, capabilities)
         emitDebug({ dependency, stage: "path_check", command, exists })
         if (!exists) continue
 
-        const resolvedPath = await resolveCommandPath(command, deps)
-        const version = await readCommandVersion(command, deps)
+        const resolvedPath = await resolveCommandPath(command, deps, capabilities)
+        const version = await readCommandVersion(command, resolvedPath, deps, capabilities)
         emitDebug({ dependency, stage: "path_check", command, exists: true, path: resolvedPath, version })
         return resolvedPath === undefined
             ? { command, version }
@@ -627,13 +666,13 @@ async function inspectFirstAvailableCommand(commands: readonly string[], deps: S
     return undefined
 }
 
-async function inspectFirstAvailableCommandPath(commands: readonly string[], deps: SandboxDependencies, dependency: string, emitDebug: DebugEmitter): Promise<CommandInspection | undefined> {
+async function inspectFirstAvailableCommandPath(commands: readonly string[], deps: SandboxDependencies, dependency: string, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<CommandInspection | undefined> {
     for (const command of commands) {
-        const exists = await commandExists(command, deps)
+        const exists = await commandExists(command, deps, capabilities)
         emitDebug({ dependency, stage: "path_check", command, exists })
         if (!exists) continue
 
-        const resolvedPath = await resolveCommandPath(command, deps)
+        const resolvedPath = await resolveCommandPath(command, deps, capabilities)
         emitDebug({ dependency, stage: "path_check", command, exists: true, path: resolvedPath })
         return resolvedPath === undefined
             ? { command }
@@ -662,8 +701,8 @@ function emitFinalDebugEvent(definition: OptionalDependencyDefinition, result: D
     })
 }
 
-async function inspectOptionalMcp(definition: OptionalDependencyDefinition, deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter): Promise<DependencyReport> {
-    const detected = await inspectFirstAvailableCommandPath(definition.bins, deps, definition.key, emitDebug)
+async function inspectOptionalMcp(definition: OptionalDependencyDefinition, deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<DependencyReport> {
+    const detected = await inspectFirstAvailableCommandPath(definition.bins, deps, definition.key, emitDebug, capabilities)
     if (detected) {
         const result: DependencyReport = {
             ok: true,
@@ -722,9 +761,9 @@ function getBrowserInstallSuggestion(): string {
     return "Install Google Chrome / Chrome for Testing manually: https://developer.chrome.com/docs/chrome-devtools/mcp"
 }
 
-async function inspectBrowserAvailability(deps: SandboxDependencies, emitDebug: DebugEmitter): Promise<DependencyReport> {
-    const googleChrome = await inspectFirstAvailableCommand(["google-chrome", "google-chrome-stable", "chrome"], deps, "browser", emitDebug)
-    const chromium = await inspectFirstAvailableCommand(["chromium", "chromium-browser"], deps, "browser", emitDebug)
+async function inspectBrowserAvailability(deps: SandboxDependencies, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<DependencyReport> {
+    const googleChrome = await inspectFirstAvailableCommand(["google-chrome", "google-chrome-stable", "chrome"], deps, "browser", emitDebug, capabilities)
+    const chromium = await inspectFirstAvailableCommand(["chromium", "chromium-browser"], deps, "browser", emitDebug, capabilities)
     const installCommand = getBrowserInstallSuggestion()
     const docsUrl = "https://developer.chrome.com/docs/chrome-devtools/mcp"
 
@@ -809,8 +848,8 @@ const optionalMcpDefinitions: readonly OptionalDependencyDefinition[] = [
     },
 ]
 
-async function inspectGitCli(deps: SandboxDependencies, emitDebug: DebugEmitter): Promise<DependencyReport> {
-    const git = await inspectFirstAvailableCommand(["git"], deps, "git_cli", emitDebug)
+async function inspectGitCli(deps: SandboxDependencies, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<DependencyReport> {
+    const git = await inspectFirstAvailableCommand(["git"], deps, "git_cli", emitDebug, capabilities)
     const installCommand = "Install git using your system package manager."
     if (git) {
         const result: DependencyReport = {
@@ -843,13 +882,13 @@ async function inspectGitCli(deps: SandboxDependencies, emitDebug: DebugEmitter)
     return result
 }
 
-async function inspectOptionalDependencies(deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter): Promise<Record<string, DependencyReport>> {
+async function inspectOptionalDependencies(deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<Record<string, DependencyReport>> {
     const [chromeDevtoolsMcp, context7Mcp, excelMcp, gitCli, browser] = await Promise.all([
-        safeInspectOptional("chrome-devtools MCP", "chrome_devtools_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[0], deps, context, emitDebug), emitDebug),
-        safeInspectOptional("Context7 MCP", "context7_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[1], deps, context, emitDebug), emitDebug),
-        safeInspectOptional("Excel MCP", "excel_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[2], deps, context, emitDebug), emitDebug),
-        safeInspectOptional("system git CLI", "git_cli", () => inspectGitCli(deps, emitDebug), emitDebug),
-        safeInspectOptional("browser availability", "browser", () => inspectBrowserAvailability(deps, emitDebug), emitDebug),
+        safeInspectOptional("chrome-devtools MCP", "chrome_devtools_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[0], deps, context, emitDebug, capabilities), emitDebug),
+        safeInspectOptional("Context7 MCP", "context7_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[1], deps, context, emitDebug, capabilities), emitDebug),
+        safeInspectOptional("Excel MCP", "excel_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[2], deps, context, emitDebug, capabilities), emitDebug),
+        safeInspectOptional("system git CLI", "git_cli", () => inspectGitCli(deps, emitDebug, capabilities), emitDebug),
+        safeInspectOptional("browser availability", "browser", () => inspectBrowserAvailability(deps, emitDebug, capabilities), emitDebug),
     ])
 
     return {
@@ -870,12 +909,43 @@ export async function inspectAutocodeDependencies(
     deps: SandboxDependencies = defaultSandboxDependencies,
     context: DependencyInspectionContext = {},
     options: DependencyInspectionOptions = {},
+    capabilities: PlatformCapabilities = { isWindows: false },
 ): Promise<Record<string, unknown>> {
     const emitDebug = createDebugEmitter(options)
+
+    if (capabilities.isWindows) {
+        const [opencode, optionalDependencies] = await Promise.all([
+            safeInspect("OpenCode", () => inspectOpencode(deps)),
+            inspectOptionalDependencies(deps, context, emitDebug, capabilities),
+        ])
+        const requiredOk = opencode.ok === true
+        const optionalActions = Object.values(optionalDependencies)
+            .filter(hasActionableOptionalGuidance)
+            .map((dependency) => dependency.guidance)
+        const optionalOk = optionalActions.length === 0
+        const nextActions = [opencode.ok === true ? undefined : opencode.guidance, ...optionalActions].filter((action): action is string => typeof action === "string" && action.length > 0)
+        const dependencies = {
+            opencode,
+            ...optionalDependencies,
+        }
+
+        return {
+            ok: requiredOk,
+            required_ok: requiredOk,
+            optional_ok: optionalOk,
+            status: requiredOk && optionalOk ? "ready" : "action_required",
+            detect_only: true,
+            opencode,
+            optional_dependencies: optionalDependencies,
+            dependencies,
+            next_actions: nextActions,
+        }
+    }
+
     const [opencode, bwrap, optionalDependencies] = await Promise.all([
         safeInspect("OpenCode", () => inspectOpencode(deps)),
-        safeInspect("bwrap", () => inspectBwrap(deps)),
-        inspectOptionalDependencies(deps, context, emitDebug),
+        safeInspect("bwrap", () => inspectBwrap(deps, capabilities)),
+        inspectOptionalDependencies(deps, context, emitDebug, capabilities),
     ])
 
     const requiredOk = opencode.ok === true && bwrap.ok === true

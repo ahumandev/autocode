@@ -1,6 +1,6 @@
 import { Glob } from "bun"
 import { existsSync, statSync } from "node:fs"
-import { isAbsolute, relative, resolve } from "node:path"
+import { isAbsolute, posix, relative, resolve, win32 } from "node:path"
 
 export interface GlobMatch {
     /** Path key: relative to cwd if inside cwd, else absolute */
@@ -11,18 +11,19 @@ export interface GlobMatch {
 
 const GLOB_META = /[*?[{]/
 
-/**
- * Returns the static directory prefix of an absolute glob pattern: the
- * substring before the first glob metacharacter. Falls back to "/" when no
- * static directory can be extracted (e.g. pattern starts with a metachar).
- */
-function absoluteScanCwd(pattern: string): string {
-    const idx = pattern.search(GLOB_META)
-    if (idx <= 0) return "/"
-    const prefix = pattern.slice(0, idx)
-    if (prefix === "/") return "/"
-    const trimmed = prefix.replace(/\/+$/, "")
-    return trimmed === "" ? "/" : trimmed
+export function absoluteScanCwd(pattern: string): string {
+    const path = isWindowsAbsolute(pattern) ? win32 : posix
+    const normalized = path.normalize(pattern)
+    const { root } = path.parse(normalized)
+    const segments = normalized.slice(root.length).split(path.sep)
+    const globSegment = segments.findIndex((segment) => GLOB_META.test(segment))
+    const staticSegments = segments.slice(0, globSegment === -1 ? undefined : globSegment)
+
+    return staticSegments.length > 0 ? path.join(root, ...staticSegments) : root
+}
+
+function isWindowsAbsolute(pattern: string): boolean {
+    return /^[A-Za-z]:[\\/]/.test(pattern) || /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(pattern)
 }
 
 /**
