@@ -45,7 +45,7 @@ function hasSetenvTriple(args: readonly string[], name: string, value: string): 
     return args.some((arg, index) => arg === "--setenv" && args[index + 1] === name && args[index + 2] === value)
 }
 
-function createDeps(options?: { existing?: string[], files?: Record<string, string>, platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, fetchOk?: boolean, spawnExit?: number }): SandboxDependencies & { spawnProcess: ReturnType<typeof mock> } {
+function createDeps(options?: { existing?: string[], files?: Record<string, string>, platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, fetchOk?: boolean, spawnExit?: number, commandExit?: Record<string, number> }): SandboxDependencies & { spawnProcess: ReturnType<typeof mock> } {
     const existing = new Set(options?.existing ?? [])
     const files = { ...(options?.files ?? {}) }
     const deps = {
@@ -73,17 +73,21 @@ function createDeps(options?: { existing?: string[], files?: Record<string, stri
             cp: mock(async (_source: unknown, destination: unknown) => { existing.add(String(destination)) }),
         },
         spawn: mock(async (command: string, args: readonly string[]) => {
-            if (command === "tar" && (options?.spawnExit ?? 0) === 0) {
+            const exitCode = options?.commandExit?.[command] ?? options?.spawnExit ?? 0
+            if (command === "tar" && exitCode === 0) {
                 const rootfsPath = String(args.find((arg) => arg.startsWith("--directory=")) ?? "").slice("--directory=".length)
                 existing.add(rootfsPath)
                 existing.add(path.join(rootfsPath, "bin", "sh"))
             }
-            if (command === "cp" && (options?.spawnExit ?? 0) === 0) {
+            if (command === "umoci" && exitCode === 0) {
+                existing.add(path.join(String(args.at(-1)), "rootfs", "bin", "sh"))
+            }
+            if (command === "cp" && exitCode === 0) {
                 const destination = String(args[args.length - 1])
                 existing.add(destination)
                 existing.add(path.join(destination, "bin", "sh"))
             }
-            return { exitCode: options?.spawnExit ?? 0, stdout: "out", stderr: "err" }
+            return { exitCode, stdout: "out", stderr: "err" }
         }),
         commandExists: mock(async (command: string) => Boolean(options?.commands?.[command])),
         fetch: mock(async () => ({ ok: options?.fetchOk ?? true, status: options?.fetchOk === false ? 500 : 200, text: async () => alpineLatestReleasesYaml(), arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer } as Response)),
@@ -264,7 +268,7 @@ describe("autocode sandbox tools", () => {
     test("nonblank alpine and debian distro create rootfs metadata and CLI binds rootfs instead of host OS", async () => {
         for (const distro of ["alpine", "debian"]) {
             const paths = getSandboxPaths("/workspace", "my_feature", `dev_${distro}`)
-            const deps = createDeps({ commands: { bwrap: true, xz: true }, arch: "x64" })
+            const deps = createDeps({ commands: { bwrap: true, xz: true, skopeo: true, umoci: true }, arch: "x64" })
             const tool = createAutocodeSandboxCreateTool(createClient(), deps, { distro_cache_path: "/cache/distros", sync_method: "copy" })
 
             const created = parseResult(await tool.execute({ sandbox_name: `dev_${distro}`, distro }, createToolContext()))
@@ -413,18 +417,15 @@ describe("autocode sandbox tools", () => {
         expect(JSON.stringify((deps.spawn as ReturnType<typeof mock>).mock.calls)).toContain("https://github.com")
     })
 
-    test("rootfs create downloads and extracts on host before internet validation bwrap", async () => {
+    test("Debian OCI rootfs pulls and unpacks on host before internet validation bwrap", async () => {
         const events: string[] = []
         const paths = getSandboxPaths("/workspace", "my_feature", "dev")
-        const deps = createDeps({ commands: { bwrap: true, xz: true }, arch: "x64" })
-        deps.fetch = mock(async () => {
-            events.push("fetch")
-            return { ok: true, status: 200, text: async () => alpineLatestReleasesYaml(), arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer } as Response
-        })
+        const deps = createDeps({ commands: { bwrap: true, skopeo: true, umoci: true }, arch: "x64" })
         deps.spawn = mock(async (command: string, args: readonly string[]) => {
-            if (command === "tar") {
-                events.push("tar")
-                const rootfsPath = String(args.find((arg) => arg.startsWith("--directory=")) ?? "").slice("--directory=".length)
+            if (command === "skopeo") events.push("skopeo")
+            if (command === "umoci") {
+                events.push("umoci")
+                const rootfsPath = path.join(String(args.at(-1)), "rootfs")
                 const rootfsEntryExists = mock(async (filePath: string) => filePath === path.join(rootfsPath, "bin", "sh") || filePath === paths.sandboxPath || filePath === `${paths.sandboxPath}/rootfs` ? { mtimeMs: 1 } : Promise.reject(missingError()))
                 deps.fileSystem.stat = rootfsEntryExists
                 deps.fileSystem.lstat = rootfsEntryExists
@@ -435,9 +436,13 @@ describe("autocode sandbox tools", () => {
         const tool = createAutocodeSandboxCreateTool(createClient(), deps, { distro_cache_path: "/cache/distros", sync_method: "copy" })
 
         const result = parseResult(await tool.execute({ sandbox_name: "dev", distro: "debian", internet_enabled: true }, createToolContext()))
+        const metadata = getMetadataWrite(deps, paths.metadataFile)
 
         expect(result.ok).toBe(true)
-        expect(events).toEqual(["fetch", "tar", "validation-bwrap"])
+        expect(events).toEqual(["skopeo", "umoci", "validation-bwrap"])
+        expect(metadata.backend_data).toEqual(expect.objectContaining({ internet_enabled: true }))
+        expect(deps.spawn).toHaveBeenCalledWith("skopeo", expect.arrayContaining(["copy", "--override-arch", "amd64", "docker://docker.io/library/debian:bookworm"]), expect.any(Object))
+        expect(deps.spawn).toHaveBeenCalledWith("umoci", expect.arrayContaining(["unpack", "--image"]), expect.any(Object))
     })
 
     test("rootfs internet validation binds existing host CA and network config only", async () => {
@@ -460,13 +465,13 @@ describe("autocode sandbox tools", () => {
         expect(validationArgs).toEqual(expect.arrayContaining(["--setenv", "HTTP_PROXY", "http://localhost:1234"]))
     })
 
-    test("create returns rootfs source URL and status on download failure", async () => {
-        const deps = createDeps({ commands: { bwrap: true }, arch: "x64", fetchOk: false })
+    test("create returns OCI source URL and actionable status when Debian tools are missing", async () => {
+        const deps = createDeps({ commands: { bwrap: true }, arch: "x64" })
         const tool = createAutocodeSandboxCreateTool(createClient(), deps)
 
         const result = parseResult(await tool.execute({ sandbox_name: "dev", distro: "debian" }, createToolContext()))
 
-        expect(result).toEqual(expect.objectContaining({ ok: false, status: "500", source_url: "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/dist-amd64/bookworm/rootfs.tar.xz", reason: expect.stringContaining("HTTP 500") }))
+        expect(result).toEqual(expect.objectContaining({ ok: false, status: "missing_dependency", source_url: "docker://docker.io/library/debian:bookworm", reason: expect.stringContaining("skopeo and umoci") }))
     })
 
     test("create uses title-derived sandbox path when lifecycle directories are empty", async () => {

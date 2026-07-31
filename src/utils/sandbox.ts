@@ -82,7 +82,7 @@ export type SandboxCacheEntry = {
     rootfs_path: string
     metadata_file: string
     source_url: string
-    archive_format: ManualRootfsArchiveFormat
+    archive_format: ManualRootfsArchiveFormat | "oci"
     created_at: string
     verified_at: string
     version: string
@@ -211,6 +211,7 @@ export const sandboxDistroMetadata: Record<SandboxDistro, SandboxDistroMetadata>
         manual_rootfs: {
             feasible: true,
             backend: "manual_proot",
+            // Runtime resolver reads latest-releases.yaml for versioned minirootfs archives, so static downloads stay empty.
             downloads: [],
             unsupported_reason: "Alpine manual rootfs download resolves x86_64, aarch64, and armv7 minirootfs archives from upstream latest-releases metadata.",
         },
@@ -221,12 +222,9 @@ export const sandboxDistroMetadata: Record<SandboxDistro, SandboxDistroMetadata>
         manual_rootfs: {
             feasible: true,
             backend: "manual_proot",
-            downloads: [
-                manualDownload("x86_64", "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/dist-amd64/bookworm/rootfs.tar.xz", "xz"),
-                manualDownload("aarch64", "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/dist-arm64v8/bookworm/rootfs.tar.xz", "xz"),
-                manualDownload("armv7", "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/dist-arm32v7/bookworm/rootfs.tar.xz", "xz"),
-            ],
-            unsupported_reason: "Debian manual rootfs download supports only x86_64, aarch64, and armv7 from debuerreotype docker-debian-artifacts.",
+            // Runtime resolver pulls docker.io/library/debian:bookworm with skopeo and unpacks it with umoci, so static downloads stay empty.
+            downloads: [],
+            unsupported_reason: "Debian Bookworm rootfs creation uses the official OCI image through skopeo and umoci.",
         },
     },
     ubuntu: {
@@ -372,6 +370,14 @@ function cacheEntryId(distro: SandboxDistro, download: ManualRootfsDownloadResol
     return `${distro}-${download.architecture}-${version}-${download.archive_format}-${sourceHash}-${verificationHash}`
 }
 
+const debianBookwormImage = "docker://docker.io/library/debian:bookworm"
+
+function getDebianOciArchitecture(architecture: ManualArchitecture): { architecture: string, variant?: string } {
+    if (architecture === "aarch64") return { architecture: "arm64", variant: "v8" }
+    if (architecture === "armv7") return { architecture: "arm", variant: "v7" }
+    return { architecture: "amd64" }
+}
+
 function parseAlpineLatestReleasesYaml(content: string): AlpineReleaseMetadata[] | undefined {
     const releases: AlpineReleaseMetadata[] = []
     let current: AlpineReleaseMetadata | undefined
@@ -502,13 +508,90 @@ async function writeJsonFile(fileSystem: Pick<SandboxFileSystem, "mkdir" | "writ
     await fileSystem.writeFile(filePath, `${JSON.stringify(value, undefined, 2)}\n`)
 }
 
+async function ensureDebianBookwormRootfsCache(architecture: ManualArchitecture, config: SandboxConfig | undefined, deps: SandboxDependencies): Promise<SandboxRootfsResolution> {
+    const version = "bookworm"
+    const sourceHash = createHash("sha256").update(debianBookwormImage).digest("hex").slice(0, 16)
+    const entryPath = path.join(resolveSandboxCachePath(config, deps), "debian", architecture, `debian-${architecture}-${version}-oci-${sourceHash}`)
+    const rootfsPath = path.join(entryPath, "rootfs")
+    const metadataFile = path.join(entryPath, "metadata.json")
+    const existing = await readJsonFile<SandboxCacheEntry>(deps.fileSystem, metadataFile)
+    if (existing && await pathExists(deps.fileSystem, existing.rootfs_path) && await optionalPathExists(deps.fileSystem, path.join(existing.rootfs_path, "bin", "sh"))) return { ok: true, cache: existing, downloaded: false }
+
+    const missingTools = (await Promise.all(["skopeo", "umoci"].map(async (command) => await isCommandCallable(command, deps)))).flatMap((available, index) => available ? [] : [index === 0 ? "skopeo" : "umoci"])
+    if (missingTools.length > 0) {
+        return { ok: false, status: "missing_dependency", source_url: debianBookwormImage, reason: `Missing host dependencies ${missingTools.join(" and ")} required to create Debian Bookworm rootfs. Install with: sudo apt install skopeo umoci.` }
+    }
+
+    await deps.fileSystem.rm?.(entryPath, { recursive: true, force: true })
+    const workPath = `${entryPath}.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const layoutPath = path.join(workPath, "oci")
+    const bundlePath = path.join(workPath, "bundle")
+    const unpackedRootfsPath = path.join(bundlePath, "rootfs")
+    const workRootfsPath = path.join(workPath, "rootfs")
+    const workMetadataFile = path.join(workPath, "metadata.json")
+    const ociArchitecture = getDebianOciArchitecture(architecture)
+    const skopeoArgs = ["copy", "--override-os", "linux", "--override-arch", ociArchitecture.architecture, ...(ociArchitecture.variant ? ["--override-variant", ociArchitecture.variant] : []), debianBookwormImage, `oci:${layoutPath}:bookworm`]
+    let completed = false
+
+    try {
+        await deps.fileSystem.mkdir(workPath, { recursive: true })
+        const pull = await deps.spawn("skopeo", skopeoArgs, { env: deps.process.env })
+        if (pull.exitCode !== 0) {
+            return { ok: false, reason: "Debian OCI image pull failed.", command: `skopeo ${skopeoArgs.join(" ")}`, stdout: pull.stdout, stderr: pull.stderr, exit_code: pull.exitCode, source_url: debianBookwormImage }
+        }
+
+        const umociArgs = ["unpack", "--rootless", "--image", `${layoutPath}:bookworm`, bundlePath]
+        const unpack = await deps.spawn("umoci", umociArgs, { env: deps.process.env })
+        if (unpack.exitCode !== 0) {
+            return { ok: false, reason: "Debian OCI image unpack failed.", command: `umoci ${umociArgs.join(" ")}`, stdout: unpack.stdout, stderr: unpack.stderr, exit_code: unpack.exitCode, source_url: debianBookwormImage }
+        }
+        if (!await optionalPathExists(deps.fileSystem, path.join(unpackedRootfsPath, "bin", "sh"))) {
+            return { ok: false, reason: "Debian OCI image unpack produced malformed rootfs: missing /bin/sh.", source_url: debianBookwormImage }
+        }
+
+        const rename = deps.fileSystem.rename
+        if (!rename) throw new Error("Unable to create Debian OCI rootfs cache: rename is unavailable")
+        await rename(unpackedRootfsPath, workRootfsPath)
+        await deps.fileSystem.rm?.(layoutPath, { recursive: true, force: true })
+        await deps.fileSystem.rm?.(bundlePath, { recursive: true, force: true })
+        const now = new Date().toISOString()
+        const cache: SandboxCacheEntry = {
+            entry_path: entryPath,
+            rootfs_path: rootfsPath,
+            metadata_file: metadataFile,
+            source_url: debianBookwormImage,
+            archive_format: "oci",
+            created_at: now,
+            verified_at: now,
+            version,
+            architecture,
+            verification: { source_url_sha256: createHash("sha256").update(debianBookwormImage).digest("hex"), skopeo_digest_verification: true },
+        }
+        await writeJsonFile(deps.fileSystem, workMetadataFile, cache)
+        await rename(workPath, entryPath)
+        completed = true
+        return { ok: true, cache, downloaded: true }
+    }
+    catch (error) {
+        return { ok: false, reason: `Debian OCI rootfs creation failed: ${error instanceof Error ? error.message : String(error)}.`, source_url: debianBookwormImage }
+    }
+    finally {
+        if (!completed) {
+            await deps.fileSystem.rm?.(workPath, { recursive: true, force: true })
+            await deps.fileSystem.rm?.(entryPath, { recursive: true, force: true })
+        }
+    }
+}
+
 export async function ensureSandboxRootfsCache(distro: SandboxDistro, config: SandboxConfig | undefined, deps: SandboxDependencies = defaultSandboxDependencies): Promise<SandboxRootfsResolution> {
     const architecture = getArchitecture(deps.process.arch)
+    if (distro === "debian") return await ensureDebianBookwormRootfsCache(architecture, config, deps)
+
     const download = distro === "alpine" ? await resolveAlpineMinirootfsDownload(architecture, deps) : getManualRootfsDownload(distro, architecture)
     if (!download.ok) return { ok: false, reason: download.reason, status: download.status, source_url: download.source_url }
     if (!deps.fetch) return { ok: false, reason: "Unable to download distro rootfs: fetch is unavailable." }
 
-    const version = download.version ?? (distro === "debian" ? "bookworm" : "latest-stable")
+    const version = download.version ?? "latest-stable"
     const entryPath = path.join(resolveSandboxCachePath(config, deps), distro, architecture, cacheEntryId(distro, download, version))
     const rootfsPath = path.join(entryPath, "rootfs")
     const metadataFile = path.join(entryPath, "metadata.json")
@@ -518,9 +601,20 @@ export async function ensureSandboxRootfsCache(distro: SandboxDistro, config: Sa
 
     await deps.fileSystem.mkdir(rootfsPath, { recursive: true })
     const archivePath = path.join(entryPath, `rootfs.tar.${download.archive_format}`)
-    const response = await deps.fetch(download.url)
-    if (!response.ok) return { ok: false, reason: `Rootfs download failed for ${download.url} with HTTP ${response.status}.`, status: String(response.status), source_url: download.url }
-    await deps.fileSystem.writeFile(archivePath, new Uint8Array(await response.arrayBuffer()))
+    let response: Response
+    try {
+        response = await deps.fetch(download.url)
+    }
+    catch (error) {
+        await deps.fileSystem.rm?.(entryPath, { recursive: true, force: true })
+        return { ok: false, reason: `Rootfs download failed for ${download.url}: ${error instanceof Error ? error.message : String(error)}.`, source_url: download.url }
+    }
+    if (!response.ok) {
+        await deps.fileSystem.rm?.(entryPath, { recursive: true, force: true })
+        return { ok: false, reason: `Rootfs download failed for ${download.url} with HTTP ${response.status}.`, status: String(response.status), source_url: download.url }
+    }
+    const archive = new Uint8Array(await response.arrayBuffer())
+    await deps.fileSystem.writeFile(archivePath, archive)
 
     const missingCompressor = await getMissingRootfsArchiveCompressor(download.archive_format, deps)
     if (missingCompressor) {

@@ -18,7 +18,7 @@ function dirent(name: string, directory = true): Dirent {
     return { name, isDirectory: () => directory, isFile: () => !directory } as Dirent
 }
 
-function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, files?: Record<string, string>, existing?: string[], spawnExit?: number, fetchOk?: boolean, fetch?: SandboxDependencies["fetch"], tarCreatesBinSh?: boolean }): SandboxDependencies {
+function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, files?: Record<string, string>, existing?: string[], spawnExit?: number, spawnResults?: Partial<Record<"skopeo" | "umoci", Partial<{ exitCode: number | null, stdout: string, stderr: string }>>>, fetchOk?: boolean, fetch?: SandboxDependencies["fetch"], tarCreatesBinSh?: boolean, umociCreatesBinSh?: boolean }): SandboxDependencies {
     const existing = new Set(options?.existing ?? [])
     const files = { ...(options?.files ?? {}) }
     return {
@@ -32,7 +32,18 @@ function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?:
                 throw missingError()
             }),
             readdir: mock(async () => []),
-            rename: mock(async () => { }),
+            rename: mock(async (source: string, destination: string) => {
+                for (const entry of [...existing]) {
+                    if (entry !== source && !entry.startsWith(`${source}${path.sep}`)) continue
+                    existing.delete(entry)
+                    existing.add(`${destination}${entry.slice(source.length)}`)
+                }
+                for (const [filePath, content] of Object.entries(files)) {
+                    if (filePath !== source && !filePath.startsWith(`${source}${path.sep}`)) continue
+                    delete files[filePath]
+                    files[`${destination}${filePath.slice(source.length)}`] = content
+                }
+            }),
             rm: mock(async (filePath: string) => { existing.delete(filePath) }),
             stat: mock(async (filePath: string) => {
                 if (existing.has(filePath)) return { mtimeMs: 1 }
@@ -46,11 +57,20 @@ function createDeps(options?: { platform?: NodeJS.Platform, arch?: string, env?:
             cp: mock(async (_source: unknown, destination: unknown) => { existing.add(String(destination)) }),
         },
         spawn: mock(async (command: string, args: readonly string[]) => {
+            const result = command === "skopeo" || command === "umoci" ? options?.spawnResults?.[command] : undefined
+            const exitCode = result?.exitCode ?? options?.spawnExit ?? 0
             if (command === "tar" && options?.tarCreatesBinSh !== false) {
                 const directory = args.find((arg) => arg.startsWith("--directory="))?.slice("--directory=".length)
                 if (directory) existing.add(path.join(directory, "bin", "sh"))
             }
-            return { exitCode: options?.spawnExit ?? 0, stdout: "", stderr: "" }
+            if (command === "umoci" && exitCode === 0) {
+                const bundlePath = args[args.length - 1]
+                if (bundlePath && options?.umociCreatesBinSh !== false) {
+                    existing.add(path.join(bundlePath, "rootfs"))
+                    existing.add(path.join(bundlePath, "rootfs", "bin", "sh"))
+                }
+            }
+            return { exitCode, stdout: result?.stdout ?? "", stderr: result?.stderr ?? "" }
         }),
         commandExists: mock(async (command: string) => Boolean(options?.commands?.[command])),
         fetch: options?.fetch ?? mock(async () => ({ ok: options?.fetchOk ?? true, status: options?.fetchOk === false ? 500 : 200, text: async () => alpineLatestReleasesYaml(), arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer } as Response)),
@@ -188,22 +208,25 @@ describe("sandbox utils", () => {
         }
     })
 
-    test("rootfs cache downloads versioned entries and reuses them across projects", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { xz: true } })
+    test("Debian OCI rootfs cache pulls, unpacks, and reuses Bookworm entries", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { skopeo: true, umoci: true } })
 
         const first = await ensureSandboxRootfsCache("debian", undefined, deps)
-        const metadataFile = first.ok ? first.cache.metadata_file : ""
         const second = await ensureSandboxRootfsCache("debian", undefined, deps)
 
         expect(first).toEqual(expect.objectContaining({ ok: true, downloaded: true }))
         expect(second).toEqual(expect.objectContaining({ ok: true, downloaded: false }))
         if (first.ok && second.ok) {
             expect(first.cache.entry_path).toBe(second.cache.entry_path)
-            expect(first.cache.entry_path).toContain("/home/user/.cache/autocode/distros/debian/x86_64/debian-x86_64-bookworm-xz-")
+            expect(first.cache.entry_path).toContain("/home/user/.cache/autocode/distros/debian/x86_64/debian-x86_64-bookworm-oci-")
             expect(first.cache.version).toBe("bookworm")
+            expect(first.cache.archive_format).toBe("oci")
+            expect(deps.fileSystem.rename).toHaveBeenCalledWith(expect.stringMatching(/\/debian\/x86_64\/debian-x86_64-bookworm-oci-[^/]+\.tmp-[^/]+$/), first.cache.entry_path)
         }
-        expect(deps.fetch).toHaveBeenCalledTimes(1)
-        expect(deps.fileSystem.writeFile).toHaveBeenCalledWith(metadataFile, expect.stringContaining('"version": "bookworm"'))
+        expect(deps.spawn).toHaveBeenCalledWith("skopeo", expect.arrayContaining(["copy", "--override-os", "linux", "--override-arch", "amd64", "docker://docker.io/library/debian:bookworm"]), expect.any(Object))
+        expect(deps.spawn).toHaveBeenCalledWith("umoci", ["unpack", "--rootless", "--image", expect.stringMatching(/:bookworm$/), expect.stringMatching(/\/bundle$/)], expect.any(Object))
+        expect(deps.fetch).not.toHaveBeenCalled()
+        expect(deps.fileSystem.writeFile).toHaveBeenCalledWith(expect.stringMatching(/\/debian\/x86_64\/debian-x86_64-bookworm-oci-[^/]+\.tmp-[^/]+\/metadata\.json$/), expect.stringContaining('"version": "bookworm"'))
     })
 
     test("alpine rootfs cache resolves versioned minirootfs metadata for process architecture", async () => {
@@ -248,12 +271,15 @@ describe("sandbox utils", () => {
         expect(deps.fileSystem.writeFile).not.toHaveBeenCalled()
     })
 
-    test("rootfs cache reports source URL on rootfs download failure", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", fetchOk: false })
+    test("Debian OCI rootfs cache reports pull errors with image source", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { skopeo: true, umoci: true }, spawnResults: { skopeo: { exitCode: 1, stdout: "pull output", stderr: "pull failed" } } })
 
         const result = await ensureSandboxRootfsCache("debian", undefined, deps)
 
-        expect(result).toEqual(expect.objectContaining({ ok: false, status: "500", source_url: "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/dist-amd64/bookworm/rootfs.tar.xz", reason: expect.stringContaining("rootfs.tar.xz") }))
+        expect(result).toEqual({ ok: false, reason: "Debian OCI image pull failed.", command: expect.stringContaining("skopeo copy"), stdout: "pull output", stderr: "pull failed", exit_code: 1, source_url: "docker://docker.io/library/debian:bookworm" })
+        expect(deps.spawn).toHaveBeenCalledWith("skopeo", expect.arrayContaining(["docker://docker.io/library/debian:bookworm"]), expect.any(Object))
+        expect(deps.spawn).not.toHaveBeenCalledWith("umoci", expect.any(Array), expect.any(Object))
+        expect(deps.fetch).not.toHaveBeenCalled()
     })
 
     test("rootfs extraction puts tar options before file operand", async () => {
@@ -296,12 +322,14 @@ describe("sandbox utils", () => {
         expect(deps.fileSystem.lstat).toHaveBeenCalledWith(expect.stringContaining(binShPath))
     })
 
-    test("rootfs extraction reports malformed rootfs before cache metadata", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { xz: true }, tarCreatesBinSh: false })
+    test("Debian OCI unpack reports malformed rootfs before cache metadata", async () => {
+        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { skopeo: true, umoci: true }, umociCreatesBinSh: false })
 
         const result = await ensureSandboxRootfsCache("debian", undefined, deps)
 
-        expect(result).toEqual(expect.objectContaining({ ok: false, source_url: "https://raw.githubusercontent.com/debuerreotype/docker-debian-artifacts/dist-amd64/bookworm/rootfs.tar.xz", reason: expect.stringContaining("missing /bin/sh") }))
+        expect(result).toEqual(expect.objectContaining({ ok: false, source_url: "docker://docker.io/library/debian:bookworm", reason: "Debian OCI image unpack produced malformed rootfs: missing /bin/sh." }))
+        expect(deps.spawn).toHaveBeenCalledWith("skopeo", expect.any(Array), expect.any(Object))
+        expect(deps.spawn).toHaveBeenCalledWith("umoci", ["unpack", "--rootless", "--image", expect.stringMatching(/:bookworm$/), expect.stringMatching(/\/bundle$/)], expect.any(Object))
         expect(deps.fileSystem.writeFile).not.toHaveBeenCalledWith(expect.stringContaining("metadata.json"), expect.any(String))
     })
 
