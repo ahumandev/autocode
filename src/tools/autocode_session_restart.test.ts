@@ -73,6 +73,10 @@ describe("autocode_session_restart tool", () => {
 
     test.each(primaryAgents)("restarts %s in the current session without creating one", async (agent) => {
         const client = createMockClient()
+        client.session.summarize.mockImplementation(async function (this: unknown) {
+            expect(this).toBe(client.session)
+            return { data: true }
+        })
         const tool = createAutocodeSessionRestartTool(client)
 
         const parsed = parseToolResult(await tool.execute({ agent }, createToolContext()))

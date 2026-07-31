@@ -156,12 +156,12 @@ export async function summarizeAutocodeAgentSession(
     sessionID: string,
     model: { providerID: string; modelID: string },
 ): Promise<AgentRestartCompactionResponse> {
-    const summarize = client.session.summarize as unknown as (request: SessionSummarizeRequest) => Promise<AgentRestartCompactionResponse>
-    return summarize({
+    const request: SessionSummarizeRequest = {
         path: { id: sessionID },
         query: { directory },
         body: { ...model, auto: false },
-    })
+    }
+    return client.session.summarize(request) as Promise<AgentRestartCompactionResponse>
 }
 
 export async function readCurrentJobPlan(
