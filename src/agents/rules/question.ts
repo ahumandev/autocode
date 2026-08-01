@@ -13,6 +13,7 @@ export const toolQuestionRules = `
 - Always provide at least 2 options
 - Option labels match previous choice headings
 - Option descriptions in Caveman English, max 30 words, highlighting what is unique.
+- NEVER include no ops options like "Stop" or "Done"
 - If multiple choices may be selected together, set \`"multiple": true\`; otherwise set \`"multiple": false\` on question object.
 
 ### Batching
