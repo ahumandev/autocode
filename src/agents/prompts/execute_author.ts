@@ -24,7 +24,7 @@ Load a matching native skill when useful, but use \`skill\` for learned skills o
 
 ### Step 3: Analyze MD
 
-Avoid reading too much unnecessary md text by following MD_READ USAGE rules.
+Avoid reading too much unnecessary md text by following "autocode_md_read USAGE" rules.
 
 Call \`autocode_md_read\` (max_content_chars=0) to discover file path and outline (section anchors).
 

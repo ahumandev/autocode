@@ -13,7 +13,12 @@ export function createAutocodeMdUpdateTool(): ReturnType<typeof tool> {
             file_path: tool.schema.string().describe("Path to md file."),
             anchor: tool.schema.string().describe("Anchor of existing section to update. Run autocode_md_read first to find anchors if unsure. Unsure about anchors? Then call autocode_md_read first."),
             heading: tool.schema.string().optional().describe("New heading text. Omit = preserve heading."),
-            content: tool.schema.string().optional().describe("New content text below heading. May include own paragraphs and/or new subsections to append after existing subsections. Omit to preserve content. Do NOT wrap in XML tags. Need to remove subsection? Then call autocode_md_remove instead."),
+            content: tool.schema.string().optional().describe(`New content text below heading. Omit to preserve content.
+MD CONTENT RULES:
+* May include paragraphs and new subsections.
+* Match content with flow (message/tone/style/language/formatting) of surrounding md text, unless user requested rewrite.
+* Do NOT wrap in XML tags.
+* Need to remove subsection? Then call autocode_md_remove instead.`),
             parent_anchor: tool.schema.string().optional().describe("Move section under different parent via anchor. Omit/empty = keep current parent."),
             index: tool.schema.number().int().optional().describe("New sibling position under parent. 0 = first; -1 = last; N = Nth."),
         },
