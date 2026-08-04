@@ -98,10 +98,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         tier: "context",
     },
 
-    title: {
-        tier: "cheap",
-    },
-
     explore: {
         disable: true,
     },
@@ -112,6 +108,10 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     plan: {
         disable: true,
+    },
+
+    title: {
+        tier: "cheap",
     },
 
     // Primary Orchestrators

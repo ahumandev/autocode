@@ -6,7 +6,7 @@ import path from "node:path"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 import { activeJobLifecycleDirectories, completedJobLifecycleDirectory, deriveJobNameFromTitle, findExistingJobFile, getCurrentSessionTitle, getJobFilePath, getRelativeJobFilePath, resolveAgentsStorageRoot, updateCurrentSessionTitleToJobName, type ActiveJobLifecycleDirectory, type JobStatus } from "@/utils/jobs"
 
-export const planSections = ["problems", "impact", "expectations", "requirements", "risks", "constraints", "proposal"] as const
+export const planSections = ["problems", "impact", "expectations", "requirements", "constraints", "proposal"] as const
 
 export type PlanSection = typeof planSections[number]
 
@@ -26,14 +26,13 @@ const planSectionContentDescriptions: Record<PlanSection, string> = {
     - Include input/output examples or technical key details like (names, keys, values, paths, codes, etc.)
     - Include all relevant examples, configs, quotes, acceptance details, and original user-request content inside the matching subsection body.
 `,
-    risks: "Define 1 assumed risk per H3 subsection",
-    constraints: "Define 1 factual constraint per H3 subsection",
+    constraints: "Define confirmed limits, restrictions, and non-goals that shape proposal. No assumptions, only facts.",
     proposal:
 `Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:
     - Provide sequence of GOALS (planned project changes) according to PROPOSAL
     - Each GOAL must briefly describe overview of STEP to reach GOAL
-    - Describe as high-level conceptual design instead of implementation details
-    - Exception to rule is if user explicitly required a specific implementation then quote user's request exactly as quoted text
+    - Describe as high-level conceptual design
+    - Include already discovered implementation details and workarounds to assumed risks
     - NEVER repeat any info already provided in other plan sections/parameters
 `,
 }
@@ -81,7 +80,6 @@ function emptyPlanSections(): Record<PlanSection, string> {
         impact: "",
         expectations: "",
         requirements: "",
-        risks: "",
         constraints: "",
         proposal: "",
     }
@@ -113,12 +111,6 @@ ${sections.requirements.trim()}
 
 ---
 
-## Risks
-
-${sections.risks.trim()}
-
----
-
 ## Constraints
 
 ${sections.constraints.trim()}
@@ -136,7 +128,7 @@ function normalizePlanValue(content: string | undefined): string | undefined {
         return undefined
     }
 
-    return content.trim().replace(/^#{1,2}\s+(?:problem|problems|observation|observations|impact|impacts|expectation|expectations|requirements|constraints|risks|solution|proposed solution|proposal|proposals)\s*\n+/i, "").trim()
+    return content.trim().replace(/^#{1,2}\s+(?:problem|problems|observation|observations|impact|impacts|expectation|expectations|requirements|constraints|solution|proposed solution|proposal|proposals)\s*\n+/i, "").trim()
 }
 
 function getPlanSaveSections(args: PlanSaveArgs, existing: PlanSections | undefined): PlanSections {
@@ -146,7 +138,6 @@ function getPlanSaveSections(args: PlanSaveArgs, existing: PlanSections | undefi
         ["impact", normalizePlanValue(args.impact)],
         ["expectations", normalizePlanValue(args.expectation)],
         ["requirements", normalizePlanValue(args.requirements)],
-        ["risks", normalizePlanValue(args.risks)],
         ["constraints", normalizePlanValue(args.constraints)],
         ["proposal", normalizePlanValue(args.proposal)],
     ]
@@ -196,10 +187,6 @@ function parseSectionHeading(line: string): PlanSection | undefined {
         case "non functional requirements":
         case "practical constraints":
             return "constraints"
-        case "risk":
-        case "risks":
-        case "practical risks":
-            return "risks"
         case "solution":
         case "proposed solution":
         case "practical solution":
@@ -287,14 +274,6 @@ function extractPlanSummaryMap(content: string, prefix: "REQ" | "CON" | "R"): Su
     return Object.fromEntries(fallback.map((summary, index) => [`${prefix}${index + 1}`, summary]))
 }
 
-export function createPlanSummaryMaps(sections: Record<PlanSection, string>) {
-    return {
-        requirement_summaries: extractPlanSummaryMap(sections.requirements, "REQ"),
-        constraint_summaries: extractPlanSummaryMap(sections.constraints, "CON"),
-        risk_summaries: extractPlanSummaryMap(sections.risks, "R"),
-    }
-}
-
 async function resolveWritablePlan(fileSystem: FileSystem, worktree: string, job: string) {
     const existing = await findExistingJobFile(fileSystem, worktree, job, "plan.md")
     if (existing) {
@@ -334,7 +313,6 @@ type PlanSaveArgs = {
     expectation?: string
     problems?: string
     requirements?: string
-    risks?: string
     constraints?: string
     proposal?: string
 }
@@ -387,18 +365,17 @@ export function createAutocodeJobDraftTool(clientOrFileSystem?: OpencodeClient |
             impact: tool.schema.string().optional().describe(planSectionContentDescriptions.impact),
             expectations: tool.schema.string().optional().describe(planSectionContentDescriptions.expectations),
             requirements: tool.schema.string().optional().describe(planSectionContentDescriptions.requirements),
-            risks: tool.schema.string().optional().describe(planSectionContentDescriptions.risks),
             constraints: tool.schema.string().optional().describe(planSectionContentDescriptions.constraints),
             proposal: tool.schema.string().optional().describe(planSectionContentDescriptions.proposal),
         },
         async execute(args, context) {
-            const hasAnyContent = [args.problems, args.impact, args.expectations, args.requirements, args.risks, args.constraints, args.proposal]
+            const hasAnyContent = [args.problems, args.impact, args.expectations, args.requirements, args.constraints, args.proposal]
                 .some((value) => value !== undefined)
             if (!hasAnyContent) {
                 return createRetryResponse(
                     "save plan",
                     "Missing required plan content",
-                    "Provide at least one of: problems, impact, expectations, requirements, risks, constraints, proposal."
+                    "Provide at least one of: problems, impact, expectations, requirements, constraints, proposal."
                 )
             }
 
