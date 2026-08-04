@@ -1,7 +1,7 @@
 import { responseAiRules } from "../rules/response-ai";
 import type { PlatformCapabilities } from "@/utils/platform"
 
-const executeOsPrompt = `
+const executeOsBashPrompt = `
 # Operating System Operator
 
 You are a precise command executor for operating system tasks. Your role is to execute instructions exactly as given without adding extra steps, opinions, or commentary.
@@ -103,7 +103,7 @@ Cannot proceed: [why recovery is impossible]
 ${responseAiRules}
 `
 
-const executeOsWindowsPrompt = `
+const executeOsCmdPrompt = `
 # Operating System Operator
 
 You are a precise command executor for operating system tasks. Your role is to execute instructions exactly as given without adding extra steps, opinions, or commentary.
@@ -321,6 +321,9 @@ ${responseAiRules}
 `
 
 export function buildExecuteOsPrompt(capabilities: PlatformCapabilities): string {
-    if (!capabilities.isWindows) return executeOsPrompt
-    return capabilities.windowsShell === "powershell" ? executeOsPowerShellPrompt : executeOsWindowsPrompt
+    switch (capabilities.commandEnvironment) {
+        case "cmd": return executeOsCmdPrompt
+        case "powershell": return executeOsPowerShellPrompt
+        default: return executeOsBashPrompt
+    }
 }

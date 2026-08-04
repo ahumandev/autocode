@@ -6,7 +6,7 @@ import { defaultSandboxDependencies, type SandboxDependencies } from "@/utils/sa
 
 export function createAutocodeDependenciesTool(
     deps: SandboxDependencies = defaultSandboxDependencies,
-    capabilities: PlatformCapabilities = { isWindows: false },
+    capabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" },
 ): ReturnType<typeof tool> {
     return tool({
         description: "Detect Autocode runtime dependencies for initialization. Detect-only: never upgrades OpenCode or installs packages.",

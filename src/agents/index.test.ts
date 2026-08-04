@@ -172,7 +172,7 @@ describe("agent policies", () => {
     })
 
     test("execute_sandbox allows native sandbox file tools", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
         for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
             expect(permissionRule(agents.execute_sandbox?.permission, toolName)).toBe("allow")
@@ -181,7 +181,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents returns policy-applied definitions with current internal tier metadata", () => {
-        const agents = buildAgents({
+        const agents = buildAgents(createPlatformCapabilities("linux"), {
             "/configured/*": "allow",
         }, { platform: "linux", env: {}, bwrapUsable: true })
 
@@ -202,18 +202,33 @@ describe("agent policies", () => {
         expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
     })
 
-    test("buildAgents registers OS prompts from supplied platform capabilities", () => {
-        for (const platform of ["win32", "linux"] as const) {
-            const capabilities = createPlatformCapabilities(platform)
-            const agents = buildAgents({}, undefined, [], capabilities)
+    test("buildAgents registers capability-aware OS prompts", () => {
+        for (const [capabilities, wrongShellGuidance] of [
+            [createPlatformCapabilities("linux"), /running on windows/i],
+            [createPlatformCapabilities("win32", {}), /always use the `bash` tool/i],
+            [createPlatformCapabilities("win32", { PSModulePath: "present" }), /`cmd\.exe`/i],
+        ] as const) {
+            const agents = buildAgents(capabilities)
 
             expect(agents.execute_os?.prompt).toBe(buildExecuteOsPrompt(capabilities))
             expect(agents.query_os?.prompt).toBe(buildQueryOsPrompt(capabilities))
+            expect(agents.execute_os?.prompt).toBeTruthy()
+            expect(agents.query_os?.prompt).toBeTruthy()
+            expect(agents.execute_os?.prompt).not.toMatch(wrongShellGuidance)
+            expect(agents.query_os?.prompt).not.toMatch(wrongShellGuidance)
+
+            if (capabilities.isWindows) {
+                expect(agents.execute_sandbox).toBeUndefined()
+            }
         }
+
+        const sandboxAgents = buildAgents(createPlatformCapabilities("linux"))
+        expect(sandboxAgents.execute_sandbox?.prompt).toBe(buildExecuteOsPrompt({ isWindows: false, commandEnvironment: "linux" }))
+        expect(sandboxAgents.execute_sandbox?.prompt).not.toMatch(/running on windows|cmd\.exe|powershell/i)
     })
 
     test("buildAgents removes sandbox agents, permissions, tasks, and guidance on Windows", () => {
-        const agents = buildAgents({}, undefined, [], createPlatformCapabilities("win32"))
+        const agents = buildAgents(createPlatformCapabilities("win32"))
 
         expect(agents.execute_sandbox).toBeUndefined()
         for (const agent of Object.values(agents)) {
@@ -235,7 +250,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents keeps sandbox registrations and guidance on Linux", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true }, [], createPlatformCapabilities("linux"))
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
         expect(agents.execute_sandbox).toBeDefined()
         for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
@@ -251,7 +266,7 @@ describe("agent policies", () => {
     })
 
     test("allows every primary agent to restart the current session", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
         for (const agentName of ["assist", "teach", "auto", "design", "edit", "research"] as const) {
             expect(agents[agentName]?.mode).toBe("primary")
@@ -260,7 +275,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents exposes teach as manual-only primary with deny-first research delegation", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
         const permission = agents.teach?.permission
         const taskPermission = permissionRule(permission, "task") as Record<string, unknown>
         const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
@@ -303,10 +318,11 @@ describe("agent policies", () => {
     })
 
     test("getAgentPermission restricts direct auto execution to assist and auto", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
-        const teachPermission = getAgentPermission("teach")
-        const assistTaskPermission = permissionRule(getAgentPermission("assist"), "task") as Record<string, unknown>
-        const autoTaskPermission = permissionRule(getAgentPermission("auto"), "task") as Record<string, unknown>
+        const capabilities = createPlatformCapabilities("linux")
+        const agents = buildAgents(capabilities, {}, { platform: "linux", env: {}, bwrapUsable: true })
+        const teachPermission = getAgentPermission("teach", capabilities)
+        const assistTaskPermission = permissionRule(getAgentPermission("assist", capabilities), "task") as Record<string, unknown>
+        const autoTaskPermission = permissionRule(getAgentPermission("auto", capabilities), "task") as Record<string, unknown>
 
         for (const toolName of ["autocode_job_execute", "autocode_agent_execute", "write", "edit", "bash", "apply_patch"]) {
             expect(resolvePermissionRule(teachPermission as Record<string, unknown>, toolName)).toBe("deny")
@@ -327,7 +343,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents exposes execute_rest as REST-only worker and allows supported orchestration tasks to call it", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
         expect(agents.execute_rest?.mode).toBe("subagent")
         expect(agents.execute_rest?.hidden).toBe(true)
@@ -351,7 +367,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents exposes query_autocode as read-only query worker", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
         const permission = agents.query_autocode?.permission
         const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
 
@@ -375,7 +391,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents exposes execute_opencode as scoped OpenCode authoring worker", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
         const permission = agents.execute_opencode?.permission
         const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
 
@@ -398,7 +414,7 @@ describe("agent policies", () => {
     })
 
     test("execute_opencode prompt stays scoped to OpenCode Markdown artifacts", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
         const prompt = String(agents.execute_opencode?.prompt ?? "")
 
         for (const path of [
@@ -419,7 +435,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents assigns every managed agent its current tier", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
         for (const [agentName, tier] of Object.entries(managedAgentTiers)) {
             expect((agents as Record<string, { tier?: string }>)[agentName]?.tier).toBe(tier)
@@ -427,7 +443,7 @@ describe("agent policies", () => {
     })
 
     test("execute_rest prompt covers main tool and follow-up saved-response tools", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
         const prompt = String(agents.execute_rest?.prompt ?? "")
 
         expect(prompt).toContain("Use `autocode_rest` for GET, POST, PUT, PATCH, DELETE")
@@ -436,7 +452,7 @@ describe("agent policies", () => {
     })
 
     test("execute_author and query_skills prompt learned skill loading guidance is current", () => {
-        const agents = buildAgents({}, { platform: "linux", env: {}, bwrapUsable: true })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
         const prompts = [String(agents.execute_author?.prompt ?? ""), String(agents.query_skills?.prompt ?? "")]
 
         for (const prompt of prompts) {

@@ -5,6 +5,7 @@ import { applyExternalDirectoryPolicy, buildAgents } from "./agents"
 import type { AutocodeAgentConfig } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig } from "./config"
 import type { ConfigFileSystem } from "./config"
+import { createPlatformCapabilities } from "./utils/platform"
 
 function makeFs(files: Record<string, string>, createdPaths: string[] = [], readPaths: string[] = [], writtenPaths: string[] = []): ConfigFileSystem {
     return {
@@ -437,7 +438,7 @@ describe("external directory config", () => {
     })
 
     test("buildAgents applies centralized rules from original actions and question ask capability", () => {
-        const agents = buildAgents({
+        const agents = buildAgents(createPlatformCapabilities("linux"), {
             "/allowed/*": "allow",
             "/review/*": "ask",
             "/blocked/*": "deny",
@@ -638,7 +639,7 @@ describe("sandbox config", () => {
 
 describe("agent workflow wiring", () => {
     test("keeps canonical auto and assist agents without removed workflow variants", () => {
-        const agents = buildAgents()
+        const agents = buildAgents(createPlatformCapabilities("linux"))
 
         expect(agents.auto).toBeDefined()
         expect(agents.assist).toBeDefined()
@@ -646,7 +647,7 @@ describe("agent workflow wiring", () => {
     })
 
     test("keeps current canonical permissions on primary workflow agents", () => {
-        const agents = buildAgents()
+        const agents = buildAgents(createPlatformCapabilities("linux"))
 
         expect(getTaskPermissionRule(agents.assist?.permission, "auto*")).toBe("deny")
         expect(getTaskPermissionRule(agents.auto?.permission, "auto_*")).toBe("allow")
@@ -655,7 +656,7 @@ describe("agent workflow wiring", () => {
     })
 
     test("does not register legacy act or ask primary agents", () => {
-        const agents = buildAgents()
+        const agents = buildAgents(createPlatformCapabilities("linux"))
 
         expect(agents.act).toBeUndefined()
         expect(agents.ask).toBeUndefined()

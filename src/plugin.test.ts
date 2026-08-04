@@ -5,8 +5,9 @@ import { tmpdir } from "node:os"
 import type { Config as PluginHookConfig, PluginInput } from "@opencode-ai/plugin"
 import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
 import autocode from "./plugin"
-import { commands } from "./commands"
+import { createCommands } from "./commands"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
+import { createPlatformCapabilities } from "./utils/platform"
 
 const tempRoots: string[] = []
 
@@ -145,6 +146,7 @@ describe("autocode plugin config", () => {
             }
             const input = { ...createInput(worktree), homeOverride: root }
             const hooks = await autocode(input) as unknown as PluginConfigHook
+            const commands = createCommands(createPlatformCapabilities("linux"))
 
             await hooks.config?.(cfg)
 
@@ -253,6 +255,7 @@ describe("autocode plugin config", () => {
             expect(cfg.agent?.[agentName]?.prompt).toMatch(/cmd commands/i)
             expect(cfg.agent?.[agentName]?.prompt).toMatch(/never use bash/i)
         }
+        expect(cfg.command?.install?.template).toContain("Run commands in CMD")
     })
 
     test("Linux preserves supported sandbox registrations and Bash guidance", async () => {
@@ -269,6 +272,28 @@ describe("autocode plugin config", () => {
         }
         expect(cfg.agent?.execute_os?.prompt).toMatch(/always use the `bash` tool/i)
         expect(cfg.agent?.query_os?.prompt).toMatch(/prefer other tools over `bash` tool/i)
+        expect(cfg.command?.install?.template).toContain("If bwrap install is needed")
+    })
+
+    test("PowerShell startup assigns PowerShell-only OS prompts", async () => {
+        const root = await createTempRoot()
+        const worktree = join(root, "worktree")
+
+        await withEnv({ PSModulePath: "present" }, async () => {
+            const input: PluginInputWithSandboxSupportOverride = {
+                ...createInput(worktree),
+                platformOverride: "win32",
+            }
+            const hooks = await autocode(input)
+            const cfg: PluginConfig = {}
+            await hooks.config?.(cfg as unknown as PluginHookConfig)
+
+            for (const agentName of ["execute_os", "query_os"] as const) {
+                expect(cfg.agent?.[agentName]?.prompt).toMatch(/windows powershell/i)
+                expect(cfg.agent?.[agentName]?.prompt).not.toMatch(/cmd commands/i)
+            }
+            expect(cfg.command?.install?.template).toContain("Run commands in CMD")
+        })
     })
 
     test("Linux startup config prepends Bun bin using POSIX paths", async (): Promise<void> => {

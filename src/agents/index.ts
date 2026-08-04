@@ -69,6 +69,7 @@ const sandboxCopyTargetPermission: PermissionTargetRules = {
 }
 
 const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"] as const
+const sandboxLinuxCapabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" }
 
 const colorAutonomousOrchestrator = "#AA0000"
 const colorWritableInteractiveOrchestrator = "#00AA00"
@@ -84,7 +85,8 @@ const CATEGORY_AGENTS: Record<SkillCategory, string[]> = {
     test: ["auto_test"],
 }
 
-const baseAgents: AgentMap = {
+function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
+    return {
 
     // Build-in opencode
 
@@ -975,7 +977,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn: "allow",
         },
-        prompt: buildExecuteOsPrompt({ isWindows: false }),
+        prompt: buildExecuteOsPrompt(capabilities),
         temperature: 0.1,
         tier: "balanced",
     },
@@ -1052,7 +1054,7 @@ const baseAgents: AgentMap = {
             skill_learn: "allow",
             "todo*": "allow",
         },
-        prompt: buildExecuteOsPrompt({ isWindows: false }),
+        prompt: buildExecuteOsPrompt(sandboxLinuxCapabilities),
         temperature: 0.1,
         tier: "operator",
     },
@@ -1276,7 +1278,7 @@ const baseAgents: AgentMap = {
             },
             skill_learn: "allow",
         },
-        prompt: buildQueryOsPrompt({ isWindows: false }),
+        prompt: buildQueryOsPrompt(capabilities),
         temperature: 0.1,
         tier: "fast",
     },
@@ -1366,6 +1368,7 @@ const baseAgents: AgentMap = {
         tier: "context",
     },
 
+    }
 }
 
 function hasAskCapableQuestionPermission(permission: AutocodeAgentConfig["permission"]): boolean {
@@ -1602,25 +1605,24 @@ export function injectExternalSkillPermissions(agents: AgentMap, externalSkills:
 }
 
 export function buildAgents(
+    capabilities: PlatformCapabilities,
     externalDirectories: ExternalDirectoryRules = {},
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
     externalSkills: ExternalSkill[] = [],
-    capabilities: PlatformCapabilities = { isWindows: false },
 ): AgentMap {
-    const agents = applyBundledAgentPolicy(baseAgents, externalDirectories, sandboxSupportOverride)
-    agents.execute_os = { ...agents.execute_os, prompt: buildExecuteOsPrompt(capabilities) }
-    agents.execute_sandbox = { ...agents.execute_sandbox, prompt: buildExecuteOsPrompt(capabilities) }
-    agents.query_os = { ...agents.query_os, prompt: buildQueryOsPrompt(capabilities) }
+    const agents = applyBundledAgentPolicy(createBaseAgents(capabilities), externalDirectories, sandboxSupportOverride)
     injectExternalSkillPermissions(agents, externalSkills)
     return applyWindowsSandboxPolicy(agents, capabilities)
 }
 
-export function getAgentPermission(agentName: string, externalDirectories: ExternalDirectoryRules = {}): AutocodeAgentConfig["permission"] {
-    return buildAgents(externalDirectories)[agentName]?.permission
+export function getAgentPermission(
+    agentName: string,
+    capabilities: PlatformCapabilities,
+    externalDirectories: ExternalDirectoryRules = {},
+): AutocodeAgentConfig["permission"] {
+    return buildAgents(capabilities, externalDirectories)[agentName]?.permission
 }
 
 export function getAgentTier(agentName: string): ModelTier | undefined {
-    return baseAgents[agentName]?.tier
+    return createBaseAgents({ isWindows: false })[agentName]?.tier
 }
-
-export const agents: AgentMap = buildAgents()

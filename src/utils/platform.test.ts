@@ -8,12 +8,16 @@ describe("platform capabilities", () => {
         expect(createPlatformCapabilities("win32").isWindows).toBe(true)
         expect(createPlatformCapabilities("linux").isWindows).toBe(false)
         expect(createPlatformCapabilities("darwin").isWindows).toBe(false)
+        expect(createPlatformCapabilities("linux").commandEnvironment).toBe("linux")
+        expect(createPlatformCapabilities("darwin").commandEnvironment).toBe("linux")
     })
 
     test("detects PowerShell only on Windows", () => {
         expect(createPlatformCapabilities("win32", { PSModulePath: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules" }).windowsShell).toBe("powershell")
         expect(createPlatformCapabilities("win32", {}).windowsShell).toBe("cmd")
         expect(createPlatformCapabilities("linux", { PSModulePath: "present" }).windowsShell).toBeUndefined()
+        expect(createPlatformCapabilities("win32", { PSModulePath: "present" }).commandEnvironment).toBe("powershell")
+        expect(createPlatformCapabilities("win32", {}).commandEnvironment).toBe("cmd")
     })
 
     test("detects PowerShell from non-empty markers and executable shell paths", () => {
@@ -61,6 +65,18 @@ describe("OS prompts", () => {
         expect(prompt).toMatch(/running on windows/i)
         expect(prompt).toMatch(/cmd commands/i)
         expect(prompt).toMatch(/never use bash/i)
+        expect(prompt).not.toMatch(/prefer other tools over `bash` tool/i)
+    })
+
+    test("buildQueryOsPrompt uses PowerShell-only guidance on Windows PowerShell", () => {
+        const prompt = buildQueryOsPrompt(createPlatformCapabilities("win32", { PSModulePath: "present" }))
+
+        expect(prompt).toMatch(/windows powershell/i)
+        expect(prompt).toContain("`Get-Help <command>`")
+        expect(prompt).toContain("`Get-Content <path>`")
+        expect(prompt).toContain("`Get-Process`")
+        expect(prompt).not.toMatch(/cmd commands/i)
+        expect(prompt).not.toContain("`type file`")
         expect(prompt).not.toMatch(/prefer other tools over `bash` tool/i)
     })
 

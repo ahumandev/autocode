@@ -3,11 +3,24 @@ import { documentCommandTemplate } from "./docs"
 import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { fixCommandTemplate } from "./fix"
-import { commands } from "./index"
+import { createCommands } from "./index"
 import { learnCommand } from "./learn"
 import { testsCommandTemplate } from "./tests"
+import { createPlatformCapabilities } from "../utils/platform"
+
+const commands = createCommands(createPlatformCapabilities("linux"))
 
 describe("commands", () => {
+    test("builds platform-specific install commands from supplied capabilities", () => {
+        const linuxCommands = createCommands(createPlatformCapabilities("linux"))
+        const cmdCommands = createCommands(createPlatformCapabilities("win32", {}))
+        const powerShellCommands = createCommands(createPlatformCapabilities("win32", { PSModulePath: "present" }))
+
+        expect(linuxCommands.install?.template).toContain("If bwrap install is needed")
+        expect(cmdCommands.install?.template).toContain("Run commands in CMD")
+        expect(powerShellCommands.install?.template).toContain("Run commands in CMD")
+    })
+
     test("keeps current command keys and command object shape", () => {
         expect(Object.keys(commands)).toEqual([
             "job-concepts",

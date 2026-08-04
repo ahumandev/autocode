@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { buildAgents, type AutocodeAgentConfig } from "./index"
 import type { ExternalSkill } from "../utils/external"
+import { createPlatformCapabilities } from "../utils/platform"
 
 function permissionRule(permission: AutocodeAgentConfig["permission"], key: string): unknown {
     if (!permission || typeof permission === "string") return undefined
@@ -23,9 +24,7 @@ function getSkillObject(agent: AutocodeAgentConfig | undefined): Record<string, 
 
 describe("buildAgents with external skills", () => {
     test("no external skills → no new permission.skill entries beyond the static rules", () => {
-        // Run first while the static baseAgents is still untouched so the
-        // snapshot reflects the canonical definition.
-        const agents = buildAgents({}, undefined, [])
+        const agents = buildAgents(createPlatformCapabilities("linux"))
 
         const executeOsSkill = getSkillObject(agents.execute_os)
         expect(executeOsSkill).toEqual({
@@ -41,7 +40,7 @@ describe("buildAgents with external skills", () => {
     })
 
     test("bash category → execute_os and execute_script get the rule, other agents do not", () => {
-        const agents = buildAgents({}, undefined, [
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "bash", skillName: "my-bash-skill", owner: "o", project: "p" },
         ])
 
@@ -52,7 +51,7 @@ describe("buildAgents with external skills", () => {
     })
 
     test("code category → only execute_code gets the rule", () => {
-        const agents = buildAgents({}, undefined, [
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "code", skillName: "my-code-skill", owner: "o", project: "p" },
         ])
 
@@ -63,7 +62,7 @@ describe("buildAgents with external skills", () => {
     })
 
     test("design category → assist, auto, and design all get the rule (design gains permission.skill)", () => {
-        const agents = buildAgents({}, undefined, [
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "design", skillName: "my-design-skill", owner: "o", project: "p" },
         ])
 
@@ -80,7 +79,7 @@ describe("buildAgents with external skills", () => {
     })
 
     test("test category → only auto_test gets the rule", () => {
-        const agents = buildAgents({}, undefined, [
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "test", skillName: "my-test-skill", owner: "o", project: "p" },
         ])
 
@@ -91,15 +90,13 @@ describe("buildAgents with external skills", () => {
     })
 
     test("unknown category → no agent is modified (function is defensive)", () => {
-        // Snapshot the static skill map for every agent before the call so the
-        // assertion holds regardless of any prior test that mutated baseAgents.
-        const baseline = buildAgents({}, undefined, [])
+        const baseline = buildAgents(createPlatformCapabilities("linux"))
         const baselineSnapshot: Record<string, Record<string, unknown> | undefined> = {}
         for (const [agentName, agent] of Object.entries(baseline)) {
             baselineSnapshot[agentName] = getSkillObject(agent)
         }
 
-        const agents = buildAgents({}, undefined, [
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "bogus" as unknown as ExternalSkill["category"], skillName: "bogus-skill", owner: "o", project: "p" },
         ])
 
@@ -110,7 +107,7 @@ describe("buildAgents with external skills", () => {
     })
 
     test("static rules are preserved after injection (execute_code keeps 'code*' = allow)", () => {
-        const agents = buildAgents({}, undefined, [
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "code", skillName: "injected-code-skill", owner: "o", project: "p" },
         ])
 

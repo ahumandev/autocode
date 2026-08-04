@@ -46,7 +46,7 @@ function preparePluginAgentsAfterOverrides(
     externalDirectories: ExternalDirectoryRules,
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
     externalSkills: Parameters<typeof injectExternalSkillPermissions>[1] = [],
-    capabilities: PlatformCapabilities = { isWindows: false },
+    capabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" },
 ): Record<string, Omit<PluginAgentConfig, "tier">> {
     const externalDirectoryFinalizedAgents = applyExternalDirectoryPolicy(agents, externalDirectories)
     const sandboxFinalizedAgents = applySandboxPlatformPolicy(externalDirectoryFinalizedAgents, sandboxSupportOverride ?? {})
@@ -86,7 +86,7 @@ async function mergeConfig(
     cfg.subagent_depth = Math.max(cfg.subagent_depth ?? 0, 4)
 
     cfg.agent = cfg.agent ?? {}
-    const agents = buildAgents(agentExternalDirectories, input.sandboxSupportOverride, generatedSkills.externalSkills, capabilities)
+    const agents = buildAgents(capabilities, agentExternalDirectories, input.sandboxSupportOverride, generatedSkills.externalSkills)
     const mergedAgents: Record<string, PluginAgentConfig> = {}
     for (const [name, agentDef] of Object.entries(agents)) {
         const userOverride = cfg.agent[name]

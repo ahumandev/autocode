@@ -74,5 +74,3 @@ Report to user:
     "tests": { agent: "auto_test", description: "Generate or improve tests", subtask: false, template: testsCommandTemplate }
     }
 }
-
-export const commands: CommandMap = createCommands({ isWindows: false })

@@ -58,7 +58,7 @@ export function createTools(
     client: OpencodeClient,
     sandboxConfig: AutocodeSandboxConfig = {},
     runtime?: ToolRuntime,
-    capabilities: PlatformCapabilities = { isWindows: false },
+    capabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" },
 ): ToolMap {
     const sandboxTools: ToolMap = capabilities.isWindows ? {} : {
         autocode_sandbox_cli: createAutocodeSandboxCliTool(client),

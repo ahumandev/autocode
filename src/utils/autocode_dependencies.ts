@@ -909,7 +909,7 @@ export async function inspectAutocodeDependencies(
     deps: SandboxDependencies = defaultSandboxDependencies,
     context: DependencyInspectionContext = {},
     options: DependencyInspectionOptions = {},
-    capabilities: PlatformCapabilities = { isWindows: false },
+    capabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" },
 ): Promise<Record<string, unknown>> {
     const emitDebug = createDebugEmitter(options)
 
