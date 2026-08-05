@@ -60,7 +60,7 @@ describe("OS prompts", () => {
     })
 
     test("buildQueryOsPrompt uses Windows CMD guidance without positive Bash guidance", () => {
-        const prompt = buildQueryOsPrompt(createPlatformCapabilities("win32"))
+        const prompt = buildQueryOsPrompt(createPlatformCapabilities("win32", {}))
 
         expect(prompt).toMatch(/running on windows/i)
         expect(prompt).toMatch(/cmd commands/i)

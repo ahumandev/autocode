@@ -211,51 +211,53 @@ describe("autocode plugin config", () => {
     test("Windows removes sandbox exposure from user agent overrides", async () => {
         const root = await createTempRoot()
         const worktree = join(root, "worktree")
-        const cfg: PluginConfigWithSandboxPermissions = {
-            agent: {
-                execute_sandbox: {
-                    prompt: "sandbox guidance",
-                    permission: { autocode_sandbox_cli: "allow" },
-                },
-                assist: {
-                    prompt: "use sandbox guidance",
-                    permission: {
-                        autocode_sandbox_cli: "allow",
-                        task: { execute_sandbox: "allow" },
+        await withEnv({ PSModulePath: undefined }, async () => {
+            const cfg: PluginConfigWithSandboxPermissions = {
+                agent: {
+                    execute_sandbox: {
+                        prompt: "sandbox guidance",
+                        permission: { autocode_sandbox_cli: "allow" },
+                    },
+                    assist: {
+                        prompt: "use sandbox guidance",
+                        permission: {
+                            autocode_sandbox_cli: "allow",
+                            task: { execute_sandbox: "allow" },
+                        },
                     },
                 },
-            },
-        }
-        const input: PluginInputWithSandboxSupportOverride = {
-            ...createInput(worktree),
-            platformOverride: "win32",
-        }
-        const hooks = await autocode(input)
-
-        await hooks.config?.(cfg as PluginHookConfig)
-
-        expect(cfg.agent?.execute_sandbox).toBeUndefined()
-        for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]) {
-            expect(hooks.tool).not.toHaveProperty(toolName)
-        }
-        for (const agent of Object.values(cfg.agent ?? {})) {
-            expect(agent).toBeDefined()
-            if (agent === undefined) throw new Error("agent override unexpectedly undefined")
-            const permission = agent.permission
-            const rules = permission && typeof permission !== "string" ? permission as Record<string, unknown> : undefined
-            for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]) {
-                expect(rules?.[toolName]).toBeUndefined()
             }
-            const task = rules?.task
-            const taskRules = task && typeof task === "object" ? task as Record<string, unknown> : undefined
-            expect(taskRules?.execute_sandbox).toBeUndefined()
-            expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toMatch(/sandbox/i)
-        }
-        for (const agentName of ["execute_os", "query_os"] as const) {
-            expect(cfg.agent?.[agentName]?.prompt).toMatch(/cmd commands/i)
-            expect(cfg.agent?.[agentName]?.prompt).toMatch(/never use bash/i)
-        }
-        expect(cfg.command?.install?.template).toContain("Run commands in CMD")
+            const input: PluginInputWithSandboxSupportOverride = {
+                ...createInput(worktree),
+                platformOverride: "win32",
+            }
+            const hooks = await autocode(input)
+
+            await hooks.config?.(cfg as PluginHookConfig)
+
+            expect(cfg.agent?.execute_sandbox).toBeUndefined()
+            for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]) {
+                expect(hooks.tool).not.toHaveProperty(toolName)
+            }
+            for (const agent of Object.values(cfg.agent ?? {})) {
+                expect(agent).toBeDefined()
+                if (agent === undefined) throw new Error("agent override unexpectedly undefined")
+                const permission = agent.permission
+                const rules = permission && typeof permission !== "string" ? permission as Record<string, unknown> : undefined
+                for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]) {
+                    expect(rules?.[toolName]).toBeUndefined()
+                }
+                const task = rules?.task
+                const taskRules = task && typeof task === "object" ? task as Record<string, unknown> : undefined
+                expect(taskRules?.execute_sandbox).toBeUndefined()
+                expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toMatch(/sandbox/i)
+            }
+            for (const agentName of ["execute_os", "query_os"] as const) {
+                expect(cfg.agent?.[agentName]?.prompt).toMatch(/cmd commands/i)
+                expect(cfg.agent?.[agentName]?.prompt).toMatch(/never use bash/i)
+            }
+            expect(cfg.command?.install?.template).toContain("Run commands in CMD")
+        })
     })
 
     test("Linux preserves supported sandbox registrations and Bash guidance", async () => {
