@@ -100,11 +100,15 @@ async function mergeConfig(
         generatedSkills.externalSkills,
         capabilities,
     )
-    if (capabilities.isWindows) {
-        delete (cfg.agent as Record<string, unknown>).execute_sandbox
-    }
     for (const [name, agent] of Object.entries(finalAgents)) {
         ;(cfg.agent as Record<string, unknown>)[name] = agent
+    }
+    if (capabilities.isWindows) {
+        const windowsAgents = applyWindowsSandboxPolicy(cfg.agent as Record<string, PluginAgentConfig>, capabilities)
+        for (const name of Object.keys(cfg.agent)) {
+            delete cfg.agent[name]
+        }
+        Object.assign(cfg.agent, windowsAgents)
     }
 
     cfg.command = cfg.command ?? {}

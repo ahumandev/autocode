@@ -1514,10 +1514,12 @@ export function applyWindowsSandboxPolicy(agents: AgentMap, capabilities: Platfo
 
 function removeWindowsSandboxReferences(agent: AutocodeAgentConfig): AutocodeAgentConfig {
     const permission = agent.permission
+    const description = typeof agent.description === "string" ? removeWindowsSandboxPromptGuidance(agent.description) : agent.description
     const prompt = typeof agent.prompt === "string" ? removeWindowsSandboxPromptGuidance(agent.prompt) : agent.prompt
 
     return {
         ...agent,
+        description,
         permission: permission && typeof permission !== "string"
             ? removeWindowsSandboxPermissionRules(permission)
             : permission,

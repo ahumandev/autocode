@@ -185,6 +185,6 @@ export function buildQueryOsPrompt(capabilities: PlatformCapabilities): string {
     switch (capabilities.commandEnvironment) {
         case "cmd": return queryOsCmdPrompt
         case "powershell": return queryOsPowerShellPrompt
-        default: return queryOsBashPrompt
+        default: return capabilities.isWindows ? queryOsCmdPrompt : queryOsBashPrompt
     }
 }
