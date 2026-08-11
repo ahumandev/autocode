@@ -10,7 +10,7 @@ export type DependencyStatus = "ok" | "upgrade_required" | "missing" | "unknown"
 
 export type DependencyReport = Record<string, unknown> & {
     ok: boolean
-    status: DependencyStatus
+    status: DependencyStatus | "skipped"
     guidance?: string
 }
 
@@ -51,6 +51,8 @@ type OptionalDependencyDefinition = {
     installCommand: string
     docsUrl: string
     guidance: string
+    linuxInstallCommand?: string
+    linuxGuidance?: string
     notes?: string
 }
 
@@ -702,6 +704,8 @@ function emitFinalDebugEvent(definition: OptionalDependencyDefinition, result: D
 }
 
 async function inspectOptionalMcp(definition: OptionalDependencyDefinition, deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<DependencyReport> {
+    const installCommand = !capabilities.isWindows && definition.linuxInstallCommand !== undefined ? definition.linuxInstallCommand : definition.installCommand
+    const guidance = !capabilities.isWindows && definition.linuxGuidance !== undefined ? definition.linuxGuidance : definition.guidance
     const detected = await inspectFirstAvailableCommandPath(definition.bins, deps, definition.key, emitDebug, capabilities)
     if (detected) {
         const result: DependencyReport = {
@@ -713,7 +717,7 @@ async function inspectOptionalMcp(definition: OptionalDependencyDefinition, deps
             command: detected.command,
             path: detected.path,
             detection_source: "path",
-            install_command: definition.installCommand,
+            install_command: installCommand,
             docs_url: definition.docsUrl,
             guidance: `${definition.packageName} is available.`,
             notes: getMcpDetectionNotes(definition.notes),
@@ -733,7 +737,7 @@ async function inspectOptionalMcp(definition: OptionalDependencyDefinition, deps
             detection_source: configDetected.detectionSource,
             config_path: configDetected.configPath,
             configured_command: configDetected.configuredCommand,
-            install_command: definition.installCommand,
+            install_command: installCommand,
             docs_url: definition.docsUrl,
             guidance: `${definition.packageName} is configured.`,
             notes: getMcpDetectionNotes(definition.notes),
@@ -748,9 +752,9 @@ async function inspectOptionalMcp(definition: OptionalDependencyDefinition, deps
         status: "missing",
         package: definition.packageName,
         bin: definition.bins[0],
-        install_command: definition.installCommand,
+        install_command: installCommand,
         docs_url: definition.docsUrl,
-        guidance: definition.guidance,
+        guidance,
         notes: getMcpDetectionNotes(definition.notes),
     }
     emitFinalDebugEvent(definition, result, emitDebug, "No PATH command or matching OpenCode config found.")
@@ -824,8 +828,10 @@ const optionalMcpDefinitions: readonly OptionalDependencyDefinition[] = [
         bins: ["chrome-devtools-mcp"],
         aliases: ["chrome-devtools-mcp", "chrome-devtools", "server-chrome"],
         installCommand: "npm install -g chrome-devtools-mcp@latest or use `npx chrome-devtools-mcp@latest`",
+        linuxInstallCommand: "npx -y chrome-devtools-mcp@latest",
         docsUrl: "https://developer.chrome.com/docs/chrome-devtools/mcp",
         guidance: "Install or use `chrome-devtools-mcp@latest` for Chrome DevTools MCP.",
+        linuxGuidance: "Run `npx -y chrome-devtools-mcp@latest` for Chrome DevTools MCP.",
         notes: "Official support is Google Chrome / Chrome for Testing; Chromium may work but is not guaranteed.",
     },
     {
@@ -834,17 +840,20 @@ const optionalMcpDefinitions: readonly OptionalDependencyDefinition[] = [
         bins: ["context7-mcp"],
         aliases: ["@upstash/context7-mcp", "context7-mcp", "context7"],
         installCommand: "npm install -g @upstash/context7-mcp or use `npx @upstash/context7-mcp`",
+        linuxInstallCommand: "npx -y @upstash/context7-mcp@latest",
         docsUrl: "https://github.com/upstash/context7",
         guidance: "Install or use `@upstash/context7-mcp` for Context7 MCP.",
+        linuxGuidance: "Run `npx -y @upstash/context7-mcp@latest` for Context7 MCP.",
     },
     {
         key: "excel_mcp",
-        packageName: "excel-mcp-server",
+        packageName: "@negokaz/excel-mcp-server",
         bins: ["excel-mcp-server"],
-        aliases: ["excel-mcp-server", "excel-mcp"],
-        installCommand: "npm install -g excel-mcp-server or use `npx excel-mcp-server`",
-        docsUrl: "https://www.npmjs.com/package/excel-mcp-server",
-        guidance: "Install or use `excel-mcp-server` for Excel MCP.",
+        aliases: ["@negokaz/excel-mcp-server", "excel-mcp-server", "excel-mcp"],
+        installCommand: "npx --yes @negokaz/excel-mcp-server@0.12.0",
+        docsUrl: "https://www.npmjs.com/package/@negokaz/excel-mcp-server",
+        guidance: "Run `npx --yes @negokaz/excel-mcp-server@0.12.0` for Excel MCP. Requires Node.js 20+.",
+        notes: "Requires Node.js 20+.",
     },
 ]
 

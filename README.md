@@ -38,7 +38,7 @@ Install AutoCode as public OpenCode plugin. AI agents use [installation guide](d
 
 - [Bubblewrap](https://github.com/containers/bubblewrap) is required only for Linux sandbox execution.
 - [Bun](https://bun.sh) is required only to build the plugin from source, run tests, or install the local shim.
-- [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) is required only for Chrome DevTools MCP server support.
+- [MCP servers](docs/index.md#linux-mcp-setup) MCP servers are optional integrations.
 
 ### Installation for LLM Agents
 

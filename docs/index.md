@@ -63,6 +63,70 @@ Start or restart OpenCode, then run `/install`. It checks and remediates Windows
 3. Confirm AutoCode commands or agents load after startup.
 4. Confirm generated skills appear in `<home>/.agents/skills/autocode` after first startup.
 
+### Linux MCP setup
+
+Use these optional MCP servers only on Linux. Add each command or URL to MCP client configuration; do not globally install packages.
+
+#### Chrome DevTools MCP
+
+Install current Google Chrome and Node LTS with npm. Use this local server command:
+
+```bash
+npx -y chrome-devtools-mcp@latest
+```
+
+For a sandbox or container, start Chrome with a remote-debugging port and a non-default profile directory:
+
+```bash
+google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.cache/chrome-devtools-mcp"
+```
+
+Then use this server command:
+
+```bash
+npx -y chrome-devtools-mcp@latest --browser-url=http://127.0.0.1:9222
+```
+
+See [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) and its [troubleshooting guide](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md).
+
+#### Context7 MCP
+
+Context7 local mode needs Node `>=20.18.1`. Use this server command:
+
+```bash
+npx -y @upstash/context7-mcp@latest --api-key YOUR_API_KEY
+```
+
+Remote fallback configuration uses URL `https://mcp.context7.com/mcp` and header `Authorization: Bearer YOUR_API_KEY`. Verify remote access:
+
+```bash
+curl https://mcp.context7.com/ping
+```
+
+See [Context7 client setup](https://context7.com/docs/resources/all-clients) and [troubleshooting](https://context7.com/docs/resources/troubleshooting).
+
+#### Excel MCP
+
+[Excel MCP Server](https://github.com/negokaz/excel-mcp-server#installing-via-npm) supports Linux `ia32`, `x64`, and `arm64`. It requires Node.js 20+; Excel, LibreOffice, Go, a compiler, and native libraries are not required.
+
+Use this local server command:
+
+```bash
+npx --yes @negokaz/excel-mcp-server@0.12.0
+```
+
+For OpenCode local MCP configuration, use this command array:
+
+```json
+["npx", "--yes", "@negokaz/excel-mcp-server@0.12.0"]
+```
+
+Optional `EXCEL_MCP_PAGING_CELLS_LIMIT` defaults to `4000`. Spreadsheet paths must be absolute and allowed by file permissions.
+
+#### Git
+
+Git is a built-in tool, not an MCP server. Confirm Git CLI is available with `git --version`; do not install a Git MCP package.
+
 ### Update the plugin version
 
 Update public plugin with native CMD on Windows or Bash on Linux:

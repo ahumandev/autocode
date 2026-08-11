@@ -28,6 +28,7 @@ import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createAutocodeJobShelveTool } from "./autocode_job_shelve"
 import { createAutocodeJobStatusTool } from "./autocode_job_status"
 import { createAutocodeKillTool } from "./autocode_kill"
+import { createAutocodeProcessKillTool } from "./autocode_process_kill"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
 import { createAutocodePlanReadTool } from "./autocode_plan_read"
 import { createAutocodeJobDraftTool } from "./autocode_job_draft"
@@ -95,6 +96,7 @@ export function createTools(
         autocode_job_shelve: createAutocodeJobShelveTool(client),
         autocode_job_status: createAutocodeJobStatusTool(client),
         autocode_kill: createAutocodeKillTool(),
+        autocode_process_kill: createAutocodeProcessKillTool(),
         autocode_logo_find: createAutocodeLogoFindTool(),
         autocode_md_create: createAutocodeMdCreateTool(),
         autocode_md_frontmatter_edit: createAutocodeMdFrontmatterEditTool(),

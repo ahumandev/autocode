@@ -85,13 +85,13 @@ opencode plugin -g @ahumandev/autocode@latest
 
 ### Step 5: Start `/install`
 
-Start or restart OpenCode, then run:
+Run:
 
 ```text
-/install
+opencode run "/install"
 ```
 
-At startup, AutoCode detects OS. Agents use native CMD on Windows and Bash on Linux. `/install` checks and remediates Windows dependencies only. It does not install Bubblewrap; on Linux, install Bubblewrap separately if sandbox execution is needed.
+AutoCode detects OS. Agents use native CMD on Windows and Bash on Linux. `/install` checks and remediates Windows dependencies only. It does not install Bubblewrap; on Linux, install Bubblewrap separately if sandbox execution is needed.
 
 Generated skills are stored in `<home>/.agents/skills`. Windows does not register sandbox agents or sandbox tools.
 

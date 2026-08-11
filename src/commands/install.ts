@@ -19,11 +19,9 @@ const linuxInstallCommand = {
 5. If bwrap install is needed, use the reported install command.
 6. Handle chrome-devtools MCP (chrome_devtools_mcp), Context7 MCP (context7_mcp), Excel MCP (excel_mcp) availability using reported install_command/guidance; if git_cli is missing, remediate system Git CLI using reported install_command/guidance.
 7. Follow dangerous-operation/manual confirmation rules: sudo, password prompts, API keys, manual confirmation, and destructive operations must stop/ask/report, not force.
-8. Do not perform documentation tasks
-9. do not task any \`document_*\` subagents
-10. After remediation, rerun \`autocode_dependencies\` and report remaining issues.
-11. Summarize succeeded, failed, skipped, unsupported, manual-action, and still missing dependencies.
-12. After summary report, perform no next action, just stop.
+8. After remediation, rerun \`autocode_dependencies\` and report remaining issues.
+9. Summarize succeeded, failed, skipped, unsupported, manual-action, and still missing dependencies.
+10. After summary report, perform no next action, just stop.
 `
 } satisfies CommandMap[string]
 
@@ -38,10 +36,8 @@ const windowsInstallCommand = {
 4. If OpenCode upgrade is needed, use the suggested \`opencode upgrade\` command in CMD.
 5. Handle OpenCode (opencode), chrome-devtools MCP (chrome_devtools_mcp), Context7 MCP (context7_mcp), Excel MCP (excel_mcp), Git CLI (git_cli), and browser availability using reported \`install_command\`/guidance. Run commands in CMD and prefer reported \`install_command\`/guidance.
 6. Follow dangerous-operation/manual confirmation rules: password prompts, API keys, manual confirmation, and destructive operations must stop/ask/report, not force.
-7. Do not perform documentation tasks
-8. do not task any \`document_*\` subagents
-9. After remediation, rerun \`autocode_dependencies\` and report remaining issues.
-10. Summarize succeeded, failed, skipped, unsupported, manual-action, and still missing dependencies.
-11. After summary report, perform no next action, just stop.
+7. After remediation, rerun \`autocode_dependencies\` and report remaining issues.
+8. Summarize succeeded, failed, skipped, unsupported, manual-action, and still missing dependencies.
+9. After summary report, perform no next action, just stop.
 `
 } satisfies CommandMap[string]

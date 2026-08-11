@@ -222,7 +222,7 @@ describe("autocode_dependencies", () => {
         expect(calls.map(([command]) => command)).not.toContain("where.exe")
         expect(result.required_ok).toBe(true)
         expect(result.optional_ok).toBe(false)
-        expect(result.next_actions).toContain("Install or use `chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
+        expect(result.next_actions).toContain("Run `npx -y chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
     })
 
     test("treats Windows where missing, errors, and empty output as unavailable", async () => {
@@ -317,22 +317,24 @@ describe("autocode_dependencies", () => {
         expect(result.required_ok).toBe(true)
         expect(result.optional_ok).toBe(false)
         expect(result.status).toBe("action_required")
-        expect(result.next_actions).toContain("Install or use `chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
-        expect(result.next_actions).toContain("Install or use `@upstash/context7-mcp` for Context7 MCP.")
-        expect(result.next_actions).toContain("Install or use `excel-mcp-server` for Excel MCP.")
+        expect(result.next_actions).toContain("Run `npx -y chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
+        expect(result.next_actions).toContain("Run `npx -y @upstash/context7-mcp@latest` for Context7 MCP.")
+        expect(result.next_actions).toContain("Run `npx --yes @negokaz/excel-mcp-server@0.12.0` for Excel MCP. Requires Node.js 20+.")
         expect(result.next_actions).toContain("Install system git CLI for built-in Git tools.")
         expect(result.next_actions).toContain("Install Google Chrome / Chrome for Testing for official Chrome DevTools MCP support. Chromium may work but is not guaranteed.")
         expect(JSON.stringify(result)).not.toContain("mcp-server-git")
         expect(JSON.stringify(result)).not.toContain("git_mcp")
         expect(optionalDependencies.chrome_devtools_mcp.package).toBe("chrome-devtools-mcp")
-        expect(optionalDependencies.chrome_devtools_mcp.install_command).toBe("npm install -g chrome-devtools-mcp@latest or use `npx chrome-devtools-mcp@latest`")
+        expect(optionalDependencies.chrome_devtools_mcp.install_command).toBe("npx -y chrome-devtools-mcp@latest")
         expect(optionalDependencies.chrome_devtools_mcp.docs_url).toBe("https://developer.chrome.com/docs/chrome-devtools/mcp")
         expect(optionalDependencies.context7_mcp.package).toBe("@upstash/context7-mcp")
-        expect(optionalDependencies.context7_mcp.install_command).toBe("npm install -g @upstash/context7-mcp or use `npx @upstash/context7-mcp`")
+        expect(optionalDependencies.context7_mcp.install_command).toBe("npx -y @upstash/context7-mcp@latest")
         expect(optionalDependencies.context7_mcp.docs_url).toBe("https://github.com/upstash/context7")
-        expect(optionalDependencies.excel_mcp.package).toBe("excel-mcp-server")
-        expect(optionalDependencies.excel_mcp.install_command).toBe("npm install -g excel-mcp-server or use `npx excel-mcp-server`")
-        expect(optionalDependencies.excel_mcp.docs_url).toBe("https://www.npmjs.com/package/excel-mcp-server")
+        expect(optionalDependencies.excel_mcp.status).toBe("missing")
+        expect(optionalDependencies.excel_mcp.package).toBe("@negokaz/excel-mcp-server")
+        expect(optionalDependencies.excel_mcp.install_command).toBe("npx --yes @negokaz/excel-mcp-server@0.12.0")
+        expect(optionalDependencies.excel_mcp.docs_url).toBe("https://www.npmjs.com/package/@negokaz/excel-mcp-server")
+        expect(optionalDependencies.excel_mcp.notes).toContain("Node.js 20+")
         expect(optionalDependencies.git_cli.package).toBe("git")
         expect(optionalDependencies.git_cli.install_command).toBe("Install git using your system package manager.")
         expect(optionalDependencies.git_cli.guidance).toBe("Install system git CLI for built-in Git tools.")
@@ -356,14 +358,14 @@ describe("autocode_dependencies", () => {
                     // global config
                     "mcp": {
                         "servers": {
-                            "context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] }
+                            "context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp@latest"] }
                         }
                     }
                 }`,
                 [worktreeConfig]: JSON.stringify({
                     mcp: {
                         servers: {
-                            "excel-mcp-server": {},
+                            "@negokaz/excel-mcp-server": {},
                         },
                     },
                 }),
@@ -373,7 +375,7 @@ describe("autocode_dependencies", () => {
         expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.context7_mcp?.detection_source).toBe("launcher_command")
         expect(result.optional_dependencies?.context7_mcp?.config_path).toBe(globalConfig)
-        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp")
+        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp@latest")
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.excel_mcp?.detection_source).toBe("config_entry")
         expect(result.optional_dependencies?.excel_mcp?.config_path).toBe(worktreeConfig)
@@ -408,7 +410,7 @@ describe("autocode_dependencies", () => {
                 "/xdg/opencode/opencode.json": JSON.stringify({
                     mcp: {
                         servers: {
-                            chrome: { command: "cmd.exe", args: ["/c", "npx", "chrome-devtools-mcp@latest"] },
+                            chrome: { command: "cmd.exe", args: ["/c", "npx", "-y", "chrome-devtools-mcp@latest"] },
                         },
                     },
                 }),
@@ -418,7 +420,7 @@ describe("autocode_dependencies", () => {
 
         expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.chrome_devtools_mcp?.detection_source).toBe("launcher_command")
-        expect(result.optional_dependencies?.chrome_devtools_mcp?.configured_command).toBe("npx chrome-devtools-mcp@latest")
+        expect(result.optional_dependencies?.chrome_devtools_mcp?.configured_command).toBe("npx -y chrome-devtools-mcp@latest")
     })
 
     test("detects MCP config entries with command arrays and ignores non-string items", async () => {
@@ -428,8 +430,8 @@ describe("autocode_dependencies", () => {
                 "/xdg/opencode/opencode.json": JSON.stringify({
                     mcpServers: {
                         chrome: { command: ["node", "/opt/tools/chrome-devtools-mcp.js"] },
-                        context7: { command: ["npx", "-y", "@upstash/context7-mcp"] },
-                        excel: { command: ["excel-mcp-server"] },
+                        context7: { command: ["npx", "-y", "@upstash/context7-mcp@latest"] },
+                        excel: { command: ["npx", "--yes", "@negokaz/excel-mcp-server@0.12.0"] },
                     },
                 }),
             },
@@ -438,9 +440,10 @@ describe("autocode_dependencies", () => {
         expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.chrome_devtools_mcp?.configured_command).toBe("node /opt/tools/chrome-devtools-mcp.js")
         expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
-        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp")
+        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp@latest")
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
-        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
+        expect(result.optional_dependencies?.excel_mcp?.detection_source).toBe("launcher_command")
+        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("npx --yes @negokaz/excel-mcp-server@0.12.0")
         expect(result.optional_dependencies?.git_cli?.status).toBe("missing")
         expect(result.optional_dependencies?.git_cli?.configured_command).toBeUndefined()
     })
@@ -492,8 +495,8 @@ describe("autocode_dependencies", () => {
             fileMap: {
                 [supplementalConfig]: JSON.stringify({
                     mcpServers: {
-                        context7: { command: ["npx", "-y", "@upstash/context7-mcp"] },
-                        excel: { command: ["excel-mcp-server"] },
+                        context7: { command: ["npx", "-y", "@upstash/context7-mcp@latest"] },
+                        excel: { command: ["npx", "--yes", "@negokaz/excel-mcp-server@0.12.0"] },
                     },
                 }),
             },
@@ -501,10 +504,10 @@ describe("autocode_dependencies", () => {
 
         expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.context7_mcp?.config_path).toBe(supplementalConfig)
-        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp")
+        expect(result.optional_dependencies?.context7_mcp?.configured_command).toBe("npx -y @upstash/context7-mcp@latest")
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.excel_mcp?.config_path).toBe(supplementalConfig)
-        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
+        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("npx --yes @negokaz/excel-mcp-server@0.12.0")
         expect(result.optional_dependencies?.git_cli?.status).toBe("missing")
     })
 
@@ -585,7 +588,7 @@ describe("autocode_dependencies", () => {
             fileMap: {
                 "/xdg/opencode/sample.opencode.jsonc": JSON.stringify({
                     mcpServers: [
-                        { name: "context7", command: ["npx", "-y", "@upstash/context7-mcp"] },
+                        { name: "context7", command: ["npx", "-y", "@upstash/context7-mcp@latest"] },
                     ],
                 }),
             },
@@ -614,7 +617,7 @@ describe("autocode_dependencies", () => {
             section: "mcpServers",
             key: "context7",
             detection_source: "launcher_command",
-            configured_command: "npx -y @upstash/context7-mcp",
+            configured_command: "npx -y @upstash/context7-mcp@latest",
         }))
         expect(events).toContainEqual(expect.objectContaining({
             dependency: "excel_mcp",
@@ -631,7 +634,7 @@ describe("autocode_dependencies", () => {
                 "/xdg/opencode/opencode.jsonc": JSON.stringify({
                     mcp: {
                         servers: [
-                            { name: "excel-mcp-server", command: ["excel-mcp-server"] },
+                            { name: "excel", command: ["npx", "--yes", "@negokaz/excel-mcp-server@0.12.0"] },
                         ],
                     },
                 }),
@@ -640,7 +643,7 @@ describe("autocode_dependencies", () => {
         })) as DependencyToolResult
 
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
-        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("excel-mcp-server")
+        expect(result.optional_dependencies?.excel_mcp?.configured_command).toBe("npx --yes @negokaz/excel-mcp-server@0.12.0")
         expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
         expect(result.optional_dependencies?.git_cli?.configured_command).toBeUndefined()
     })

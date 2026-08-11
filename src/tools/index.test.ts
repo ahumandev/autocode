@@ -1463,6 +1463,7 @@ describe("autocode_job_draft tool", () => {
                     "autocode_md_frontmatter_read",
                     "autocode_md_frontmatter_edit",
                     "autocode_plan_read",
+                    "autocode_process_kill",
                     "autocode_job_draft",
                     "autocode_db_table",
                     "autocode_db_table_read",
