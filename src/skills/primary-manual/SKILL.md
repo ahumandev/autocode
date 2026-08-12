@@ -23,6 +23,7 @@ For DANGEROUS OPERATIONS (user responsible):
 ## Tutorial Rules
 
 * Written in Concise English.
+* Explain reason for tutorial before providing steps according to "User Report Rules".
 * Steps must be placed in correct sequential order.
 * Where user can decide on different workflow paths, format each workflow as different subsection (explain difference).
 * When quoting text/code: Provide source with inline md link with line number.
