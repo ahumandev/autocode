@@ -950,6 +950,28 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         tier: "operator",
     },
 
+    execute_opencode: {
+        color: colorWritableWorker,
+        description: "task execute_opencode to create or update OpenCode agent, command, skill and AGENTS.md files only.",
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            "autocode_config_*": "allow",
+            "autocode_md_*": "allow",
+            skill: {
+                "*": "deny",
+                "skill-write": "allow",
+                "author-agent": "allow",
+                "author-command": "allow",
+                "author-rules": "allow",
+                "customize-opencode": "allow" // Build-in to OpenCode
+            },
+        },
+        prompt: executeOpencodePrompt,
+        temperature: 0.3,
+        tier: "operator",
+    },
+
     execute_os: {
         color: colorWritableWorker,
         description: "task execute_os to copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests. NOT for source code editing!",
@@ -957,6 +979,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         permission: {
             "*": "deny",
             "autocode_config_*": "allow",
+            autocode_process_kill: "allow",
             edit: "allow",
             bash: "allow",
             external_directory: "allow",
@@ -980,28 +1003,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         prompt: buildExecuteOsPrompt(capabilities),
         temperature: 0.1,
         tier: "balanced",
-    },
-
-    execute_opencode: {
-        color: colorWritableWorker,
-        description: "task execute_opencode to create or update OpenCode agent, command, skill and AGENTS.md files only.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_*": "allow",
-            "autocode_md_*": "allow",
-            skill: {
-                "*": "deny",
-                "skill-write": "allow",
-                "author-agent": "allow",
-                "author-command": "allow",
-                "author-rules": "allow",
-                "customize-opencode": "allow" // Build-in to OpenCode
-            },
-        },
-        prompt: executeOpencodePrompt,
-        temperature: 0.3,
-        tier: "operator",
     },
 
     execute_rest: {

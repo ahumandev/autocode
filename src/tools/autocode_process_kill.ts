@@ -138,12 +138,12 @@ export async function runAutocodeProcessKill(rawArgs: AutocodeProcessKillArgs, d
 
 export function createAutocodeProcessKillTool(deps: AutocodeProcessKillDependencies = defaultSandboxDependencies): ReturnType<typeof tool> {
     return tool({
-        description: "Stop TCP server processes listening on one required port; established client connections are never selected.",
+        description: "Kill local server process and free TCP port.",
         args: {
-            server_port: tool.schema.number().int().min(1).max(65535).describe("Required TCP server port to stop."),
+            port: tool.schema.number().int().min(1).max(65535).describe("TCP port to free."),
         },
-        async execute(args: AutocodeProcessKillArgs, _context: ToolContext): Promise<string> {
-            return runAutocodeProcessKill(args, deps)
+        async execute(args, _context: ToolContext): Promise<string> {
+            return runAutocodeProcessKill({ server_port: args.port }, deps)
         },
     })
 }
