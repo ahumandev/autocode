@@ -683,6 +683,17 @@ describe("skill tool", () => {
         })
     })
 
+    test("blank reference loads main skill content", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")
+
+            const result = await executeSkillLoad(worktree, undefined, { name: "code-typescript", reference: "" })
+
+            expectLoadedResultShape(result, "code-typescript")
+            expect(result.output).toContain("Generated TypeScript guidance.")
+        })
+    })
+
     test("reference arg errors when file not found", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
             writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance.")

@@ -193,14 +193,15 @@ function validateSkillLoadArgs(args: SkillLoadArgs): { name: string, reference?:
         }
     }
 
-    if (args.reference !== undefined && (typeof args.reference !== "string" || !args.reference.trim())) {
+    if (args.reference !== undefined && typeof args.reference !== "string") {
         return {
-            error: "Invalid reference. Reference must be a non-empty string when provided.",
+            error: "Invalid reference. Reference must be a string when provided.",
             instruction: "Retry with a valid reference path or omit the reference argument.",
         }
     }
 
-    return { name: args.name.trim(), reference: typeof args.reference === "string" ? args.reference.trim() : undefined }
+    const reference = typeof args.reference === "string" ? args.reference.trim() : undefined
+    return { name: args.name.trim(), reference: reference || undefined }
 }
 
 function isPathWithinSkillDirectory(absolutePath: string, skillDirectory: string): boolean {
@@ -485,8 +486,8 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
     return tool({
         description: "Before starting work: load all applicable skills (not yet loaded) or skills needed by current step from `<available_skills>` block ONLY.",
         args: {
-            name: tool.schema.string().describe("Must exactly match `<name>` from `<available_skills>` block in system prompt. If name only appears in agent prompt body (e.g. `Task `foo``), it is a subagent - use `task` tool instead."),
-            reference: tool.schema.string().optional().describe("Relative file path matching link in SKILL.md content exactly, to read a reference file instead of the main SKILL.md content. Example: reference/template.xml"),
+            name: tool.schema.string().describe("Must exactly match `<name>` from `<available_skills>` block in system prompt. NEVER for subagents."),
+            reference: tool.schema.string().optional().describe("Omit, to load skill. Include to load reference file instead. Must match link exactly as in SKILL.md content. Example: reference/template.xml"),
         },
         async execute(args, context) {
             const validatedArgs = validateSkillLoadArgs(args)
