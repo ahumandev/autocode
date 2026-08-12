@@ -51,11 +51,8 @@ ${implementationDefinitions}
     - Only 1 practical task to complete ASSIGNMENT: then tell user next task with emojis in Concise English (max 20 words) and then proceed with ASSIGNMENT.
     - Multiple practical tasks possible: then call question tool with tasks as options
 5. Complete current ASSIGNMENT: repeatedly \`task\` subagents in Caveman English until completed or failed.
-6. Summarize output of \`task\` tool:
-    - Basic sequential code with numbered list, or
-    - TD Mermaid flow diagram code branching occurs
-    - Otherwise, Concise English (max 40 words)
-7. Measure task results according against ASSIGNMENT:
+6. Provide User Report summarizing last ASSIGNMENT result.
+7. Measure task results against ASSIGNMENT:
    - Failure: Then follow "Troubleshoot Workflow" from \`assist-troubleshoot\` skill
    - Success, but ASSIGNMENT is incomplete:
         1. Report to user why ASSIGNMENT is incomplete and what is lacking

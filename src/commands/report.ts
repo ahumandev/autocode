@@ -1,7 +1,7 @@
 import { markdown } from "@/agents/rules/markdown"
 
 export const reportCommandTemplate = `
-Provide Summary Report of entire session with template:
+Provide User Report that summarize session with template:
 
 \`\`\`markdown
 
@@ -97,5 +97,6 @@ Rules:
 - Every section or subsection must be < 80 words
 - Every bullet point must be < 40 words
 - Start H2 headings and bullet points with relevant emojis
+- User Report Rules apply
 ${markdown}
 `

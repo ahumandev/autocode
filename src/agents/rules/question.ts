@@ -2,9 +2,7 @@ export const toolQuestionRules = `
 ## Question Rules
 
 ### Before Asking
-- ✅ ALWAYS respond first with findings/report in text, BEFORE calling \`question\` tool.
-- ✅ ALWAYS ask for confirmation when decision affects PROPOSAL or require DANGEROUS OPERATION.
-- ✅ ALWAYS present all reports BEFORE calling \`question\` tool.
+- ✅ ALWAYS present report BEFORE calling \`question\` tool.
 - ✅ ALWAYS match PROPOSAL REPORT headings and order with \`question\` tool option \`labels\` and order.
 - ❌ NEVER ask for information user already provided.
 
