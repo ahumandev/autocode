@@ -32,8 +32,7 @@ describe("commands", () => {
             "assist",
             "auto",
             "design",
-            "research",
-            "teach",
+            "advise",
             "autocode-install",
             "autocode-version",
             "author",
@@ -131,7 +130,7 @@ describe("commands", () => {
         })
 
         for (const commandName of ["docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux"] as const) {
-            expect(commands[commandName]?.agent).not.toBe("teach")
+            expect(commands[commandName]?.agent).not.toBe("advise")
         }
     })
 

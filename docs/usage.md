@@ -6,18 +6,17 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 
 | Agent        | Purpose                                     |
 | ------------ | ------------------------------------------- |
-| 🔎 `research` | Research topics & answer questions.         |
+| 💡 `advise`   | Research topics, answer questions, and guide manual work. |
 | 🗺️ `design`   | Design and propose solutions.               |
 | 🤖 `auto`     | **Autonomously** solve problems.            |
 | 🧑‍💻 `assist`   | Assist **interactively** to solve problems. |
-| 🎓 `teach`    | Teach how to **manually** solve problems.   |
 | ✏️ `edit`     | Edit files directly (fast & cheap).         |
 
 ### Autonomous Job Workflow
 
 ```mermaid
 flowchart TD
-  Research([🔎 research results]) --🗺️ design--> drafts
+  Advise([💡 advise guidance]) --🗺️ design--> drafts
   concepts --🗺️ design--> drafts
   drafts --🤖 auto --> executing
   executing -.blocked.-> facilitate
@@ -26,7 +25,7 @@ flowchart TD
   review --> shelved
 ```
 
-1. 🔎 `research` possibilities or create concept md document in `.agents/jobs/concepts`.
+1. 💡 Use `advise` to research possibilities, answer questions, or create concept md document in `.agents/jobs/concepts`.
 2. Run `/job-design` to investigate feasibility, design best approach and draft solution plan in `.agents/jobs/drafts/{job_name}/plan.md`.
 3. Revise draft `plan.md` before autonomous handover.
 4. Run `/job-execute` to execute `plan.md` fully autonomously.
@@ -39,26 +38,22 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  Research([🔎 research results]) --🗺️ design--> drafts
+  Advise([💡 advise guidance]) --🗺️ design--> drafts
   concepts --🗺️ design--> drafts
   drafts --🧑‍💻 assist --> facilitate
-  drafts --🎓 teach --> facilitate
   facilitate --> shelved
 ```
 
-1. 🔎 `research` possibilities or create concept md document in `.agents/jobs/concepts`.
+1. 💡 Use `advise` to research possibilities, answer questions, or create concept md document in `.agents/jobs/concepts`.
 2. Run `/job-design` to investigate feasibility, design best approach and draft solution plan in `.agents/jobs/drafts/{job_name}/plan.md`.
-3. Run one of these commands:
-   - `/job-facilitate`: Execute `plan.md` semi-autonomously with assistant (you make decisions, assistant do work).
-   - `/job-teach`: Execute `plan.md` manually with guiding teacher.
-5. If `/job-execute` was chosen, then job will move automatically to `.agents/jobs/executing` while busy and then to `.agents/jobs/review` when done.
-6. When done, do manual testing, then:
+3. Run `/job-facilitate` to execute `plan.md` semi-autonomously with assistant (you make decisions, assistant do work).
+4. When done, do manual testing, then:
    - *Reject* job with `/job-shelve` to shelve (clean up files) job or
    - *Accept* job with `/commit` to commit to git and shelve.
 
 ### Hybrid Workflow
 
-Combinations of Autonomous and Assisted Workflows are also possible as you can switch any time between `auto`, `assist`, `teach` agents.
+Combinations of Autonomous and Assisted Workflows are also possible as you can switch any time between `auto` and `assist` agents.
 
 For example you may start in `assist` mode and then later when you get busy, switch to `auto` mode so that agent can continue with your plan without your presence or vice versa.
 
@@ -72,18 +67,16 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 | `/job-design`     | Design draft plan to `.agents/jobs/drafts/{name}/`.                                 |
 | `/job-execute`    | Moves reviewed draft to `.agents/jobs/executing/{name}/` and starts 🤖 auto agent.   |
 | `/job-facilitate` | Moves reviewed draft to `.agents/jobs/facilitate/{name}/` and start 🧑‍💻 assist agent. |
-| `/job-teach`      | Moves reviewed draft to `.agents/jobs/facilitate/{name}/` and start 🎓 teach agent.  |
 | `/job-shelve`     | Moves reviewed job to `.agents/jobs/shelve/{name}/`.                                |
 
 ### Modes
 
 | Command     | Purpose                                                                         |
 | ----------- | ------------------------------------------------------------------------------- |
-| `/research` | Switch to 🔎 research mode to answer question at hand.                           |
+| `/advise`   | Switch to 💡 advise mode to research topics, answer questions, and guide manual work. |
 | `/design`   | Switch to 🗺️ design mode to design solution to problem.                          |
 | `/auto`     | Switch to 🤖 auto mode to autonomously solve problems (according to design plan) |
 | `/assist`   | Switch to 🧑‍💻 assist mode to semi-autonomously assist with problems/improvements. |
-| `/teach`    | Switch to 🎓 teach mode to teach you how to solve problems (provide commands).   |
 
 ### Documentation Commands
 

@@ -41,8 +41,7 @@ export function createCommands(capabilities: PlatformCapabilities): CommandMap {
     "assist": { description: "Continue assist task execution in same session.", subtask: false, template: restartSessionTemplate("assist", "Solve PROBLEM by following 'Assist Workflow' steps.") },
     "auto": { description: "Continue autonomous task execution in same session.", subtask: false, template: restartSessionTemplate("auto", "Solve PROBLEM by following 'Auto Workflow' steps.") },
     "design": { description: "Continue solution design in same session.", subtask: false, template: restartSessionTemplate("design", "Design SOLUTION for PROBLEM by following 'Design Workflow' steps.") },
-    "research": { description: "Continue topic research in same session.", subtask: false, template: restartSessionTemplate("research", "Research topic by following 'Research Workflow' steps.") },
-    "teach": { description: "Continue manual practice guidance in same session.", subtask: false, template: restartSessionTemplate("teach", "Solve PROBLEM by following 'Assist Workflow' steps.") },
+    "advise": { description: "Research topics and continue manual practice guidance in same session.", subtask: false, template: restartSessionTemplate("advise", "Research topic and teach manual fixes by following 'Assistant Workflow' steps.") },
 
     // Ad-hoc commands
 

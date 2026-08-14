@@ -9,7 +9,7 @@ import type {
     readCurrentJobPlan,
     summarizeAutocodeAgentSession,
 } from "@/hooks/agent_restart"
-import { RESTART_ASSIST_PROMPT, RESTART_AUTO_PROMPT, RESTART_TEACH_PROMPT } from "@/hooks/agent_restart_prompt"
+import { RESTART_ADVISE_PROMPT, RESTART_ASSIST_PROMPT, RESTART_AUTO_PROMPT } from "@/hooks/agent_restart_prompt"
 import { dispatchAutocodeAgentPrompt } from "@/utils/agent_swap"
 import type { resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
 
@@ -112,13 +112,13 @@ describe("restartAutocodeAgentInSession", () => {
             return { sessionID: SESSION_ID }
         })
 
-        await restartAutocodeAgentInSession(input("research"), dependencies())
+        await restartAutocodeAgentInSession(input("advise"), dependencies())
 
         expect(order).toEqual(["resolve", "discover", "summarize", "dispatch"])
-        expect(resolveSettingsMock).toHaveBeenCalledWith("research", WORKTREE, DIRECTORY)
+        expect(resolveSettingsMock).toHaveBeenCalledWith("advise", WORKTREE, DIRECTORY)
         expect(findActiveMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID)
         expect(summarizeMock.mock.calls[0].slice(0, 3)).toEqual([client, DIRECTORY, SESSION_ID])
-        expect(dispatchMock.mock.calls[0].slice(0, 4)).toEqual([client, DIRECTORY, SESSION_ID, "research"])
+        expect(dispatchMock.mock.calls[0].slice(0, 4)).toEqual([client, DIRECTORY, SESSION_ID, "advise"])
         expect(sessionCreateMock).not.toHaveBeenCalled()
     })
 
@@ -143,10 +143,10 @@ describe("restartAutocodeAgentInSession", () => {
         expect(dispatchMock.mock.calls[0][4]).toBe(RESTART_AUTO_PROMPT)
     })
 
-    test("restarts teach in the same session with manual-only prompt and no job-plan lookup", async () => {
-        await restartAutocodeAgentInSession(input("teach"), dependencies())
+    test("restarts advise in the same session with research and manual-guidance prompt", async () => {
+        await restartAutocodeAgentInSession(input("advise"), dependencies())
 
-        expect(dispatchMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID, "teach", RESTART_TEACH_PROMPT, {
+        expect(dispatchMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID, "advise", RESTART_ADVISE_PROMPT, {
             model: { providerID: "openai", modelID: "gpt-5" },
             variant: "high",
         })

@@ -14,7 +14,7 @@ type AgentSchema = {
     safeParse(input: unknown): { success: boolean }
 }
 
-const primaryAgents: PrimaryAutocodeAgent[] = ["assist", "teach", "auto", "research", "design"]
+const primaryAgents: PrimaryAutocodeAgent[] = ["assist", "advise", "auto", "design"]
 
 describe("autocode_session_restart tool", () => {
     let worktree: string

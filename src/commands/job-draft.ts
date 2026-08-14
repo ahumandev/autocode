@@ -8,7 +8,7 @@ Your plan is saved at: \`[job_path]\`
 Enter:
 - \`/job-execute\` 🤖 to execute the planned job autonomously
 - \`/job-facilitate\` 👨‍💻 to facilitate planned job execution
-- \`/job-teach\` 🎓 to learn planned job execution
+- \`/advise\` 🎓 to learn planned job execution
 \`\`\`
 
 Replace [job_path] with \`job_path\` value from \`autocode_job_draft\` tool response.

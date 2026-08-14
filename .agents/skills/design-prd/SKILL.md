@@ -4,9 +4,11 @@ description: Use `design-prd` to get Product Requirements when planning any feat
 ---
 
 ## Problem Statement
+
 AutoCode turns rough ideas into traceable OpenCode jobs. Files keep plan, work, review, and close trail. Users choose auto work or human-steered work. Unsafe work stops for human help.
 
 ## Feature Requirements
+
 - **Job lifecycle**: Keep concept, draft, assist, executing, facilitate, review, and shelved jobs under `.agents/jobs/`.
 - **Planning flow**: User creates concept. Design makes plan. User saves draft before work.
 - **Execution modes**: Run drafted job in `auto` mode or human-steered `assist` mode.
@@ -19,14 +21,16 @@ AutoCode turns rough ideas into traceable OpenCode jobs. Files keep plan, work, 
 - **Learned skills**: Save corrections, env facts, permissions, and preferences for later sessions.
 
 ## User Roles
+
 - **User**: Create, approve, steer, review, accept, or shelve jobs.
-- **research agent**: Gather evidence. Make Research Report.
+- **advise agent**: Gather evidence, answer questions, and guide manual work.
 - **design agent**: Make plans and drafts from concept or context.
 - **auto agent**: Run drafted job alone.
 - **assist agent**: Run work with user steering.
 - **edit agent**: Make fast in-session targeted edits.
 
 ## Constraints & Assumptions
+
 - Plugin runs inside OpenCode. No web server or special UI.
 - Job state lives in version-control text files.
 - External directory rule is `allow`, `ask`, or `deny`.
@@ -34,6 +38,7 @@ AutoCode turns rough ideas into traceable OpenCode jobs. Files keep plan, work, 
 - Learned skills prune per category by configured newest-item limit.
 
 ## Success Metrics
+
 - Jobs move lifecycle dirs. No silent state drift.
 - Criteria block acceptance until clear.
 - Unsafe work gets human hand-off.
@@ -41,9 +46,11 @@ AutoCode turns rough ideas into traceable OpenCode jobs. Files keep plan, work, 
 - Learned facts help later sessions.
 
 ## UX/UI Considerations
+
 No special UI. Work uses OpenCode agents, slash commands, and text files. Show job path, state, next action, and whether user approval or manual help is needed.
 
 ## User Stories
+
 - As a user, I want concept and draft files so work starts from clear requirements.
 - As a user, I want auto or assist mode so I choose autonomy level.
 - As a user, I want blocked unsafe work stopped so I can help safely.

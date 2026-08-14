@@ -21,6 +21,9 @@ export const toolTaskRules = `
 * Only call \`task_resume\` tool with known \`task_id\` if you resume from own interruption
 * NEVER \`task\` subagent to re-scan, re-search, or re-read what user already supplied: files, paths, line numbers, error messages, stack traces, conventions, or requirements
 * ONLY \`task\` subagents to find critically missing info to complete current ASSIGNMENT
+* When searching for info:
+   - next search subject related to previous finding: call \`task\` again with same \`task_id\`
+   - next search subject unique: start new subagent with unique \`task_id\`
 
 ---
 

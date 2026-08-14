@@ -2,9 +2,10 @@
 
 ### Implementation Modes
 
-- 🤖 **Auto mode** — *autonomous*: agent oversee full lifecycle of structured jobs until completion.
+- 💡 **Advise mode** — *guidance*: agent researches topics, answers questions, and guides manual implementation.
 - 🧑‍💻 **Assist mode** — *interactive*: you make decisions, agent orchestration do the work, manage job lifecycle and suggest next steps.
-- 🎓 **Teach mode** — *manual*: agents discover solutions, then guide manual implementation with step-by-step tutorials.
+- 🤖 **Auto mode** — *autonomous*: agent oversee full lifecycle of structured jobs until completion.
+
 
 ### Workflow Optimizations
 
@@ -78,18 +79,17 @@ At startup, AutoCode detects OS. Agents use CMD on Windows and Bash on Linux. Wi
 
 |     | Agent      | Purpose                                 |
 | --- | ---------- | --------------------------------------- |
-| 🔎   | `research` | Research topics & answer questions.     |
+| 💡   | `advise`   | Research topics, answer questions, and guide manual work. |
 | 🗺️   | `design`   | Design and propose solutions.           |
 | 🤖   | `auto`     | **Autonomously** solve problems.        |
 | 🧑‍💻   | `assist`   | Assist **interactively** with problems. |
-| 🎓   | `teach`    | Teach how to **manually** fix problems. |
 | ✏️   | `edit`     | Edit files directly (fast & cheap).     |
 
 ### Autonomous Job Workflow
 
 ```mermaid
 flowchart TD
-  Research([🔎 research results]) --🗺️ design--> Drafts[.agents/jobs/drafts]
+  Advise([💡 advise guidance]) --🗺️ design--> Drafts[.agents/jobs/drafts]
   Concepts[ .agents/jobs/concepts] --🗺️ design--> Drafts
   Drafts --🤖 auto --> Executing[.agents/jobs/executing]
   Executing --> Review[.agents/jobs/review]
@@ -98,7 +98,7 @@ flowchart TD
   Facilitate -.unblocked.-> Executing
 ```
 
-1. 🔎 `research` possibilities or create concept md document in `.agents/jobs/concepts`.
+1. 💡 Use `advise` to research possibilities, answer questions, or create concept md document in `.agents/jobs/concepts`.
 2. Run `/job-design` to investigate feasibility, design best approach and draft solution plan in `.agents/jobs/drafts/{job_name}/plan.md`.
 3. Revise draft `plan.md` before autonomous handover.
 4. Run `/job-execute` to execute `plan.md` fully autonomously.
@@ -111,26 +111,22 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  Research([🔎 research results]) --🗺️ design--> Drafts[.agents/jobs/drafts]
+  Advise([💡 advise guidance]) --🗺️ design--> Drafts[.agents/jobs/drafts]
   Concepts[ .agents/jobs/concepts] --🗺️ design--> Drafts
   Drafts --🧑‍💻 assist --> Facilitate[.agents/jobs/facilitate]
-  Drafts --🎓 teach --> Facilitate
   Facilitate -.completed.-> Shelved[.agents/jobs/shelved]
 ```
 
-1. 🔎 `research` possibilities or create concept md document in `.agents/jobs/concepts`.
+1. 💡 Use `advise` to research possibilities, answer questions, or create concept md document in `.agents/jobs/concepts`.
 2. Run `/job-design` to investigate feasibility, design best approach and draft solution plan in `.agents/jobs/drafts/{job_name}/plan.md`.
-3. Run one of these commands:
-   - `/job-facilitate`: Execute `plan.md` semi-autonomously with assistant (you make decisions, assistant do work).
-   - `/job-teach`: Execute `plan.md` manually with guiding teacher.
-5. If `/job-execute` was chosen, then job will move automatically to `.agents/jobs/executing` while busy and then to `.agents/jobs/review` when done.
-6. When done, do manual testing, then:
+3. Run `/job-facilitate` to execute `plan.md` semi-autonomously with assistant (you make decisions, assistant do work).
+4. When done, do manual testing, then:
    - *Reject* job with `/job-shelve` to shelve (clean up files) job or
    - *Accept* job with `/commit` to commit to git and shelve.
 
 ### Hybrid Workflow
 
-Combinations of Autonomous and Assisted Workflows are also possible as you can switch any time between `auto`, `assist`, `teach` agents.
+Combinations of Autonomous and Assisted Workflows are also possible as you can switch any time between `auto` and `assist` agents.
 
 For example you may start in `assist` mode and then later when you get busy, switch to `auto` mode so that agent can continue with your plan without your presence or vice versa.
 

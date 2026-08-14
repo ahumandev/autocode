@@ -43,8 +43,7 @@ import { queryGitPrompt } from "./prompts/query_git";
 import { buildQueryOsPrompt } from "./prompts/query_os";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
-import { researchPrompt } from "./prompts/research";
-import { teachPrompt } from "./prompts/teach";
+import { advisePrompt } from "./prompts/advise";
 import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
@@ -115,6 +114,41 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
     },
 
     // Primary Orchestrators
+
+    advise: {
+        color: colorReadOnlyInteractiveOrchestrator,
+        description: "Advise how to manually fix problems.",
+        hidden: false,
+        mode: "primary",
+        permission: {
+            "*": "deny",
+            autocode_job_status: "allow",
+            autocode_session_restart: "allow",
+            doom_loop: "ask",
+            git_commit: "ask",
+            question: "allow",
+            skill: {
+                "*": "deny",
+                "assist-*": "allow",
+                "codebase-design": "allow", // From mattpocock/skills
+                "git-commit": "allow",
+                "learned-permissions*": "allow",
+                "primary-manual*": "allow",
+                "vue-best-practices": "allow",
+                "ui-craft": "allow",
+            },
+            skill_learn: "allow",
+            task: {
+                "*": "deny",
+                auto_research: "allow",
+                "query*": "allow",
+            },
+            task_resume: "allow",
+            "todo*": "allow",
+        },
+        prompt: advisePrompt,
+        tier: "balanced",
+    },
 
     assist: {
         color: colorWritableInteractiveOrchestrator,
@@ -218,6 +252,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             skill_learn: "allow",
             task: {
                 "*": "deny",
+                auto_research: "allow",
                 "query*": "allow",
             },
             task_external: "ask",
@@ -265,70 +300,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         },
         prompt: editPrompt,
         tier: "balanced"
-    },
-
-    research: {
-        color: colorReadOnlyInteractiveOrchestrator,
-        description: "Research topics & answer questions.",
-        hidden: false,
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            autocode_session_restart: "allow",
-            doom_loop: "ask",
-            external_directory: "ask",
-            question: "allow",
-            skill: {
-                "*": "deny",
-                "skill-write": "allow",
-            },
-            skill_learn: "allow",
-            task: {
-                "*": "deny",
-                "query*": "allow",
-            },
-            task_external: "ask",
-            task_resume: "allow",
-            "todo*": "allow",
-        },
-        prompt: researchPrompt,
-        temperature: 0.7,
-        tier: "balanced",
-    },
-
-    teach: {
-        color: colorReadOnlyInteractiveOrchestrator,
-        description: "Teach how to manually fix problems.",
-        hidden: false,
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            autocode_job_status: "allow",
-            autocode_session_restart: "allow",
-            doom_loop: "ask",
-            git_commit: "ask",
-            question: "allow",
-            skill: {
-                "*": "deny",
-                "assist-*": "allow",
-                "codebase-design": "allow", // From mattpocock/skills
-                "git-commit": "allow",
-                "learned-permissions*": "allow",
-                "primary-manual*": "allow",
-                "vue-best-practices": "allow",
-                "ui-craft": "allow",
-            },
-            skill_learn: "ask",
-            task: {
-                "*": "deny",
-                auto_research: "allow",
-                "query*": "allow",
-            },
-            task_resume: "allow",
-            "todo*": "allow",
-        },
-        prompt: teachPrompt,
-        tier: "balanced",
     },
 
     // Secondary Orchestrators
@@ -474,7 +445,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 design: "deny",
                 plan: "deny",
                 report: "deny",
-                research: "deny",
                 session: "deny",
                 "temp*": "deny"
             },
@@ -676,6 +646,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 "author-rules": "allow"
             },
+            skill_edit: "allow",
         },
         prompt: documentAgentsPrompt,
         temperature: 0.3,
@@ -696,7 +667,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_write": "allow"
+                "skill_edit": "allow"
             },
             skill_edit: "allow",
         },
@@ -719,7 +690,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_write": "allow"
+                "skill_edit": "allow"
             },
             skill_edit: "allow",
         },
@@ -741,8 +712,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             skill: {
                 "*": "deny",
                 "learned-env*": "allow",
-                "skill-write": "allow"
+                "skill_edit": "allow"
             },
+            skill_edit: "allow",
             skill_learn: "allow",
             task: {
                 "*": "deny",
@@ -768,7 +740,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_write": "allow"
+                "skill_edit": "allow"
             },
             skill_edit: "allow",
         },
@@ -791,7 +763,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_write": "allow"
+                "skill_edit": "allow"
             },
             skill_edit: "allow",
         },
@@ -814,7 +786,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_write": "allow"
+                "skill_edit": "allow"
             },
             skill_edit: "allow",
         },

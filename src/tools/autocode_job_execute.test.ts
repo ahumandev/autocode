@@ -162,13 +162,13 @@ describe("autocode_job_execute tool", () => {
         expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: session-1\n")
     })
 
-    test("compacts current session and dispatches plan with teach", async () => {
+    test("compacts current session and dispatches plan with advise", async () => {
         const fs = createMockFs()
         const events: string[] = []
         configureResolvedDraft(fs, "# Lesson\n\nExplain this change\n")
         const client = createMockClient(events)
 
-        await createAutocodeJobExecuteTool(client, fs).execute({ agent: "teach" }, createToolContext())
+        await createAutocodeJobExecuteTool(client, fs).execute({ agent: "advise" }, createToolContext())
 
         expect(events).toEqual([
             "title:Test Job (facilitate)",
@@ -184,7 +184,7 @@ describe("autocode_job_execute tool", () => {
         expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
             path: { id: "session-1" },
             body: expect.objectContaining({
-                agent: "teach",
+                agent: "advise",
                 parts: [{ type: "text", text: "Selected job: test_job\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan.md:\n# Lesson\n\nExplain this change\n" }],
             }),
         }))
@@ -307,7 +307,7 @@ describe("autocode_job_execute tool", () => {
         expect(result).toBe(createRetryResponse(
             "autocode_job_execute",
             "Invalid agent: invalid",
-            "Provide agent as one of: auto, assist, teach."
+            "Provide agent as one of: auto, assist, advise."
         ))
         expect(fs.readdir).not.toHaveBeenCalled()
         expect(client.session.summarize).not.toHaveBeenCalled()

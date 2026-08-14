@@ -4,7 +4,7 @@ import { executeOpencodePrompt } from "./prompts/execute_opencode"
 import { buildExecuteOsPrompt } from "./prompts/execute_os"
 import { queryAutocodePrompt } from "./prompts/query-autocode"
 import { buildQueryOsPrompt } from "./prompts/query_os"
-import { teachPrompt } from "./prompts/teach"
+import { advisePrompt } from "./prompts/advise"
 import { createPlatformCapabilities } from "../utils/platform"
 
 function permissionRule(permission: AutocodeAgentConfig["permission"], key: string): unknown {
@@ -30,11 +30,10 @@ const managedAgentTiers = {
     compaction: "context",
     title: "cheap",
     assist: "balanced",
-    teach: "balanced",
+    advise: "balanced",
     auto: "smart",
     design: "balanced",
     edit: "balanced",
-    research: "balanced",
     assist_browser: "operator",
     assist_git_conflict: "balanced",
     auto_design: "smart",
@@ -202,6 +201,16 @@ describe("agent policies", () => {
         expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
     })
 
+    test("document_env allows skill_edit without broader permission grants", () => {
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
+        const permission = agents.document_env?.permission
+        const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
+
+        expect(permissionRule(permission, "skill_edit")).toBe("allow")
+        expect(skillPermission["skill_edit"]).toBe("allow")
+        expect(permissionRule(permission, "external_directory")).toEqual({ "*": "deny" })
+    })
+
     test("buildAgents registers capability-aware OS prompts", () => {
         for (const [capabilities, wrongShellGuidance] of [
             [createPlatformCapabilities("linux"), /running on windows/i],
@@ -268,25 +277,25 @@ describe("agent policies", () => {
     test("allows every primary agent to restart the current session", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
-        for (const agentName of ["assist", "teach", "auto", "design", "edit", "research"] as const) {
+        for (const agentName of ["assist", "advise", "auto", "design", "edit"] as const) {
             expect(agents[agentName]?.mode).toBe("primary")
             expect(permissionRule(agents[agentName]?.permission, "autocode_session_restart")).toBe("allow")
         }
     })
 
-    test("buildAgents exposes teach as manual-only primary with deny-first research delegation", () => {
+    test("buildAgents exposes advise as research and manual-guidance primary", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const permission = agents.teach?.permission
+        const permission = agents.advise?.permission
         const taskPermission = permissionRule(permission, "task") as Record<string, unknown>
         const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
 
-        expect(agents.teach?.hidden).toBe(false)
-        expect(agents.teach?.mode).toBe("primary")
-        expect(agents.teach?.tier).toBe("balanced")
-        expect(agents.teach?.prompt).toBe(teachPrompt)
-        expect(teachPrompt).toContain("Discover solution before giving implementation steps")
-        expect(teachPrompt).toContain("Do not ask user to make a project change until solution is clear")
-        expect(teachPrompt).toContain("Teach clear solution as manual tutorial")
+        expect(agents.advise?.hidden).toBe(false)
+        expect(agents.advise?.mode).toBe("primary")
+        expect(agents.advise?.tier).toBe("balanced")
+        expect(agents.advise?.prompt).toBe(advisePrompt)
+        expect(advisePrompt).toContain("Ask user to gather or provide external information")
+        expect(advisePrompt).toContain("Do not ask user to make a project change until solution is clear")
+        expect(advisePrompt).toContain("Discover solution before giving implementation steps")
         expect(permissionRule(permission, "*")).toBe("deny")
         expect(taskPermission).toEqual({
             "*": "deny",
@@ -296,7 +305,7 @@ describe("agent policies", () => {
         for (const agentName of ["query_code", "query_autocode", "auto_research"]) {
             expect(resolvePermissionRule(taskPermission, agentName)).toBe("allow")
         }
-        for (const agentName of ["inquiry_code", "research", "auto_researcher", "execute_code", "execute_*"]) {
+        for (const agentName of ["inquiry_code", "auto_researcher", "execute_code", "execute_*"]) {
             expect(resolvePermissionRule(taskPermission, agentName)).toBe("deny")
         }
         for (const toolName of [
@@ -313,19 +322,22 @@ describe("agent policies", () => {
         for (const capability of ["question", "todo*", "task_resume", "autocode_session_restart"]) {
             expect(permissionRule(permission, capability)).toBe("allow")
         }
-        expect(permissionRule(permission, "skill_learn")).toBe("ask")
+        expect(permissionRule(permission, "task_external")).toBeUndefined()
+        expect(permissionRule(permission, "external_directory")).toEqual({ "*": "deny" })
+        expect(permissionRule(permission, "skill_learn")).toBe("allow")
         expect(skillPermission["learned-permissions*"]).toBe("allow")
+        expect(skillPermission["skill-write"]).toBeUndefined()
     })
 
     test("getAgentPermission restricts direct auto execution to assist and auto", () => {
         const capabilities = createPlatformCapabilities("linux")
         const agents = buildAgents(capabilities, {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const teachPermission = getAgentPermission("teach", capabilities)
+        const advisePermission = getAgentPermission("advise", capabilities)
         const assistTaskPermission = permissionRule(getAgentPermission("assist", capabilities), "task") as Record<string, unknown>
         const autoTaskPermission = permissionRule(getAgentPermission("auto", capabilities), "task") as Record<string, unknown>
 
         for (const toolName of ["autocode_job_execute", "autocode_agent_execute", "write", "edit", "bash", "apply_patch"]) {
-            expect(resolvePermissionRule(teachPermission as Record<string, unknown>, toolName)).toBe("deny")
+            expect(resolvePermissionRule(advisePermission as Record<string, unknown>, toolName)).toBe("deny")
         }
         expect(resolvePermissionRule(assistTaskPermission, "assist_browser")).toBe("allow")
         expect(resolvePermissionRule(autoTaskPermission, "auto_feature")).toBe("allow")

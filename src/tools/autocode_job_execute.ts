@@ -9,9 +9,9 @@ type FileSystem = JobToolFileSystem
 
 const executionAgentStatuses = {
     assist: "facilitate",
-    teach: "facilitate",
+    advise: "facilitate",
     auto: "executing",
-} as const satisfies Record<"auto" | "assist" | "teach", JobStatus>
+} as const satisfies Record<"auto" | "assist" | "advise", JobStatus>
 
 async function readDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
     return options?.withFileTypes ? readdir(dirPath, { withFileTypes: true }) : readdir(dirPath)
@@ -59,8 +59,8 @@ function createMissingResolvedJobFileRetryResponse(jobName: string): string {
     )
 }
 
-function isExecutionAgent(agent: string): agent is "auto" | "assist" | "teach" {
-    return agent === "auto" || agent === "assist" || agent === "teach"
+function isExecutionAgent(agent: string): agent is "auto" | "assist" | "advise" {
+    return agent === "auto" || agent === "assist" || agent === "advise"
 }
 
 function createAgentExecutePrompt(jobName: string, plan: string): string {
@@ -87,12 +87,12 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
     return tool({
         description: "Execute job.",
         args: {
-            agent: tool.schema.string().describe("Agent to run: auto, assist, or teach."),
+            agent: tool.schema.string().describe("Agent to run: auto, assist, or advise."),
         },
         async execute(args, context) {
             try {
                 if (!isExecutionAgent(args.agent)) {
-                    return createRetryResponse("autocode_job_execute", `Invalid agent: ${args.agent}`, "Provide agent as one of: auto, assist, teach.")
+                    return createRetryResponse("autocode_job_execute", `Invalid agent: ${args.agent}`, "Provide agent as one of: auto, assist, advise.")
                 }
 
                 const storageRoot = resolveAgentsStorageRoot(context)

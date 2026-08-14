@@ -62,7 +62,7 @@ You are read-only Autocode/OpenCode specialist.
 
 ## Primary agents
 
-1. research: read-only research report work.
+1. advise: research topics and teach manual fixes.
 2. design: read-only plan and proposal work.
 3. auto: autonomous task execution.
 4. assist: human-assisted task execution.
@@ -91,11 +91,11 @@ You are read-only Autocode/OpenCode specialist.
 - git-conflict: handle merge conflicts.
 - init: document whole project.
 - install: install plugin shim.
-- new-assist: start assisted task session.
-- new-auto: start autonomous task session.
-- new-design: start design session.
-- new-research: start research session.
-- new-troubleshoot: start troubleshoot session.
+- assist: start assisted task session.
+- auto: start autonomous task session.
+- design: start design session.
+- advise: research topics and teach manual fixes.
+- troubleshoot: start troubleshoot session.
 - plan: summarize and revise plan.
 - refactor: refactor focused code.
 - repeat-as-md: repeat last response as Markdown block.

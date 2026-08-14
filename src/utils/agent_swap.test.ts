@@ -63,8 +63,8 @@ describe("agent swap utilities", () => {
     test("formats session title with agent postfix, stripping any prior single-word paren postfix", () => {
         expect(formatAutocodeSessionTitleForAgent("Create login screen", "design")).toBe("Create login screen (design)")
         expect(formatAutocodeSessionTitleForAgent("Some title (executing)", "design")).toBe("Some title (design)")
-        expect(formatAutocodeSessionTitleForAgent("Some title (research)", "design")).toBe("Some title (design)")
-        expect(formatAutocodeSessionTitleForAgent("Some title (design) ", "research")).toBe("Some title (research)")
+        expect(formatAutocodeSessionTitleForAgent("Some title (advise)", "design")).toBe("Some title (design)")
+        expect(formatAutocodeSessionTitleForAgent("Some title (design) ", "advise")).toBe("Some title (advise)")
         expect(formatAutocodeSessionTitleForAgent("Fix (critical issue)", "design")).toBe("Fix (critical issue) (design)")
     })
 
@@ -98,7 +98,7 @@ describe("agent swap utilities", () => {
         })
     })
 
-    test("validates session creation with primary agents including teach", () => {
+    test("validates session creation with primary agents including advise", () => {
         expect(validateAutocodeSessionCreateInput("  Continue the task.  ", " auto ")).toEqual({
             prompt: "Continue the task.",
             agent: "auto",
@@ -106,16 +106,16 @@ describe("agent swap utilities", () => {
         })
         expect(validateAutocodeSessionCreateInput("Continue the task.", "hidden_worker")).toEqual({
             error: "Invalid agent: hidden_worker",
-            instruction: "Provide agent as one of: assist, teach, auto, research, design.",
+            instruction: "Provide agent as one of: assist, advise, auto, design.",
         })
         expect(validateAutocodeSessionCreateInput("Continue the task.", "invalid-agent")).toEqual({
             error: "Invalid agent: invalid-agent",
-            instruction: "Provide agent as one of: assist, teach, auto, research, design.",
+            instruction: "Provide agent as one of: assist, advise, auto, design.",
         })
-        expect(validateAutocodeSessionCreateInput("  Teach me manual debugging.  ", " teach ")).toEqual({
-            prompt: "Teach me manual debugging.",
-            agent: "teach",
-            title: "Teach me manual debugging.",
+        expect(validateAutocodeSessionCreateInput("  Advise manual debugging.  ", " advise ")).toEqual({
+            prompt: "Advise manual debugging.",
+            agent: "advise",
+            title: "Advise manual debugging.",
         })
     })
 
@@ -373,13 +373,13 @@ describe("agent swap utilities", () => {
             createSessionMessage("pair", 90),
             createSessionMessage("design", 70),
             createSessionMessage("hidden_worker", 100),
-            createSessionMessage("research", 80),
+            createSessionMessage("advise", 80),
         ])
 
         const result = await findPreviousPrimaryAutocodeAgent(client, "/workspace", "session-1")
 
         expect(result).toEqual({
-            agent: "research",
+            agent: "advise",
             skipped: false,
         })
     })

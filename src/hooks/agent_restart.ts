@@ -189,7 +189,7 @@ export async function restartAutocodeAgentInSession(
     deps: AgentRestartDependencies = {},
 ): Promise<string> {
     if (!isPrimaryAutocodeAgent(input.targetAgent)) {
-        return createAbortResponse("validation", `Invalid target agent: ${String(input.targetAgent)}`, "Provide target agent as one of: assist, teach, auto, research, design.")
+        return createAbortResponse("validation", `Invalid target agent: ${String(input.targetAgent)}`, "Provide target agent as one of: assist, advise, auto, design.")
     }
 
     const targetAgent = input.targetAgent

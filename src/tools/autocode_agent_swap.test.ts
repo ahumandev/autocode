@@ -31,7 +31,7 @@ const primaryAgentTierCases: PrimaryAgentTierCase[] = [
     ["assist", "balanced", "Handle the current task."],
     ["auto", "smart", "Continue execution."],
     ["design", "balanced", "Update the design."],
-    ["research", "balanced", "Research the current risk."],
+    ["advise", "balanced", "Advise on the current risk."],
 ]
 
 describe("autocode_agent_swap tool", () => {

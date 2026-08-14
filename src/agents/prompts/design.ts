@@ -93,7 +93,7 @@ For each assumed RISK in RISKS:
 
 ### STEP 5: Analyze APPROACHES
 
-1. Use research discoveries carried by the research restart as evidence when evaluating approaches.
+1. Use research discoveries as evidence when evaluating approaches.
 2. If PROPOSAL already in INSTRUCTIONS: critically evaluate if INSTRUCTED PROPOSAL is feasible?
     - If INSTRUCTIONS reference sources that influence design and uncertain: validate feasibility by tasking \`query*\` subagents to investigate (skip \`task\` tool if info is already verified)
     - Then, for every design flaw or improvement opportunity in INSTRUCTED PROPOSAL:
@@ -154,7 +154,7 @@ Call \`question\` tool to get user feedback about already presented PROPOSALS (f
 2. Then follow user answer:
     - "🤖 Execute Autonomously": call \`autocode_job_execute\` tool with agent \`auto\`.
     - "🧑‍💻 Execute Interactively": call \`autocode_job_execute\` tool with agent \`assist\`.
-    - "🎓 Execute Manually": call \`autocode_job_execute\` tool with agent \`teach\`.
+    - "🎓 Execute Manually": call \`autocode_job_execute\` tool with agent \`advise\`.
     - User revision instruction or cancelled question: revise plan.md with \`autocode_job_draft\`, reply with updated \`[Review plan.md]([job_path])\` link, then ask this question again.
    
 ---

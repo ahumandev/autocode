@@ -103,7 +103,7 @@ describe("autocode_agent_execute tool", () => {
         expect(client.session.promptAsync).not.toHaveBeenCalled()
     })
 
-    test("hands off teach to facilitate lifecycle status", async () => {
+    test("hands off advise to facilitate lifecycle status", async () => {
         const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-execute-"))
         try {
             const fs = createMockFs()
@@ -113,26 +113,26 @@ describe("autocode_agent_execute tool", () => {
                     balanced: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
                 },
             })
-            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs/drafts` ? ["teach_job"] : [])
+            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs/drafts` ? ["advise_job"] : [])
             fs.readFile.mockImplementation(async (filePath: string) => {
-                if (filePath === `${worktree}/.agents/jobs/drafts/teach_job/plan.md`) return "# Problem\n\nTeach execution\n"
+                if (filePath === `${worktree}/.agents/jobs/drafts/advise_job/plan.md`) return "# Problem\n\nAdvise execution\n"
                 throw createMissingError()
             })
 
             const tool = createAutocodeAgentExecuteTool(client, fs)
-            const parsed = parseToolResult(await tool.execute({ job_name: "teach_job", agent: "teach" }, createToolContext({ directory: worktree, worktree })))
+            const parsed = parseToolResult(await tool.execute({ job_name: "advise_job", agent: "advise" }, createToolContext({ directory: worktree, worktree })))
 
             expect(parsed).toEqual({
                 current_status: "facilitate",
             })
-            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/teach_job`, `${worktree}/.agents/jobs/facilitate/teach_job`)
+            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/advise_job`, `${worktree}/.agents/jobs/facilitate/advise_job`)
             expect(client.session.promptAsync).toHaveBeenCalledWith({
                 path: { id: "session-1" },
                 query: { directory: worktree },
                 body: {
-                    agent: "teach",
+                    agent: "advise",
                     model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
-                    parts: [{ type: "text", text: "Selected job: teach_job\n\nplan.md:\n# Problem\n\nTeach execution\n" }],
+                    parts: [{ type: "text", text: "Selected job: advise_job\n\nplan.md:\n# Problem\n\nAdvise execution\n" }],
                 },
             })
         } finally {

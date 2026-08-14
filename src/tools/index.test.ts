@@ -387,7 +387,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("does not register removed job_draft command and keeps current design-research agents", async () => {
+    test("does not register removed job_draft command and keeps current design-advise agents", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -400,7 +400,7 @@ describe("auto resume wiring", () => {
                 expect(cfg.command.job_draft).toBeUndefined()
                 expect(cfg.agent.plan).toEqual({ disable: true })
                 expect(cfg.agent.design?.prompt).toContain("# Solution Designer")
-                expect(cfg.agent.research?.prompt).toContain("# Researcher")
+                expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -1605,7 +1605,6 @@ describe("autocode_job_draft tool", () => {
                 expect(getPermissionRule(cfg.agent.auto_general?.permission, "*")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.auto_general?.permission, "doom_loop")).toBe("deny")
                 expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "design")).toBe("deny")
-                expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "research")).toBe("deny")
                 expect(cfg.agent.auto_general?.prompt).toContain("fallback auto orchestrator")
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_agent_swap")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_restart")).toBe("allow")
@@ -1628,8 +1627,8 @@ describe("autocode_job_draft tool", () => {
                 expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
                 expect(cfg.agent.design?.prompt).toContain("autocode_job_draft")
                 expect(cfg.agent.design?.prompt).toContain("autocode_job_execute")
-                expect(cfg.agent.research?.prompt).toContain("Research Workflow")
-                expect(cfg.agent.research?.prompt).toContain("Task `query*` subagents")
+                expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
+                expect(cfg.agent.advise?.prompt).toContain("`task` query subagents")
                 const queryDbAgent = (cfg.agent as Record<string, Record<string, unknown>>).query_db
                 expect((queryDbAgent.permission as Record<string, unknown> | undefined)?.autocode_agent_swap).toBeUndefined()
                 expect((queryDbAgent.permission as Record<string, unknown> | undefined)?.autocode_session_restart).toBeUndefined()
@@ -2853,7 +2852,7 @@ describe("plugin.config tier wiring", () => {
                 expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "design", "variant")).toBe("standard")
                 expect(getAgentField(cfg, "auto", "model")).toBe("anthropic/claude-opus-4-5")
-                expect(getAgentField(cfg, "research", "model")).toBe("anthropic/claude-sonnet-4-5")
+                expect(getAgentField(cfg, "advise", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "execute_code", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "execute_code", "variant")).toBe("standard")
                 expect(getAgentField(cfg, "query_git", "model")).toBe("anthropic/claude-haiku-4-5")
@@ -2870,7 +2869,7 @@ describe("plugin.config tier wiring", () => {
                 expect(getAgentField(cfg, "compaction", "instructions")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "behavior")).toBeUndefined()
                 expect(getAgentField(cfg, "design", "tier")).toBeUndefined()
-                expect(getAgentField(cfg, "research", "tier")).toBeUndefined()
+                expect(getAgentField(cfg, "advise", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "auto", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "execute_code", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "query_git", "tier")).toBeUndefined()
@@ -2910,7 +2909,7 @@ describe("plugin.config tier wiring", () => {
                 expect(cfg.small_model).toBeUndefined()
                 expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "auto", "model")).toBe("anthropic/claude-opus-4-5")
-                expect(getAgentField(cfg, "research", "model")).toBe("anthropic/claude-sonnet-4-5")
+                expect(getAgentField(cfg, "advise", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "execute_code", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "query_git", "model")).toBe("anthropic/claude-haiku-4-5")
             } finally {
