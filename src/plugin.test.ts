@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import type { Config as PluginHookConfig, PluginInput, ToolContext } from "@opencode-ai/plugin"
 import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
-import type { Event } from "@opencode-ai/sdk"
+import type { Event, OpencodeClient } from "@opencode-ai/sdk"
 import autocode from "./plugin"
 import { createCommands } from "./commands"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
@@ -37,6 +37,13 @@ type V2Plugin = {
     setup(context: PluginInputWithSandboxSupportOverride & {
         skill: { transform(callback: (draft: { source(source: SkillSource): void }) => void): void }
     }): Promise<void>
+}
+type RestartTestClient = OpencodeClient & {
+    session: Pick<OpencodeClient["session"], "messages" | "summarize" | "promptAsync"> & {
+        messages: ReturnType<typeof mock>
+        summarize: ReturnType<typeof mock>
+        promptAsync: ReturnType<typeof mock>
+    }
 }
 
 async function createTempRoot(): Promise<string> {
@@ -125,8 +132,8 @@ describe("autocode plugin config", () => {
                     return {}
                 }),
             },
-        }
-        const hooks = await autocode({ ...createInput(worktree), client } as unknown as Parameters<typeof autocode>[0]) as unknown as PluginRestartHooks
+        } as RestartTestClient
+        const hooks = await autocode({ ...createInput(worktree), client }) as unknown as PluginRestartHooks
         const restartTool = hooks.tool?.autocode_session_restart
         if (!restartTool || !hooks.event) throw new Error("restart lifecycle hooks unavailable")
         const context: ToolContext = {

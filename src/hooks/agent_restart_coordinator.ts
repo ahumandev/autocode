@@ -1,8 +1,6 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk"
 import { dispatchAutocodeAgentPrompt, type PrimaryAutocodeAgent, type ResolvedAgentModel } from "@/utils/agent_swap"
 
-const DEFAULT_PENDING_RESTART_TIMEOUT_MS = 60_000
-
 export type PendingRestartCompactionResponse = {
     data?: boolean
     error?: unknown
@@ -31,7 +29,7 @@ export type PendingAgentRestartCoordinator = {
 
 type PendingAgentRestartEntry = PendingAgentRestart & {
     key: string
-    timer: ReturnType<typeof setTimeout>
+    timer?: ReturnType<typeof setTimeout>
     abortListener?: () => void
     running: boolean
     cancelled: boolean
@@ -59,12 +57,15 @@ function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
 }
 
 export function createPendingAgentRestartCoordinator(
-    timeoutMs: number = DEFAULT_PENDING_RESTART_TIMEOUT_MS,
+    timeoutMs?: number,
 ): PendingAgentRestartCoordinator {
     const pending = new Map<string, PendingAgentRestartEntry>()
 
     function stopWaiting(entry: PendingAgentRestartEntry): void {
-        clearTimeout(entry.timer)
+        if (entry.timer !== undefined) {
+            clearTimeout(entry.timer)
+            entry.timer = undefined
+        }
         if (entry.abort && entry.abortListener) {
             entry.abort.removeEventListener("abort", entry.abortListener)
         }
@@ -122,17 +123,17 @@ export function createPendingAgentRestartCoordinator(
             const key = createRestartKey(restart.directory, restart.sessionID)
             if (pending.has(key)) return "duplicate"
 
-            const timer = setTimeout(() => {
-                const entry = pending.get(key)
-                if (entry) clear(entry)
-            }, timeoutMs)
-            unrefTimer(timer)
-            const entry: PendingAgentRestartEntry = { ...restart, key, timer, running: false, cancelled: false }
+            const entry: PendingAgentRestartEntry = { ...restart, key, running: false, cancelled: false }
             if (restart.abort) {
                 entry.abortListener = () => clear(entry)
                 restart.abort.addEventListener("abort", entry.abortListener, { once: true })
             }
             pending.set(key, entry)
+            if (timeoutMs !== undefined) {
+                const timer = setTimeout((): void => clear(entry), timeoutMs)
+                entry.timer = timer
+                unrefTimer(timer)
+            }
             return "registered"
         },
 

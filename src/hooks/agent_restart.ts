@@ -205,10 +205,11 @@ export async function restartAutocodeAgentInSession(
     if ("error" in settings) {
         return createAbortResponse("configuration resolution", settings.error)
     }
-    if (!hasResolvedModel(settings.resolvedModel)) {
+    const resolvedModel = settings.resolvedModel
+    if (!hasResolvedModel(resolvedModel)) {
         return createAbortResponse("configuration resolution", "Resolved target agent model is unavailable or invalid.")
     }
-    const summaryModel = settings.resolvedModel.model
+    const summaryModel = resolvedModel.model
 
     const findActiveAgent = deps.findActiveAutocodeAgent ?? findActiveAutocodeAgent
     let activeAgent: ActiveAutocodeAgentResult
@@ -242,7 +243,7 @@ export async function restartAutocodeAgentInSession(
         currentAgent: activeAgent.currentAgent,
         targetAgent,
         prompt,
-        resolvedModel: settings.resolvedModel,
+        resolvedModel,
         summarize: () => summarize(input.client, input.context.directory, input.context.sessionID, summaryModel),
         abort: input.abort,
     })

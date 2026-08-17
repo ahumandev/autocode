@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test"
+import { beforeEach, describe, expect, jest, mock, test } from "bun:test"
 import type { Event } from "@opencode-ai/sdk"
 import { findActiveAutocodeAgent, restartAutocodeAgentInSession } from "@/hooks/agent_restart"
 import type { AgentRestartDependencies, AgentRestartInput, readCurrentJobPlan, summarizeAutocodeAgentSession } from "@/hooks/agent_restart"
@@ -9,6 +9,8 @@ type FindActiveFn = typeof findActiveAutocodeAgent
 type ResolveSettingsFn = typeof resolveAutocodeAgentSessionSettings
 type SummarizeFn = typeof summarizeAutocodeAgentSession
 type ReadCurrentJobPlanFn = typeof readCurrentJobPlan
+type PromptAsyncFn = NonNullable<AgentRestartInput["client"]["session"]["promptAsync"]>
+type PromptAsyncMock = (...args: Parameters<PromptAsyncFn>) => ReturnType<PromptAsyncFn>
 
 const SESSION_ID = "session-123"
 const DIRECTORY = "/repo"
@@ -22,7 +24,16 @@ const resolveSettingsMock = mock<ResolveSettingsFn>(async () => ({
 }))
 const summarizeMock = mock<SummarizeFn>(async () => ({ data: true }))
 const readCurrentJobPlanMock = mock<ReadCurrentJobPlanFn>(async () => undefined)
-const promptAsyncMock = mock(async () => ({}))
+function promptAsyncSuccess(..._args: Parameters<PromptAsyncFn>): ReturnType<PromptAsyncFn> {
+    return Promise.resolve({
+        data: undefined,
+        error: undefined,
+        request: new Request("http://localhost"),
+        response: new Response(null, { status: 204 }),
+    })
+}
+
+const promptAsyncMock = mock<PromptAsyncMock>(promptAsyncSuccess)
 const client = { session: { create: sessionCreateMock, promptAsync: promptAsyncMock } } as unknown as AgentRestartInput["client"]
 const terminalConfigurations: Array<[string, () => void]> = [
     ["summary false", (): void => { summarizeMock.mockImplementation(async () => ({ data: false })) }],
@@ -80,7 +91,7 @@ describe("restartAutocodeAgentInSession", () => {
         }))
         summarizeMock.mockImplementation(async () => ({ data: true }))
         readCurrentJobPlanMock.mockImplementation(async () => undefined)
-        promptAsyncMock.mockImplementation(async () => ({}))
+        promptAsyncMock.mockImplementation(promptAsyncSuccess)
     })
 
     test("returns pending restart without compaction or continuation in active tool turn", async () => {
@@ -104,9 +115,9 @@ describe("restartAutocodeAgentInSession", () => {
             order.push("summarize")
             return { data: true }
         })
-        promptAsyncMock.mockImplementation(async () => {
+        promptAsyncMock.mockImplementation((...args: Parameters<PromptAsyncFn>): ReturnType<PromptAsyncFn> => {
             order.push("prompt")
-            return {}
+            return promptAsyncSuccess(...args)
         })
 
         await restartAutocodeAgentInSession(input(coordinator, "advise"), dependencies())
@@ -124,6 +135,25 @@ describe("restartAutocodeAgentInSession", () => {
             },
         })
         expect(coordinator.pendingCount()).toBe(0)
+    })
+
+    test("retains pending restart past old default timeout until matching idle", async () => {
+        jest.useFakeTimers()
+        try {
+            await restartAutocodeAgentInSession(input(coordinator, "advise"), dependencies())
+            jest.advanceTimersByTime(60_001)
+
+            expect(coordinator.pendingCount()).toBe(1)
+            await coordinator.handleEvent(idleEvent())
+
+            expect(summarizeMock).toHaveBeenCalledTimes(1)
+            expect(promptAsyncMock).toHaveBeenCalledTimes(1)
+            expect(coordinator.pendingCount()).toBe(0)
+        }
+        finally {
+            coordinator.dispose()
+            jest.useRealTimers()
+        }
     })
 
     test("preserves selected job plan in deferred assist continuation", async () => {
