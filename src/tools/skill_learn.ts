@@ -355,7 +355,7 @@ export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem)
     }
 
     return tool({
-        description: `Call \`skill_learn\` when learn new skill when one of these categories were identified:
+        description: `Call \`skill_learn\` to learn or remember new skill when:
 - "corrections": self corrected mistakes: summarize mistake + correction steps or lessons learned
 - "env": unusual capability / limitation found in dev/remote environment: non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.
 - "permissions": user says manual task was safe / warn about unsafe task / insist task must be manual: which actions are safe and which are dangerous, including safe passwords.

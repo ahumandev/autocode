@@ -34,55 +34,43 @@ description: When task fails, use assist-troubleshoot skill, then follow its Tro
 ### STEP 1: Cheap EVIDENCE Discovery
 
 1. Gather cheap read-only EVIDENCE without questioning user:
+   - Recall previous SOLUTIONS with \`skill\` tool
    - Read configs, env, input
    - Search logs
    - Check Git diff/history
    - Check system, fs, permissions
    - Inspect stored data
    - Trace source
+   - Similar SYMPTOMS reported online (suspicious public dependency)
+   - Create and run integration tests (debug component in isolation)
 2. Summarize EVIDENCE found in 1 sentence.
 
 ### STEP 2: Expensive EVIDENCE Discovery
 
 CAUSE is clear when EVIDENCE explains SYMPTOM and no remaining plausibly refute it.
 
-1. Skip Expensive EVIDENCE Discovery if CAUSE is clear.
+1. CAUSE is clear? Skip to STEP 6 to propose APPROACHES
 2. Otherwise, each hypothesis need 1 or more follow up actions to confirm hypothesis in this preferred order (skip irrelevant/impractical actions):
-   1. Similar SYMPTOMS reported online - if opensource lib is suspected
-   2. Debug tests starting/calling component in isolation (cheapest, try first)
-   3. Add debug logging, redeploy, reproduce (in local/test/sandbox env), view new logs
-   4. Experiment: create and run stripped project copy with only suspicious components
-   5. Reinstall last known working version separately and systematically reapply recent changes until broken
-   6. Manual instructions - if above not autonomously possible (most expensive, last resort)
-3. Report 1-4 competing CAUSE hypotheses (most likely first) as follows:
-   - Numbered Heading
-   - Section include numbered list simulating possible events leading to SYMPTOM based on EVIDENCE.
+   1. Add debug logging, redeploy, reproduce (in local/test/sandbox env), view new logs
+   2. Experiment: create and run stripped project copy with only suspicious components
+   3. Reinstall last known working version separately and systematically reapply recent changes until broken
+   4. Manual instructions - if above not autonomously possible (most expensive, last resort)
 
-### STEP 3: Choose Hypotheses
+### STEP 3: Report Hypotheses
 
-1. Only 1 Hypothesis? Choose it, skip to STEP 4.
-2. All Hypothesis are cheap (no Expensive EVIDENCE Discovery required)? Choose all and skip to STEP 4.
-3. Otherwise, call \`question\` tool with multiple options (multi-choice):
-   - \`label\`: match "Hypothesis numbered heading name".
-   - \`description\`: Summarize follow-ups in < 40 words.
-4. User answer = choose hypotheses to confirm/refute
+Report most likely CAUSE hypotheses:
+- Which explain observed symptoms
+- Not refuted by EVIDENCE
+- Conflicting hypotheses? Clarify with more EVIDENCE (repeat STEP 1 or STEP 2 with more focussed queries)
 
 ### STEP 4: Confirm/Refute Hypotheses
 
-Gather more EVIDENCE as follows:
-  1. \`task\` subagents with details of chosen hypotheses, to confirm/refute chosen hypotheses, in "preferred order" according STEP 2.
-  2. If "Manual instructions" are needed: use \`primary-manual\` skill to guide user how to gather EVIDENCE and wait for user feedback.
+1. Gather more hypotheses EVIDENCE as follows:
+   * \`task\` subagents with details of chosen hypotheses, to confirm/refute chosen hypotheses, in "preferred order" according STEP 2.
+   * If "Manual instructions" are needed: use \`primary-manual\` skill to guide user how to gather EVIDENCE and wait for user feedback.
+2. Hypotheses refused? Repeat STEP 3 with report of next most likely CAUSE hypotheses.
 
-### STEP 5: Identifying ROOT CAUSE
-
-1. According to discoveries of previous STEP:
-    - List each refuted hypothesis with disproves including source refs.
-    - List each confirmed hypothesis with supporting EVIDENCE including source refs.
-2. No hypothesis confirmed? Repeat from Troubleshoot Workflow from STEP 1 to Report alternative Hypotheses with new discoveries.
-3. Multiple hypotheses confirmed? \`question\` user with option to gather more EVIDENCE or options to choose confirmed hypothesis to assume correct.
-4. Only 1 hypothesis confirmed? Continue with STEP 6.
-
-### STEP 6: Propose APPROACHES
+### STEP 5: Propose APPROACHES
 
 Report to user 1-4 APPROACH PROPOSALS in PROPOSAL REPORT to solve confirmed hypothesis and give each:
    - Numbered heading name
@@ -92,12 +80,12 @@ Report to user 1-4 APPROACH PROPOSALS in PROPOSAL REPORT to solve confirmed hypo
       * behavioral from user perspective (changes to UX, configs, performance, output)
       * warn about potential unwanted side effects of APPROACH
 
-### STEP 7: Choose Best APPROACH
+### STEP 6: Choose Best APPROACH
 
 \`question\` user with options matching "Numbered heading name" of listed APPROACHES (previous STEP):
    - answer = selected APPROACH
 
-### STEP 8: Implement APPROACH
+### STEP 7: Implement APPROACH
 
 1. \`task\` subagents with GOAL to implement selected APPROACH and \`prompt\` must include needed known facts to avoid duplicate rediscoveries.
 2. Compare \`task\` output with APPROACH description:
@@ -105,6 +93,13 @@ Report to user 1-4 APPROACH PROPOSALS in PROPOSAL REPORT to solve confirmed hypo
   - If subagent failed because lack of tools: \`task\` another subagent to complete task
   - If new CONSTRAINT discovered making APPROACH impractical: Restart Troubleshoot Workflow from STEP 1 with new CONSTRAINT and discoveries.
   - If APPROACH SOLUTION completed successfully, continue next STEP.
+
+### STEP 8: Learn From Mistakes
+
+Learn rules to prevent repetition of OBSTACLE using \`skill_learn\` tool as follows:
+- Describe OBSTACLE as SYMPTOM (include exact errors)
+- Include EVIDENCE that lead to CAUSE (include paths to source code/configs)
+- Explain what APPROACH solved issue (include key code/config changes)
 
 ### STEP 9: Report
 

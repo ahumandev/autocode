@@ -4,18 +4,18 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 
 ### Primary Agents
 
-| Agent        | Purpose                                     |
-| ------------ | ------------------------------------------- |
-| 💡 `advise`   | Research topics, answer questions, and guide manual work. |
-| 🗺️ `design`   | Design and propose solutions.               |
-| 🤖 `auto`     | **Autonomously** solve problems.            |
-| 🧑‍💻 `assist`   | Assist **interactively** to solve problems. |
+| Agent      | Purpose                                                   |
+| ---------- | --------------------------------------------------------- |
+| 💡 `advise` | Research topics, answer questions, and guide manual work. |
+| 🗺️ `design` | Design and propose solutions.                             |
+| 🤖 `auto`   | **Autonomously** solve problems.                          |
+| 🧑‍💻 `assist` | Assist **interactively** to solve problems.               |
 
 ### Autonomous Job Workflow
 
 ```mermaid
 flowchart TD
-  Advise([💡 advise guidance]) --🗺️ design--> drafts
+  Advise([💡 advise]) --🗺️ design--> drafts
   concepts --🗺️ design--> drafts
   drafts --🤖 auto --> executing
   executing -.blocked.-> facilitate
@@ -37,7 +37,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  Advise([💡 advise guidance]) --🗺️ design--> drafts
+  Advise([💡 advise]) --🗺️ design--> drafts
   concepts --🗺️ design--> drafts
   drafts --🧑‍💻 assist --> facilitate
   facilitate --> shelved
@@ -70,12 +70,12 @@ Normal prompts can start or resume work. Slash commands are convenience wrappers
 
 ### Modes
 
-| Command     | Purpose                                                                         |
-| ----------- | ------------------------------------------------------------------------------- |
-| `/advise`   | Switch to 💡 advise mode to research topics, answer questions, and guide manual work. |
-| `/design`   | Switch to 🗺️ design mode to design solution to problem.                          |
-| `/auto`     | Switch to 🤖 auto mode to autonomously solve problems (according to design plan) |
-| `/assist`   | Switch to 🧑‍💻 assist mode to semi-autonomously assist with problems/improvements. |
+| Command   | Purpose                                                                              |
+| --------- | ------------------------------------------------------------------------------------ |
+| `/advise` | Switch to 💡 advise mode to research topics, answer questions, and guide manual work. |
+| `/design` | Switch to 🗺️ design mode to design solution to problem.                               |
+| `/auto`   | Switch to 🤖 auto mode to autonomously solve problems (according to design plan)      |
+| `/assist` | Switch to 🧑‍💻 assist mode to semi-autonomously assist with problems/improvements.      |
 
 ### Documentation Commands
 
