@@ -10,7 +10,6 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 | 🗺️ `design`   | Design and propose solutions.               |
 | 🤖 `auto`     | **Autonomously** solve problems.            |
 | 🧑‍💻 `assist`   | Assist **interactively** to solve problems. |
-| ✏️ `edit`     | Edit files directly (fast & cheap).         |
 
 ### Autonomous Job Workflow
 

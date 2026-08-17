@@ -6,7 +6,6 @@
 - 🧑‍💻 **Assist mode** — *interactive*: you make decisions, agent orchestration do the work, manage job lifecycle and suggest next steps.
 - 🤖 **Auto mode** — *autonomous*: agent oversee full lifecycle of structured jobs until completion.
 
-
 ### Workflow Optimizations
 
 - 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in external directories.
@@ -83,7 +82,6 @@ At startup, AutoCode detects OS. Agents use CMD on Windows and Bash on Linux. Wi
 | 🗺️   | `design`   | Design and propose solutions.           |
 | 🤖   | `auto`     | **Autonomously** solve problems.        |
 | 🧑‍💻   | `assist`   | Assist **interactively** with problems. |
-| ✏️   | `edit`     | Edit files directly (fast & cheap).     |
 
 ### Autonomous Job Workflow
 

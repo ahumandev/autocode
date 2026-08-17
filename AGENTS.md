@@ -8,7 +8,6 @@ It turns concepts into plans, runs work in OpenCode, and keeps state in text fil
 - **`/learn`**: Retains corrections, environment quirks, permissions, and preferences as skills.
 - **GitHub skill snapshots**: Bundles reviewed reusable skills from supported GitHub sources.
 - **SSH tool suite**: Runs remote commands and manages files through environment-keyed tools.
-- **`edit` agent**: Makes fast, targeted in-session edits without spawning subagents.
 
 # Architecture map
 

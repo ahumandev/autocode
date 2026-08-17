@@ -27,7 +27,6 @@ AutoCode turns rough ideas into traceable OpenCode jobs. Files keep plan, work, 
 - **design agent**: Make plans and drafts from concept or context.
 - **auto agent**: Run drafted job alone.
 - **assist agent**: Run work with user steering.
-- **edit agent**: Make fast in-session targeted edits.
 
 ## Constraints & Assumptions
 
