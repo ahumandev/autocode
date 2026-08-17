@@ -2,6 +2,7 @@ import type { OpencodeClient } from "@opencode-ai/sdk"
 import type { ToolDefinition } from "@opencode-ai/plugin"
 import type { AutocodeSandboxConfig } from "../config"
 import type { PlatformCapabilities } from "../utils/platform"
+import type { PendingAgentRestartCoordinator } from "../hooks/agent_restart_coordinator"
 import { createAutocodeAgentExecuteTool } from "./autocode_agent_execute"
 import { createAutocodeAgentSwapTool } from "./autocode_agent_swap"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
@@ -51,6 +52,7 @@ import { createTaskResumeTool } from "./task_resume"
 type ToolRuntime = {
     home?: string
     serverUrl?: string | URL
+    restartCoordinator?: PendingAgentRestartCoordinator
 }
 
 type ToolMap = Record<string, ToolDefinition>
@@ -110,7 +112,7 @@ export function createTools(
         autocode_rest: createAutocodeRestTool(client),
         
         autocode_session_context: createAutocodeSessionContextTool(client),
-        autocode_session_restart: createAutocodeSessionRestartTool(client),
+        autocode_session_restart: createAutocodeSessionRestartTool(client, runtime?.restartCoordinator),
         autocode_ssh_command: createAutocodeSshCommandTool(),
         autocode_ssh_config_edit: createAutocodeSshConfigEditTool(),
         autocode_ssh_config_read: createAutocodeSshConfigReadTool(),

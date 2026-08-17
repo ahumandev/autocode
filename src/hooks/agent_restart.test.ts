@@ -1,15 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test"
-import {
-    findActiveAutocodeAgent,
-    restartAutocodeAgentInSession,
-} from "@/hooks/agent_restart"
-import type {
-    AgentRestartDependencies,
-    AgentRestartInput,
-    readCurrentJobPlan,
-    summarizeAutocodeAgentSession,
-} from "@/hooks/agent_restart"
-import { RESTART_ADVISE_PROMPT, RESTART_ASSIST_PROMPT, RESTART_AUTO_PROMPT } from "@/hooks/agent_restart_prompt"
+import type { Event } from "@opencode-ai/sdk"
+import { findActiveAutocodeAgent, restartAutocodeAgentInSession } from "@/hooks/agent_restart"
+import type { AgentRestartDependencies, AgentRestartInput, readCurrentJobPlan, summarizeAutocodeAgentSession } from "@/hooks/agent_restart"
+import { createPendingAgentRestartCoordinator, type PendingAgentRestartCoordinator } from "@/hooks/agent_restart_coordinator"
 import type { resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
 
 type FindActiveFn = typeof findActiveAutocodeAgent
@@ -31,12 +24,33 @@ const summarizeMock = mock<SummarizeFn>(async () => ({ data: true }))
 const readCurrentJobPlanMock = mock<ReadCurrentJobPlanFn>(async () => undefined)
 const promptAsyncMock = mock(async () => ({}))
 const client = { session: { create: sessionCreateMock, promptAsync: promptAsyncMock } } as unknown as AgentRestartInput["client"]
+const terminalConfigurations: Array<[string, () => void]> = [
+    ["summary false", (): void => { summarizeMock.mockImplementation(async () => ({ data: false })) }],
+    ["summary throws", (): void => { summarizeMock.mockImplementation(async () => { throw new Error("summary unavailable") }) }],
+    ["continuation fails", (): void => { promptAsyncMock.mockImplementation(async () => { throw new Error("queue unavailable") }) }],
+]
 
-function input(targetAgent: unknown = "auto"): AgentRestartInput {
+function idleEvent(): Event {
+    return {
+        type: "session.status",
+        properties: { sessionID: SESSION_ID, status: { type: "idle" } },
+    } as unknown as Event
+}
+
+function sessionEvent(type: "session.deleted" | "session.error"): Event {
+    if (type === "session.deleted") {
+        return { type, properties: { info: { id: SESSION_ID } } } as unknown as Event
+    }
+    return { type, properties: { sessionID: SESSION_ID } } as unknown as Event
+}
+
+function input(coordinator: PendingAgentRestartCoordinator, targetAgent: unknown = "auto", abort?: AbortSignal): AgentRestartInput {
     return {
         client,
         context: { sessionID: SESSION_ID, directory: DIRECTORY, worktree: WORKTREE },
         targetAgent,
+        abort,
+        coordinator,
     }
 }
 
@@ -50,7 +64,10 @@ function dependencies(): AgentRestartDependencies {
 }
 
 describe("restartAutocodeAgentInSession", () => {
+    let coordinator: PendingAgentRestartCoordinator
+
     beforeEach(() => {
+        coordinator = createPendingAgentRestartCoordinator()
         sessionCreateMock.mockClear()
         findActiveMock.mockClear()
         resolveSettingsMock.mockClear()
@@ -63,211 +80,177 @@ describe("restartAutocodeAgentInSession", () => {
         }))
         summarizeMock.mockImplementation(async () => ({ data: true }))
         readCurrentJobPlanMock.mockImplementation(async () => undefined)
+        promptAsyncMock.mockImplementation(async () => ({}))
     })
 
-    function waitForPostTurnDispatch(): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, 0))
-    }
+    test("returns pending restart without compaction or continuation in active tool turn", async () => {
+        const response = JSON.parse(await restartAutocodeAgentInSession(input(coordinator, "advise"), dependencies())) as Record<string, unknown>
 
-    test("forwards resolved model and reasoning variant to restart dispatch", async () => {
-        await restartAutocodeAgentInSession(input(), dependencies())
-        await waitForPostTurnDispatch()
-
-        expect(summarizeMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID, {
-            providerID: "openai",
-            modelID: "gpt-5",
+        expect(response).toEqual({
+            session_id: SESSION_ID,
+            current_agent: "assist",
+            target_agent: "advise",
+            compaction_pending: true,
+            continuation_pending: true,
         })
-        expect(promptAsyncMock).toHaveBeenCalledWith({
-            path: { id: SESSION_ID },
-            query: { directory: DIRECTORY },
-            body: expect.objectContaining({
-                model: { providerID: "openai", modelID: "gpt-5", variant: "high" },
-            }),
-        })
+        expect(summarizeMock).not.toHaveBeenCalled()
+        expect(promptAsyncMock).not.toHaveBeenCalled()
+        expect(coordinator.pendingCount()).toBe(1)
     })
 
-    test("resolves, discovers, compacts, then dispatches in same session without creating one", async () => {
+    test("summarizes once then immediately continues once on matching idle", async () => {
         const order: string[] = []
-        resolveSettingsMock.mockImplementation(async () => {
-            order.push("resolve")
-            return { resolvedModel: { model: { providerID: "openai", modelID: "gpt-5" } } }
-        })
-        findActiveMock.mockImplementation(async () => {
-            order.push("discover")
-            return { currentAgent: "assist" }
-        })
         summarizeMock.mockImplementation(async () => {
             order.push("summarize")
             return { data: true }
         })
         promptAsyncMock.mockImplementation(async () => {
-            order.push("dispatch")
+            order.push("prompt")
             return {}
         })
 
-        await restartAutocodeAgentInSession(input("advise"), dependencies())
-        await waitForPostTurnDispatch()
+        await restartAutocodeAgentInSession(input(coordinator, "advise"), dependencies())
+        await coordinator.handleEvent(idleEvent())
 
-        expect(order).toEqual(["resolve", "discover", "summarize", "dispatch"])
-        expect(resolveSettingsMock).toHaveBeenCalledWith("advise", WORKTREE, DIRECTORY)
-        expect(findActiveMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID)
-        expect(summarizeMock.mock.calls[0].slice(0, 3)).toEqual([client, DIRECTORY, SESSION_ID])
-        expect(promptAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
+        expect(order).toEqual(["summarize", "prompt"])
+        expect(summarizeMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID, { providerID: "openai", modelID: "gpt-5" })
+        expect(promptAsyncMock).toHaveBeenCalledWith({
             path: { id: SESSION_ID },
             query: { directory: DIRECTORY },
-            body: expect.objectContaining({ agent: "advise" }),
+            body: {
+                agent: "advise",
+                model: { providerID: "openai", modelID: "gpt-5", variant: "high" },
+                parts: [{ type: "text", text: "Research possibilities regarding recent discussion and continue manual practice guidance without project implementation." }],
+            },
+        })
+        expect(coordinator.pendingCount()).toBe(0)
+    })
+
+    test("preserves selected job plan in deferred assist continuation", async () => {
+        readCurrentJobPlanMock.mockImplementation(async () => ({ jobName: "current_job", plan: "# Current plan" }))
+
+        await restartAutocodeAgentInSession(input(coordinator, "assist"), dependencies())
+        await coordinator.handleEvent(idleEvent())
+
+        expect(promptAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
+            body: expect.objectContaining({
+                parts: [expect.objectContaining({ text: "Selected job: current_job\n\nplan.md:\n# Current plan" })],
+            }),
         }))
         expect(sessionCreateMock).not.toHaveBeenCalled()
     })
 
-    test("injects current job name and plan for assist and auto restart", async () => {
-        readCurrentJobPlanMock.mockImplementation(async () => ({ jobName: "current_job", plan: "# Current plan" }))
+    test("consumes repeated and concurrent idle events before compaction awaits", async () => {
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        await Promise.all([coordinator.handleEvent(idleEvent()), coordinator.handleEvent(idleEvent())])
 
-        await restartAutocodeAgentInSession(input("assist"), dependencies())
-        await waitForPostTurnDispatch()
-
-        expect(promptAsyncMock.mock.calls[0][0].body.parts[0].text).toBe("Selected job: current_job\n\nplan.md:\n# Current plan")
-
-        promptAsyncMock.mockClear()
-        await restartAutocodeAgentInSession(input("auto"), dependencies())
-        await waitForPostTurnDispatch()
-        expect(promptAsyncMock.mock.calls[0][0].body.parts[0].text).toBe("Selected job: current_job\n\nplan.md:\n# Current plan")
+        expect(summarizeMock).toHaveBeenCalledTimes(1)
+        expect(promptAsyncMock).toHaveBeenCalledTimes(1)
+        expect(coordinator.pendingCount()).toBe(0)
     })
 
-    test("uses exact assist and auto fallback prompts when current job plan is unavailable", async () => {
-        await restartAutocodeAgentInSession(input("assist"), dependencies())
-        await waitForPostTurnDispatch()
-        expect(promptAsyncMock.mock.calls[0][0].body.parts[0].text).toBe(RESTART_ASSIST_PROMPT)
+    test.each(terminalConfigurations)("cleans pending restart when %s", async (_label, configure) => {
+        configure()
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        await coordinator.handleEvent(idleEvent())
 
-        promptAsyncMock.mockClear()
-        await restartAutocodeAgentInSession(input("auto"), dependencies())
-        await waitForPostTurnDispatch()
-        expect(promptAsyncMock.mock.calls[0][0].body.parts[0].text).toBe(RESTART_AUTO_PROMPT)
+        expect(coordinator.pendingCount()).toBe(0)
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        expect(coordinator.pendingCount()).toBe(1)
     })
 
-    test("restarts advise in the same session with research and manual-guidance prompt", async () => {
-        await restartAutocodeAgentInSession(input("advise"), dependencies())
-        await waitForPostTurnDispatch()
+    test("removes pending restart on abort, deleted session, and session error", async () => {
+        const controller = new AbortController()
+        await restartAutocodeAgentInSession(input(coordinator, "auto", controller.signal), dependencies())
+        controller.abort()
+        await coordinator.handleEvent(idleEvent())
+        expect(summarizeMock).not.toHaveBeenCalled()
 
-        expect(promptAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
-            path: { id: SESSION_ID },
-            query: { directory: DIRECTORY },
-            body: expect.objectContaining({
-                agent: "advise",
-                parts: [{ type: "text", text: RESTART_ADVISE_PROMPT }],
-            }),
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        await coordinator.handleEvent(sessionEvent("session.deleted"))
+        await coordinator.handleEvent(idleEvent())
+        expect(summarizeMock).not.toHaveBeenCalled()
+
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        await coordinator.handleEvent(sessionEvent("session.error"))
+        await coordinator.handleEvent(idleEvent())
+        expect(summarizeMock).not.toHaveBeenCalled()
+        expect(coordinator.pendingCount()).toBe(0)
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        expect(coordinator.pendingCount()).toBe(1)
+    })
+
+    test("does not register an already-aborted request or a duplicate pending restart", async () => {
+        const controller = new AbortController()
+        controller.abort()
+        const aborted = JSON.parse(await restartAutocodeAgentInSession(input(coordinator, "auto", controller.signal), dependencies())) as Record<string, string>
+        expect(aborted.failedAction).toBe("restart registration")
+        expect(coordinator.pendingCount()).toBe(0)
+
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        const duplicate = JSON.parse(await restartAutocodeAgentInSession(input(coordinator), dependencies())) as Record<string, string>
+        expect(duplicate.failedAction).toBe("restart registration")
+        await coordinator.handleEvent(idleEvent())
+        expect(summarizeMock).toHaveBeenCalledTimes(1)
+        expect(promptAsyncMock).toHaveBeenCalledTimes(1)
+    })
+
+    test("rejects duplicate registration while matching idle compaction is running", async () => {
+        let beginSummary: (() => void) | undefined
+        let finishSummary: (() => void) | undefined
+        const summaryStarted = new Promise<void>((resolve) => {
+            beginSummary = resolve
         })
-        expect(readCurrentJobPlanMock).not.toHaveBeenCalled()
-        expect(sessionCreateMock).not.toHaveBeenCalled()
-    })
-
-    test("blocks dispatch and reports structured compaction failure", async () => {
-        summarizeMock.mockImplementation(async () => ({ error: "summary unavailable" }))
-
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, string>
-
-        expect(response.failedAction).toBe("compaction")
-        expect(response.error).toContain("summary unavailable")
-        expect(response.instruction).toContain("same-session compaction")
-        expect(promptAsyncMock).not.toHaveBeenCalled()
-    })
-
-    test("blocks dispatch when compaction throws", async () => {
+        const summaryFinished = new Promise<void>((resolve) => {
+            finishSummary = resolve
+        })
         summarizeMock.mockImplementation(async () => {
-            throw new Error("summary unavailable")
+            beginSummary?.()
+            await summaryFinished
+            return { data: true }
         })
 
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, string>
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        const idle = coordinator.handleEvent(idleEvent())
+        await summaryStarted
+        const duplicate = JSON.parse(await restartAutocodeAgentInSession(input(coordinator), dependencies())) as Record<string, string>
+        finishSummary?.()
+        await idle
 
-        expect(response.failedAction).toBe("compaction")
-        expect(response.error).toContain("summary unavailable")
-        expect(promptAsyncMock).not.toHaveBeenCalled()
-    })
-
-    test("blocks dispatch when compaction reports data false", async () => {
-        summarizeMock.mockImplementation(async () => ({ data: false }))
-
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, string>
-
-        expect(response.failedAction).toBe("compaction")
-        expect(response.error).toBe("Session compaction did not complete.")
-        expect(response.instruction).toContain("Retry same-session compaction")
-        expect(promptAsyncMock).not.toHaveBeenCalled()
-    })
-
-    test("returns restart success when deferred continuation dispatch reports an error", async () => {
-        promptAsyncMock.mockImplementation(async () => ({ error: "queue unavailable" }))
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, unknown>
-        await waitForPostTurnDispatch()
-
+        expect(duplicate.failedAction).toBe("restart registration")
         expect(summarizeMock).toHaveBeenCalledTimes(1)
-        expect(response.continuation_dispatched).toBe(true)
         expect(promptAsyncMock).toHaveBeenCalledTimes(1)
+        expect(coordinator.pendingCount()).toBe(0)
     })
 
-    test("returns restart success when deferred continuation dispatch throws", async () => {
-        promptAsyncMock.mockImplementation(async () => {
-            throw new Error("queue unavailable")
-        })
+    test("cleans a timed out pending restart without execution", async () => {
+        coordinator = createPendingAgentRestartCoordinator(1)
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        await new Promise<void>((resolve) => setTimeout(resolve, 5))
+        await coordinator.handleEvent(idleEvent())
 
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, unknown>
-        await waitForPostTurnDispatch()
-
-        expect(summarizeMock).toHaveBeenCalledTimes(1)
-        expect(response.continuation_dispatched).toBe(true)
-        expect(promptAsyncMock).toHaveBeenCalledTimes(1)
+        expect(coordinator.pendingCount()).toBe(0)
+        expect(summarizeMock).not.toHaveBeenCalled()
+        await restartAutocodeAgentInSession(input(coordinator), dependencies())
+        expect(coordinator.pendingCount()).toBe(1)
     })
 
-    test("blocks compaction and dispatch for missing active agent and unsupported target", async () => {
+    test("blocks registration for invalid target or missing current agent", async () => {
+        const invalid = JSON.parse(await restartAutocodeAgentInSession(input(coordinator, "temporary"), dependencies())) as Record<string, string>
+        expect(invalid.failedAction).toBe("validation")
+        expect(coordinator.pendingCount()).toBe(0)
+
         findActiveMock.mockImplementation(async () => ({ error: "No active agent" }))
-
-        const missingActiveResponse = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, string>
-
-        expect(missingActiveResponse.failedAction).toBe("validation")
-        expect(summarizeMock).not.toHaveBeenCalled()
-        expect(promptAsyncMock).not.toHaveBeenCalled()
-
-        findActiveMock.mockClear()
-        resolveSettingsMock.mockClear()
-        const unsupportedTargetResponse = JSON.parse(await restartAutocodeAgentInSession(input("temporary"), dependencies())) as Record<string, string>
-
-        expect(unsupportedTargetResponse.failedAction).toBe("validation")
-        expect(unsupportedTargetResponse.error).toContain("Invalid target agent")
-        expect(resolveSettingsMock).not.toHaveBeenCalled()
-        expect(findActiveMock).not.toHaveBeenCalled()
-        expect(summarizeMock).not.toHaveBeenCalled()
-        expect(promptAsyncMock).not.toHaveBeenCalled()
-    })
-
-    test("blocks compaction and dispatch for unsupported discovered agent", async () => {
-        findActiveMock.mockImplementation(async () => ({ error: "Unsupported current agent in newest session user message." }))
-
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, string>
-
-        expect(response.failedAction).toBe("validation")
-        expect(response.error).toContain("Unsupported current agent in newest session user message.")
-        expect(summarizeMock).not.toHaveBeenCalled()
-        expect(promptAsyncMock).not.toHaveBeenCalled()
-    })
-
-    test("blocks all injected side effects for invalid input", async () => {
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(null), dependencies())) as Record<string, string>
-
-        expect(response.failedAction).toBe("validation")
-        expect(findActiveMock).not.toHaveBeenCalled()
-        expect(resolveSettingsMock).not.toHaveBeenCalled()
-        expect(summarizeMock).not.toHaveBeenCalled()
-        expect(promptAsyncMock).not.toHaveBeenCalled()
-        expect(sessionCreateMock).not.toHaveBeenCalled()
+        const missing = JSON.parse(await restartAutocodeAgentInSession(input(coordinator), dependencies())) as Record<string, string>
+        expect(missing.failedAction).toBe("validation")
+        expect(coordinator.pendingCount()).toBe(0)
     })
 
     test("reports when newest session history has no user message", async () => {
-        const historyClient = {
-            session: { messages: mock(async () => ({ data: [] })) },
-        } as unknown as Parameters<typeof findActiveAutocodeAgent>[0]
+        const historyClient = { session: { messages: mock(async () => ({ data: [] })) } } as unknown as Parameters<typeof findActiveAutocodeAgent>[0]
 
-        const response = await findActiveAutocodeAgent(historyClient, DIRECTORY, SESSION_ID)
-
-        expect(response).toEqual({ error: "Unable to identify current agent from newest session user message." })
+        expect(await findActiveAutocodeAgent(historyClient, DIRECTORY, SESSION_ID)).toEqual({
+            error: "Unable to identify current agent from newest session user message.",
+        })
     })
 })

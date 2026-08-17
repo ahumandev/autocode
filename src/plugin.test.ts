@@ -1,17 +1,24 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import { mkdtemp, rm, writeFile, mkdir, readdir } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import type { Config as PluginHookConfig, PluginInput } from "@opencode-ai/plugin"
+import type { Config as PluginHookConfig, PluginInput, ToolContext } from "@opencode-ai/plugin"
 import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
+import type { Event } from "@opencode-ai/sdk"
 import autocode from "./plugin"
 import { createCommands } from "./commands"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 import { createPlatformCapabilities } from "./utils/platform"
+import { createNoopAsk } from "./tools/test_context"
 
 const tempRoots: string[] = []
 
 type PluginConfigHook = { config?: (input: PluginConfig) => Promise<void> }
+type RestartTool = { execute(args: { agent: "assist" | "advise" | "auto" | "design" }, context: ToolContext): Promise<string | { output: string }> }
+type PluginRestartHooks = PluginConfigHook & {
+    event?: (input: { event: Event }) => Promise<void>
+    tool?: { autocode_session_restart?: RestartTool }
+}
 type PluginInputWithSandboxSupportOverride = PluginInput & {
     sandboxSupportOverride?: SandboxPlatformSupportOptions
     platformOverride?: NodeJS.Platform
@@ -98,6 +105,63 @@ afterEach(async () => {
 })
 
 describe("autocode plugin config", () => {
+    test("runs one deferred restart only after matching idle status", async () => {
+        const root = await createTempRoot()
+        const worktree = join(root, "worktree")
+        await mkdir(join(worktree, ".opencode"), { recursive: true })
+        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
+            autocode: { tiers: { balanced: { model: "openai/gpt-5" } } },
+        }))
+        const order: string[] = []
+        const client = {
+            session: {
+                messages: mock(async () => ({ data: [{ info: { id: "user-1", role: "user", agent: "assist", time: { created: 1 } }, parts: [] }] })),
+                summarize: mock(async () => {
+                    order.push("summarize")
+                    return { data: true }
+                }),
+                promptAsync: mock(async () => {
+                    order.push("prompt")
+                    return {}
+                }),
+            },
+        }
+        const hooks = await autocode({ ...createInput(worktree), client } as unknown as Parameters<typeof autocode>[0]) as unknown as PluginRestartHooks
+        const restartTool = hooks.tool?.autocode_session_restart
+        if (!restartTool || !hooks.event) throw new Error("restart lifecycle hooks unavailable")
+        const context: ToolContext = {
+            sessionID: "session-1",
+            messageID: "message-1",
+            agent: "assist",
+            directory: worktree,
+            worktree,
+            abort: new AbortController().signal,
+            metadata() {
+            },
+            ask: createNoopAsk(),
+        }
+
+        const result = await restartTool.execute({ agent: "advise" }, context)
+
+        expect(JSON.parse(typeof result === "string" ? result : result.output)).toEqual({
+            session_id: "session-1",
+            current_agent: "assist",
+            target_agent: "advise",
+            compaction_pending: true,
+            continuation_pending: true,
+        })
+        expect(client.session.summarize).not.toHaveBeenCalled()
+        await Promise.all([
+            hooks.event({ event: { type: "session.compacted", properties: { sessionID: "session-1" } } as unknown as Event }),
+            hooks.event({ event: { type: "session.status", properties: { sessionID: "session-1", status: { type: "idle" } } } as unknown as Event }),
+            hooks.event({ event: { type: "session.idle", properties: { sessionID: "session-1" } } as unknown as Event }),
+        ])
+
+        expect(order).toEqual(["summarize", "prompt"])
+        expect(client.session.summarize).toHaveBeenCalledTimes(1)
+        expect(client.session.promptAsync).toHaveBeenCalledTimes(1)
+    })
+
     test("merges plugin config while preserving user command and agent overrides", async () => {
         const root = await createTempRoot()
         const worktree = join(root, "worktree")

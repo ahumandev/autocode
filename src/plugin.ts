@@ -10,6 +10,7 @@ import { createCommands } from "./commands"
 import { cleanupLearnedSkills, reconcileGeneratedSkills } from "./skills"
 import { createTools } from "./tools"
 import { createPlatformCapabilities, type PlatformCapabilities } from "./utils/platform"
+import { createPendingAgentRestartCoordinator } from "./hooks/agent_restart_coordinator"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
@@ -131,6 +132,7 @@ async function createPluginHooks(
     registerSkills?: (path: string) => void,
 ): Promise<Hooks> {
     const capabilities = createPlatformCapabilities(input.platformOverride ?? process.platform, process.env)
+    const restartCoordinator = createPendingAgentRestartCoordinator()
     const commandDefinitions = createCommands(capabilities)
     const path = capabilities.isWindows ? win32 : posix
     const home = input.homeOverride ?? homedir()
@@ -153,10 +155,16 @@ async function createPluginHooks(
     }
 
     return {
+        async dispose(): Promise<void> {
+            restartCoordinator.dispose()
+        },
+        async event({ event }): Promise<void> {
+            await restartCoordinator.handleEvent(event)
+        },
         async config(cfg: ConfigWithSubagentDepth) {
             await mergeConfig(cfg, input, autocodeConfig, generatedSkills, capabilities, commandDefinitions)
         },
-        tool: createTools(input.client, autocodeConfig.sandbox, { home, serverUrl: input.serverUrl }, capabilities),
+        tool: createTools(input.client, autocodeConfig.sandbox, { home, serverUrl: input.serverUrl, restartCoordinator }, capabilities),
     }
 }
 

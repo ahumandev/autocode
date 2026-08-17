@@ -3,16 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ToolContext } from "@opencode-ai/plugin"
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { Event, OpencodeClient } from "@opencode-ai/sdk"
 import type { PrimaryAutocodeAgent } from "../utils/agent_swap"
+import { createPendingAgentRestartCoordinator } from "../hooks/agent_restart_coordinator"
 import { createAutocodeSessionRestartTool } from "./autocode_session_restart"
 import { createNoopAsk } from "./test_context"
 
 type ParsedToolResult = Record<string, unknown>
-
-type AgentSchema = {
-    safeParse(input: unknown): { success: boolean }
-}
+type AgentSchema = { safeParse(input: unknown): { success: boolean } }
 
 const primaryAgents: PrimaryAutocodeAgent[] = ["assist", "advise", "auto", "design"]
 
@@ -23,12 +21,7 @@ describe("autocode_session_restart tool", () => {
         worktree = mkdtempSync(join(tmpdir(), "autocode-session-restart-"))
         mkdirSync(join(worktree, ".opencode"), { recursive: true })
         writeFileSync(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
-            autocode: {
-                tiers: {
-                    balanced: { model: "anthropic/claude-sonnet-4-5" },
-                    smart: { model: "openai/gpt-5.5", variant: "thinking" },
-                },
-            },
+            autocode: { tiers: { balanced: { model: "anthropic/claude-sonnet-4-5" }, smart: { model: "openai/gpt-5.5", variant: "thinking" } } },
         }))
     })
 
@@ -51,16 +44,18 @@ describe("autocode_session_restart tool", () => {
         }
     }
 
+    function idleEvent(): Event {
+        return {
+            type: "session.status",
+            properties: { sessionID: "current-session", status: { type: "idle" } },
+        } as unknown as Event
+    }
+
     function createMockClient(): OpencodeClient & { session: { create: ReturnType<typeof mock>, summarize: ReturnType<typeof mock>, promptAsync: ReturnType<typeof mock> } } {
         return {
             session: {
                 create: mock(async () => ({ data: { id: "new-session" } })),
-                messages: mock(async () => ({
-                    data: [{
-                        info: { id: "user-1", role: "user", agent: "assist", time: { created: 1 } },
-                        parts: [],
-                    }],
-                })),
+                messages: mock(async () => ({ data: [{ info: { id: "user-1", role: "user", agent: "assist", time: { created: 1 } }, parts: [] }] })),
                 summarize: mock(async () => ({ data: true })),
                 promptAsync: mock(async () => ({})),
             },
@@ -71,70 +66,42 @@ describe("autocode_session_restart tool", () => {
         return JSON.parse(typeof result === "string" ? result : result.output)
     }
 
-    function waitForPostTurnDispatch(): Promise<void> {
-        return new Promise((resolve) => setTimeout(resolve, 0))
-    }
-
-    test.each(primaryAgents)("restarts %s in the current session without creating one", async (agent) => {
+    test.each(primaryAgents)("returns pending restart for %s without compacting during tool execution", async (agent) => {
         const client = createMockClient()
-        client.session.summarize.mockImplementation(async function (this: unknown) {
-            expect(this).toBe(client.session)
-            return { data: true }
-        })
-        const tool = createAutocodeSessionRestartTool(client)
+        const coordinator = createPendingAgentRestartCoordinator()
+        const tool = createAutocodeSessionRestartTool(client, coordinator)
 
         const parsed = parseToolResult(await tool.execute({ agent }, createToolContext()))
-
-        await waitForPostTurnDispatch()
 
         expect(parsed).toEqual({
             session_id: "current-session",
             current_agent: "assist",
             target_agent: agent,
-            compaction_completed: true,
-            continuation_dispatched: true,
+            compaction_pending: true,
+            continuation_pending: true,
         })
-        expect(client.session.summarize).toHaveBeenCalledWith({
-            path: { id: "current-session" },
-            query: { directory: worktree },
-            body: expect.objectContaining({ auto: false }),
-        })
-        expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
-            path: { id: "current-session" },
-            query: { directory: worktree },
-            body: expect.objectContaining({ agent }),
-        }))
+        expect(client.session.summarize).not.toHaveBeenCalled()
+        expect(client.session.promptAsync).not.toHaveBeenCalled()
+        expect(coordinator.pendingCount()).toBe(1)
+        await coordinator.handleEvent(idleEvent())
+        expect(client.session.summarize).toHaveBeenCalledTimes(1)
+        expect(client.session.promptAsync).toHaveBeenCalledTimes(1)
         expect(client.session.create).not.toHaveBeenCalled()
     })
 
-    test("resolves restart before deferred continuation dispatch", async () => {
+    test("passes tool abort signal so an aborted request cannot execute after idle", async () => {
         const client = createMockClient()
-        const tool = createAutocodeSessionRestartTool(client)
-        const originalSetTimeout = globalThis.setTimeout
-        let deferredCallback: (() => void) | undefined
-        globalThis.setTimeout = ((callback: () => void) => {
-            deferredCallback = callback
-            return 0 as unknown as ReturnType<typeof setTimeout>
-        }) as typeof setTimeout
+        const coordinator = createPendingAgentRestartCoordinator()
+        const controller = new AbortController()
+        const tool = createAutocodeSessionRestartTool(client, coordinator)
 
-        try {
-            const parsed = parseToolResult(await tool.execute({ agent: "advise" }, createToolContext()))
+        await tool.execute({ agent: "advise" }, createToolContext({ abort: controller.signal }))
+        controller.abort()
+        await coordinator.handleEvent(idleEvent())
 
-            expect(parsed.continuation_dispatched).toBe(true)
-            expect(client.session.promptAsync).not.toHaveBeenCalled()
-            expect(deferredCallback).toBeDefined()
-
-            deferredCallback!()
-
-            expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
-                path: { id: "current-session" },
-                query: { directory: worktree },
-                body: expect.objectContaining({ agent: "advise" }),
-            }))
-        }
-        finally {
-            globalThis.setTimeout = originalSetTimeout
-        }
+        expect(client.session.summarize).not.toHaveBeenCalled()
+        expect(client.session.promptAsync).not.toHaveBeenCalled()
+        expect(coordinator.pendingCount()).toBe(0)
     })
 
     test("schema exposes only agent and omits legacy create fields", () => {
@@ -150,43 +117,17 @@ describe("autocode_session_restart tool", () => {
         }
     })
 
-    test("rejects missing and invalid agent schema inputs", () => {
-        const tool = createAutocodeSessionRestartTool()
-        const agentSchema = tool.args.agent as unknown as AgentSchema
-
-        expect(agentSchema.safeParse(undefined).success).toBe(false)
-        expect(agentSchema.safeParse("plan").success).toBe(false)
-    })
-
-    test("rejects missing and invalid agents without creating a session", async () => {
+    test("rejects unavailable lifecycle and invalid agent without compaction", async () => {
         const client = createMockClient()
-        const tool = createAutocodeSessionRestartTool(client)
+        const missingLifecycle = createAutocodeSessionRestartTool(client)
+        const activeTool = createAutocodeSessionRestartTool(client, createPendingAgentRestartCoordinator())
 
-        const missing = parseToolResult(await tool.execute({} as never, createToolContext()))
-        const invalid = parseToolResult(await tool.execute({ agent: "plan" } as never, createToolContext()))
+        const unavailable = parseToolResult(await missingLifecycle.execute({ agent: "auto" }, createToolContext()))
+        const invalid = parseToolResult(await activeTool.execute({ agent: "plan" } as never, createToolContext()))
 
-        expect(missing.failedAction).toBe("validation")
+        expect(unavailable.failedAction).toBe("autocode_session_restart")
         expect(invalid.failedAction).toBe("validation")
-        expect(client.session.create).not.toHaveBeenCalled()
         expect(client.session.summarize).not.toHaveBeenCalled()
         expect(client.session.promptAsync).not.toHaveBeenCalled()
-    })
-
-    test("ignores legacy extra inputs while restarting the current session", async () => {
-        const client = createMockClient()
-        const tool = createAutocodeSessionRestartTool(client)
-
-        const parsed = parseToolResult(await tool.execute({
-            agent: "auto",
-            model: "openai/gpt-5.5",
-            auto: true,
-            prompt: "Create another session",
-            title: "Separate Session",
-            unknown: "ignored",
-        } as never, createToolContext()))
-
-        expect(parsed.session_id).toBe("current-session")
-        expect(parsed.target_agent).toBe("auto")
-        expect(client.session.create).not.toHaveBeenCalled()
     })
 })

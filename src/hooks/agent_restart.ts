@@ -3,12 +3,12 @@ import { readFile, readdir } from "node:fs/promises"
 import { createAgentRestartPrompt } from "@/hooks/agent_restart_prompt"
 import { createDirectoryFileSystem, getJobFilePath, isMissingFile, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem } from "@/utils/jobs"
 import {
-    dispatchAutocodeAgentPromptAfterTurn,
     isPrimaryAutocodeAgent,
     resolveAutocodeAgentSessionSettings,
     type PrimaryAutocodeAgent,
     type ResolvedAgentModel,
 } from "@/utils/agent_swap"
+import type { PendingAgentRestartCoordinator, PendingRestartCompactionResponse } from "@/hooks/agent_restart_coordinator"
 import { createAbortResponse, createRetryResponse, flattenError } from "@/utils/tools"
 
 type SessionMessage = {
@@ -16,10 +16,7 @@ type SessionMessage = {
     parts: Part[]
 }
 
-export type AgentRestartCompactionResponse = {
-    data?: boolean
-    error?: unknown
-}
+export type AgentRestartCompactionResponse = PendingRestartCompactionResponse
 
 type OpenCodeApiResponse<T> = {
     data?: T
@@ -55,6 +52,8 @@ export type AgentRestartInput = {
     client: OpencodeClient
     context: AgentRestartContext
     targetAgent: unknown
+    abort?: AbortSignal
+    coordinator: PendingAgentRestartCoordinator
 }
 
 export type ActiveAutocodeAgentResult =
@@ -209,6 +208,7 @@ export async function restartAutocodeAgentInSession(
     if (!hasResolvedModel(settings.resolvedModel)) {
         return createAbortResponse("configuration resolution", "Resolved target agent model is unavailable or invalid.")
     }
+    const summaryModel = settings.resolvedModel.model
 
     const findActiveAgent = deps.findActiveAutocodeAgent ?? findActiveAutocodeAgent
     let activeAgent: ActiveAutocodeAgentResult
@@ -220,18 +220,6 @@ export async function restartAutocodeAgentInSession(
     }
     if ("error" in activeAgent) {
         return createAbortResponse("validation", activeAgent.error)
-    }
-
-    const summarize = deps.summarizeAutocodeAgentSession ?? summarizeAutocodeAgentSession
-    let compaction: AgentRestartCompactionResponse
-    try {
-        compaction = await summarize(input.client, input.context.directory, input.context.sessionID, settings.resolvedModel.model)
-    }
-    catch (error) {
-        return createRetryResponse("compaction", error, "Retry same-session compaction before continuation dispatch.")
-    }
-    if (compaction.error !== undefined || compaction.data !== true) {
-        return createRetryResponse("compaction", compaction.error ?? "Session compaction did not complete.", "Retry same-session compaction before continuation dispatch.")
     }
 
     let jobPlan: CurrentJobPlan | undefined
@@ -246,13 +234,30 @@ export async function restartAutocodeAgentInSession(
     }
 
     const prompt = createAgentRestartPrompt({ currentAgent: activeAgent.currentAgent, targetAgent, jobPlan })
-    dispatchAutocodeAgentPromptAfterTurn(input.client, input.context.directory, input.context.sessionID, targetAgent, prompt, settings.resolvedModel)
+    const summarize = deps.summarizeAutocodeAgentSession ?? summarizeAutocodeAgentSession
+    const registration = input.coordinator.register({
+        client: input.client,
+        directory: input.context.directory,
+        sessionID: input.context.sessionID,
+        currentAgent: activeAgent.currentAgent,
+        targetAgent,
+        prompt,
+        resolvedModel: settings.resolvedModel,
+        summarize: () => summarize(input.client, input.context.directory, input.context.sessionID, summaryModel),
+        abort: input.abort,
+    })
+    if (registration === "aborted") {
+        return createAbortResponse("restart registration", "Restart request was aborted before compaction could be scheduled.")
+    }
+    if (registration === "duplicate") {
+        return createRetryResponse("restart registration", "A restart is already pending for this session.", "Wait for pending compaction before requesting another restart.")
+    }
 
     return JSON.stringify({
         session_id: input.context.sessionID,
         current_agent: activeAgent.currentAgent,
         target_agent: targetAgent,
-        compaction_completed: true,
-        continuation_dispatched: true,
+        compaction_pending: true,
+        continuation_pending: true,
     })
 }
