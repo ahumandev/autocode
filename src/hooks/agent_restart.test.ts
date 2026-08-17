@@ -10,13 +10,11 @@ import type {
     summarizeAutocodeAgentSession,
 } from "@/hooks/agent_restart"
 import { RESTART_ADVISE_PROMPT, RESTART_ASSIST_PROMPT, RESTART_AUTO_PROMPT } from "@/hooks/agent_restart_prompt"
-import { dispatchAutocodeAgentPrompt } from "@/utils/agent_swap"
 import type { resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
 
 type FindActiveFn = typeof findActiveAutocodeAgent
 type ResolveSettingsFn = typeof resolveAutocodeAgentSessionSettings
 type SummarizeFn = typeof summarizeAutocodeAgentSession
-type DispatchFn = typeof dispatchAutocodeAgentPrompt
 type ReadCurrentJobPlanFn = typeof readCurrentJobPlan
 
 const SESSION_ID = "session-123"
@@ -30,7 +28,6 @@ const resolveSettingsMock = mock<ResolveSettingsFn>(async () => ({
     resolvedModel: { model: { providerID: "openai", modelID: "gpt-5" }, variant: "high" },
 }))
 const summarizeMock = mock<SummarizeFn>(async () => ({ data: true }))
-const dispatchMock = mock<DispatchFn>(async () => ({ sessionID: SESSION_ID }))
 const readCurrentJobPlanMock = mock<ReadCurrentJobPlanFn>(async () => undefined)
 const promptAsyncMock = mock(async () => ({}))
 const client = { session: { create: sessionCreateMock, promptAsync: promptAsyncMock } } as unknown as AgentRestartInput["client"]
@@ -48,7 +45,6 @@ function dependencies(): AgentRestartDependencies {
         findActiveAutocodeAgent: findActiveMock,
         resolveAutocodeAgentSessionSettings: resolveSettingsMock,
         summarizeAutocodeAgentSession: summarizeMock,
-        dispatchAutocodeAgentPrompt: dispatchMock,
         readCurrentJobPlan: readCurrentJobPlanMock,
     }
 }
@@ -59,7 +55,6 @@ describe("restartAutocodeAgentInSession", () => {
         findActiveMock.mockClear()
         resolveSettingsMock.mockClear()
         summarizeMock.mockClear()
-        dispatchMock.mockClear()
         readCurrentJobPlanMock.mockClear()
         promptAsyncMock.mockClear()
         findActiveMock.mockImplementation(async () => ({ currentAgent: "assist" }))
@@ -67,22 +62,20 @@ describe("restartAutocodeAgentInSession", () => {
             resolvedModel: { model: { providerID: "openai", modelID: "gpt-5" }, variant: "high" },
         }))
         summarizeMock.mockImplementation(async () => ({ data: true }))
-        dispatchMock.mockImplementation(async () => ({ sessionID: SESSION_ID }))
         readCurrentJobPlanMock.mockImplementation(async () => undefined)
     })
 
-    test("forwards resolved model and reasoning variant to restart dispatch", async () => {
-        dispatchMock.mockImplementation(dispatchAutocodeAgentPrompt)
+    function waitForPostTurnDispatch(): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, 0))
+    }
 
+    test("forwards resolved model and reasoning variant to restart dispatch", async () => {
         await restartAutocodeAgentInSession(input(), dependencies())
+        await waitForPostTurnDispatch()
 
         expect(summarizeMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID, {
             providerID: "openai",
             modelID: "gpt-5",
-        })
-        expect(dispatchMock.mock.calls[0][5]).toEqual({
-            model: { providerID: "openai", modelID: "gpt-5" },
-            variant: "high",
         })
         expect(promptAsyncMock).toHaveBeenCalledWith({
             path: { id: SESSION_ID },
@@ -107,18 +100,23 @@ describe("restartAutocodeAgentInSession", () => {
             order.push("summarize")
             return { data: true }
         })
-        dispatchMock.mockImplementation(async () => {
+        promptAsyncMock.mockImplementation(async () => {
             order.push("dispatch")
-            return { sessionID: SESSION_ID }
+            return {}
         })
 
         await restartAutocodeAgentInSession(input("advise"), dependencies())
+        await waitForPostTurnDispatch()
 
         expect(order).toEqual(["resolve", "discover", "summarize", "dispatch"])
         expect(resolveSettingsMock).toHaveBeenCalledWith("advise", WORKTREE, DIRECTORY)
         expect(findActiveMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID)
         expect(summarizeMock.mock.calls[0].slice(0, 3)).toEqual([client, DIRECTORY, SESSION_ID])
-        expect(dispatchMock.mock.calls[0].slice(0, 4)).toEqual([client, DIRECTORY, SESSION_ID, "advise"])
+        expect(promptAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: { id: SESSION_ID },
+            query: { directory: DIRECTORY },
+            body: expect.objectContaining({ agent: "advise" }),
+        }))
         expect(sessionCreateMock).not.toHaveBeenCalled()
     })
 
@@ -126,29 +124,38 @@ describe("restartAutocodeAgentInSession", () => {
         readCurrentJobPlanMock.mockImplementation(async () => ({ jobName: "current_job", plan: "# Current plan" }))
 
         await restartAutocodeAgentInSession(input("assist"), dependencies())
+        await waitForPostTurnDispatch()
 
-        expect(dispatchMock.mock.calls[0][4]).toBe("Selected job: current_job\n\nplan.md:\n# Current plan")
+        expect(promptAsyncMock.mock.calls[0][0].body.parts[0].text).toBe("Selected job: current_job\n\nplan.md:\n# Current plan")
 
-        dispatchMock.mockClear()
+        promptAsyncMock.mockClear()
         await restartAutocodeAgentInSession(input("auto"), dependencies())
-        expect(dispatchMock.mock.calls[0][4]).toBe("Selected job: current_job\n\nplan.md:\n# Current plan")
+        await waitForPostTurnDispatch()
+        expect(promptAsyncMock.mock.calls[0][0].body.parts[0].text).toBe("Selected job: current_job\n\nplan.md:\n# Current plan")
     })
 
     test("uses exact assist and auto fallback prompts when current job plan is unavailable", async () => {
         await restartAutocodeAgentInSession(input("assist"), dependencies())
-        expect(dispatchMock.mock.calls[0][4]).toBe(RESTART_ASSIST_PROMPT)
+        await waitForPostTurnDispatch()
+        expect(promptAsyncMock.mock.calls[0][0].body.parts[0].text).toBe(RESTART_ASSIST_PROMPT)
 
-        dispatchMock.mockClear()
+        promptAsyncMock.mockClear()
         await restartAutocodeAgentInSession(input("auto"), dependencies())
-        expect(dispatchMock.mock.calls[0][4]).toBe(RESTART_AUTO_PROMPT)
+        await waitForPostTurnDispatch()
+        expect(promptAsyncMock.mock.calls[0][0].body.parts[0].text).toBe(RESTART_AUTO_PROMPT)
     })
 
     test("restarts advise in the same session with research and manual-guidance prompt", async () => {
         await restartAutocodeAgentInSession(input("advise"), dependencies())
+        await waitForPostTurnDispatch()
 
-        expect(dispatchMock).toHaveBeenCalledWith(client, DIRECTORY, SESSION_ID, "advise", RESTART_ADVISE_PROMPT, {
-            model: { providerID: "openai", modelID: "gpt-5" },
-            variant: "high",
+        expect(promptAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
+            path: { id: SESSION_ID },
+            query: { directory: DIRECTORY },
+            body: expect.objectContaining({
+                agent: "advise",
+                parts: [{ type: "text", text: RESTART_ADVISE_PROMPT }],
+            }),
         })
         expect(readCurrentJobPlanMock).not.toHaveBeenCalled()
         expect(sessionCreateMock).not.toHaveBeenCalled()
@@ -162,7 +169,7 @@ describe("restartAutocodeAgentInSession", () => {
         expect(response.failedAction).toBe("compaction")
         expect(response.error).toContain("summary unavailable")
         expect(response.instruction).toContain("same-session compaction")
-        expect(dispatchMock).not.toHaveBeenCalled()
+        expect(promptAsyncMock).not.toHaveBeenCalled()
     })
 
     test("blocks dispatch when compaction throws", async () => {
@@ -174,7 +181,7 @@ describe("restartAutocodeAgentInSession", () => {
 
         expect(response.failedAction).toBe("compaction")
         expect(response.error).toContain("summary unavailable")
-        expect(dispatchMock).not.toHaveBeenCalled()
+        expect(promptAsyncMock).not.toHaveBeenCalled()
     })
 
     test("blocks dispatch when compaction reports data false", async () => {
@@ -185,33 +192,30 @@ describe("restartAutocodeAgentInSession", () => {
         expect(response.failedAction).toBe("compaction")
         expect(response.error).toBe("Session compaction did not complete.")
         expect(response.instruction).toContain("Retry same-session compaction")
-        expect(dispatchMock).not.toHaveBeenCalled()
+        expect(promptAsyncMock).not.toHaveBeenCalled()
     })
 
-    test("reports continuation dispatch failure after compaction completes", async () => {
-        dispatchMock.mockImplementation(async () => ({ error: "queue unavailable", instruction: "" }))
-
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, string>
+    test("returns restart success when deferred continuation dispatch reports an error", async () => {
+        promptAsyncMock.mockImplementation(async () => ({ error: "queue unavailable" }))
+        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, unknown>
+        await waitForPostTurnDispatch()
 
         expect(summarizeMock).toHaveBeenCalledTimes(1)
-        expect(response.failedAction).toBe("continuation dispatch")
-        expect(response.error).toContain("Compaction completed")
-        expect(response.error).toContain("queue unavailable")
-        expect(response.instruction).toContain("compaction completed")
+        expect(response.continuation_dispatched).toBe(true)
+        expect(promptAsyncMock).toHaveBeenCalledTimes(1)
     })
 
-    test("reports thrown continuation dispatch failure after compaction completes", async () => {
-        dispatchMock.mockImplementation(async () => {
+    test("returns restart success when deferred continuation dispatch throws", async () => {
+        promptAsyncMock.mockImplementation(async () => {
             throw new Error("queue unavailable")
         })
 
-        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, string>
+        const response = JSON.parse(await restartAutocodeAgentInSession(input(), dependencies())) as Record<string, unknown>
+        await waitForPostTurnDispatch()
 
         expect(summarizeMock).toHaveBeenCalledTimes(1)
-        expect(response.failedAction).toBe("continuation dispatch")
-        expect(response.error).toContain("Compaction completed")
-        expect(response.error).toContain("queue unavailable")
-        expect(response.instruction).toContain("compaction completed")
+        expect(response.continuation_dispatched).toBe(true)
+        expect(promptAsyncMock).toHaveBeenCalledTimes(1)
     })
 
     test("blocks compaction and dispatch for missing active agent and unsupported target", async () => {
@@ -221,7 +225,7 @@ describe("restartAutocodeAgentInSession", () => {
 
         expect(missingActiveResponse.failedAction).toBe("validation")
         expect(summarizeMock).not.toHaveBeenCalled()
-        expect(dispatchMock).not.toHaveBeenCalled()
+        expect(promptAsyncMock).not.toHaveBeenCalled()
 
         findActiveMock.mockClear()
         resolveSettingsMock.mockClear()
@@ -232,7 +236,7 @@ describe("restartAutocodeAgentInSession", () => {
         expect(resolveSettingsMock).not.toHaveBeenCalled()
         expect(findActiveMock).not.toHaveBeenCalled()
         expect(summarizeMock).not.toHaveBeenCalled()
-        expect(dispatchMock).not.toHaveBeenCalled()
+        expect(promptAsyncMock).not.toHaveBeenCalled()
     })
 
     test("blocks compaction and dispatch for unsupported discovered agent", async () => {
@@ -243,7 +247,7 @@ describe("restartAutocodeAgentInSession", () => {
         expect(response.failedAction).toBe("validation")
         expect(response.error).toContain("Unsupported current agent in newest session user message.")
         expect(summarizeMock).not.toHaveBeenCalled()
-        expect(dispatchMock).not.toHaveBeenCalled()
+        expect(promptAsyncMock).not.toHaveBeenCalled()
     })
 
     test("blocks all injected side effects for invalid input", async () => {
@@ -253,7 +257,7 @@ describe("restartAutocodeAgentInSession", () => {
         expect(findActiveMock).not.toHaveBeenCalled()
         expect(resolveSettingsMock).not.toHaveBeenCalled()
         expect(summarizeMock).not.toHaveBeenCalled()
-        expect(dispatchMock).not.toHaveBeenCalled()
+        expect(promptAsyncMock).not.toHaveBeenCalled()
         expect(sessionCreateMock).not.toHaveBeenCalled()
     })
 

@@ -71,6 +71,10 @@ describe("autocode_session_restart tool", () => {
         return JSON.parse(typeof result === "string" ? result : result.output)
     }
 
+    function waitForPostTurnDispatch(): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, 0))
+    }
+
     test.each(primaryAgents)("restarts %s in the current session without creating one", async (agent) => {
         const client = createMockClient()
         client.session.summarize.mockImplementation(async function (this: unknown) {
@@ -80,6 +84,8 @@ describe("autocode_session_restart tool", () => {
         const tool = createAutocodeSessionRestartTool(client)
 
         const parsed = parseToolResult(await tool.execute({ agent }, createToolContext()))
+
+        await waitForPostTurnDispatch()
 
         expect(parsed).toEqual({
             session_id: "current-session",
@@ -99,6 +105,36 @@ describe("autocode_session_restart tool", () => {
             body: expect.objectContaining({ agent }),
         }))
         expect(client.session.create).not.toHaveBeenCalled()
+    })
+
+    test("resolves restart before deferred continuation dispatch", async () => {
+        const client = createMockClient()
+        const tool = createAutocodeSessionRestartTool(client)
+        const originalSetTimeout = globalThis.setTimeout
+        let deferredCallback: (() => void) | undefined
+        globalThis.setTimeout = ((callback: () => void) => {
+            deferredCallback = callback
+            return 0 as unknown as ReturnType<typeof setTimeout>
+        }) as typeof setTimeout
+
+        try {
+            const parsed = parseToolResult(await tool.execute({ agent: "advise" }, createToolContext()))
+
+            expect(parsed.continuation_dispatched).toBe(true)
+            expect(client.session.promptAsync).not.toHaveBeenCalled()
+            expect(deferredCallback).toBeDefined()
+
+            deferredCallback!()
+
+            expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
+                path: { id: "current-session" },
+                query: { directory: worktree },
+                body: expect.objectContaining({ agent: "advise" }),
+            }))
+        }
+        finally {
+            globalThis.setTimeout = originalSetTimeout
+        }
     })
 
     test("schema exposes only agent and omits legacy create fields", () => {

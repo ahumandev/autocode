@@ -2,7 +2,7 @@ export const toolQuestionRules = `
 ## Question Rules
 
 ### Before Asking
-- ✅ ALWAYS present report BEFORE calling \`question\` tool.
+- ✅ ALWAYS present "User Report" BEFORE calling \`question\` tool.
 - ✅ ALWAYS match PROPOSAL REPORT headings and order with \`question\` tool option \`labels\` and order.
 - ❌ NEVER ask for information user already provided.
 
@@ -17,4 +17,8 @@ export const toolQuestionRules = `
 ### Batching
 - Prefer batching related questions into single \`question\` tool call.
 - Keep each question focused on 1 decision.
+
+### After User Report
+- Done with ASSIGNMENT? Call \`question\` to suggest "next ACTION".
+- ALWAYS call \`question\` to enable user decisions.
 `

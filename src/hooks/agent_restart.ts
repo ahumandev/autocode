@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises"
 import { createAgentRestartPrompt } from "@/hooks/agent_restart_prompt"
 import { createDirectoryFileSystem, getJobFilePath, isMissingFile, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem } from "@/utils/jobs"
 import {
-    dispatchAutocodeAgentPrompt,
+    dispatchAutocodeAgentPromptAfterTurn,
     isPrimaryAutocodeAgent,
     resolveAutocodeAgentSessionSettings,
     type PrimaryAutocodeAgent,
@@ -65,7 +65,6 @@ export type AgentRestartDependencies = {
     findActiveAutocodeAgent?: typeof findActiveAutocodeAgent
     resolveAutocodeAgentSessionSettings?: typeof resolveAutocodeAgentSessionSettings
     summarizeAutocodeAgentSession?: typeof summarizeAutocodeAgentSession
-    dispatchAutocodeAgentPrompt?: typeof dispatchAutocodeAgentPrompt
     readCurrentJobPlan?: typeof readCurrentJobPlan
 }
 
@@ -246,18 +245,8 @@ export async function restartAutocodeAgentInSession(
         }
     }
 
-    const dispatch = deps.dispatchAutocodeAgentPrompt ?? dispatchAutocodeAgentPrompt
     const prompt = createAgentRestartPrompt({ currentAgent: activeAgent.currentAgent, targetAgent, jobPlan })
-    let dispatched: Awaited<ReturnType<typeof dispatchAutocodeAgentPrompt>>
-    try {
-        dispatched = await dispatch(input.client, input.context.directory, input.context.sessionID, targetAgent, prompt, settings.resolvedModel)
-    }
-    catch (error) {
-        return createRetryResponse("continuation dispatch", `Compaction completed, but continuation dispatch failed: ${flattenError(error)}`, "Retry continuation dispatch in this same session; compaction completed.")
-    }
-    if ("error" in dispatched) {
-        return createRetryResponse("continuation dispatch", `Compaction completed, but continuation dispatch failed: ${dispatched.error}`, "Retry continuation dispatch in this same session; compaction completed.")
-    }
+    dispatchAutocodeAgentPromptAfterTurn(input.client, input.context.directory, input.context.sessionID, targetAgent, prompt, settings.resolvedModel)
 
     return JSON.stringify({
         session_id: input.context.sessionID,

@@ -22,7 +22,6 @@ import { documentConventionsPrompt } from "./prompts/document_conventions"
 import { documentInstallPrompt } from "./prompts/document_install"
 import { documentPrdPrompt } from "./prompts/document_prd"
 import { documentUxPrompt } from "./prompts/document_ux"
-import { editPrompt } from "./prompts/edit";
 import { executeAuthorPrompt } from "./prompts/execute_author";
 import { executeCodePrompt } from "./prompts/execute_code";
 import { executeDebugPrompt } from "./prompts/execute_debug";
@@ -122,20 +121,32 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         mode: "primary",
         permission: {
             "*": "deny",
+            autocode_config_read: "allow",
             autocode_job_status: "allow",
+            autocode_md_frontmatter_read: "allow",
+            autocode_md_read: "allow",
             autocode_session_restart: "allow",
             doom_loop: "ask",
             git_commit: "ask",
             question: "allow",
             skill: {
                 "*": "deny",
+                "angular-developer": "allow",
                 "assist-*": "allow",
+                "author-*": "allow",
                 "codebase-design": "allow", // From mattpocock/skills
+                "code*": "allow",
+                "java-junit": "allow",
+                "javascript-typescript-jest": "allow",
                 "git-commit": "allow",
+                "learned-preferences*": "allow",
                 "learned-permissions*": "allow",
                 "primary-manual*": "allow",
+                "skill-write": "allow",
+                "tailwindcss": "allow",
+                "vitest": "allow",
                 "vue-best-practices": "allow",
-                "ui-craft": "allow",
+                "ui-craft": "allow",    
             },
             skill_learn: "allow",
             task: {
@@ -157,24 +168,35 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         mode: "primary",
         permission: {
             "*": "deny",
+            "autocode_config_*": "allow",
             autocode_dependencies: "allow",
             autocode_job_status: "allow",
+            "autocode_md_*": "allow",
             autocode_sandbox_create: "ask",
             autocode_sandbox_delete: "allow",
             autocode_session_restart: "allow",
             doom_loop: "ask",
+            edit: "allow",
             git_commit: "allow",
             question: "allow",
             skill: {
                 "*": "deny",
+                "angular-developer": "allow",
                 "assist-*": "allow",
+                "author-*": "allow",
                 "codebase-design": "allow", // From mattpocock/skills
+                "code*": "allow",
+                "java-junit": "allow",
+                "javascript-typescript-jest": "allow",
                 "git-commit": "allow",
+                "learned-preferences*": "allow",
                 "learned-permissions*": "allow",
                 "primary-manual*": "allow",
                 "skill-write": "allow",
+                "tailwindcss": "allow",
+                "vitest": "allow",
                 "vue-best-practices": "allow",
-                "ui-craft": "allow",
+                "ui-craft": "allow",                
             },
             skill_learn: "allow",
             task: {
@@ -262,44 +284,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         prompt: designPrompt,
         temperature: 0.7,
         tier: "balanced",
-    },
-
-    edit: {
-        color: colorWritableInteractiveOrchestrator,
-        description: "Edit files directly (fast & cheap).",
-        hidden: false,
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            "autocode_config_*": "allow",
-            "autocode_md_*": "allow",
-            apply_patch: "allow",
-            autocode_session_restart: "allow",
-            doom_loop: "ask",
-            edit: "allow",
-            external_directory: "ask",
-            git_commit: "allow",
-            glob: "allow",
-            grep: "allow",
-            list: "allow",
-            lsp: "allow",
-            question: "allow",
-            read: "allow",
-            write: "allow",
-            skill: {
-                "*": "deny",
-                "angular-developer": "allow",
-                "author-article": "allow",
-                "code*": "allow",
-                "design*": "allow",
-                "git-commit": "allow",
-                "learned-preferences*": "allow",
-                "skill-write": "allow",
-            },
-            "skill_learn": "allow"
-        },
-        prompt: editPrompt,
-        tier: "balanced"
     },
 
     // Secondary Orchestrators

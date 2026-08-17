@@ -33,7 +33,6 @@ const managedAgentTiers = {
     advise: "balanced",
     auto: "smart",
     design: "balanced",
-    edit: "balanced",
     assist_browser: "operator",
     assist_git_conflict: "balanced",
     auto_design: "smart",
@@ -277,7 +276,7 @@ describe("agent policies", () => {
     test("allows every primary agent to restart the current session", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
-        for (const agentName of ["assist", "advise", "auto", "design", "edit"] as const) {
+        for (const agentName of ["assist", "advise", "auto", "design"] as const) {
             expect(agents[agentName]?.mode).toBe("primary")
             expect(permissionRule(agents[agentName]?.permission, "autocode_session_restart")).toBe("allow")
         }
@@ -326,7 +325,7 @@ describe("agent policies", () => {
         expect(permissionRule(permission, "external_directory")).toEqual({ "*": "deny" })
         expect(permissionRule(permission, "skill_learn")).toBe("allow")
         expect(skillPermission["learned-permissions*"]).toBe("allow")
-        expect(skillPermission["skill-write"]).toBeUndefined()
+        expect(skillPermission["skill-write"]).toBe("allow")
     })
 
     test("getAgentPermission restricts direct auto execution to assist and auto", () => {
