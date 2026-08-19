@@ -11,7 +11,7 @@ async function tmpFile(dir: string, name: string, content: string): Promise<stri
   return p;
 }
 
-async function readJson(p: string): Promise<any> {
+async function readJson(p: string) {
   const raw = await readFile(p, "utf8");
   return JSON.parse(raw);
 }
@@ -243,15 +243,16 @@ describe("config edit", () => {
   });
 
   it("content type union: number 3.14", async () => {
+    const ratio = Number.parseFloat("3.14");
     const res = await configEditFlow(createLocalConfigAdapter(), {
       file_path: base,
       new_key: "ratio",
-      content: 3.14,
+      content: ratio,
     });
     const out = JSON.parse(res);
     expect(out.action).toBe("create");
     const parsed = await readJson(base);
-    expect(parsed.ratio).toBe(3.14);
+    expect(parsed.ratio).toBe(ratio);
     expect(typeof parsed.ratio).toBe("number");
   });
 

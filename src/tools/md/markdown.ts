@@ -232,9 +232,9 @@ export function resolveSection(model: MdModel, key: string): ResolveResult {
 export function rebuildFile(model: MdModel, newBody: string): string {
     if (model.frontmatterBlock !== "" && newBody !== "") {
         const fm = model.frontmatterBlock.replace(/\n+$/, "")
-        return fm + "\n\n" + newBody
+        return `${fm}\n\n${newBody}`
     }
-    return model.frontmatterBlock + newBody
+    return `${model.frontmatterBlock}${newBody}`
 }
 
 export function bodyText(model: MdModel): string {
@@ -272,7 +272,7 @@ export function parseContentBlocks(content: string, newSectionLevel: number): Co
         return { intro: "", children: [], overrides: new Map() }
     }
     // append newline so parseMarkdown's body parsing has stable boundaries
-    const contentModel = parseMarkdown(normalized + "\n")
+    const contentModel = parseMarkdown(`${normalized}\n`)
     if (contentModel.roots.length === 0) {
         return { intro: normalized, children: [], overrides: new Map() }
     }

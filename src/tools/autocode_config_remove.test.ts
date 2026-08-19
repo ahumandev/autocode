@@ -11,7 +11,7 @@ async function tmpFile(dir: string, name: string, content: string): Promise<stri
   return p;
 }
 
-async function readJson(p: string): Promise<any> {
+async function readJson(p: string) {
   const raw = await readFile(p, "utf8");
   return JSON.parse(raw);
 }

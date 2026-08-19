@@ -116,7 +116,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     advise: {
         color: colorReadOnlyInteractiveOrchestrator,
-        description: "Advise how to manually fix problems.",
+        description: "💡 Advise how to manually fix problems.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -125,7 +125,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             autocode_job_status: "allow",
             autocode_md_frontmatter_read: "allow",
             autocode_md_read: "allow",
-            autocode_session_restart: "allow",
+            autocode_session_create: "allow",
             doom_loop: "ask",
             git_commit: "ask",
             question: "allow",
@@ -156,18 +156,17 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     assist: {
         color: colorWritableInteractiveOrchestrator,
-        description: "Assist interactively with problems.",
+        description: "🧑‍💻 Assist interactively with problems.",
         hidden: false,
         mode: "primary",
         permission: {
             "*": "deny",
             "autocode_config_*": "allow",
-            autocode_dependencies: "allow",
             autocode_job_status: "allow",
             "autocode_md_*": "allow",
             autocode_sandbox_create: "ask",
             autocode_sandbox_delete: "allow",
-            autocode_session_restart: "allow",
+            autocode_session_create: "allow",
             doom_loop: "ask",
             edit: "allow",
             git_commit: "allow",
@@ -203,15 +202,14 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     auto: {
         color: colorAutonomousOrchestrator,
-        description: "Autonomously solve problems.",
+        description: "🤖 Autonomously solve problems.",
         hidden: false,
         mode: "primary",
         permission: {
             "*": "deny",
-            autocode_agent_swap: "allow",
             autocode_job_shelve: "allow",
             autocode_job_status: "allow",
-            autocode_session_restart: "allow",
+            autocode_session_create: "allow",
             git_commit: "allow",
             skill: {
                 "*": "deny",
@@ -236,7 +234,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     design: {
         color: colorReadOnlyInteractiveOrchestrator,
-        description: "Design and propose solutions.",
+        description: "📐 Design and propose solutions.",
         hidden: false,
         mode: "primary",
         permission: {
@@ -248,7 +246,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             autocode_job_execute: "allow",
             autocode_job_list: "allow",
             autocode_job_draft: "allow",
-            autocode_session_restart: "allow",
+            autocode_session_create: "allow",
             doom_loop: "ask",
             external_directory: "ask",
             question: "allow",
@@ -921,6 +919,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         permission: {
             "*": "deny",
             "autocode_config_*": "allow",
+            autocode_dependencies: "allow",
             autocode_process_kill: "allow",
             edit: "allow",
             bash: "allow",

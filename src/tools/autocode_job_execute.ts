@@ -1,8 +1,8 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
-import { dispatchAutocodeAgentPromptAfterTurn, resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
-import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, updateCurrentSessionTitleToJobName, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
+import { createAutocodeSession, dispatchAutocodeAgentPromptAfterTurn, resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
+import { createDirectoryFileSystem, formatJobSessionTitle, getJobFilePath, listPlannedJobs, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity, resolvePlannedJob, selectableExecutionJobStatuses, type JobStatus, type JobToolFileSystem, type StartJobFileSystem } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type FileSystem = JobToolFileSystem
@@ -67,18 +67,6 @@ function createAgentExecutePrompt(jobName: string, plan: string): string {
     return `Selected job: ${jobName}\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan.md:\n${plan}`
 }
 
-async function compactSessionForJob(client: OpencodeClient, sessionID: string, directory: string, model: { providerID: string, modelID: string }): Promise<void> {
-    const body = { ...model, auto: false }
-    const response = await client.session.summarize({
-        path: { id: sessionID },
-        query: { directory },
-        body,
-    })
-    if (response.error) {
-        throw response.error
-    }
-}
-
 async function persistJobSessionID(fileSystem: Pick<FileSystem, "writeFile">, worktree: string, job: { directory: JobStatus }, jobName: string, sessionID: string): Promise<void> {
     await fileSystem.writeFile(getJobFilePath(worktree, job.directory, jobName, "session.yml"), `session_id: ${sessionID}\n`)
 }
@@ -113,17 +101,19 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                             const plan = await fileSystem.readFile(planPath, "utf8")
 
                             const startStatus = executionAgentStatuses[args.agent]
-                            await updateCurrentSessionTitleToJobName(client, context, resolvedJobName, startStatus)
+                            const sessionTitle = formatJobSessionTitle(resolvedJobName, startStatus)
                             const sessionSettings = await resolveAutocodeAgentSessionSettings(args.agent, context.worktree, context.directory)
                             if ("error" in sessionSettings) {
                                 return createAbortResponse("autocode_job_execute", sessionSettings.error)
                             }
 
-                            await compactSessionForJob(client, context.sessionID, context.directory, sessionSettings.resolvedModel.model!)
-
-                            const sessionTitle = formatJobSessionTitle(resolvedJobName, startStatus)
                             if (!directoryFileSystem.rename) {
                                 return createAbortResponse("autocode_job_execute", "Unable to start planned job execution: rename is unavailable")
+                            }
+
+                            const createdSession = await createAutocodeSession(client, context.directory, sessionTitle, args.agent)
+                            if ("error" in createdSession) {
+                                return createAbortResponse("autocode_job_execute", createdSession.error)
                             }
 
                             const startFileSystem: StartJobFileSystem = {
@@ -136,12 +126,12 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                             }
 
                             const { job } = startResult
-                            await persistJobSessionID(fileSystem, storageRoot, job, resolvedJobName, context.sessionID)
+                            await persistJobSessionID(fileSystem, storageRoot, job, resolvedJobName, createdSession.sessionID)
 
                             dispatchAutocodeAgentPromptAfterTurn(
                                 client,
                                 context.directory,
-                                context.sessionID,
+                                createdSession.sessionID,
                                 args.agent,
                                 createAgentExecutePrompt(resolvedJobName, plan),
                                 sessionSettings.resolvedModel,
@@ -150,8 +140,9 @@ export function createAutocodeJobExecuteTool(client?: OpencodeClient, fileSystem
                             return JSON.stringify({
                                 result_type: "session_created",
                                 job_name: resolvedJobName,
-                                session_id: context.sessionID,
+                                session_id: createdSession.sessionID,
                                 session_title: sessionTitle,
+                                message: `Created new session for ${args.agent}: ${sessionTitle} (${createdSession.sessionID}).`,
                             })
                         }
                         catch (error) {

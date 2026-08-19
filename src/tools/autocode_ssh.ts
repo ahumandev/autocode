@@ -222,7 +222,7 @@ export function createAutocodeSshReadFileTool(deps: SshToolDeps = {}): ReturnTyp
                 const file = String(await sftpReadFile(sftp, args.path, "utf8"))
                 const totalLines = file.split(/(?<=\n)/).length
                 const effectiveLastLine = lastLine > totalLines ? totalLines : lastLine
-                if (firstLine > effectiveLastLine) return createRetryResponse("read SSH file", new Error("first_line exceeds the file's total line count (" + totalLines + ")"), "Reduce first_line to within the file's line count.")
+                if (firstLine > effectiveLastLine) return createRetryResponse("read SSH file", new Error(`first_line exceeds the file's total line count (${totalLines})`), "Reduce first_line to within the file's line count.")
                 const selectedContent = selectLineRange(file, firstLine, effectiveLastLine)
                 const contentTruncated = selectedContent.length > readFileMaxCharacters
 

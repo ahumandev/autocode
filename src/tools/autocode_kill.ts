@@ -137,7 +137,7 @@ function isPermissionFailure(error: unknown): boolean {
 function trimConfigMatch(line: string, hostToken?: string): string {
     const trimmed = line.trim()
     if (trimmed.length <= 160) return trimmed
-    return hostToken ?? trimmed.slice(0, 157).trimEnd() + "..."
+    return hostToken ?? `${trimmed.slice(0, 157).trimEnd()}...`
 }
 
 function addMatch(matches: PortMatch[], seen: Set<string>, configFile: string, configMatch: string, port: number): void {

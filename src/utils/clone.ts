@@ -48,7 +48,7 @@ export function cloneRepo(args: { owner: string; project: string; branch?: strin
 
         if (result.signal === "SIGTERM" || result.error || (result.status !== null && result.status !== 0)) {
             const detail = result.signal === "SIGTERM"
-                ? "timed out after " + GIT_OPERATION_TIMEOUT_MS + "ms"
+                ? `timed out after ${GIT_OPERATION_TIMEOUT_MS}ms`
                 : (result.error?.message ?? result.stderr?.trim() ?? `exit ${result.status}`)
             logger.log(`error: clone: ${detail}`)
             return target
@@ -60,14 +60,14 @@ export function cloneRepo(args: { owner: string; project: string; branch?: strin
             const fetch = spawnSync("git", ["-C", target, "fetch", "--depth", "1", "origin", branch], { encoding: "utf8", timeout: GIT_OPERATION_TIMEOUT_MS })
             if (fetch.signal === "SIGTERM" || fetch.error || (fetch.status !== null && fetch.status !== 0)) {
                 const detail = fetch.signal === "SIGTERM"
-                    ? "timed out after " + GIT_OPERATION_TIMEOUT_MS + "ms"
+                    ? `timed out after ${GIT_OPERATION_TIMEOUT_MS}ms`
                     : (fetch.error?.message ?? fetch.stderr?.trim() ?? `exit ${fetch.status}`)
                 logger.log(`error: checkout branch ${branch}: ${detail}`)
             } else {
                 const checkout = spawnSync("git", ["-C", target, "checkout", branch], { encoding: "utf8", timeout: GIT_OPERATION_TIMEOUT_MS })
                 if (checkout.signal === "SIGTERM" || checkout.error || (checkout.status !== null && checkout.status !== 0)) {
                     const detail = checkout.signal === "SIGTERM"
-                        ? "timed out after " + GIT_OPERATION_TIMEOUT_MS + "ms"
+                        ? `timed out after ${GIT_OPERATION_TIMEOUT_MS}ms`
                         : (checkout.error?.message ?? checkout.stderr?.trim() ?? `exit ${checkout.status}`)
                     logger.log(`error: checkout branch ${branch}: ${detail}`)
                 }

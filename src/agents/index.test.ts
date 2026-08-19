@@ -19,6 +19,7 @@ function resolvePermissionRule(rules: Record<string, unknown>, name: string): un
 }
 
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]
+const primaryAgents = ["assist", "advise", "auto", "design"] as const
 const executeRestToolNames = ["autocode_rest"]
 const executeOpencodeAllowedPermissionKeys = ["autocode_config_*", "autocode_md_*"]
 const executeOpencodeForbiddenToolKeys = ["apply_patch", "bash", "execute", "patch", "task", "write"]
@@ -196,7 +197,6 @@ describe("agent policies", () => {
         }))
         expect(agents.auto?.tier).toBe("smart")
         expect(agents.assist?.tier).toBe("balanced")
-        expect(permissionRule(agents.assist?.permission, "autocode_dependencies")).toBe("allow")
         expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
     })
 
@@ -206,7 +206,7 @@ describe("agent policies", () => {
         const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
 
         expect(permissionRule(permission, "skill_edit")).toBe("allow")
-        expect(skillPermission["skill_edit"]).toBe("allow")
+        expect(skillPermission.skill_edit).toBe("allow")
         expect(permissionRule(permission, "external_directory")).toEqual({ "*": "deny" })
     })
 
@@ -273,12 +273,16 @@ describe("agent policies", () => {
         expect(agents.auto_troubleshoot?.prompt).toContain("sandbox")
     })
 
-    test("allows every primary agent to restart the current session", () => {
+    test("allows only primary agents to create sessions", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
         for (const agentName of ["assist", "advise", "auto", "design"] as const) {
             expect(agents[agentName]?.mode).toBe("primary")
-            expect(permissionRule(agents[agentName]?.permission, "autocode_session_restart")).toBe("allow")
+            expect(permissionRule(agents[agentName]?.permission, "autocode_session_create")).toBe("allow")
+        }
+        for (const [agentName, agent] of Object.entries(agents)) {
+            if (primaryAgents.includes(agentName as typeof primaryAgents[number])) continue
+            expect(permissionRule(agent.permission, "autocode_session_create")).toBeUndefined()
         }
     })
 
@@ -314,11 +318,10 @@ describe("agent policies", () => {
             "edit",
             "bash",
             "apply_patch",
-            "autocode_agent_swap",
         ]) {
             expect(resolvePermissionRule(permission as Record<string, unknown>, toolName)).toBe("deny")
         }
-        for (const capability of ["question", "todo*", "task_resume", "autocode_session_restart"]) {
+        for (const capability of ["question", "todo*", "task_resume", "autocode_session_create"]) {
             expect(permissionRule(permission, capability)).toBe("allow")
         }
         expect(permissionRule(permission, "task_external")).toBeUndefined()

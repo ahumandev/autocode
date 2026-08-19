@@ -73,9 +73,9 @@ function parseOklch(s) {
   if (!m) return null;
   const parts = m[1].split(/[,\s/]+/).filter(Boolean).slice(0, 3);
   if (parts.length < 3) return null;
-  let L = parts[0].endsWith("%") ? parseFloat(parts[0]) / 100 : parseFloat(parts[0]);
-  let C = parseFloat(parts[1]);
-  let H = parseFloat(parts[2]);
+  const L = parts[0].endsWith("%") ? parseFloat(parts[0]) / 100 : parseFloat(parts[0]);
+  const C = parseFloat(parts[1]);
+  const H = parseFloat(parts[2]);
   if ([L, C, H].some(v => Number.isNaN(v))) return null;
   return oklchToRgb(L, C, H);
 }
@@ -93,13 +93,13 @@ function oklchToRgb(L, C, hDeg) {
   const m = m_ * m_ * m_;
   const s = s_ * s_ * s_;
   // LMS → linear sRGB
-  let r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-  let g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-  let b = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+  const r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  const b = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
   // Linear → sRGB
   const toSrgb = c => {
     if (c <= 0.0031308) c = 12.92 * c;
-    else c = 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+    else c = 1.055 * c ** (1 / 2.4) - 0.055;
     return clamp(Math.round(c * 255), 0, 255);
   };
   return [toSrgb(r), toSrgb(g), toSrgb(b)];
@@ -122,7 +122,7 @@ function parseColor(s) {
 function relativeLuminance([r, g, b]) {
   const chan = c => {
     const cs = c / 255;
-    return cs <= 0.03928 ? cs / 12.92 : Math.pow((cs + 0.055) / 1.055, 2.4);
+    return cs <= 0.03928 ? cs / 12.92 : ((cs + 0.055) / 1.055) ** 2.4;
   };
   return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b);
 }
@@ -141,32 +141,32 @@ function apcaLc(textRgb, bgRgb) {
   const sRGBtrc = 2.4;
   const Rco = 0.2126729, Gco = 0.7151522, Bco = 0.0721750;
   const normBG = 0.56, normTXT = 0.57, revTXT = 0.62, revBG = 0.65;
-  const blkThrs = 0.022, blkClmp = 1.414;
+  const blkThrs = 0.022, blkClmp = Math.SQRT2;
   const scaleBoW = 1.14, loBoWoffset = 0.027;
   const scaleWoB = 1.14, loWoBoffset = 0.027;
   const deltaYmin = 0.0005;
 
   const sY = ([r, g, b]) => {
-    const f = c => Math.pow(c / 255, sRGBtrc);
+    const f = c => (c / 255) ** sRGBtrc;
     return f(r) * Rco + f(g) * Gco + f(b) * Bco;
   };
 
   let txtY = sY(textRgb);
   let bgY = sY(bgRgb);
 
-  if (txtY < blkThrs) txtY += Math.pow(blkThrs - txtY, blkClmp);
-  if (bgY < blkThrs) bgY += Math.pow(blkThrs - bgY, blkClmp);
+  if (txtY < blkThrs) txtY += (blkThrs - txtY) ** blkClmp;
+  if (bgY < blkThrs) bgY += (blkThrs - bgY) ** blkClmp;
 
   if (Math.abs(bgY - txtY) < deltaYmin) return 0;
 
   let outputContrast;
   if (bgY > txtY) {
     // light bg, dark text (BoW)
-    const SAPC = (Math.pow(bgY, normBG) - Math.pow(txtY, normTXT)) * scaleBoW;
+    const SAPC = (bgY ** normBG - txtY ** normTXT) * scaleBoW;
     outputContrast = SAPC < loBoWoffset ? 0 : SAPC - loBoWoffset;
   } else {
     // dark bg, light text (WoB)
-    const SAPC = (Math.pow(bgY, revBG) - Math.pow(txtY, revTXT)) * scaleWoB;
+    const SAPC = (bgY ** revBG - txtY ** revTXT) * scaleWoB;
     outputContrast = SAPC > -loWoBoffset ? 0 : SAPC + loWoBoffset;
   }
 

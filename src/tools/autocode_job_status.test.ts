@@ -84,7 +84,7 @@ describe("autocode_job_status tool", () => {
         expect(client.session.update).toHaveBeenCalledWith({
             path: { id: "session-1" },
             query: { directory: "/workspace" },
-            body: { title: "My Feature (executing)" },
+            body: { title: "My Feature" },
         })
         expect(fs.writeFile).not.toHaveBeenCalled()
     })
@@ -134,9 +134,31 @@ describe("autocode_job_status tool", () => {
         expect(client.session.update).toHaveBeenCalledWith({
             path: { id: "session-1" },
             query: { directory: "/workspace" },
-            body: { title: "My Feature (review)" },
+            body: { title: "My Feature" },
         })
         expect(fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    test("formats status titles only for the exact auto agent", async () => {
+        for (const [agent, expectedTitle] of [
+            ["auto", "My Feature (executing)"],
+            ["assist", "My Feature"],
+            ["advise", "My Feature"],
+            ["design", "My Feature"],
+        ] as const) {
+            const fs = createMockFs()
+            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["my_feature"] : [])
+            const client = createClient("My Feature") as OpencodeClient & { session: { update: ReturnType<typeof mock> } }
+            const tool = createAutocodeJobStatusTool(client, fs)
+
+            await tool.execute({ status: "executing" }, createToolContext({ agent }))
+
+            expect(client.session.update).toHaveBeenCalledWith({
+                path: { id: "session-1" },
+                query: { directory: "/workspace" },
+                body: { title: expectedTitle },
+            })
+        }
     })
 
     test("returns generic neutral response and does not mutate when the session title is unresolved", async () => {

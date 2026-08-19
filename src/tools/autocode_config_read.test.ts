@@ -204,9 +204,9 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
     await tmpFile(toolDir, "b.json", JSON.stringify({ name: "B" }));
     const out = await execute({ file_path_glob: "*.json" });
     expect(Object.keys(out.file_paths).sort()).toEqual(["a.json", "b.json"]);
-    expect(out.file_paths["a.json"].key_paths["name"]).toBe("A");
-    expect(out.file_paths["a.json"].key_paths["version"]).toBe("1.0");
-    expect(out.file_paths["b.json"].key_paths["name"]).toBe("B");
+    expect(out.file_paths["a.json"].key_paths.name).toBe("A");
+    expect(out.file_paths["a.json"].key_paths.version).toBe("1.0");
+    expect(out.file_paths["b.json"].key_paths.name).toBe("B");
     expect(typeof out.file_paths["a.json"].nodes_shown).toBe("number");
     expect(typeof out.file_paths["a.json"].nodes_total).toBe("number");
   });
@@ -214,8 +214,8 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
   it("key_path drills into nested key", async () => {
     await tmpFile(toolDir, "data.json", JSON.stringify({ server: { host: "h", port: 80 } }));
     const out = await execute({ file_path_glob: "data.json", key_path: "server" });
-    expect(out.file_paths["data.json"].key_paths["host"]).toBe("h");
-    expect(out.file_paths["data.json"].key_paths["port"]).toBe("80");
+    expect(out.file_paths["data.json"].key_paths.host).toBe("h");
+    expect(out.file_paths["data.json"].key_paths.port).toBe("80");
   });
 
   it("value_regex filters leaves", async () => {
@@ -223,9 +223,9 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
     const out = await execute({ file_path_glob: "vp.json", value_regex: "orld|ello" });
     // only leaves are emitted; a and b match; c (42) is excluded
     expect(out.file_paths["vp.json"].nodes_total).toBe(2);
-    expect(out.file_paths["vp.json"].key_paths["a"]).toBe("hello");
-    expect(out.file_paths["vp.json"].key_paths["b"]).toBe("world");
-    expect(out.file_paths["vp.json"].key_paths["c"]).toBeUndefined();
+    expect(out.file_paths["vp.json"].key_paths.a).toBe("hello");
+    expect(out.file_paths["vp.json"].key_paths.b).toBe("world");
+    expect(out.file_paths["vp.json"].key_paths.c).toBeUndefined();
   });
 
   it("non-match glob returns retry JSON error", async () => {
@@ -258,7 +258,7 @@ describe("autocode_config_read tool (glob + file_paths output)", () => {
     expect(keyPaths["a.b"]).toBe("true");
     expect(keyPaths["a.c"]).toBe("3");
     expect(keyPaths[""]).toBeUndefined();
-    expect(keyPaths["a"]).toBeUndefined();
+    expect(keyPaths.a).toBeUndefined();
     expect(entry.nodes_shown).toBe(2);
     expect(entry.nodes_total).toBe(2);
   });

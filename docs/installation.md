@@ -83,15 +83,15 @@ opencode plugin -g @ahumandev/autocode@latest
 
 `-g` installs plugin in global OpenCode configuration. Default config directory is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` applies when `OPENCODE_CONFIG_DIR` is unset.
 
-### Step 5: Start `/install`
+### Step 5: Start `/autocode-install`
 
 Run:
 
 ```text
-opencode run "/install"
+opencode run "/autocode-install"
 ```
 
-AutoCode detects OS. Agents use native CMD on Windows and Bash on Linux. `/install` checks and remediates Windows dependencies only. It does not install Bubblewrap; on Linux, install Bubblewrap separately if sandbox execution is needed.
+AutoCode detects OS. Agents use native CMD on Windows and Bash on Linux. `/autocode-install` checks and remediates Windows dependencies only. It does not install Bubblewrap; on Linux, install Bubblewrap separately if sandbox execution is needed.
 
 Generated skills are stored in `<home>/.agents/skills`. Windows does not register sandbox agents or sandbox tools.
 
@@ -167,7 +167,7 @@ Use this if OpenCode starts but cannot install AutoCode.
 1. Run `opencode plugin -g @ahumandev/autocode@latest` again.
 2. Confirm OpenCode global config is valid and preserves unrelated settings.
 3. Restart OpenCode.
-4. Run `/install` after startup.
+4. Run `/autocode-install` after startup.
 
 Check configured directory first: default is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` when unset.
 
@@ -203,7 +203,7 @@ Success checks:
 
 - `opencode --version` prints version.
 - `opencode plugin -g @ahumandev/autocode@latest` completes.
-- OpenCode starts and `/install` runs.
+- OpenCode starts and `/autocode-install` runs.
 - Generated skills, when created, are in `<home>/.agents/skills`.
 
 Do not claim a native Windows runtime test.

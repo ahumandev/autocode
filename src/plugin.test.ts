@@ -1,550 +1,968 @@
-import { afterEach, describe, expect, mock, test } from "bun:test"
-import { mkdtemp, rm, writeFile, mkdir, readdir } from "node:fs/promises"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
-import type { Config as PluginHookConfig, PluginInput, ToolContext } from "@opencode-ai/plugin"
-import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
-import type { Event, OpencodeClient } from "@opencode-ai/sdk"
-import autocode from "./plugin"
-import { createCommands } from "./commands"
-import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
-import { createPlatformCapabilities } from "./utils/platform"
-import { createNoopAsk } from "./tools/test_context"
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type {
+	Config as PluginHookConfig,
+	PluginInput,
+	ToolContext,
+} from "@opencode-ai/plugin";
+import type { Event, OpencodeClient } from "@opencode-ai/sdk";
+import type { Config as PluginConfig } from "@opencode-ai/sdk/v2";
+import type { SandboxPlatformSupportOptions } from "@/utils/sandbox";
+import { createCommands } from "./commands";
+import autocode from "./plugin";
+import { createNoopAsk } from "./tools/test_context";
+import { createPlatformCapabilities } from "./utils/platform";
 
-const tempRoots: string[] = []
+const tempRoots: string[] = [];
 
-type PluginConfigHook = { config?: (input: PluginConfig) => Promise<void> }
-type RestartTool = { execute(args: { agent: "assist" | "advise" | "auto" | "design" }, context: ToolContext): Promise<string | { output: string }> }
+type PluginConfigHook = { config?: (input: PluginConfig) => Promise<void> };
+type CreateTool = {
+	execute(
+        args: { prompt?: string; agent: "assist" | "advise" | "auto" | "design" },
+		context: ToolContext,
+	): Promise<string | { output: string }>;
+};
 type PluginRestartHooks = PluginConfigHook & {
-    event?: (input: { event: Event }) => Promise<void>
-    tool?: { autocode_session_restart?: RestartTool }
-}
+	event?: (input: { event: Event }) => Promise<void>;
+	tool?: {
+		autocode_session_create?: CreateTool;
+	};
+};
 type PluginInputWithSandboxSupportOverride = PluginInput & {
-    sandboxSupportOverride?: SandboxPlatformSupportOptions
-    platformOverride?: NodeJS.Platform
-    homeOverride?: string
-}
-type PluginAgentConfig = NonNullable<NonNullable<PluginHookConfig["agent"]>[string]>
+	sandboxSupportOverride?: SandboxPlatformSupportOptions;
+	platformOverride?: NodeJS.Platform;
+	homeOverride?: string;
+};
+type PluginAgentConfig = NonNullable<
+	NonNullable<PluginHookConfig["agent"]>[string]
+>;
 type SandboxPermission = NonNullable<PluginAgentConfig["permission"]> & {
-    autocode_sandbox_cli?: "ask" | "allow" | "deny"
-    task?: { execute_sandbox?: "ask" | "allow" | "deny" }
-}
+	autocode_sandbox_cli?: "ask" | "allow" | "deny";
+	task?: { execute_sandbox?: "ask" | "allow" | "deny" };
+};
 type PluginConfigWithSandboxPermissions = Omit<PluginHookConfig, "agent"> & {
-    agent?: Record<string, Omit<PluginAgentConfig, "permission"> & { permission?: SandboxPermission } | undefined>
-}
-type SkillSource = { type: "directory", path: string }
+	agent?: Record<
+		string,
+		| (Omit<PluginAgentConfig, "permission"> & {
+				permission?: SandboxPermission;
+		  })
+		| undefined
+	>;
+};
+type SkillSource = { type: "directory"; path: string };
 type V2Plugin = {
-    setup(context: PluginInputWithSandboxSupportOverride & {
-        skill: { transform(callback: (draft: { source(source: SkillSource): void }) => void): void }
-    }): Promise<void>
-}
+	setup(
+		context: PluginInputWithSandboxSupportOverride & {
+			skill: {
+				transform(
+					callback: (draft: { source(source: SkillSource): void }) => void,
+				): void;
+			};
+		},
+	): Promise<void>;
+};
 type RestartTestClient = OpencodeClient & {
-    session: Pick<OpencodeClient["session"], "messages" | "summarize" | "promptAsync"> & {
-        messages: ReturnType<typeof mock>
-        summarize: ReturnType<typeof mock>
-        promptAsync: ReturnType<typeof mock>
-    }
-}
+	session: Pick<
+		OpencodeClient["session"],
+		"messages" | "summarize" | "promptAsync"
+	> & {
+		messages: ReturnType<typeof mock>;
+		summarize: ReturnType<typeof mock>;
+		promptAsync: ReturnType<typeof mock>;
+	};
+};
 
 async function createTempRoot(): Promise<string> {
-    const root = await mkdtemp(join(tmpdir(), "autocode-plugin-test-"))
-    tempRoots.push(root)
-    return root
+	const root = await mkdtemp(join(tmpdir(), "autocode-plugin-test-"));
+	tempRoots.push(root);
+	return root;
 }
 
-async function withEnv(entries: Record<string, string | undefined>, run: () => Promise<void>): Promise<void> {
-    const originals = new Map<string, string | undefined>()
-    for (const [key, value] of Object.entries(entries)) {
-        originals.set(key, process.env[key])
-        if (value === undefined) delete process.env[key]
-        else process.env[key] = value
-    }
+async function withEnv(
+	entries: Record<string, string | undefined>,
+	run: () => Promise<void>,
+): Promise<void> {
+	const originals = new Map<string, string | undefined>();
+	for (const [key, value] of Object.entries(entries)) {
+		originals.set(key, process.env[key]);
+		if (value === undefined) delete process.env[key];
+		else process.env[key] = value;
+	}
 
-    try {
-        await run()
-    }
-    finally {
-        for (const [key, value] of originals) {
-            if (value === undefined) delete process.env[key]
-            else process.env[key] = value
-        }
-    }
+	try {
+		await run();
+	} finally {
+		for (const [key, value] of originals) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
 }
 
 function createInput(
-    worktree: string,
-    sandboxSupportOverride: SandboxPlatformSupportOptions = { platform: "linux", env: {}, bwrapUsable: true },
+	worktree: string,
+	sandboxSupportOverride: SandboxPlatformSupportOptions = {
+		platform: "linux",
+		env: {},
+		bwrapUsable: true,
+	},
 ): PluginInputWithSandboxSupportOverride {
-    return {
-        worktree,
-        directory: worktree,
-        client: {},
-        sandboxSupportOverride,
-    } as PluginInputWithSandboxSupportOverride
+	return {
+		worktree,
+		directory: worktree,
+		client: {},
+		sandboxSupportOverride,
+	} as PluginInputWithSandboxSupportOverride;
 }
 
-async function registerGeneratedSkills(input: PluginInputWithSandboxSupportOverride): Promise<SkillSource[]> {
-    const sources: SkillSource[] = []
-    await (autocode as unknown as V2Plugin).setup({
-        ...input,
-        skill: {
-            transform(callback) {
-                callback({
-                    source(source) {
-                        sources.push(source)
-                    },
-                })
-            },
-        },
-    })
-    return sources
+async function registerGeneratedSkills(
+	input: PluginInputWithSandboxSupportOverride,
+): Promise<SkillSource[]> {
+	const sources: SkillSource[] = [];
+	await (autocode as unknown as V2Plugin).setup({
+		...input,
+		skill: {
+			transform(callback) {
+				callback({
+					source(source) {
+						sources.push(source);
+					},
+				});
+			},
+		},
+	});
+	return sources;
 }
 
-function skillPermissions(config: PluginConfig, agentName: string): Record<string, unknown> | undefined {
-    const permission = config.agent?.[agentName]?.permission
-    if (!permission || typeof permission === "string") return undefined
-    const skill = (permission as Record<string, unknown>).skill
-    return skill && typeof skill !== "string" ? skill as Record<string, unknown> : undefined
+function skillPermissions(
+	config: PluginConfig,
+	agentName: string,
+): Record<string, unknown> | undefined {
+	const permission = config.agent?.[agentName]?.permission;
+	if (!permission || typeof permission === "string") return undefined;
+	const skill = (permission as Record<string, unknown>).skill;
+	return skill && typeof skill !== "string"
+		? (skill as Record<string, unknown>)
+		: undefined;
 }
 
 afterEach(async () => {
-    await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
-})
+	await Promise.all(
+		tempRoots
+			.splice(0)
+			.map((root) => rm(root, { recursive: true, force: true })),
+	);
+});
 
 describe("autocode plugin config", () => {
-    test("runs one deferred restart only after matching idle status", async () => {
-        const root = await createTempRoot()
-        const worktree = join(root, "worktree")
-        await mkdir(join(worktree, ".opencode"), { recursive: true })
-        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
-            autocode: { tiers: { balanced: { model: "openai/gpt-5" } } },
-        }))
-        const order: string[] = []
-        const client = {
-            session: {
-                messages: mock(async () => ({ data: [{ info: { id: "user-1", role: "user", agent: "assist", time: { created: 1 } }, parts: [] }] })),
-                summarize: mock(async () => {
-                    order.push("summarize")
-                    return { data: true }
-                }),
-                promptAsync: mock(async () => {
-                    order.push("prompt")
-                    return {}
-                }),
-            },
-        } as RestartTestClient
-        const hooks = await autocode({ ...createInput(worktree), client }) as unknown as PluginRestartHooks
-        const restartTool = hooks.tool?.autocode_session_restart
-        if (!restartTool || !hooks.event) throw new Error("restart lifecycle hooks unavailable")
-        const context: ToolContext = {
-            sessionID: "session-1",
-            messageID: "message-1",
-            agent: "assist",
-            directory: worktree,
-            worktree,
-            abort: new AbortController().signal,
-            metadata() {
-            },
-            ask: createNoopAsk(),
-        }
+	test("runtime exposes create and restart session tools", async () => {
+		const root = await createTempRoot();
+		const hooks = (await autocode(
+			createInput(join(root, "worktree")),
+		)) as unknown as PluginRestartHooks;
 
-        const result = await restartTool.execute({ agent: "advise" }, context)
+		expect(hooks.tool?.autocode_session_create).toBeDefined();
+	});
 
-        expect(JSON.parse(typeof result === "string" ? result : result.output)).toEqual({
-            session_id: "session-1",
-            current_agent: "assist",
-            target_agent: "advise",
-            compaction_pending: true,
-            continuation_pending: true,
-        })
-        expect(client.session.summarize).not.toHaveBeenCalled()
-        await Promise.all([
-            hooks.event({ event: { type: "session.compacted", properties: { sessionID: "session-1" } } as unknown as Event }),
-            hooks.event({ event: { type: "session.status", properties: { sessionID: "session-1", status: { type: "idle" } } } as unknown as Event }),
-            hooks.event({ event: { type: "session.idle", properties: { sessionID: "session-1" } } as unknown as Event }),
-        ])
+	test("uses PluginInput server URL when AUTOCODE_WEB_URL is absent", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({
+				autocode: { tiers: { balanced: { model: "openai/gpt-5.5" } } },
+			}),
+		);
+		const client = {
+			session: {
+				get: mock(async () => ({ data: { title: "Source session" } })),
+				create: mock(async () => ({ data: { id: "destination-session" } })),
+			},
+		} as unknown as OpencodeClient;
+		const context: ToolContext = {
+			sessionID: "source-session",
+			messageID: "source-message",
+			agent: "assist",
+			directory: worktree,
+			worktree,
+			abort: new AbortController().signal,
+			metadata() {},
+			ask: createNoopAsk(),
+		};
 
-        expect(order).toEqual(["summarize", "prompt"])
-        expect(client.session.summarize).toHaveBeenCalledTimes(1)
-        expect(client.session.promptAsync).toHaveBeenCalledTimes(1)
-    })
+		await withEnv(
+			{
+				AUTOCODE_WEB_URL: "http://127.0.0.1:3200"
+			},
+			async () => {
+				const hooks = (await autocode({
+					...createInput(worktree),
+					client,
+					serverUrl: new URL("http://127.0.0.1:4444/"),
+				})) as unknown as PluginRestartHooks;
+				const createTool = hooks.tool?.autocode_session_create;
+				if (!createTool) throw new Error("session-create tool unavailable");
 
-    test("merges plugin config while preserving user command and agent overrides", async () => {
-        const root = await createTempRoot()
-        const worktree = join(root, "worktree")
-        const configHome = join(root, "xdg")
-        await mkdir(join(worktree, ".opencode"), { recursive: true })
-        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
-            autocode: {
-                tiers: {
-                    cheap: { model: "cheap-model", variant: "high" },
-                    fast: { model: "fast-model" },
-                    balanced: { model: "balanced-model", variant: "balanced-variant" },
-                    smart: { model: "smart-model" },
-                },
-            },
-            permission: {
-                external_directory: {
-                    "/configured/*": "allow",
-                },
-            },
-        }))
+				process.env.AUTOCODE_WEB_URL = "http://127.0.0.1:3300";
+				const result = await createTool.execute(
+					{ prompt: "Continue", agent: "assist" },
+					context,
+				);
+				const message = JSON.parse(
+					typeof result === "string" ? result : result.output,
+				).message as string;
+				const link = message.match(/\]\(([^)]+)\)/)?.[1];
+				const encodedServerUrl = Buffer.from(
+					"http://127.0.0.1:4444",
+					"utf8",
+				).toString("base64url");
 
-        await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root, AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1" }, async () => {
-            const cfg: PluginConfig = {
-                agent: {
-                    assist: {
-                        model: "user-model",
-                        permission: {
-                            question: "allow",
-                            task_external: "ask",
-                        },
-                    },
-                },
-                command: {
-                    "job-execute": {
-                        description: "user description",
-                        template: "user template",
-                        subtask: true,
-                    },
-                },
-                permission: {
-                    external_directory: {
-                        "/native/*": "ask",
-                        "/configured/*": "deny",
-                    },
-                },
-            }
-            const input = { ...createInput(worktree), homeOverride: root }
-            const hooks = await autocode(input) as unknown as PluginConfigHook
-            const commands = createCommands(createPlatformCapabilities("linux"))
+				expect(link).toBe(
+					`http://127.0.0.1:3300/server/${encodedServerUrl}/session/destination-session`,
+				);
+			},
+		);
+	});
 
-            await hooks.config?.(cfg)
+	test("runs one deferred restart only after matching idle status", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({
+				autocode: { tiers: { balanced: { model: "openai/gpt-5" } } },
+			}),
+		);
+		const order: string[] = [];
+		const client = {
+			session: {
+				messages: mock(async () => ({
+					data: [
+						{
+							info: {
+								id: "user-1",
+								role: "user",
+								agent: "assist",
+								time: { created: 1 },
+							},
+							parts: [],
+						},
+					],
+				})),
+				summarize: mock(async () => {
+					order.push("summarize");
+					return { data: true };
+				}),
+				promptAsync: mock(async () => {
+					order.push("prompt");
+					return {};
+				}),
+			},
+		} as RestartTestClient;
+		const hooks = (await autocode({
+			...createInput(worktree),
+			client,
+		})) as unknown as PluginRestartHooks;
+		const createTool = hooks.tool?.autocode_session_create;
+		if (!createTool || !hooks.event)
+			throw new Error("restart lifecycle hooks unavailable");
+		const context: ToolContext = {
+			sessionID: "session-1",
+			messageID: "message-1",
+			agent: "assist",
+			directory: worktree,
+			worktree,
+			abort: new AbortController().signal,
+			metadata() {},
+			ask: createNoopAsk(),
+		};
 
-            expect(cfg.small_model).toBe("cheap-model")
-            expect(cfg.agent?.title).toEqual(expect.objectContaining({
-                model: "cheap-model",
-                variant: "high",
-            }))
-            expect(cfg.agent?.title?.options?.reasoningEffort).toBeUndefined()
-            expect(cfg.agent?.compaction?.model).toBeUndefined()
-            expect(cfg.command?.["job-execute"]).toEqual(expect.objectContaining({
-                description: "user description",
-                template: "user template",
-                subtask: true,
-            }))
-            expect(cfg.command?.["job-execute"]?.agent).toBe("design")
-            expect(cfg.command?.["job-facilitate"]?.template).toContain("autocode_job_execute")
-            expect(Object.keys(cfg.command ?? {})).toEqual(["job-execute", "job-concepts", "job-design", "job-draft", "job-facilitate", "job-shelve", "assist", "auto", "design", "advise", "autocode-install", "autocode-version", "author", "commit", "docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux", "explain", "fix", "git-conflict", "init", "install", "learn", "repeat-as-md", "repeat-as-wiki", "report", "resume", "tests"])
-            for (const [name, commandDef] of Object.entries(commands)) {
-                if (name === "job-execute") continue
-                expect(cfg.command?.[name]).toEqual(commandDef)
-            }
-            expect(cfg.command?.["job-execute"]).toEqual({
-                ...commands["job-execute"],
-                description: "user description",
-                template: "user template",
-                subtask: true,
-            })
-            expect(cfg.agent?.assist?.model).toBe("user-model")
-            expect(cfg.agent?.assist?.variant).toBe("balanced-variant")
-            const assist = cfg.agent?.assist
-            const design = cfg.agent?.design
-            const assistPermission = assist?.permission
-            expect(((assist ?? {}) as Record<string, unknown>).tier).toBeUndefined()
-            expect(cfg.agent?.design?.model).toBe("balanced-model")
-            expect(((design ?? {}) as Record<string, unknown>).tier).toBeUndefined()
-            expect(((assistPermission ?? {}) as Record<string, unknown>).external_directory).toEqual({
-                "*": "ask",
-                "/native/*": "ask",
-                "/configured/*": "allow",
-            })
-            expect(await registerGeneratedSkills(input)).toContainEqual({
-                type: "directory",
-                path: join(root, ".agents", "skills", "autocode"),
-            })
+		const result = await createTool.execute({ agent: "advise" }, context);
 
-            const explicitTitleConfig: PluginConfig = {
-                agent: {
-                    title: {
-                        options: {
-                            reasoningEffort: "high",
-                        },
-                    },
-                },
-            }
-            await hooks.config?.(explicitTitleConfig)
+		expect(
+			JSON.parse(typeof result === "string" ? result : result.output),
+		).toEqual({
+			session_id: "session-1",
+			current_agent: "assist",
+			target_agent: "advise",
+			compaction_pending: true,
+			continuation_pending: true,
+		});
+		expect(client.session.summarize).not.toHaveBeenCalled();
+		await Promise.all([
+			hooks.event({
+				event: {
+					type: "session.compacted",
+					properties: { sessionID: "session-1" },
+				} as unknown as Event,
+			}),
+			hooks.event({
+				event: {
+					type: "session.status",
+					properties: { sessionID: "session-1", status: { type: "idle" } },
+				} as unknown as Event,
+			}),
+			hooks.event({
+				event: {
+					type: "session.idle",
+					properties: { sessionID: "session-1" },
+				} as unknown as Event,
+			}),
+		]);
 
-            expect(explicitTitleConfig.agent?.title?.options?.reasoningEffort).toBe("high")
-        })
-    })
+		expect(order).toEqual(["summarize", "prompt"]);
+		expect(client.session.summarize).toHaveBeenCalledTimes(1);
+		expect(client.session.promptAsync).toHaveBeenCalledTimes(1);
+	});
 
-    test("Windows removes sandbox exposure from user agent overrides", async () => {
-        const root = await createTempRoot()
-        const worktree = join(root, "worktree")
-        await withEnv({ PSModulePath: undefined }, async () => {
-            const cfg: PluginConfigWithSandboxPermissions = {
-                agent: {
-                    execute_sandbox: {
-                        prompt: "sandbox guidance",
-                        permission: { autocode_sandbox_cli: "allow" },
-                    },
-                    assist: {
-                        prompt: "use sandbox guidance",
-                        permission: {
-                            autocode_sandbox_cli: "allow",
-                            task: { execute_sandbox: "allow" },
-                        },
-                    },
-                },
-            }
-            const input: PluginInputWithSandboxSupportOverride = {
-                ...createInput(worktree),
-                platformOverride: "win32",
-            }
-            const hooks = await autocode(input)
+	test("defers plugin-wired session-create handoff until matching source idle event", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({
+				autocode: {
+					tiers: { smart: { model: "openai/gpt-5.5", variant: "thinking" } },
+				},
+			}),
+		);
+		const order: string[] = [];
+		const sourceGet = mock(async () => ({ data: { title: "Source session" } }));
+		const sessionCreate = mock(async () => {
+			order.push("create");
+			return { data: { id: "destination-session" } };
+		});
+		const sourceUpdate = mock(async () => {
+			order.push("archive");
+			return { data: true };
+		});
+		const destinationPrompt = mock(async () => {
+			order.push("prompt");
+			return {};
+		});
+		const client = {
+			session: {
+				get: sourceGet,
+				create: sessionCreate,
+				update: sourceUpdate,
+				promptAsync: destinationPrompt,
+			},
+		} as unknown as OpencodeClient;
+		const hooks = (await autocode({
+			...createInput(worktree),
+			client,
+		})) as unknown as PluginRestartHooks;
+		const createTool = hooks.tool?.autocode_session_create;
+		if (!createTool || !hooks.event)
+			throw new Error("session-create lifecycle hooks unavailable");
+		const context: ToolContext = {
+			sessionID: "source-session",
+			messageID: "source-message",
+			agent: "assist",
+			directory: worktree,
+			worktree,
+			abort: new AbortController().signal,
+			metadata() {},
+			ask: createNoopAsk(),
+		};
 
-            await hooks.config?.(cfg as PluginHookConfig)
+		const result = await createTool.execute(
+			{ prompt: "Implement exact handoff", agent: "auto" },
+			context,
+		);
 
-            expect(cfg.agent?.execute_sandbox).toBeUndefined()
-            for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]) {
-                expect(hooks.tool).not.toHaveProperty(toolName)
-            }
-            for (const agent of Object.values(cfg.agent ?? {})) {
-                expect(agent).toBeDefined()
-                if (agent === undefined) throw new Error("agent override unexpectedly undefined")
-                const permission = agent.permission
-                const rules = permission && typeof permission !== "string" ? permission as Record<string, unknown> : undefined
-                for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]) {
-                    expect(rules?.[toolName]).toBeUndefined()
-                }
-                const task = rules?.task
-                const taskRules = task && typeof task === "object" ? task as Record<string, unknown> : undefined
-                expect(taskRules?.execute_sandbox).toBeUndefined()
-                expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toMatch(/sandbox/i)
-            }
-            for (const agentName of ["execute_os", "query_os"] as const) {
-                expect(cfg.agent?.[agentName]?.prompt).toMatch(/cmd commands/i)
-                expect(cfg.agent?.[agentName]?.prompt).toMatch(/never use bash/i)
-            }
-            expect(cfg.command?.install?.template).toContain("Run commands in CMD")
-        })
-    })
+		expect(
+			JSON.parse(typeof result === "string" ? result : result.output),
+		).toMatchObject({
+			session_id: "destination-session",
+			agent: "auto",
+			handoff_state: "registered",
+		});
+		expect(order).toEqual(["create"]);
+		expect(sourceUpdate).not.toHaveBeenCalled();
+		expect(destinationPrompt).not.toHaveBeenCalled();
 
-    test("Linux preserves supported sandbox registrations and Bash guidance", async () => {
-        const root = await createTempRoot()
-        const worktree = join(root, "worktree")
-        const hooks = await autocode(createInput(worktree))
-        const cfg: PluginConfig = {}
+		await hooks.event({
+			event: {
+				type: "session.idle",
+				properties: { sessionID: "unrelated-session" },
+			} as unknown as Event,
+		});
 
-        await hooks.config?.(cfg as unknown as PluginHookConfig)
+		expect(order).toEqual(["create"]);
+		expect(sourceUpdate).not.toHaveBeenCalled();
+		expect(destinationPrompt).not.toHaveBeenCalled();
 
-        expect(cfg.agent?.execute_sandbox).toBeDefined()
-        for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]) {
-            expect(hooks.tool).toHaveProperty(toolName)
-        }
-        expect(cfg.agent?.execute_os?.prompt).toMatch(/always use the `bash` tool/i)
-        expect(cfg.agent?.query_os?.prompt).toMatch(/prefer other tools over `bash` tool/i)
-        expect(cfg.command?.install?.template).toContain("If bwrap install is needed")
-    })
+		const event = {
+			type: "session.status",
+			properties: { sessionID: "source-session", status: { type: "idle" } },
+		} as unknown as Event;
+		await Promise.all([hooks.event({ event }), hooks.event({ event })]);
 
-    test("PowerShell startup assigns PowerShell-only OS prompts", async () => {
-        const root = await createTempRoot()
-        const worktree = join(root, "worktree")
+		expect(order).toEqual(["create", "archive", "prompt"]);
+		expect(sourceUpdate).toHaveBeenCalledWith({
+			path: { id: "source-session" },
+			query: { directory: worktree },
+			body: {
+				title: expect.stringMatching(
+					/^Source session \(\d{4}-\d{2}-\d{2} \d{2}:\d{2}\)$/,
+				),
+			},
+		});
+		expect(sourceUpdate).toHaveBeenCalledTimes(1);
+		expect(destinationPrompt).toHaveBeenCalledWith({
+			path: { id: "destination-session" },
+			query: { directory: worktree },
+			body: {
+				agent: "auto",
+				model: {
+					providerID: "openai",
+					modelID: "gpt-5.5",
+					variant: "thinking",
+				},
+				parts: [{ type: "text", text: "Implement exact handoff" }],
+			},
+		});
+		expect(destinationPrompt).toHaveBeenCalledTimes(1);
+	});
 
-        await withEnv({ PSModulePath: "present" }, async () => {
-            const input: PluginInputWithSandboxSupportOverride = {
-                ...createInput(worktree),
-                platformOverride: "win32",
-            }
-            const hooks = await autocode(input)
-            const cfg: PluginConfig = {}
-            await hooks.config?.(cfg as unknown as PluginHookConfig)
+	test("merges plugin config while preserving user command and agent overrides", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		const configHome = join(root, "xdg");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({
+				autocode: {
+					tiers: {
+						cheap: { model: "cheap-model", variant: "high" },
+						fast: { model: "fast-model" },
+						balanced: { model: "balanced-model", variant: "balanced-variant" },
+						smart: { model: "smart-model" },
+					},
+				},
+				permission: {
+					external_directory: {
+						"/configured/*": "allow",
+					},
+				},
+			}),
+		);
 
-            for (const agentName of ["execute_os", "query_os"] as const) {
-                expect(cfg.agent?.[agentName]?.prompt).toMatch(/windows powershell/i)
-                expect(cfg.agent?.[agentName]?.prompt).not.toMatch(/cmd commands/i)
-            }
-            expect(cfg.command?.install?.template).toContain("Run commands in CMD")
-        })
-    })
+		await withEnv(
+			{
+				XDG_CONFIG_HOME: configHome,
+				HOME: root,
+				AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1",
+			},
+			async () => {
+				const cfg: PluginConfig = {
+					agent: {
+						assist: {
+							model: "user-model",
+							permission: {
+								question: "allow",
+								task_external: "ask",
+							},
+						},
+					},
+					command: {
+						"job-execute": {
+							description: "user description",
+							template: "user template",
+							subtask: true,
+						},
+					},
+					permission: {
+						external_directory: {
+							"/native/*": "ask",
+							"/configured/*": "deny",
+						},
+					},
+				};
+				const input = { ...createInput(worktree), homeOverride: root };
+				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				const commands = createCommands(createPlatformCapabilities("linux"));
 
-    test("Linux startup config prepends Bun bin using POSIX paths", async (): Promise<void> => {
-        const root = await createTempRoot()
-        const home = `${root}/Jane Doe`
-        const originalPath = "/usr/local/bin:/usr/bin:/custom/bin"
+				await hooks.config?.(cfg);
 
-        await withEnv({ HOME: home, PATH: originalPath, BUN_INSTALL: undefined }, async (): Promise<void> => {
-            const input: PluginInputWithSandboxSupportOverride = {
-                ...createInput(join(root, "worktree")),
-                homeOverride: home,
-            }
-            const hooks = await autocode(input) as unknown as PluginConfigHook
-            await hooks.config?.({})
+				expect(cfg.small_model).toBe("cheap-model");
+				expect(cfg.agent?.title).toEqual(
+					expect.objectContaining({
+						model: "cheap-model",
+						variant: "high",
+					}),
+				);
+				expect(cfg.agent?.title?.options?.reasoningEffort).toBeUndefined();
+				expect(cfg.agent?.compaction?.model).toBeUndefined();
+				expect(cfg.command?.["job-execute"]).toEqual(
+					expect.objectContaining({
+						description: "user description",
+						template: "user template",
+						subtask: true,
+					}),
+				);
+				expect(cfg.command?.["job-execute"]?.agent).toBe("design");
+				expect(cfg.command?.["job-facilitate"]?.template).toContain(
+					"autocode_job_execute",
+				);
+				expect(Object.keys(cfg.command ?? {})).toEqual([
+					"job-execute",
+					"job-concepts",
+					"job-design",
+					"job-draft",
+					"job-facilitate",
+					"job-shelve",
+					"assist",
+					"new-advise",
+					"new-assist",
+					"new-auto",
+					"new-design",
+					"new-fix",
+					"autocode-install",
+					"autocode-version",
+					"author",
+					"commit",
+					"docs",
+					"docs-conventions",
+					"docs-code",
+					"docs-env",
+					"docs-prd",
+					"docs-ux",
+					"explain",
+					"git-conflict",
+					"init",
+					"learn",
+					"repeat-as-md",
+					"repeat-as-wiki",
+					"report",
+					"resume",
+					"tests",
+				]);
+				for (const [name, commandDef] of Object.entries(commands)) {
+					if (name === "job-execute") continue;
+					expect(cfg.command?.[name]).toEqual(commandDef);
+				}
+				expect(cfg.command?.["job-execute"]).toEqual({
+					...commands["job-execute"],
+					description: "user description",
+					template: "user template",
+					subtask: true,
+				});
+				expect(cfg.agent?.assist?.model).toBe("user-model");
+				expect(cfg.agent?.assist?.variant).toBe("balanced-variant");
+				const assist = cfg.agent?.assist;
+				const design = cfg.agent?.design;
+				const assistPermission = assist?.permission;
+				expect(
+					((assist ?? {}) as Record<string, unknown>).tier,
+				).toBeUndefined();
+				expect(cfg.agent?.design?.model).toBe("balanced-model");
+				expect(
+					((design ?? {}) as Record<string, unknown>).tier,
+				).toBeUndefined();
+				expect(
+					((assistPermission ?? {}) as Record<string, unknown>)
+						.external_directory,
+				).toEqual({
+					"*": "ask",
+					"/native/*": "ask",
+					"/configured/*": "allow",
+				});
+				expect(await registerGeneratedSkills(input)).toContainEqual({
+					type: "directory",
+					path: join(root, ".agents", "skills", "autocode"),
+				});
 
-            expect(process.env.BUN_INSTALL).toBe(`${home}/.bun`)
-            expect(process.env.PATH).toBe(`${home}/.bun/bin:${originalPath}`)
-        })
-    })
+				const explicitTitleConfig: PluginConfig = {
+					agent: {
+						title: {
+							options: {
+								reasoningEffort: "high",
+							},
+						},
+					},
+				};
+				await hooks.config?.(explicitTitleConfig);
 
-    test("Windows startup config prepends Bun bin using Windows paths", async (): Promise<void> => {
-        const root = await createTempRoot()
-        const home = "C:\\Users\\Jane Doe"
-        const originalPath = "C:\\Windows\\System32;C:\\Tools\\bin"
-        const worktree = join(root, "worktree")
-        await mkdir(join(worktree, ".opencode"), { recursive: true })
-        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: true } } }))
+				expect(explicitTitleConfig.agent?.title?.options?.reasoningEffort).toBe(
+					"high",
+				);
+			},
+		);
+	});
 
-        await withEnv({ HOME: undefined, PATH: originalPath, BUN_INSTALL: undefined }, async (): Promise<void> => {
-            const input: PluginInputWithSandboxSupportOverride = {
-                ...createInput(worktree),
-                platformOverride: "win32",
-                homeOverride: home,
-            }
-            const hooks = await autocode(input) as unknown as PluginConfigHook
-            await hooks.config?.({})
+	test("Windows removes sandbox exposure from user agent overrides", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await withEnv({ PSModulePath: undefined }, async () => {
+			const cfg: PluginConfigWithSandboxPermissions = {
+				agent: {
+					execute_sandbox: {
+						prompt: "sandbox guidance",
+						permission: { autocode_sandbox_cli: "allow" },
+					},
+					assist: {
+						prompt: "use sandbox guidance",
+						permission: {
+							autocode_sandbox_cli: "allow",
+							task: { execute_sandbox: "allow" },
+						},
+					},
+				},
+			};
+			const input: PluginInputWithSandboxSupportOverride = {
+				...createInput(worktree),
+				platformOverride: "win32",
+			};
+			const hooks = await autocode(input);
 
-            expect(process.env.BUN_INSTALL).toBe("C:\\Users\\Jane Doe\\.bun")
-            expect(process.env.PATH).toBe(`C:\\Users\\Jane Doe\\.bun\\bin;${originalPath}`)
-        })
-    })
+			await hooks.config?.(cfg as PluginHookConfig);
 
-    test("startup reconciliation makes no network calls", async () => {
-        const root = await createTempRoot()
-        const originalFetch = globalThis.fetch
-        let fetchCalls = 0
-        globalThis.fetch = Object.assign(
-            async (..._args: Parameters<typeof fetch>): Promise<Response> => {
-                fetchCalls += 1
-                throw new Error("network must not run during startup")
-            },
-            { preconnect: originalFetch.preconnect.bind(originalFetch) },
-        )
+			expect(cfg.agent?.execute_sandbox).toBeUndefined();
+			for (const toolName of [
+				"autocode_sandbox_create",
+				"autocode_sandbox_cli",
+				"autocode_sandbox_delete",
+				"autocode_sandbox_edit",
+				"autocode_sandbox_glob",
+				"autocode_sandbox_grep",
+				"autocode_sandbox_read",
+				"autocode_sandbox_copy",
+				"autocode_sandbox_config_edit",
+				"autocode_sandbox_config_read",
+				"autocode_sandbox_config_remove",
+			]) {
+				expect(hooks.tool).not.toHaveProperty(toolName);
+			}
+			for (const agent of Object.values(cfg.agent ?? {})) {
+				expect(agent).toBeDefined();
+				if (agent === undefined)
+					throw new Error("agent override unexpectedly undefined");
+				const permission = agent.permission;
+				const rules =
+					permission && typeof permission !== "string"
+						? (permission as Record<string, unknown>)
+						: undefined;
+				for (const toolName of [
+					"autocode_sandbox_create",
+					"autocode_sandbox_cli",
+					"autocode_sandbox_delete",
+					"autocode_sandbox_edit",
+					"autocode_sandbox_glob",
+					"autocode_sandbox_grep",
+					"autocode_sandbox_read",
+					"autocode_sandbox_copy",
+					"autocode_sandbox_config_edit",
+					"autocode_sandbox_config_read",
+					"autocode_sandbox_config_remove",
+				]) {
+					expect(rules?.[toolName]).toBeUndefined();
+				}
+				const task = rules?.task;
+				const taskRules =
+					task && typeof task === "object"
+						? (task as Record<string, unknown>)
+						: undefined;
+				expect(taskRules?.execute_sandbox).toBeUndefined();
+				expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toMatch(
+					/sandbox/i,
+				);
+			}
+			for (const agentName of ["execute_os", "query_os"] as const) {
+				expect(cfg.agent?.[agentName]?.prompt).toMatch(/cmd commands/i);
+				expect(cfg.agent?.[agentName]?.prompt).toMatch(/never use bash/i);
+			}
+			expect(cfg.command?.['autocode-install']?.template).toContain("Run commands in CMD");
+		});
+	});
 
-        try {
-            await withEnv({ XDG_CONFIG_HOME: join(root, "xdg"), HOME: root }, async () => {
-                const input: PluginInputWithSandboxSupportOverride = {
-                    ...createInput(join(root, "worktree")),
-                    homeOverride: root,
-                }
-                const hooks = await autocode(input) as unknown as PluginConfigHook
-                await hooks.config?.({})
-            })
-        } finally {
-            globalThis.fetch = originalFetch
-        }
+	test("Linux preserves supported sandbox registrations and Bash guidance", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		const hooks = await autocode(createInput(worktree));
+		const cfg: PluginConfig = {};
 
-        expect(fetchCalls).toBe(0)
-    })
+		await hooks.config?.(cfg as unknown as PluginHookConfig);
 
-    test("frozen skills skip startup writes and network while exposing existing generated root", async () => {
-        const root = await createTempRoot()
-        const configHome = join(root, "xdg")
-        const worktree = join(root, "worktree")
-        const generatedRoot = join(root, ".agents", "skills", "autocode")
-        const existingSkill = join(generatedRoot, "existing", "SKILL.md")
-        await mkdir(join(configHome, "opencode"), { recursive: true })
-        await mkdir(join(worktree, ".opencode"), { recursive: true })
-        await mkdir(join(generatedRoot, "existing"), { recursive: true })
-        await writeFile(join(configHome, "opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: false } } }))
-        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: true } } }))
-        await writeFile(existingSkill, "pre-existing skill")
-        const originalFetch = globalThis.fetch
-        let fetchCalls = 0
-        globalThis.fetch = Object.assign(
-            async (..._args: Parameters<typeof fetch>): Promise<Response> => {
-                fetchCalls += 1
-                throw new Error("network must not run during frozen startup")
-            },
-            { preconnect: originalFetch.preconnect.bind(originalFetch) },
-        )
+		expect(cfg.agent?.execute_sandbox).toBeDefined();
+		for (const toolName of [
+			"autocode_sandbox_create",
+			"autocode_sandbox_cli",
+			"autocode_sandbox_delete",
+			"autocode_sandbox_edit",
+			"autocode_sandbox_glob",
+			"autocode_sandbox_grep",
+			"autocode_sandbox_read",
+			"autocode_sandbox_copy",
+			"autocode_sandbox_config_edit",
+			"autocode_sandbox_config_read",
+			"autocode_sandbox_config_remove",
+		]) {
+			expect(hooks.tool).toHaveProperty(toolName);
+		}
+		expect(cfg.agent?.execute_os?.prompt).toMatch(
+			/always use the `bash` tool/i,
+		);
+		expect(cfg.agent?.query_os?.prompt).toMatch(
+			/prefer other tools over `bash` tool/i,
+		);
+		expect(cfg.command?.['autocode-install']?.template).toContain(
+			"If bwrap install is needed",
+		);
+	});
 
-        try {
-            await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
-                const input = { ...createInput(worktree), homeOverride: root }
-                const hooks = await autocode(input) as unknown as PluginConfigHook
-                const cfg: PluginConfig = {}
-                await hooks.config?.(cfg)
+	test("PowerShell startup assigns PowerShell-only OS prompts", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
 
-                expect(await registerGeneratedSkills(input)).toContainEqual({ type: "directory", path: generatedRoot })
-            })
-        } finally {
-            globalThis.fetch = originalFetch
-        }
+		await withEnv({ PSModulePath: "present" }, async () => {
+			const input: PluginInputWithSandboxSupportOverride = {
+				...createInput(worktree),
+				platformOverride: "win32",
+			};
+			const hooks = await autocode(input);
+			const cfg: PluginConfig = {};
+			await hooks.config?.(cfg as unknown as PluginHookConfig);
 
-        expect(await readdir(generatedRoot)).toEqual(["existing"])
-        expect(await Bun.file(existingSkill).text()).toBe("pre-existing skill")
-        expect(fetchCalls).toBe(0)
-    })
+			for (const agentName of ["execute_os", "query_os"] as const) {
+				expect(cfg.agent?.[agentName]?.prompt).toMatch(/windows powershell/i);
+				expect(cfg.agent?.[agentName]?.prompt).not.toMatch(/cmd commands/i);
+			}
+			expect(cfg.command?.['autocode-install']?.template).toContain("Run commands in CMD");
+		});
+	});
 
-    test("legacy skill URL has no startup fetch, grant, or generated-file effect", async () => {
-        const root = await createTempRoot()
-        const configHome = join(root, "xdg")
-        const worktree = join(root, "worktree")
-        const legacyUrl = "https://github.com/example/legacy-startup-url/blob/main/SKILL.md"
-        await mkdir(join(configHome, "opencode"), { recursive: true })
-        await mkdir(join(worktree, ".opencode"), { recursive: true })
-        await writeFile(join(configHome, "opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: false } } }))
-        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
-            autocode: { skills: { freeze: true, bash: [legacyUrl] } },
-        }))
-        const originalFetch = globalThis.fetch
-        let fetchCalls = 0
-        globalThis.fetch = Object.assign(
-            async (..._args: Parameters<typeof fetch>): Promise<Response> => {
-                fetchCalls += 1
-                throw new Error("legacy URL must not fetch during startup")
-            },
-            { preconnect: originalFetch.preconnect.bind(originalFetch) },
-        )
+	test("Linux startup config prepends Bun bin using POSIX paths", async (): Promise<void> => {
+		const root = await createTempRoot();
+		const home = `${root}/Jane Doe`;
+		const originalPath = "/usr/local/bin:/usr/bin:/custom/bin";
 
-        try {
-            await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
-                const input = { ...createInput(worktree), homeOverride: root }
-                const hooks = await autocode(input) as unknown as PluginConfigHook
-                const cfg: PluginConfig = {}
-                await hooks.config?.(cfg)
+		await withEnv(
+			{ HOME: home, PATH: originalPath, BUN_INSTALL: undefined },
+			async (): Promise<void> => {
+				const input: PluginInputWithSandboxSupportOverride = {
+					...createInput(join(root, "worktree")),
+					homeOverride: home,
+				};
+				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				await hooks.config?.({});
 
-                expect(skillPermissions(cfg, "execute_os")?.["legacy-startup-url"]).toBeUndefined()
-                expect(await registerGeneratedSkills(input)).toContainEqual({
-                    type: "directory",
-                    path: join(root, ".agents", "skills", "autocode"),
-                })
-            })
-        } finally {
-            globalThis.fetch = originalFetch
-        }
+				expect(process.env.BUN_INSTALL).toBe(`${home}/.bun`);
+				expect(process.env.PATH).toBe(`${home}/.bun/bin:${originalPath}`);
+			},
+		);
+	});
 
-        expect(fetchCalls).toBe(0)
-        expect(await readdir(join(root, ".agents", "skills")).catch(() => [])).toEqual([])
-    })
+	test("Windows startup config prepends Bun bin using Windows paths", async (): Promise<void> => {
+		const root = await createTempRoot();
+		const home = "C:\\Users\\Jane Doe";
+		const originalPath = "C:\\Windows\\System32;C:\\Tools\\bin";
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({ autocode: { skills: { freeze: true } } }),
+		);
 
-    test("manifest skills grant matching category agents without duplicate grants", async () => {
-        const root = await createTempRoot()
-        const configHome = join(root, "xdg")
-        const worktree = join(root, "worktree")
-        await mkdir(join(configHome, "opencode"), { recursive: true })
-        await mkdir(join(worktree, ".opencode"), { recursive: true })
-        await writeFile(join(configHome, "opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: false } } }))
-        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: true } } }))
+		await withEnv(
+			{ HOME: undefined, PATH: originalPath, BUN_INSTALL: undefined },
+			async (): Promise<void> => {
+				const input: PluginInputWithSandboxSupportOverride = {
+					...createInput(worktree),
+					platformOverride: "win32",
+					homeOverride: home,
+				};
+				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				await hooks.config?.({});
 
-        await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
-            const input: PluginInputWithSandboxSupportOverride = {
-                ...createInput(worktree),
-                homeOverride: root,
-            }
-            const hooks = await autocode(input) as unknown as PluginConfigHook
-            const cfg: PluginConfig = {}
-            await hooks.config?.(cfg)
+				expect(process.env.BUN_INSTALL).toBe("C:\\Users\\Jane Doe\\.bun");
+				expect(process.env.PATH).toBe(
+					`C:\\Users\\Jane Doe\\.bun\\bin;${originalPath}`,
+				);
+			},
+		);
+	});
 
-            expect(skillPermissions(cfg, "execute_code")?.["angular-developer"]).toBe("allow")
-            expect(skillPermissions(cfg, "execute_os")?.["angular-developer"]).toBeUndefined()
-            expect(skillPermissions(cfg, "auto_test")?.["vitest"]).toBe("allow")
-            expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBe("allow")
-            expect(skillPermissions(cfg, "auto")?.["codebase-design"]).toBe("allow")
-            expect(skillPermissions(cfg, "design")?.["codebase-design"]).toBe("allow")
-            const grants = Object.keys(skillPermissions(cfg, "execute_code") ?? {})
-            expect(new Set(grants).size).toBe(grants.length)
-        })
-    })
-})
+	test("startup reconciliation makes no network calls", async () => {
+		const root = await createTempRoot();
+		const originalFetch = globalThis.fetch;
+		let fetchCalls = 0;
+		globalThis.fetch = Object.assign(
+			async (..._args: Parameters<typeof fetch>): Promise<Response> => {
+				fetchCalls += 1;
+				throw new Error("network must not run during startup");
+			},
+			{ preconnect: originalFetch.preconnect.bind(originalFetch) },
+		);
+
+		try {
+			await withEnv(
+				{ XDG_CONFIG_HOME: join(root, "xdg"), HOME: root },
+				async () => {
+					const input: PluginInputWithSandboxSupportOverride = {
+						...createInput(join(root, "worktree")),
+						homeOverride: root,
+					};
+					const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+					await hooks.config?.({});
+				},
+			);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+
+		expect(fetchCalls).toBe(0);
+	});
+
+	test("frozen skills skip startup writes and network while exposing existing generated root", async () => {
+		const root = await createTempRoot();
+		const configHome = join(root, "xdg");
+		const worktree = join(root, "worktree");
+		const generatedRoot = join(root, ".agents", "skills", "autocode");
+		const existingSkill = join(generatedRoot, "existing", "SKILL.md");
+		await mkdir(join(configHome, "opencode"), { recursive: true });
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await mkdir(join(generatedRoot, "existing"), { recursive: true });
+		await writeFile(
+			join(configHome, "opencode", "autocode.jsonc"),
+			JSON.stringify({ autocode: { skills: { freeze: false } } }),
+		);
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({ autocode: { skills: { freeze: true } } }),
+		);
+		await writeFile(existingSkill, "pre-existing skill");
+		const originalFetch = globalThis.fetch;
+		let fetchCalls = 0;
+		globalThis.fetch = Object.assign(
+			async (..._args: Parameters<typeof fetch>): Promise<Response> => {
+				fetchCalls += 1;
+				throw new Error("network must not run during frozen startup");
+			},
+			{ preconnect: originalFetch.preconnect.bind(originalFetch) },
+		);
+
+		try {
+			await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+				const input = { ...createInput(worktree), homeOverride: root };
+				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				const cfg: PluginConfig = {};
+				await hooks.config?.(cfg);
+
+				expect(await registerGeneratedSkills(input)).toContainEqual({
+					type: "directory",
+					path: generatedRoot,
+				});
+			});
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+
+		expect(await readdir(generatedRoot)).toEqual(["existing"]);
+		expect(await Bun.file(existingSkill).text()).toBe("pre-existing skill");
+		expect(fetchCalls).toBe(0);
+	});
+
+	test("legacy skill URL has no startup fetch, grant, or generated-file effect", async () => {
+		const root = await createTempRoot();
+		const configHome = join(root, "xdg");
+		const worktree = join(root, "worktree");
+		const legacyUrl =
+			"https://github.com/example/legacy-startup-url/blob/main/SKILL.md";
+		await mkdir(join(configHome, "opencode"), { recursive: true });
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(configHome, "opencode", "autocode.jsonc"),
+			JSON.stringify({ autocode: { skills: { freeze: false } } }),
+		);
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({
+				autocode: { skills: { freeze: true, bash: [legacyUrl] } },
+			}),
+		);
+		const originalFetch = globalThis.fetch;
+		let fetchCalls = 0;
+		globalThis.fetch = Object.assign(
+			async (..._args: Parameters<typeof fetch>): Promise<Response> => {
+				fetchCalls += 1;
+				throw new Error("legacy URL must not fetch during startup");
+			},
+			{ preconnect: originalFetch.preconnect.bind(originalFetch) },
+		);
+
+		try {
+			await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+				const input = { ...createInput(worktree), homeOverride: root };
+				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				const cfg: PluginConfig = {};
+				await hooks.config?.(cfg);
+
+				expect(
+					skillPermissions(cfg, "execute_os")?.["legacy-startup-url"],
+				).toBeUndefined();
+				expect(await registerGeneratedSkills(input)).toContainEqual({
+					type: "directory",
+					path: join(root, ".agents", "skills", "autocode"),
+				});
+			});
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+
+		expect(fetchCalls).toBe(0);
+		expect(
+			await readdir(join(root, ".agents", "skills")).catch(() => []),
+		).toEqual([]);
+	});
+
+	test("manifest skills grant matching category agents without duplicate grants", async () => {
+		const root = await createTempRoot();
+		const configHome = join(root, "xdg");
+		const worktree = join(root, "worktree");
+		await mkdir(join(configHome, "opencode"), { recursive: true });
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(configHome, "opencode", "autocode.jsonc"),
+			JSON.stringify({ autocode: { skills: { freeze: false } } }),
+		);
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({ autocode: { skills: { freeze: true } } }),
+		);
+
+		await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+			const input: PluginInputWithSandboxSupportOverride = {
+				...createInput(worktree),
+				homeOverride: root,
+			};
+			const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+			const cfg: PluginConfig = {};
+			await hooks.config?.(cfg);
+
+			expect(skillPermissions(cfg, "execute_code")?.["angular-developer"]).toBe(
+				"allow",
+			);
+			expect(
+				skillPermissions(cfg, "execute_os")?.["angular-developer"],
+			).toBeUndefined();
+			expect(skillPermissions(cfg, "auto_test")?.vitest).toBe("allow");
+			expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBe(
+				"allow",
+			);
+			expect(skillPermissions(cfg, "auto")?.["codebase-design"]).toBe("allow");
+			expect(skillPermissions(cfg, "design")?.["codebase-design"]).toBe(
+				"allow",
+			);
+			const grants = Object.keys(skillPermissions(cfg, "execute_code") ?? {});
+			expect(new Set(grants).size).toBe(grants.length);
+		});
+	});
+});

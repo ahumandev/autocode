@@ -67,8 +67,8 @@ function sanitizeSerializedBody(body: string, newline: string): string {
         kept.push(line)
     }
     let out = kept.join(newline)
-    const tripleBlank = new RegExp("(?:" + escapeForRegex(newline) + "){3,}", "g")
-    out = out.replace(tripleBlank, newline + newline)
+    const tripleBlank = new RegExp(`(?:${escapeForRegex(newline)}){3,}`, "g")
+    out = out.replace(tripleBlank, `${newline}${newline}`)
     return out
 }
 

@@ -40,7 +40,7 @@ ${implementationDefinitions}
 ## Auto Workflow
 
 1. Extract or derive PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CRITERIA, RISKS, CONSTRAINTS from INSTRUCTIONS and PROPOSAL form INSTRUCTIONS:
-    - Unable to extract PROBLEM? Call \`autocode_session_restart\` with \`agent\`=\`design\` and then ask for clarity.
+    - Unable to extract PROBLEM? Call \`autocode_session_create\` with \`agent\`=\`design\` with prompt that include all understood facts and ask for clarity.
     - Unable to derive CRITERIA? \`task\` subagent \`auto_design\` to design plan that solve PROBLEM.
 2. Task subagents to inspect known RISKS and convert RISKS to CONSTRAINTS if evidence confirms.
 3. Plan tasks according to "Task Planning Rules" section.

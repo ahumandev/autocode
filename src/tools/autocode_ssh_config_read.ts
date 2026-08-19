@@ -60,7 +60,7 @@ export function createAutocodeSshConfigReadTool(deps: SshToolDeps = {}): ReturnT
                 })
 
                 if (matches.length === 0) {
-                    return createRetryResponse(failedAction, new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")
+                    return createRetryResponse(failedAction, new Error(`no files matched glob: ${args.file_path_glob}`), "Check the glob pattern and path.")
                 }
 
                 const file_paths: Record<string, { key_paths: Record<string, string | null>; nodes_shown: number; nodes_total: number }> = {}
@@ -113,7 +113,7 @@ export function createAutocodeSshConfigReadTool(deps: SshToolDeps = {}): ReturnT
                 }
 
                 if (Object.keys(file_paths).length === 0) {
-                    return createRetryResponse(failedAction, new Error("no readable config files for glob: " + args.file_path_glob), "Check the glob pattern and file formats.")
+                    return createRetryResponse(failedAction, new Error(`no readable config files for glob: ${args.file_path_glob}`), "Check the glob pattern and file formats.")
                 }
 
                 return JSON.stringify({ file_paths })

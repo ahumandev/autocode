@@ -88,7 +88,7 @@ describe("autocode_job_list tool", () => {
             job_name: "long-job",
             status: "drafts",
             job_path: ".agents/jobs/drafts/long-job/",
-            description: longProblem.slice(0, 80) + "...",
+            description: `${longProblem.slice(0, 80)}...`,
         })
     })
 

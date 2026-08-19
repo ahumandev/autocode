@@ -177,10 +177,10 @@ describe("autocode_dependencies", () => {
         const darwin = parseResult(await createAutocodeDependenciesTool(createDeps({ platform: "darwin" })).execute({}, createToolContext()) as string)
         const termux = parseResult(await createAutocodeDependenciesTool(createDeps({ env: { TERMUX_VERSION: "1" } })).execute({}, createToolContext()) as string)
 
-        expect(darwin.bwrap!.status).toBe("unsupported")
-        expect(darwin.bwrap!.reason).toContain("macOS")
-        expect(termux.bwrap!.status).toBe("unsupported")
-        expect(termux.bwrap!.reason).toContain("Termux")
+        expect(darwin.bwrap?.status).toBe("unsupported")
+        expect(darwin.bwrap?.reason).toContain("macOS")
+        expect(termux.bwrap?.status).toBe("unsupported")
+        expect(termux.bwrap?.reason).toContain("Termux")
     })
 
     test("reports Windows dependencies without bwrap and uses where.exe lookup", async () => {
@@ -281,12 +281,12 @@ describe("autocode_dependencies", () => {
         const missing = parseResult(await createAutocodeDependenciesTool(createDeps({ bwrapExists: false, osRelease: "ID=ubuntu\n" })).execute({}, createToolContext()) as string)
         const unusable = parseResult(await createAutocodeDependenciesTool(createDeps({ bwrapExit: 1, osRelease: "ID=fedora\n" })).execute({}, createToolContext()) as string)
 
-        expect(missing.bwrap!.status).toBe("missing")
-        expect(missing.bwrap!.install_command).toBe("sudo apt-get install -y bubblewrap")
+        expect(missing.bwrap?.status).toBe("missing")
+        expect(missing.bwrap?.install_command).toBe("sudo apt-get install -y bubblewrap")
         expect(missing.next_actions).toContain("sudo apt-get install -y bubblewrap")
-        expect(unusable.bwrap!.status).toBe("unusable")
-        expect(unusable.bwrap!.install_command).toBe("sudo dnf install -y bubblewrap")
-        expect(unusable.bwrap!.guidance).toContain("Fix bwrap usability")
+        expect(unusable.bwrap?.status).toBe("unusable")
+        expect(unusable.bwrap?.install_command).toBe("sudo dnf install -y bubblewrap")
+        expect(unusable.bwrap?.guidance).toContain("Fix bwrap usability")
     })
 
     test("is detect-only and never runs upgrade or package install commands", async () => {

@@ -618,7 +618,7 @@ describe("skill tool", () => {
     })
 
     test("root markdown skill loads with native name fallback", async () => {
-        await withTempSkillRoots(async ({ configHome, generatedRoot, worktree }) => {
+        await withTempSkillRoots(async ({ generatedRoot, worktree }) => {
             const rootSkill = join(generatedRoot, "standalone.md")
             mkdirSync(generatedRoot, { recursive: true })
             writeFileSync(rootSkill, "---\ndescription: Standalone skill\n---\n\nStandalone guidance.")

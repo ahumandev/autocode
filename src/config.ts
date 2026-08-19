@@ -47,8 +47,7 @@ const defaultFs: ConfigFileSystem = {
     writeFileSync: (path, contents) => writeFileSync(path, contents),
 }
 
-const DEFAULT_AUTOCODE_CONFIG =
-    JSON.stringify(
+const DEFAULT_AUTOCODE_CONFIG = `${JSON.stringify(
         {
             ...defaultAutocodeConfig,
             autocode: {
@@ -58,7 +57,7 @@ const DEFAULT_AUTOCODE_CONFIG =
         },
         null,
         4,
-    ) + "\n"
+    )}\n`
 
 type AutocodeJsoncNew = {
     autocode?: {

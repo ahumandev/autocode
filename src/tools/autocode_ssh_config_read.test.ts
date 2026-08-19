@@ -92,7 +92,7 @@ class MemorySftp implements SftpLike {
         }
         const hasChildren = path === "/"
             ? Array.from(this.files.keys()).some((p) => p.startsWith("/") && p !== "/")
-            : Array.from(this.files.keys()).some((p) => p === path || p.startsWith(path + "/"))
+            : Array.from(this.files.keys()).some((p) => p === path || p.startsWith(`${path}/`))
         if (hasChildren) {
             const stats = {
                 isDirectory: () => true,
@@ -118,7 +118,7 @@ class MemorySftp implements SftpLike {
             callback(new Error("No such file"), [])
             return
         }
-        const prefix = path === "/" ? "/" : path + "/"
+        const prefix = path === "/" ? "/" : `${path}/`
         const children = new Set<string>()
         for (const filePath of this.files.keys()) {
             if (!filePath.startsWith(prefix)) continue
@@ -197,7 +197,7 @@ function buildDeps(sftp: MemorySftp) {
     return { env: envWithPassword, pool: createFakePool(new FakeClient(sftp)).pool }
 }
 
-function parseOut(result: unknown): any {
+function parseOut(result: unknown) {
     const raw = typeof result === "string" ? result : (result as { output: string }).output
     return JSON.parse(raw)
 }

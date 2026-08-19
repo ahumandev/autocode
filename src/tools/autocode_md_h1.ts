@@ -85,9 +85,9 @@ export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
                 const body = serializeTree(model, overrides)
                 let newBody: string
                 if (newPreamble && body) {
-                    newBody = newPreamble + "\n\n" + body
+                    newBody = `${newPreamble}\n\n${body}`
                 } else if (newPreamble) {
-                    newBody = newPreamble + model.newline
+                    newBody = `${newPreamble}${model.newline}`
                 } else {
                     newBody = body
                 }

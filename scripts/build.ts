@@ -168,7 +168,9 @@ export async function watch(deps: BuildDependencies = defaultBuildDependencies):
         if (exit.exitCode !== 0) throw new Error(`Build watcher exited with code ${exit.exitCode ?? "unknown"}.`)
     }
     finally {
-        unregisterSignalHandlers.forEach((unregister) => unregister())
+        unregisterSignalHandlers.forEach((unregister): void => {
+            unregister()
+        })
     }
 }
 

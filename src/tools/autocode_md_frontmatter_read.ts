@@ -65,7 +65,7 @@ export function createAutocodeMdFrontmatterReadTool(): ReturnType<typeof tool> {
             const cwd = context.directory
             const matches = await expandGlob(String(args.file_path_glob), cwd, { dot: true })
             if (matches.length === 0) {
-                return createRetryResponse(failedAction, new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")
+                return createRetryResponse(failedAction, new Error(`no files matched glob: ${args.file_path_glob}`), "Check the glob pattern and path.")
             }
 
             const file_paths: Record<string, { key_paths: Record<string, string | null>; nodes_shown: number; nodes_total: number }> = {}
@@ -125,7 +125,7 @@ export function createAutocodeMdFrontmatterReadTool(): ReturnType<typeof tool> {
             }
 
             if (Object.keys(file_paths).length === 0) {
-                return createRetryResponse(failedAction, new Error("no files with frontmatter for glob: " + args.file_path_glob), "Check the glob pattern targets .md files with frontmatter.")
+                return createRetryResponse(failedAction, new Error(`no files with frontmatter for glob: ${args.file_path_glob}`), "Check the glob pattern targets .md files with frontmatter.")
             }
 
             return JSON.stringify({

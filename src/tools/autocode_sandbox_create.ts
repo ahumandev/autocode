@@ -144,10 +144,10 @@ function createInternetValidationFailureResponse(validationDiagnostics: Record<s
 
 export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies, sandboxConfig: SandboxConfig = {}) {
     return tool({
-        description: "Create sandbox environment when you need to test deployments, isolate dependency problem, run experimental scripts in isolated environment. Always run `autocode_sandbox_create` before tasking `execute_sandbox` agents. Omit `distro` for fast startup using read-only host OS filesystem mounts. Use `alpine` for isolated OS/installation testing and experimentation. Use `debian` when Alpine is incompatible with project dependencies or glibc expectations.",
+        description: "Create sandbox environment when you need to test deployments, isolate dependency problem, run experimental scripts in isolated environment. Always run `autocode_sandbox_create` before tasking `execute_sandbox` agents.",
         args: {
             sandbox_name: tool.schema.string().describe("Lowercase sandbox name using letters, numbers, and underscores only."),
-            distro: tool.schema.string().optional().describe("One of: alpine, debian, ubuntu, archlinux, opensuse. Omit or leave blank for quick mode."),
+            distro: tool.schema.string().optional().describe("Omit `distro` for fast startup using read-only host OS filesystem mounts. Use `alpine` for isolated OS/installation testing and experimentation. Use `debian` when Alpine is incompatible with project dependencies or glibc expectations."),
             internet_enabled: tool.schema.boolean().optional().describe("Enable sandbox network access; defaults to false."),
         },
         async execute(args, context) {

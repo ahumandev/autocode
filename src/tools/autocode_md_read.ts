@@ -85,7 +85,7 @@ Example:
             const cwd = context.directory
             const matches = await expandGlob(String(args.file_path_glob), cwd, { dot: true })
             if (matches.length === 0) {
-                return createRetryResponse("Read md section", new Error("no files matched glob: " + args.file_path_glob), "Check the glob pattern and path.")
+                return createRetryResponse("Read md section", new Error(`no files matched glob: ${args.file_path_glob}`), "Check the glob pattern and path.")
             }
 
             const maxKeys = args.max_anchors ?? DEFAULT_MAX_ANCHORS
@@ -222,7 +222,7 @@ Example:
             }
 
             if (Object.keys(file_paths).length === 0) {
-                return createRetryResponse("Read md section", new Error("no readable md files/sections for glob: " + args.file_path_glob), "Check the glob pattern targets .md files with matching headers.")
+                return createRetryResponse("Read md section", new Error(`no readable md files/sections for glob: ${args.file_path_glob}`), "Check the glob pattern targets .md files with matching headers.")
             }
 
             return JSON.stringify({ file_paths })

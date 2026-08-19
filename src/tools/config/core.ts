@@ -109,7 +109,7 @@ function renderConfigValue(value: unknown, maxValueChars: number): string | null
     if (typeof value === "string") {
         if (value.length === 0) return "\"\""
         if (value.length <= maxValueChars) return value
-        return value.slice(0, maxValueChars) + "..."
+        return `${value.slice(0, maxValueChars)}...`
     }
     if (Array.isArray(value)) return `[${value.length} items]`
     if (typeof value === "object") return `{${Object.keys(value as Record<string, unknown>).length} keys}`

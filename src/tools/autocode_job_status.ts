@@ -122,7 +122,7 @@ export function createAutocodeJobStatusTool(clientOrFileSystem?: OpencodeClient 
                     rename: directoryFileSystem.rename,
                 }
                 const effectiveStatus = getEffectiveJobStatus(status, resolvedJob.status)
-                await updateCurrentSessionTitleToJobName(client, context, jobName, effectiveStatus)
+                await updateCurrentSessionTitleToJobName(client, context, jobName, effectiveStatus, context.agent)
 
                 if (effectiveStatus === "shelved") {
                     const shelved = await shelveResolvedPlannedJob({

@@ -115,7 +115,7 @@ function stored(sftp: MemorySftp, path: string): unknown {
     return JSON.parse(sftp.files.get(path) ?? "null")
 }
 
-function parseOut(result: unknown): any {
+function parseOut(result: unknown) {
     const raw = typeof result === "string" ? result : (result as { output: string }).output
     return JSON.parse(raw)
 }

@@ -19,7 +19,7 @@ function useTempCwd(): string {
     return tempDir
 }
 
-function parseResult(result: unknown): Record<string, any> {
+function parseResult(result: unknown): Record<string, unknown> {
     const text = typeof result === "string" ? result : (result as { output: string }).output
     return JSON.parse(text)
 }

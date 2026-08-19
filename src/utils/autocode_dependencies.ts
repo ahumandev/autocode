@@ -228,7 +228,7 @@ function matchLauncherCommand(command: string, args: readonly string[], definiti
     }
 
     if (base === "pipx") {
-        const runIndex = args.findIndex((arg) => arg === "run")
+        const runIndex = args.indexOf("run")
         const target = runIndex >= 0 ? getFirstNonOption(args, runIndex + 1) : getFirstNonOption(args)
         if (target && tokenMatchesAliases(stripPackageVersion(target), aliases)) return [command, ...args].join(" ")
         return undefined

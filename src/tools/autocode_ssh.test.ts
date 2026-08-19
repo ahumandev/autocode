@@ -458,13 +458,13 @@ describe("autocode_ssh tools", () => {
     })
 
     test("read_file defaults last_line to 40", async () => {
-        const file = Array.from({ length: 50 }, (_, i) => "line" + (i + 1)).join("\n") + "\n"
+        const file = `${Array.from({ length: 50 }, (_, i) => `line${i + 1}`).join("\n")}\n`
         const sftp = new FakeSftp({ "/tmp/many.txt": file }) as SftpLike
         const client = new FakeClient(sftp)
         const { pool } = createFakePool(client)
         const tool = createAutocodeSshReadFileTool({ env: envWithPassword, pool })
         const payload = parseToolResult(await tool.execute({ ssh_key: "dev", path: "/tmp/many.txt" }, createToolContext()))
-        const expected = Array.from({ length: 40 }, (_, i) => "line" + (i + 1)).join("\n") + "\n"
+        const expected = `${Array.from({ length: 40 }, (_, i) => `line${i + 1}`).join("\n")}\n`
         expect(payload.content).toBe(expected)
         expect(payload.content_truncated).toBe(false)
     })

@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { documentCommandTemplate } from "./docs"
 import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
-import { fixCommandTemplate } from "./fix"
 import { createCommands } from "./index"
 import { learnCommand } from "./learn"
+import { newSessionTemplate } from "./new-session"
 import { testsCommandTemplate } from "./tests"
 import { createPlatformCapabilities } from "../utils/platform"
 
@@ -16,9 +16,9 @@ describe("commands", () => {
         const cmdCommands = createCommands(createPlatformCapabilities("win32", {}))
         const powerShellCommands = createCommands(createPlatformCapabilities("win32", { PSModulePath: "present" }))
 
-        expect(linuxCommands.install?.template).toContain("If bwrap install is needed")
-        expect(cmdCommands.install?.template).toContain("Run commands in CMD")
-        expect(powerShellCommands.install?.template).toContain("Run commands in CMD")
+        expect(linuxCommands['autocode-install']?.template).toContain("If bwrap install is needed")
+        expect(cmdCommands['autocode-install']?.template).toContain("Run commands in CMD")
+        expect(powerShellCommands['autocode-install']?.template).toContain("Run commands in CMD")
     })
 
     test("keeps current command keys and command object shape", () => {
@@ -30,9 +30,11 @@ describe("commands", () => {
             "job-facilitate",
             "job-shelve",
             "assist",
-            "auto",
-            "design",
-            "advise",
+            "new-advise",
+            "new-assist",
+            "new-auto",
+            "new-design",
+            "new-fix",
             "autocode-install",
             "autocode-version",
             "author",
@@ -44,10 +46,8 @@ describe("commands", () => {
             "docs-prd",
             "docs-ux",
             "explain",
-            "fix",
             "git-conflict",
             "init",
-            "install",
             "learn",
             "repeat-as-md",
             "repeat-as-wiki",
@@ -65,7 +65,7 @@ describe("commands", () => {
             if ("model" in command) expect(command.model).toEqual(expect.any(String))
         }
 
-        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "rename", "review", "act", "ask"] as const) {
+        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "rename", "review", "act", "ask", "advise", "auto", "design", "fix"] as const) {
             expect(commands[commandName]).toBeUndefined()
         }
 
@@ -79,11 +79,33 @@ describe("commands", () => {
             subtask: false,
             template: explainCommandTemplate,
         })
-        expect(commands.fix).toEqual({
-            agent: "auto_troubleshoot",
-            description: "Fix errors or requested issues",
+        expect(commands["new-advise"]).toEqual({
+            description: "Create new 💡 advise session to research topics, answer questions, and guide manual work.",
             subtask: false,
-            template: fixCommandTemplate,
+            template: newSessionTemplate("advise", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION"),
+        })
+        expect(commands["new-assist"]).toEqual({
+            description: "Create new 🧑‍💻 assist session to semi-autonomously assist with problems/improvements.",
+            subtask: false,
+            template: newSessionTemplate("assist", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION"),
+        })
+        expect(commands.assist).toBe(commands["new-assist"])
+        expect(commands.assist?.description).toBe(commands["new-assist"]?.description)
+        expect(commands.assist?.template).toBe(commands["new-assist"]?.template)
+        expect(commands["new-auto"]).toEqual({
+            description: "Create new 🤖 auto session to autonomously solve problems.",
+            subtask: false,
+            template: newSessionTemplate("auto", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Solve PROBLEM according 'Auto Workflow'."),
+        })
+        expect(commands["new-design"]).toEqual({
+            description: "Create new 📐 design session to design solution to problem.",
+            subtask: false,
+            template: newSessionTemplate("design", "Summarize how steps taken so far", "Design and suggest APPROACHES around discovered OBSTACLES within CONSTRAINTS."),
+        })
+        expect(commands["new-fix"]).toEqual({
+            description: "Fix errors in new session.",
+            subtask: false,
+            template: newSessionTemplate("auto_troubleshoot", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Continue with 'Workflow Loop'."),
         })
         expect(commands.tests).toEqual({
             agent: "auto_test",
@@ -92,7 +114,7 @@ describe("commands", () => {
             template: testsCommandTemplate,
         })
 
-        for (const commandName of ["context", "explain", "fix", "tests"] as const) {
+        for (const commandName of ["context", "explain", "tests"] as const) {
             expect(commands[commandName]?.description).not.toBe("")
         }
     })
@@ -173,12 +195,7 @@ describe("commands", () => {
     })
 
     test("keeps install dependency remediation-only", () => {
-        const template = commands.install?.template ?? ""
-
-        expect(commands.install?.agent).toBe("assist")
-        expect(commands["autocode-install"]).toBe(commands.install)
-        expect(commands["autocode-install"]?.description).toBe(commands.install?.description)
-        expect(commands["autocode-install"]?.template).toBe(commands.install?.template)
+        const template = commands["autocode-install"]?.template ?? ""
         expect(template).toContain("Call `autocode_dependencies` first.")
         expect(template).toContain("Only treat as no issues")
         expect(template).toContain("report dependencies OK and stop")

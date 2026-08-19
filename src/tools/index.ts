@@ -4,7 +4,6 @@ import type { AutocodeSandboxConfig } from "../config"
 import type { PlatformCapabilities } from "../utils/platform"
 import type { PendingAgentRestartCoordinator } from "../hooks/agent_restart_coordinator"
 import { createAutocodeAgentExecuteTool } from "./autocode_agent_execute"
-import { createAutocodeAgentSwapTool } from "./autocode_agent_swap"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptReadTool } from "./autocode_concept_read"
@@ -40,10 +39,10 @@ import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 import { createAutocodeSandboxConfigEditTool, createAutocodeSandboxConfigReadTool, createAutocodeSandboxConfigRemoveTool } from "./autocode_sandbox_config_tools"
 import { createAutocodeSessionContextTool } from "./autocode_session_context"
+import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createAutocodeSkillEditTool } from "./skill_edit"
 import { createAutocodeSkillReadTool } from "./skill_read"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
-import { createAutocodeSessionRestartTool } from "./autocode_session_restart"
 import { createSkillLearnTool } from "./skill_learn"
 import { createSkillTool } from "./skill"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
@@ -52,6 +51,8 @@ import { createTaskResumeTool } from "./task_resume"
 type ToolRuntime = {
     home?: string
     serverUrl?: string | URL
+    getServerUrl?: () => string | URL | undefined
+    getWebUrl?: () => string | URL | undefined
     restartCoordinator?: PendingAgentRestartCoordinator
 }
 
@@ -81,7 +82,6 @@ export function createTools(
         ...createGitTools(),
         ...sandboxTools,
         autocode_agent_execute: createAutocodeAgentExecuteTool(client),
-        autocode_agent_swap: createAutocodeAgentSwapTool(client),
         autocode_concept_create: createAutocodeConceptCreateTool(client),
         autocode_concept_list: createAutocodeConceptListTool(),
         autocode_concept_read: createAutocodeConceptReadTool(client),
@@ -112,7 +112,7 @@ export function createTools(
         autocode_rest: createAutocodeRestTool(client),
         
         autocode_session_context: createAutocodeSessionContextTool(client),
-        autocode_session_restart: createAutocodeSessionRestartTool(client, runtime?.restartCoordinator),
+        autocode_session_create: createAutocodeSessionCreateTool(client, runtime?.restartCoordinator, runtime?.serverUrl, runtime?.getServerUrl, runtime?.getWebUrl),
         autocode_ssh_command: createAutocodeSshCommandTool(),
         autocode_ssh_config_edit: createAutocodeSshConfigEditTool(),
         autocode_ssh_config_read: createAutocodeSshConfigReadTool(),

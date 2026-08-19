@@ -2,6 +2,7 @@ import path from "node:path"
 import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import type { Dirent } from "node:fs"
+import { cleanSessionTitleSuffix, formatSessionTitleForJobStatus } from "./session_title"
 
 export const activeJobLifecycleDirectories = ["concepts", "drafts", "facilitate", "executing", "review"] as const
 export const completedJobLifecycleDirectory = "shelved" as const
@@ -286,7 +287,7 @@ export async function listPlannedJobs(
 }
 
 export function deriveJobNameFromTitle(title: string): string {
-    const titleWithoutStatus = title.replace(/\s+\(([a-z]+)\)\s*$/, (_match, status: string) => isJobStatus(status) ? "" : _match)
+    const titleWithoutStatus = cleanSessionTitleSuffix(title, isJobStatus)
 
     return titleWithoutStatus
         .toLowerCase()
@@ -304,7 +305,7 @@ export function formatJobSessionTitle(jobName: string, status?: JobStatus): stri
         .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
         .join(" ")
 
-    return status ? `${title} (${status})` : title
+    return status ? formatSessionTitleForJobStatus(title, "auto", status, isJobStatus) : title
 }
 
 function formatSessionTitleFallbackTimestamp(date: Date = new Date()): string {
@@ -1025,9 +1026,12 @@ export async function resolvePlannedJobIdentity(
     }
 }
 
-export async function updateCurrentSessionTitleToJobName(client: OpencodeClient | undefined, context: Pick<SessionJobContext, "sessionID" | "directory">, jobName: string, status?: JobStatus): Promise<{ updated: boolean, warning?: string }> {
+export async function updateCurrentSessionTitleToJobName(client: OpencodeClient | undefined, context: Pick<SessionJobContext, "sessionID" | "directory">, jobName: string, status?: JobStatus, agent?: string): Promise<{ updated: boolean, warning?: string }> {
     const sessionClient = client as SessionTitleClient | undefined
-    const title = formatJobSessionTitle(jobName, status)
+    const baseTitle = formatJobSessionTitle(jobName)
+    const title = agent === undefined
+        ? formatJobSessionTitle(jobName, status)
+        : formatSessionTitleForJobStatus(baseTitle, agent, status, isJobStatus)
     if (!sessionClient?.session.update) {
         return {
             updated: false,

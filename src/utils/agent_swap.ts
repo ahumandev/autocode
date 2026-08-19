@@ -3,6 +3,8 @@ import { getAgentTier } from "@/agents"
 import type { ModelTier, TierConfig } from "@/config"
 import { loadAutocodeConfig } from "@/config"
 import { flattenError } from "@/utils/tools"
+import { isJobStatus } from "@/utils/jobs"
+import { formatSessionTitleForAgent } from "./session_title"
 
 export const primaryAutocodeAgents = ["assist", "advise", "auto", "design"] as const
 export const allowedAutocodeSessionCreateAgents = ["assist", "advise", "auto", "design"] as const
@@ -159,15 +161,12 @@ export function resolveTierModel(tier: ModelTier | undefined, tiers: Partial<Rec
     }
 }
 
-const SESSION_TITLE_POSTFIX_PATTERN = /\s+\(([a-z]+)\)\s*$/
-
 export function deriveAutocodeAgentSwapTitle(prompt: string): string {
     return prompt.slice(0, 60)
 }
 
 export function formatAutocodeSessionTitleForAgent(baseTitle: string, agent: string): string {
-    const stripped = baseTitle.replace(SESSION_TITLE_POSTFIX_PATTERN, "").trim()
-    return `${stripped} (${agent})`
+    return formatSessionTitleForAgent(baseTitle, agent, isJobStatus)
 }
 
 export function validateAutocodeAgentSwapInput(

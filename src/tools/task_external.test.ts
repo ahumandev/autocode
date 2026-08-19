@@ -124,7 +124,7 @@ describe("task_external tool", () => {
         const spawn = mock((_command: string, _args: string[], _options: SpawnOptions) => createChildProcess())
         const tool = createTaskProjectTool({ stat, realpath, spawn })
 
-        const missingResult = parseToolResult(await tool.execute({ prompt: "Do it" } as any, createToolContext()))
+        const missingResult = parseToolResult(await tool.execute({ prompt: "Do it" } as never, createToolContext()))
         const blankResult = parseToolResult(await tool.execute({ target_directory: "   ", prompt: "Do it" }, createToolContext()))
 
         expect(missingResult).toEqual({
@@ -143,7 +143,7 @@ describe("task_external tool", () => {
         const spawn = mock((_command: string, _args: string[], _options: SpawnOptions) => createChildProcess())
         const tool = createTaskProjectTool({ stat, realpath, spawn })
 
-        const missingResult = parseToolResult(await tool.execute({ target_directory: "/project" } as any, createToolContext()))
+        const missingResult = parseToolResult(await tool.execute({ target_directory: "/project" } as never, createToolContext()))
         const blankResult = parseToolResult(await tool.execute({ target_directory: "/project", prompt: "   " }, createToolContext()))
 
         expect(missingResult).toEqual({

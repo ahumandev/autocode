@@ -19,7 +19,7 @@ function useTempCwd(): string {
     return tempDir
 }
 
-function parseResult(result: unknown): Record<string, any> {
+function parseResult(result: unknown) {
     const text = typeof result === "string" ? result : (result as { output: string }).output
     return JSON.parse(text)
 }
@@ -52,9 +52,9 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         const tool = createAutocodeMdFrontmatterReadTool()
         const result = await execute(tool, { file_path_glob: "*.md" })
         expect(Object.keys(result.file_paths).sort()).toEqual(["a.md", "b.md"])
-        expect(result.file_paths["a.md"].key_paths["title"]).toBe("A")
-        expect(result.file_paths["a.md"].key_paths["author"]).toBe("alice")
-        expect(result.file_paths["b.md"].key_paths["title"]).toBe("B")
+        expect(result.file_paths["a.md"].key_paths.title).toBe("A")
+        expect(result.file_paths["a.md"].key_paths.author).toBe("alice")
+        expect(result.file_paths["b.md"].key_paths.title).toBe("B")
         expect(result.file_paths["a.md"].nodes_shown).toBe(2)
         expect(result.file_paths["a.md"].nodes_total).toBe(2)
     })
@@ -103,9 +103,9 @@ describe("createAutocodeMdFrontmatterReadTool", () => {
         const result = await execute(tool, { file_path_glob: "vp.md", value_regex: "orld|ello" })
         // only leaves are emitted; a and b match; c (42) is excluded
         expect(result.file_paths["vp.md"].nodes_total).toBe(2)
-        expect(result.file_paths["vp.md"].key_paths["a"]).toBe("hello")
-        expect(result.file_paths["vp.md"].key_paths["b"]).toBe("world")
-        expect(result.file_paths["vp.md"].key_paths["c"]).toBeUndefined()
+        expect(result.file_paths["vp.md"].key_paths.a).toBe("hello")
+        expect(result.file_paths["vp.md"].key_paths.b).toBe("world")
+        expect(result.file_paths["vp.md"].key_paths.c).toBeUndefined()
     })
 
     test("max_keys truncation reflected in nodes_shown vs nodes_total", async () => {

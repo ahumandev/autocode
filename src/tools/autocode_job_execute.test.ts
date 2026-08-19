@@ -49,12 +49,6 @@ function createMockFs() {
     }
 }
 
-type PromptCall = {
-    path: { id: string }
-    query: { directory: string }
-    body: { agent: string, parts: Array<{ type: string, text?: string }>, model?: unknown }
-}
-
 type MockClient = OpencodeClient & {
     session: {
         create: ReturnType<typeof mock>
@@ -86,7 +80,7 @@ function createMockClient(events: string[], messageIDs = ["user-1", "assistant-1
                 return { data: { id: "session-1" } }
             }),
             create: mock(async () => ({ data: { id: "new-session" } })),
-            promptAsync: mock(async (args: PromptCall) => {
+            promptAsync: mock(async () => {
                 events.push("dispatch")
                 return {}
             }),
@@ -118,7 +112,7 @@ describe("autocode_job_execute tool", () => {
         if (xdgConfigHome) rmSync(xdgConfigHome, { recursive: true, force: true })
     })
 
-    test("compacts current session, retitles it, persists same session, then dispatches selected plan", async () => {
+    test("creates isolated job session, persists it, then dispatches selected plan", async () => {
         const fs = createMockFs()
         const events: string[] = []
         configureResolvedDraft(fs)
@@ -129,29 +123,22 @@ describe("autocode_job_execute tool", () => {
         expect(parsed).toEqual({
             result_type: "session_created",
             job_name: "test_job",
-            session_id: "session-1",
+            session_id: "new-session",
             session_title: "Test Job (facilitate)",
+            message: "Created new session for assist: Test Job (facilitate) (new-session).",
         })
-        expect(client.session.summarize).toHaveBeenCalledTimes(1)
-        expect(events).toEqual([
-            "title:Test Job (facilitate)",
-            "summarize",
-        ])
+        expect(client.session.summarize).not.toHaveBeenCalled()
+        expect(client.session.update).not.toHaveBeenCalled()
+        expect(events).toEqual([])
         expect(client.session.promptAsync).not.toHaveBeenCalled()
-        expect(client.session.update).toHaveBeenCalledWith({
-            path: { id: "session-1" },
+        expect(client.session.create).toHaveBeenCalledWith({
             query: { directory: "/workspace" },
             body: { title: "Test Job (facilitate)" },
         })
-        expect(client.session.create).not.toHaveBeenCalled()
         await waitForPostTurnDispatch()
-        expect(events).toEqual([
-            "title:Test Job (facilitate)",
-            "summarize",
-            "dispatch",
-        ])
+        expect(events).toEqual(["dispatch"])
         expect(client.session.promptAsync).toHaveBeenCalledWith({
-            path: { id: "session-1" },
+            path: { id: "new-session" },
             query: { directory: "/workspace" },
             body: {
                 agent: "assist",
@@ -159,10 +146,10 @@ describe("autocode_job_execute tool", () => {
             },
         })
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/facilitate/test_job")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: session-1\n")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: new-session\n")
     })
 
-    test("compacts current session and dispatches plan with advise", async () => {
+    test("dispatches advise plan in isolated job session", async () => {
         const fs = createMockFs()
         const events: string[] = []
         configureResolvedDraft(fs, "# Lesson\n\nExplain this change\n")
@@ -170,29 +157,24 @@ describe("autocode_job_execute tool", () => {
 
         await createAutocodeJobExecuteTool(client, fs).execute({ agent: "advise" }, createToolContext())
 
-        expect(events).toEqual([
-            "title:Test Job (facilitate)",
-            "summarize",
-        ])
+        expect(events).toEqual([])
+        expect(client.session.summarize).not.toHaveBeenCalled()
+        expect(client.session.update).not.toHaveBeenCalled()
         expect(client.session.promptAsync).not.toHaveBeenCalled()
         await waitForPostTurnDispatch()
-        expect(events).toEqual([
-            "title:Test Job (facilitate)",
-            "summarize",
-            "dispatch",
-        ])
+        expect(events).toEqual(["dispatch"])
         expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
-            path: { id: "session-1" },
+            path: { id: "new-session" },
             body: expect.objectContaining({
                 agent: "advise",
                 parts: [{ type: "text", text: "Selected job: test_job\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan.md:\n# Lesson\n\nExplain this change\n" }],
             }),
         }))
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/facilitate/test_job")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: session-1\n")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: new-session\n")
     })
 
-    test("dispatches assist with balanced model and omits standard variant in current session", async () => {
+    test("dispatches assist with balanced model in isolated job session", async () => {
         const worktree = mkdtempSync(join(tmpdir(), "autocode-job-execute-"))
         try {
             mkdirSync(join(worktree, ".opencode"), { recursive: true })
@@ -212,21 +194,24 @@ describe("autocode_job_execute tool", () => {
             expect(client.session.promptAsync).not.toHaveBeenCalled()
             await waitForPostTurnDispatch()
             expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
-                path: { id: "session-1" },
+                path: { id: "new-session" },
                 body: expect.objectContaining({
                     agent: "assist",
                     model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
                 }),
             }))
-            expect(client.session.create).not.toHaveBeenCalled()
+            expect(client.session.create).toHaveBeenCalledWith({
+                query: { directory: worktree },
+                body: { title: "Test Job (facilitate)" },
+            })
             expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/test_job`, `${worktree}/.agents/jobs/facilitate/test_job`)
-            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/facilitate/test_job/session.yml`, "session_id: session-1\n")
+            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/facilitate/test_job/session.yml`, "session_id: new-session\n")
         } finally {
             rmSync(worktree, { recursive: true, force: true })
         }
     })
 
-    test("dispatches auto with smart model and configured reasoning variant in current session", async () => {
+    test("dispatches auto with smart model and configured reasoning variant in isolated job session", async () => {
         const worktree = mkdtempSync(join(tmpdir(), "autocode-job-execute-"))
         try {
             mkdirSync(join(worktree, ".opencode"), { recursive: true })
@@ -246,21 +231,24 @@ describe("autocode_job_execute tool", () => {
             expect(client.session.promptAsync).not.toHaveBeenCalled()
             await waitForPostTurnDispatch()
             expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
-                path: { id: "session-1" },
+                path: { id: "new-session" },
                 body: expect.objectContaining({
                     agent: "auto",
                     model: { providerID: "openai", modelID: "gpt-5.5", variant: "thinking" },
                 }),
             }))
-            expect(client.session.create).not.toHaveBeenCalled()
+            expect(client.session.create).toHaveBeenCalledWith({
+                query: { directory: worktree },
+                body: { title: "Test Job (executing)" },
+            })
             expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/test_job`, `${worktree}/.agents/jobs/executing/test_job`)
-            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/executing/test_job/session.yml`, "session_id: session-1\n")
+            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/executing/test_job/session.yml`, "session_id: new-session\n")
         } finally {
             rmSync(worktree, { recursive: true, force: true })
         }
     })
 
-    test("starts job when post-turn current-session dispatch fails", async () => {
+    test("starts job when post-turn isolated-session dispatch fails", async () => {
         const fs = createMockFs()
         configureResolvedDraft(fs)
         const client = createMockClient([])
@@ -271,12 +259,15 @@ describe("autocode_job_execute tool", () => {
         expect(parsed).toMatchObject({
             result_type: "session_created",
             job_name: "test_job",
-            session_id: "session-1",
+            session_id: "new-session",
         })
-        expect(client.session.create).not.toHaveBeenCalled()
+        expect(client.session.create).toHaveBeenCalledWith({
+            query: { directory: "/workspace" },
+            body: { title: "Test Job (executing)" },
+        })
         expect(client.session.promptAsync).not.toHaveBeenCalled()
         expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/executing/test_job")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/test_job/session.yml", "session_id: session-1\n")
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/test_job/session.yml", "session_id: new-session\n")
         await waitForPostTurnDispatch()
         expect(client.session.promptAsync).toHaveBeenCalledTimes(1)
     })

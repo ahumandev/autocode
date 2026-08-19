@@ -13,7 +13,7 @@ import {
     createSandboxConfigAdapter,
 } from "./autocode_sandbox_config_tools"
 
-function parseResult(result: string | { output: string }): any {
+function parseResult(result: string | { output: string }) {
     return JSON.parse(typeof result === "string" ? result : result.output)
 }
 
@@ -281,9 +281,9 @@ describe("createAutocodeSandboxConfigReadTool", () => {
         const result = parseResult(await tool.execute({ sandbox_name: "dev", file_path_glob: "app.json", key_path: "server" }, context))
         const fileEntry = result.file_paths["app.json"] as { key_paths: Record<string, string> }
 
-        expect(fileEntry.key_paths["port"]).toBe("3000")
-        expect(fileEntry.key_paths["host"]).toBe("x")
-        expect(fileEntry.key_paths["other"]).toBeUndefined()
+        expect(fileEntry.key_paths.port).toBe("3000")
+        expect(fileEntry.key_paths.host).toBe("x")
+        expect(fileEntry.key_paths.other).toBeUndefined()
     }))
 
     test("recursive glob returns multiple file_paths keys", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {
@@ -305,8 +305,8 @@ describe("createAutocodeSandboxConfigReadTool", () => {
         const result = parseResult(await tool.execute({ sandbox_name: "dev", file_path_glob: "vp.json", value_regex: "ello" }, context))
         const fileEntry = result.file_paths["vp.json"] as { key_paths: Record<string, string> }
 
-        expect(fileEntry.key_paths["a"]).toBe("hello")
-        expect(fileEntry.key_paths["c"]).toBeUndefined()
+        expect(fileEntry.key_paths.a).toBe("hello")
+        expect(fileEntry.key_paths.c).toBeUndefined()
     }))
 
     test("non-matching glob returns retry 'no files matched glob'", async () => withSandboxFixture(async ({ deps, client, context }) => {

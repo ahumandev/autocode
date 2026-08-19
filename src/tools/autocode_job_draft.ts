@@ -12,8 +12,6 @@ export type PlanSection = typeof planSections[number]
 
 type PlanSections = Record<PlanSection, string>
 
-type SummaryMap = Record<string, string>
-
 const planSectionContentDescriptions: Record<PlanSection, string> = {
     problems: "Define observed wrong/missing project behavior or missing info. Include exact key names, values, paths, codes, and user provided examples.",
     impact: "Define why problem matters. Describe affected user, system, or workflow impact.",
@@ -232,46 +230,6 @@ export function parsePlanMarkdown(content: string): Record<PlanSection, string> 
     }
 
     return result
-}
-
-function cleanSummaryTitle(value: string) {
-    return value.trim().replace(/^#+\s*/, "").replace(/\s+#+\s*$/, "").replace(/^(?:REQ|CON|R)\d+[:.)-]?\s*/i, "").trim()
-}
-
-function extractPlanSummaryMap(content: string, prefix: "REQ" | "CON" | "R"): SummaryMap {
-    const summaries: SummaryMap = {}
-    const fallback: string[] = []
-    const lines = content.split(/\r?\n/)
-    let inFence = false
-
-    for (const rawLine of lines) {
-        const trimmed = rawLine.trim()
-        if (/^(```|~~~)/.test(trimmed)) {
-            inFence = !inFence
-            continue
-        }
-
-        if (inFence) {
-            continue
-        }
-
-        const heading = trimmed.match(/^###\s+(.+)$/)
-        if (heading) {
-            summaries[`${prefix}${Object.keys(summaries).length + 1}`] = cleanSummaryTitle(heading[1])
-            continue
-        }
-
-        const fallbackLine = trimmed.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "").replace(new RegExp(`^${prefix}\\d+:\\s*`), "").trim().replace(/^['"]|['"]$/g, "")
-        if (fallbackLine) {
-            fallback.push(fallbackLine)
-        }
-    }
-
-    if (Object.keys(summaries).length > 0) {
-        return summaries
-    }
-
-    return Object.fromEntries(fallback.map((summary, index) => [`${prefix}${index + 1}`, summary]))
 }
 
 async function resolveWritablePlan(fileSystem: FileSystem, worktree: string, job: string) {

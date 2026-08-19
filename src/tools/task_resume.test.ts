@@ -5,6 +5,8 @@ import { createTaskResumeTool } from "./task_resume"
 import { createNoopAsk } from "./test_context"
 import { createAbortResponse } from "@/utils/tools"
 
+type TestRecord = Record<string, unknown>
+
 function createToolContext(overrides: Partial<ToolContext> = {}): ToolContext {
     return {
         sessionID: "parent-session",
@@ -19,7 +21,7 @@ function createToolContext(overrides: Partial<ToolContext> = {}): ToolContext {
     }
 }
 
-function createSession(id: string, overrides: Record<string, unknown> = {}): any {
+function createSession(id: string, overrides: TestRecord = {}): TestRecord {
     return {
         id,
         directory: "/workspace",
@@ -32,7 +34,7 @@ function createSession(id: string, overrides: Record<string, unknown> = {}): any
     }
 }
 
-function createAssistantMessage(id: string, interrupted = true): any {
+function createAssistantMessage(id: string, interrupted = true): TestRecord {
     return {
         id,
         role: "assistant",
@@ -47,7 +49,7 @@ function createAssistantMessage(id: string, interrupted = true): any {
     }
 }
 
-function createUserMessage(id: string, text: string): any {
+function createUserMessage(id: string, text: string): TestRecord {
     return {
         info: {
             id,
@@ -65,7 +67,7 @@ function createUserMessage(id: string, text: string): any {
     }
 }
 
-function createInterruptedChildMessages(promptText: string): any[] {
+function createInterruptedChildMessages(promptText: string): TestRecord[] {
     const assistantMsg = createAssistantMessage("assist-1", true)
     return [
         createUserMessage("user-1", promptText),
@@ -76,7 +78,7 @@ function createInterruptedChildMessages(promptText: string): any[] {
     ]
 }
 
-function createNonInterruptedChildMessages(promptText: string): any[] {
+function createNonInterruptedChildMessages(promptText: string): TestRecord[] {
     return [
         createUserMessage("user-1", promptText),
         {
@@ -93,7 +95,7 @@ function createNonInterruptedChildMessages(promptText: string): any[] {
     ]
 }
 
-function createParentMessages(taskId: string, promptText: string): any[] {
+function createParentMessages(taskId: string, promptText: string): TestRecord[] {
     return [
         {
             info: {
@@ -119,12 +121,12 @@ function createParentMessages(taskId: string, promptText: string): any[] {
 }
 
 function createMockClient(overrides: {
-    sessionGetData?: any
-    sessionGetError?: any
-    parentMessages?: any[]
-    childSessions?: any[]
-    childMessagesMap?: Record<string, any[]>
-    promptAsyncError?: any
+    sessionGetData?: TestRecord
+    sessionGetError?: unknown
+    parentMessages?: TestRecord[]
+    childSessions?: TestRecord[]
+    childMessagesMap?: Record<string, TestRecord[]>
+    promptAsyncError?: unknown
 } = {}): OpencodeClient {
     const {
         sessionGetData = createSession("parent-session"),
@@ -141,7 +143,7 @@ function createMockClient(overrides: {
                 data: sessionGetError ? undefined : sessionGetData,
                 error: sessionGetError,
             })),
-            messages: mock(async (args: any) => {
+            messages: mock(async (args: { path: { id: string } }) => {
                 const sessionId = args.path.id
                 if (sessionId === "parent-session") {
                     return { data: parentMessages, error: undefined }
@@ -307,7 +309,7 @@ describe("task_resume tool", () => {
                     data: createSession("parent-session"),
                     error: undefined,
                 })),
-                messages: mock(async (args: any) => {
+                messages: mock(async (args: { path: { id: string } }) => {
                     if (args.path.id === "parent-session") {
                         return { data: [], error: undefined }
                     }
@@ -337,7 +339,7 @@ describe("task_resume tool", () => {
                     data: createSession("parent-session"),
                     error: undefined,
                 })),
-                messages: mock(async (args: any) => {
+                messages: mock(async (args: { path: { id: string } }) => {
                     if (args.path.id === "parent-session") {
                         return { data: [], error: undefined }
                     }

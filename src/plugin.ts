@@ -164,7 +164,12 @@ async function createPluginHooks(
         async config(cfg: ConfigWithSubagentDepth) {
             await mergeConfig(cfg, input, autocodeConfig, generatedSkills, capabilities, commandDefinitions)
         },
-        tool: createTools(input.client, autocodeConfig.sandbox, { home, serverUrl: input.serverUrl, restartCoordinator }, capabilities),
+        tool: createTools(input.client, autocodeConfig.sandbox, {
+            home,
+            serverUrl: input.serverUrl,
+            getWebUrl: () => process.env.AUTOCODE_WEB_URL,
+            restartCoordinator,
+        }, capabilities),
     }
 }
 

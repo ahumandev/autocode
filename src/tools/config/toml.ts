@@ -224,22 +224,22 @@ function tomlParse(raw: string): TomlValue {
 
 function quoteKeyOrString(s: string): string {
     if (/^[A-Za-z0-9_-]+$/.test(s)) return s
-    return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"'
+    return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
 }
 
 function formatScalar(value: string | number | boolean): string {
     if (typeof value === "string") {
-        return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t") + '"'
+        return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t")}"`
     }
     if (typeof value === "boolean") return value ? "true" : "false"
     return String(value)
 }
 
 function formatValue(value: TomlValue): string {
-    if (Array.isArray(value)) return "[" + value.map(formatValue).join(", ") + "]"
+    if (Array.isArray(value)) return `[${value.map(formatValue).join(", ")}]`
     if (isTomlObject(value)) {
         const entries = Object.entries(value).map(([k, v]) => `${quoteKeyOrString(k)} = ${formatValue(v)}`)
-        return "{ " + entries.join(", ") + " }"
+        return `{ ${entries.join(", ")} }`
     }
     return formatScalar(value)
 }

@@ -1,3 +1,15 @@
+***The workflow engine for traceable autonomous job execution***
+
+![Autocode](docs/logo.webp)
+
+AutoCode is an OpenCode plugin that turns rough conceptual ideas into completed solutions by means of structured workflow phases and optional review gates.
+
+Run jobs autonomously with **Auto mode**, or stay in control with **Assist mode**, where AutoCode does the safe hard work and separates dangerous operations into guided manual steps.
+
+No special UI required. AutoCode runs in OpenCode, keeps progress in version-controllable text files, and lets you track multiple jobs across their full lifecycle making it the ideal solution for remote development or server administration.
+
+---
+
 ## Features
 
 ### Implementation Modes
@@ -76,10 +88,10 @@ At startup, AutoCode detects OS. Agents use CMD on Windows and Bash on Linux. Wi
 
 ### Primary Agents
 
-|     | Agent      | Purpose                                 |
-| --- | ---------- | --------------------------------------- |
+|      | Agent      | Purpose                                 |
+| ---- | ---------- | --------------------------------------- |
 | 💡   | `advise`   | Research topics, answer questions, and guide manual work. |
-| 🗺️   | `design`   | Design and propose solutions.           |
+| 📐   | `design`   | Design and propose solutions.           |
 | 🤖   | `auto`     | **Autonomously** solve problems.        |
 | 🧑‍💻   | `assist`   | Assist **interactively** with problems. |
 
@@ -87,8 +99,8 @@ At startup, AutoCode detects OS. Agents use CMD on Windows and Bash on Linux. Wi
 
 ```mermaid
 flowchart TD
-  Advise([💡 advise guidance]) --🗺️ design--> Drafts[.agents/jobs/drafts]
-  Concepts[ .agents/jobs/concepts] --🗺️ design--> Drafts
+  Advise([💡 advise guidance]) --📐 design--> Drafts[.agents/jobs/drafts]
+  Concepts[ .agents/jobs/concepts] --📐 design--> Drafts
   Drafts --🤖 auto --> Executing[.agents/jobs/executing]
   Executing --> Review[.agents/jobs/review]
   Review --> Shelved
@@ -109,8 +121,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  Advise([💡 advise guidance]) --🗺️ design--> Drafts[.agents/jobs/drafts]
-  Concepts[ .agents/jobs/concepts] --🗺️ design--> Drafts
+  Advise([💡 advise guidance]) --📐 design--> Drafts[.agents/jobs/drafts]
+  Concepts[ .agents/jobs/concepts] --📐 design--> Drafts
   Drafts --🧑‍💻 assist --> Facilitate[.agents/jobs/facilitate]
   Facilitate -.completed.-> Shelved[.agents/jobs/shelved]
 ```

@@ -28,6 +28,22 @@ OpenCode applies a last-matching-rule-wins model to external-directory permissio
 
 See [OpenCode Go documentation](https://opencode.ai/docs/go#endpoints) for supported model names.
 
+### Web session links
+
+AutoCode resolves server URL in this order:
+
+1. `AUTOCODE_WEB_URL`
+2. Runtime server URL
+3. Client base URL
+
+`AUTOCODE_WEB_URL` independently sets origin used for browser links. When unset, browser links use resolved server origin. For example:
+
+```sh
+AUTOCODE_WEB_URL="https://app.example.com"
+```
+
+`AUTOCODE_WEB_URL` selects server URL. `AUTOCODE_WEB_URL` overrides only browser-link origin.
+
 #### Skills
 
 Set `autocode.skills.freeze` to `true` to strictly skip first-run extraction and every generated-root mutation. Existing stale generated skills remain until manually removed or a later unfrozen startup updates them.

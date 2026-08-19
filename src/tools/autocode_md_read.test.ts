@@ -48,12 +48,12 @@ describe("autocode_md_read", () => {
             byAnchor[e.anchor] = { line_of_heading: e.line_of_heading, line_count: e.line_count }
         }
         expect(Object.keys(byAnchor).sort()).toEqual(["a", "a1", "a2"])
-        expect(byAnchor["a"].line_of_heading).toBe(1)
-        expect(byAnchor["a"].line_count).toBe(4)
-        expect(byAnchor["a1"].line_of_heading).toBe(5)
-        expect(byAnchor["a1"].line_count).toBe(7)
-        expect(byAnchor["a2"].line_of_heading).toBe(9)
-        expect(byAnchor["a2"].line_count).toBe(3)
+        expect(byAnchor.a.line_of_heading).toBe(1)
+        expect(byAnchor.a.line_count).toBe(4)
+        expect(byAnchor.a1.line_of_heading).toBe(5)
+        expect(byAnchor.a1.line_count).toBe(7)
+        expect(byAnchor.a2.line_of_heading).toBe(9)
+        expect(byAnchor.a2.line_count).toBe(3)
         expect((entry[0] as Record<string, unknown>).nodes_shown).toBeUndefined()
         expect((entry[0] as Record<string, unknown>).nodes_total).toBeUndefined()
     })
@@ -86,10 +86,10 @@ describe("autocode_md_read", () => {
             byAnchor[e.anchor] = { line_of_heading: e.line_of_heading, line_count: e.line_count }
         }
         expect(Object.keys(byAnchor).sort()).toEqual(["a", "b"])
-        expect(byAnchor["a"].line_of_heading).toBe(1)
-        expect(byAnchor["a"].line_count).toBe(4)
-        expect(byAnchor["b"].line_of_heading).toBe(5)
-        expect(byAnchor["b"].line_count).toBe(3)
+        expect(byAnchor.a.line_of_heading).toBe(1)
+        expect(byAnchor.a.line_count).toBe(4)
+        expect(byAnchor.b.line_of_heading).toBe(5)
+        expect(byAnchor.b.line_count).toBe(3)
     })
 
     test("duplicate headers get GitHub-style -1,-2 suffix as anchor (multiple -> outline only)", async () => {
@@ -184,9 +184,9 @@ describe("autocode_md_read", () => {
         expect(entry.length).toBe(3)
         const byAnchor: Record<string, string> = {}
         for (const e of entry) byAnchor[e.anchor] = e.content
-        expect(byAnchor["a"]).toBe("1234")
-        expect(byAnchor["b"]).toBe("6789")
-        expect(byAnchor["c"]).toBe("abcd")
+        expect(byAnchor.a).toBe("1234")
+        expect(byAnchor.b).toBe("6789")
+        expect(byAnchor.c).toBe("abcd")
     })
 
     test("water-filling: small sections keep full content, leftover budget redistributed to larger section", async () => {
@@ -198,9 +198,9 @@ describe("autocode_md_read", () => {
         expect(entry.length).toBe(3)
         const byAnchor: Record<string, string> = {}
         for (const e of entry) byAnchor[e.anchor] = e.content
-        expect(byAnchor["a"]).toBe("xy")
-        expect(byAnchor["b"]).toBe("zw")
-        expect(byAnchor["c"]).toBe("cccccccc")
+        expect(byAnchor.a).toBe("xy")
+        expect(byAnchor.b).toBe("zw")
+        expect(byAnchor.c).toBe("cccccccc")
         const total = entry.reduce((n: number, e: { content: string }) => n + e.content.length, 0)
         expect(total).toBe(12)
     })
@@ -214,9 +214,9 @@ describe("autocode_md_read", () => {
         expect(entry.length).toBe(3)
         const byAnchor: Record<string, string> = {}
         for (const e of entry) byAnchor[e.anchor] = e.content
-        expect(byAnchor["a"]).toBe("xy")
-        expect(byAnchor["b"]).toBe("zw")
-        expect(byAnchor["c"]).toBe("uv")
+        expect(byAnchor.a).toBe("xy")
+        expect(byAnchor.b).toBe("zw")
+        expect(byAnchor.c).toBe("uv")
     })
 
     test("water-filling: even split when every section exceeds fair share", async () => {
@@ -231,9 +231,9 @@ describe("autocode_md_read", () => {
         }
         const byAnchor: Record<string, string> = {}
         for (const e of entry) byAnchor[e.anchor] = e.content
-        expect(byAnchor["a"]).toBe("aaaa")
-        expect(byAnchor["b"]).toBe("bbbb")
-        expect(byAnchor["c"]).toBe("cccc")
+        expect(byAnchor.a).toBe("aaaa")
+        expect(byAnchor.b).toBe("bbbb")
+        expect(byAnchor.c).toBe("cccc")
     })
 
     test("water-filling: budget below section count yields empty content for every section but all listed", async () => {
