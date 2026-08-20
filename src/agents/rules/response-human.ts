@@ -31,8 +31,11 @@ ${markdown}
 
 Before tool calls, summarize next ACTION in format:
 \`\`\`md
-## {emoji} {verb} {subject in < 4 words}
-{reason in 1 concise sentence}
+# {emoji} {verb} {subject in < 4 words}
+
+{main reason why ACTION needed summarized in 1 sentence}
+
+{main expectation what ACTION will accomplish summarized in 1 sentence}
 \`\`\`
 
 * After intermediate tool calls, summarize tool result in one concise sentence.

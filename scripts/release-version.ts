@@ -39,6 +39,22 @@ function runCommand(command: string, args: string[]): void {
   }
 }
 
+function runShellCommand(command: string): void {
+  const result = spawnSync(command, {
+    cwd: projectRoot,
+    stdio: "inherit",
+    shell: true,
+  })
+
+  if (result.error !== undefined) {
+    throw result.error
+  }
+
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1)
+  }
+}
+
 function getCommandOutput(command: string, args: string[]): string {
   const result = spawnSync(command, args, {
     cwd: projectRoot,
@@ -68,9 +84,7 @@ if (process.argv.length !== 3 || !validVersionArgPattern.test(versionArg)) {
 }
 
 runCommand("npm", ["version", versionArg, "--no-git-tag-version"])
-runCommand("bun", ["run", "typecheck"])
-runCommand("bun", ["run", "build"])
-runCommand("bun", ["run", "verify:package"])
+runShellCommand("bun run typecheck && bun run build && bun run verify:package")
 
 const version = readPackageVersion()
 const branch = getCommandOutput("git", ["rev-parse", "--abbrev-ref", "HEAD"])
