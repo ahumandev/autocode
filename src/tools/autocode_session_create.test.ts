@@ -118,6 +118,12 @@ describe("autocode_session_create tool", () => {
 		return JSON.parse(typeof result === "string" ? result : result.output);
 	}
 
+	function writeJobDesign(directoryName: string, content: string): void {
+		const jobDirectory = join(worktree, ".agents", "jobs", directoryName);
+		mkdirSync(jobDirectory, { recursive: true });
+		writeFileSync(join(jobDirectory, "design.md"), content);
+	}
+
 	test("schema accepts optional prompt and requires string agent", () => {
 		const tool = createAutocodeSessionCreateTool();
 		const promptSchema = tool.args.prompt as unknown as StringSchema;
@@ -146,7 +152,11 @@ describe("autocode_session_create tool", () => {
 				),
 			);
 
-			expect(result).toMatchObject({ agent, handoff_state: "registered" });
+			expect(result).toMatchObject({
+				session_id: "destination/session",
+				session_title: `Source session (${agent})`,
+				message: expect.any(String),
+			});
 			expect(client.session.update).not.toHaveBeenCalled();
 			expect(client.session.promptAsync).not.toHaveBeenCalled();
 			expect(coordinator.pendingCount()).toBe(1);
@@ -157,7 +167,7 @@ describe("autocode_session_create tool", () => {
 	test("archives source then dispatches exact destination prompt once after matching source turn", async () => {
 		const calls: string[] = [];
 		const client = createMockClient({
-			sourceTitle: "Research topic (executing)",
+			sourceTitle: "Research topic",
 		});
 		const coordinator = createPendingAgentRestartCoordinator();
 		client.session.create.mockImplementation(async () => {
@@ -181,14 +191,11 @@ describe("autocode_session_create tool", () => {
 		);
 
 		expect(calls).toEqual(["create"]);
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			session_id: "destination/session",
-			session_title: "Research topic (executing)",
-			agent: "auto",
-			handoff_state: "registered",
-			session_action: "created",
+			session_title: "Research topic (auto)",
 			message:
-				"Created new session for auto: Research topic (executing) (destination/session). Handoff registered.",
+				"Created new session for auto: Research topic (auto) (destination/session). Handoff registered.",
 		});
 
 		await Promise.all([
@@ -220,6 +227,175 @@ describe("autocode_session_create tool", () => {
 			},
 		});
 		expect(client.session.promptAsync).toHaveBeenCalledTimes(1);
+		coordinator.dispose();
+	});
+
+	const emptyPromptCases: Array<
+		[string, { agent: string; prompt?: string }]
+	> = [
+		["omitted", { agent: "assist" }],
+		["empty", { prompt: "", agent: "assist" }],
+		["whitespace-only", { prompt: " \t\n", agent: "assist" }],
+	];
+	test.each(emptyPromptCases)(
+		"loads matching design for %s prompt and defers it to destination",
+		async (promptKind, args) => {
+			const sourceTitle = "Durable Design";
+			const design = `# Design handoff (${promptKind})`;
+			writeJobDesign(
+				"2026-08-20_10-30-00_durable_design",
+				design,
+			);
+			const client = createMockClient({ sourceTitle });
+			const coordinator = createPendingAgentRestartCoordinator();
+
+			const result = parseToolResult(
+				await createAutocodeSessionCreateTool(client, coordinator).execute(
+					args,
+					createToolContext(),
+				),
+			);
+
+			expect(result).toMatchObject({
+				session_id: "destination/session",
+			});
+			expect(client.session.create).toHaveBeenCalledTimes(1);
+			expect(client.session.promptAsync).not.toHaveBeenCalled();
+
+			await coordinator.handleEvent(sourceTurnEndedEvent());
+
+			expect(client.session.promptAsync).toHaveBeenCalledWith(
+				expect.objectContaining({
+					body: expect.objectContaining({
+						parts: [{ type: "text", text: design }],
+					}),
+				}),
+			);
+			coordinator.dispose();
+		},
+	);
+
+	test("selects latest timestamped matching design directory", async () => {
+		const sourceTitle = "Durable Design";
+		writeJobDesign(
+			"2026-08-20_10-30-00_durable_design",
+			"# Earlier design",
+		);
+		writeJobDesign(
+			"2026-08-21_10-30-00_durable_design",
+			"# Latest design",
+		);
+		writeJobDesign("2027-08-21T10-30-00_durable_design", "# Malformed");
+		writeJobDesign("2028-08-21_10-30-00_other_design", "# Wrong title");
+		const client = createMockClient({ sourceTitle });
+		const coordinator = createPendingAgentRestartCoordinator();
+
+		await createAutocodeSessionCreateTool(client, coordinator).execute(
+			{ agent: "assist" },
+			createToolContext(),
+		);
+		await coordinator.handleEvent(sourceTurnEndedEvent());
+
+		expect(client.session.promptAsync).toHaveBeenCalledWith(
+			expect.objectContaining({
+				body: expect.objectContaining({
+					parts: [{ type: "text", text: "# Latest design" }],
+				}),
+			}),
+		);
+		coordinator.dispose();
+	});
+
+	test("selects latest matching design over older session-linked design", async () => {
+		const sourceTitle = "Durable Design";
+		const olderDirectory = "2026-08-20_10-30-00_durable_design";
+		writeJobDesign(olderDirectory, "# Older session-linked design");
+		writeFileSync(
+			join(worktree, ".agents", "jobs", olderDirectory, "session.yml"),
+			"session_id: source-session\n",
+		);
+		writeJobDesign(
+			"2026-08-21_10-30-00_durable_design",
+			"# Newer timestamped design",
+		);
+		const client = createMockClient({ sourceTitle });
+		const coordinator = createPendingAgentRestartCoordinator();
+
+		await createAutocodeSessionCreateTool(client, coordinator).execute(
+			{ agent: "assist" },
+			createToolContext(),
+		);
+		await coordinator.handleEvent(sourceTurnEndedEvent());
+
+		expect(client.session.promptAsync).toHaveBeenCalledWith(
+			expect.objectContaining({
+				body: expect.objectContaining({
+					parts: [{ type: "text", text: "# Newer timestamped design" }],
+				}),
+			}),
+		);
+		coordinator.dispose();
+	});
+
+	test("returns retry response without destination when no matching design exists", async () => {
+		writeJobDesign("2026-08-20_10-30-00_other_design", "# Wrong title");
+		writeJobDesign("2026-08-20T10-30-00_source_session", "# Malformed");
+		const client = createMockClient({ sourceTitle: "Source Session" });
+		const coordinator = createPendingAgentRestartCoordinator();
+
+		const result = parseToolResult(
+			await createAutocodeSessionCreateTool(client, coordinator).execute(
+				{ prompt: "\t ", agent: "assist" },
+				createToolContext(),
+			),
+		);
+
+		expect(result).toEqual({
+			failedAction: "autocode_session_create",
+			error: "No matching job design.md found for current session title.",
+			instruction: "Provide a nonempty prompt and retry autocode_session_create.",
+		});
+		expect(client.session.create).not.toHaveBeenCalled();
+		coordinator.dispose();
+	});
+
+	test("uses explicit nonblank prompt without inspecting job design files", async () => {
+		const fileSystem = {
+			readdir: mock(async () => {
+				throw new Error("job design lookup must be skipped");
+			}),
+			readFile: mock(async () => {
+				throw new Error("job design lookup must be skipped");
+			}),
+		};
+		const client = createMockClient({ sourceTitle: "Explicit Prompt" });
+		const coordinator = createPendingAgentRestartCoordinator();
+		const prompt = "Use supplied handoff instructions.";
+
+		const result = parseToolResult(
+			await createAutocodeSessionCreateTool(
+				client,
+				coordinator,
+				undefined,
+				undefined,
+				undefined,
+				fileSystem,
+			).execute({ prompt, agent: "assist" }, createToolContext()),
+		);
+
+		expect(result).toMatchObject({ session_id: "destination/session" });
+		expect(client.session.create).toHaveBeenCalledTimes(1);
+		expect(fileSystem.readdir).not.toHaveBeenCalled();
+		expect(fileSystem.readFile).not.toHaveBeenCalled();
+		expect(client.session.get).toHaveBeenCalledTimes(1);
+		await coordinator.handleEvent(sourceTurnEndedEvent());
+		expect(client.session.promptAsync).toHaveBeenCalledWith(
+			expect.objectContaining({
+				body: expect.objectContaining({
+					parts: [{ type: "text", text: prompt }],
+				}),
+			}),
+		);
 		coordinator.dispose();
 	});
 

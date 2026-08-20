@@ -5,7 +5,8 @@ import { cp, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } fro
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { archiveJobSandboxesForShelvedJob, assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, createSandboxAlias, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getJobSandboxRoot, getNamedSandboxPath, getSandboxPaths, materializeSandboxRootfs, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, resolveSandboxJob, type SandboxCacheEntry, type SandboxDependencies } from "./sandbox"
+import { assertDirectSandboxPath, assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupEmptyJobSandboxRoot, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, materializeSandboxRootfs, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, resolveSandboxOwner, type SandboxCacheEntry, type SandboxDependencies, type SandboxOwner, type SandboxPaths } from "./sandbox"
+import { resolveJobWorkspaceIdentity } from "./jobs"
 import { copyPath, resolveSafeRelativePath, validateSafeWriteTarget } from "./sandbox_file_tools"
 
 function missingError(): NodeJS.ErrnoException {
@@ -112,6 +113,27 @@ function getMetadataWrite(deps: SandboxDependencies, metadataFile: string): Reco
 
 function createClient(title: string): OpencodeClient {
     return { session: { get: mock(async () => ({ data: { title } })) } } as unknown as OpencodeClient
+}
+
+function createSandboxOwner(storageRoot: string, jobName: string, workspaceName = `2026-08-20_10-30-00_${jobName}`): SandboxOwner {
+    const workspacePath = path.join(storageRoot, ".agents", "jobs", workspaceName)
+    return {
+        storageRoot,
+        workspace: {
+            job_name: jobName,
+            job_path: `.agents/jobs/${workspaceName}/`,
+            absolute_path: workspacePath,
+        },
+        jobName,
+        workspacePath,
+        jobSandboxRoot: path.join(workspacePath, "sandboxes"),
+    }
+}
+
+function createSandboxPaths(storageRoot: string, jobName: string, sandboxName: string, workspaceName?: string): SandboxPaths {
+    const owner = createSandboxOwner(storageRoot, jobName, workspaceName)
+    const sandboxPath = path.join(owner.jobSandboxRoot, sandboxName)
+    return { ...owner, sandboxName, sandboxPath, metadataFile: path.join(sandboxPath, "sandbox.json") }
 }
 
 async function runCommand(command: string, args: readonly string[], options?: { env?: NodeJS.ProcessEnv, cwd?: string }): Promise<{ exitCode: number | null, stdout: string, stderr: string }> {
@@ -359,47 +381,56 @@ describe("sandbox utils", () => {
         }
         const oldCache = { ...cache, entry_path: "/cache/alpine/aarch64/old", rootfs_path: "/cache/alpine/aarch64/old/rootfs", metadata_file: "/cache/alpine/aarch64/old/metadata.json", created_at: "2020-01-01T00:00:00.000Z" }
         const referencedCache = { ...oldCache, entry_path: "/cache/alpine/aarch64/referenced", rootfs_path: "/cache/alpine/aarch64/referenced/rootfs", metadata_file: "/cache/alpine/aarch64/referenced/metadata.json" }
+        const owner = createSandboxOwner("/repo", "job")
+        const sandboxPath = path.join(owner.jobSandboxRoot, "dev")
         const deps = createDeps({
-            existing: ["/repo/.agents/sandboxes/job/dev"],
+            existing: [sandboxPath],
             files: {
                 [oldCache.metadata_file]: JSON.stringify(oldCache),
                 [referencedCache.metadata_file]: JSON.stringify(referencedCache),
-                "/repo/.agents/sandboxes/job/dev/sandbox.json": JSON.stringify({ sandbox_name: "dev", job_name: "job", distro: "alpine", backend: "bubblewrap", root_path: "/repo/.agents/sandboxes/job/dev", backend_data: { cache_entry_path: referencedCache.entry_path } }),
+                [path.join(sandboxPath, "sandbox.json")]: JSON.stringify({ sandbox_name: "dev", job_name: "job", distro: "alpine", backend: "bubblewrap", root_path: sandboxPath, backend_data: { cache_entry_path: referencedCache.entry_path } }),
             },
         })
         deps.fileSystem.readdir = mock(async (dirPath: string, options?: { withFileTypes?: boolean }) => {
             if (dirPath === "/cache/alpine/aarch64" && options?.withFileTypes) return [dirent("current"), dirent("old"), dirent("referenced")]
-            if (dirPath === "/repo/.agents/sandboxes" && options?.withFileTypes) return [dirent("job")]
-            if (dirPath === "/repo/.agents/sandboxes/job" && options?.withFileTypes) return [dirent("dev")]
+            if (dirPath === owner.jobSandboxRoot && options?.withFileTypes) return [dirent("dev")]
             return []
         })
 
-        await cleanupExpiredSandboxCacheEntries(cache, "/repo", undefined, "copy", deps)
-        await cleanupExpiredSandboxCacheEntries(cache, "/repo", undefined, "reflink", deps)
+        await cleanupExpiredSandboxCacheEntries(cache, owner, undefined, "copy", deps)
+        await cleanupExpiredSandboxCacheEntries(cache, owner, undefined, "reflink", deps)
 
         expect(deps.fileSystem.rm).toHaveBeenCalledWith(oldCache.entry_path, { recursive: true, force: true })
         expect(deps.fileSystem.rm).not.toHaveBeenCalledWith(referencedCache.entry_path, expect.any(Object))
         expect(deps.fileSystem.rm).not.toHaveBeenCalledWith(cache.entry_path, expect.any(Object))
     })
 
-    test("builds sandbox paths under .agents/sandboxes", () => {
-        const paths = getSandboxPaths("/repo", "my_job", "dev")
+    test("builds sandbox paths under resolved job workspace", async () => {
+        const workspaceName = "2026-08-20_10-30-00_my_job"
+        const deps = createDeps({
+            files: { [`/repo/.agents/jobs/${workspaceName}/session.yml`]: "session_id: session-1\n" },
+        })
+        deps.fileSystem.readdir = mock(async (dirPath: string) => dirPath === "/repo/.agents/jobs" ? [workspaceName] : [])
 
-        expect(paths.sandboxesRoot).toBe("/repo/.agents/sandboxes")
-        expect(paths.jobSandboxRoot).toBe("/repo/.agents/sandboxes/my_job")
-        expect(paths.sandboxPath).toBe("/repo/.agents/sandboxes/my_job/dev")
-        expect(getJobSandboxRoot("/repo", "my_job")).toBe("/repo/.agents/sandboxes/my_job")
-        expect(getNamedSandboxPath("/repo", "my_job", "dev")).toBe("/repo/.agents/sandboxes/my_job/dev")
-        expect(paths.sandboxPath).not.toContain(".agents/jobs")
+        const result = await resolveSandboxOwner(deps.fileSystem, createClient("Other Title"), { sessionID: "session-1", directory: "/repo", worktree: "/repo" }, "dev")
+
+        expect(result).toEqual(expect.objectContaining({ ok: true, owner: expect.objectContaining({
+            jobName: "my_job",
+            workspacePath: "/repo/.agents/jobs/2026-08-20_10-30-00_my_job",
+            jobSandboxRoot: "/repo/.agents/jobs/2026-08-20_10-30-00_my_job/sandboxes",
+            sandboxPath: "/repo/.agents/jobs/2026-08-20_10-30-00_my_job/sandboxes/dev",
+        }),
+        }))
     })
 
     test("guards sandbox paths and deletion targets", () => {
-        const root = "/repo/.agents/sandboxes/my_job"
+        const root = "/repo/.agents/jobs/2026-08-20_10-30-00_my_job/sandboxes"
 
         expect(assertSafeSandboxPath(`${root}/dev`, root).ok).toBe(true)
-        expect(assertSafeSandboxDeletionPath(`${root}/dev`, "/repo", root).ok).toBe(true)
-        for (const unsafe of [`${root}/../other`, "/repo/outside", root, "/repo/.agents", "/repo/.agents/sandboxes"]) {
-            expect(assertSafeSandboxDeletionPath(unsafe, "/repo", root).ok).toBe(false)
+        expect(assertSafeSandboxDeletionPath(`${root}/dev`, root).ok).toBe(true)
+        expect(assertDirectSandboxPath(`${root}/dev/nested`, root).ok).toBe(false)
+        for (const unsafe of [`${root}/../other`, "/repo/outside", root, "/repo/.agents", "/repo/.agents/jobs"]) {
+            expect(assertSafeSandboxDeletionPath(unsafe, root).ok).toBe(false)
         }
     })
 
@@ -436,53 +467,98 @@ describe("sandbox utils", () => {
         expect(result.reason).toContain("usable bwrap")
     })
 
-    test("creates deterministic bounded aliases", () => {
-        const alias = createSandboxAlias("my_job", "sandbox_with_long_name_that_gets_trimmed")
+    test("exact session-linked sandbox workspace takes precedence over newer title match", async () => {
+        const linkedWorkspace = "2026-08-19_10-30-00_my_feature"
+        const newerWorkspace = "2026-08-20_10-30-00_my_feature"
+        const deps = createDeps({
+            files: {
+                [`/repo/.agents/jobs/${linkedWorkspace}/session.yml`]: "session_id: session-1\n",
+                [`/repo/.agents/jobs/${newerWorkspace}/session.yml`]: "session_id: session-2\n",
+            },
+        })
+        deps.fileSystem.readdir = mock(async (dirPath: string) => dirPath === "/repo/.agents/jobs" ? [newerWorkspace, linkedWorkspace] : [])
 
-        expect(alias).toBe(createSandboxAlias("my_job", "sandbox_with_long_name_that_gets_trimmed"))
-        expect(alias).toContain("sandbox")
-        expect(alias.length).toBeLessThanOrEqual(48)
+        const owner = await resolveSandboxOwner(deps.fileSystem, createClient("My Feature"), { sessionID: "session-1", directory: "/repo", worktree: "/repo" })
+
+        expect(owner).toEqual(expect.objectContaining({ ok: true, owner: expect.objectContaining({ workspacePath: `/repo/.agents/jobs/${linkedWorkspace}` }) }))
     })
 
-    test("resolves title-derived sandbox job without lifecycle directories", async () => {
-        const result = await resolveSandboxJob(createClient("My Feature"), { sessionID: "session-1", directory: "/repo", worktree: "/repo" }, createDeps().fileSystem)
+    test("sandbox owner selects newest title-matched workspace when session is not linked", async () => {
+        const olderWorkspace = "2026-08-19_10-30-00_my_feature"
+        const newerWorkspace = "2026-08-20_10-30-00_my_feature"
+        const deps = createDeps()
+        deps.fileSystem.readdir = mock(async (dirPath: string) => dirPath === "/repo/.agents/jobs" ? [olderWorkspace, newerWorkspace] : [])
 
-        expect(result).toEqual({ ok: true, storageRoot: "/repo", jobName: "my_feature" })
+        const owner = await resolveSandboxOwner(deps.fileSystem, createClient("My Feature"), { sessionID: "session-1", directory: "/repo", worktree: "/repo" })
+
+        expect(owner).toEqual(expect.objectContaining({ ok: true, owner: expect.objectContaining({ workspacePath: `/repo/.agents/jobs/${newerWorkspace}` }) }))
     })
 
-    test("fails sandbox job resolution without usable title or job name", async () => {
-        const result = await resolveSandboxJob(undefined, { sessionID: "session-1", directory: "/repo", worktree: "/repo" }, createDeps().fileSystem)
+    test("sandbox owner reports normal resolver error when linked and title workspaces are absent", async () => {
+        const workspace = "2026-08-20_10-30-00_my_feature"
+        const deps = createDeps()
+        deps.fileSystem.readdir = mock(async (dirPath: string) => dirPath === "/repo/.agents/jobs" ? [workspace] : [])
+        const context = { sessionID: "session-1", directory: "/repo", worktree: "/repo" }
 
-        expect(result.ok).toBe(false)
-        if (!result.ok) {
-            expect(result.identity.resolution).toBe("title_unavailable")
-            expect(result.identity.job_name).toBeUndefined()
-        }
+        const normal = await resolveJobWorkspaceIdentity(deps.fileSystem, createClient("Other Feature"), context)
+        const owner = await resolveSandboxOwner(deps.fileSystem, createClient("Other Feature"), context)
+
+        expect(normal).toEqual(expect.objectContaining({ resolution: "missing", job_name: "other_feature" }))
+        expect(owner).toEqual({
+            ok: false,
+            reason: "No timestamped job workspace was found for the current session.",
+            jobName: "other_feature",
+        })
     })
 
     test("deletes sandbox paths safely and warns for legacy metadata", async () => {
-        const paths = getSandboxPaths("/repo", "my_job", "dev")
-        const deps = createDeps({ existing: [paths.sandboxPath], commands: { "proot-distro": true }, files: { [paths.metadataFile]: JSON.stringify({ sandbox_name: "dev", job_name: "my_job", distro: "alpine", backend: "termux_proot_distro", root_path: paths.sandboxPath, backend_data: { alias: createSandboxAlias("my_job", "dev") } }) } })
+        const paths = createSandboxPaths("/repo", "my_job", "dev")
+        const deps = createDeps({ existing: [paths.sandboxPath], commands: { "proot-distro": true }, files: { [paths.metadataFile]: JSON.stringify({ sandbox_name: "dev", job_name: "my_job", distro: "alpine", backend: "termux_proot_distro", root_path: paths.sandboxPath }) } })
 
         expect(await deleteSandboxPath(paths, deps)).toEqual({ sandbox_name: "dev", status: "warning", warning: expect.stringContaining("Recreate the sandbox under bubblewrap") })
         expect(deps.spawn).not.toHaveBeenCalled()
         expect(await deleteSandboxPath(paths, deps)).toEqual({ sandbox_name: "dev", status: "missing" })
     })
 
+    test("deletes sandbox directory symlink without deleting external target", async () => {
+        const tempRoot = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-delete-"))
+        const paths = createSandboxPaths(tempRoot, "my_job", "dev")
+        const externalDirectory = path.join(tempRoot, "external")
+        const markerFile = path.join(externalDirectory, "marker.txt")
+        try {
+            await mkdir(paths.jobSandboxRoot, { recursive: true })
+            await mkdir(externalDirectory, { recursive: true })
+            await writeFile(markerFile, "unchanged")
+            await symlink(externalDirectory, paths.sandboxPath, "dir")
+            const deps = createDeps()
+            deps.fileSystem = { ...deps.fileSystem, readFile, rm, stat }
+
+            expect(await deleteSandboxPath(paths, deps)).toEqual({ sandbox_name: "dev", status: "deleted" })
+            await expect(lstat(paths.sandboxPath)).rejects.toMatchObject({ code: "ENOENT" })
+            expect((await stat(externalDirectory)).isDirectory()).toBe(true)
+            expect(await readFile(markerFile, "utf8")).toBe("unchanged")
+        }
+        finally {
+            await rm(tempRoot, { recursive: true, force: true })
+        }
+    })
+
     test("cleans only valid named sandbox children", async () => {
-        const deps = createDeps({ existing: ["/repo/.agents/sandboxes/my_job/dev"] })
-        deps.fileSystem.stat = mock(async (filePath: string) => filePath === "/repo/.agents/sandboxes/my_job" || filePath.endsWith("/dev") ? { mtimeMs: 1 } : Promise.reject(missingError()))
+        const owner = createSandboxOwner("/repo", "my_job")
+        const sandboxPath = path.join(owner.jobSandboxRoot, "dev")
+        const deps = createDeps({ existing: [sandboxPath] })
+        deps.fileSystem.stat = mock(async (filePath: string) => filePath === owner.jobSandboxRoot || filePath === sandboxPath ? { mtimeMs: 1 } : Promise.reject(missingError()))
         deps.fileSystem.readdir = mock(async () => [dirent("dev"), dirent("bad-name")])
 
-        const result = await cleanupJobSandboxes("/repo", "my_job", deps)
+        const result = await cleanupJobSandboxes(owner, deps)
 
         expect(result.items.map((item) => item.sandbox_name)).toEqual(["dev", "bad-name"])
-        expect(deps.fileSystem.rm).toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job/dev", { recursive: true, force: true })
-        expect(deps.fileSystem.rm).not.toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job", { recursive: true, force: true })
+        expect(deps.fileSystem.rm).toHaveBeenCalledWith(sandboxPath, { recursive: true, force: true })
+        expect(deps.fileSystem.rm).not.toHaveBeenCalledWith(owner.jobSandboxRoot, { recursive: true, force: true })
     })
 
     test("cleans job sandbox root after deleting all sandbox children", async () => {
-        const paths = getSandboxPaths("/repo", "my_job", "dev")
+        const paths = createSandboxPaths("/repo", "my_job", "dev")
         const deps = createDeps({ existing: [paths.jobSandboxRoot, paths.sandboxPath] })
         let remainingEntries = [dirent("dev")]
         deps.fileSystem.readdir = mock(async (filePath: string) => {
@@ -492,45 +568,21 @@ describe("sandbox utils", () => {
             return entries
         })
 
-        const result = await cleanupJobSandboxes("/repo", "my_job", deps)
+        const result = await cleanupJobSandboxes(paths, deps)
 
         expect(result).toEqual(expect.objectContaining({ status: "deleted", deleted: 1 }))
         expect(deps.fileSystem.rm).toHaveBeenCalledWith(paths.sandboxPath, { recursive: true, force: true })
         expect(deps.fileSystem.rm).toHaveBeenCalledWith(paths.jobSandboxRoot, { recursive: true, force: true })
     })
 
-    test("archives job sandboxes into shelved job directory", async () => {
-        const deps = createDeps({ existing: ["/repo/.agents/sandboxes/my_job", "/repo/.agents/sandboxes/my_job/dev", "/repo/.agents/sandboxes/my_job/other"] })
-        deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => filePath === "/repo/.agents/sandboxes/my_job" && options?.withFileTypes ? [dirent("dev"), dirent("other"), dirent("note.txt", false)] : [])
-        deps.fileSystem.stat = mock(async (filePath: string) => filePath === "/repo/.agents/jobs/shelved/my_job/sandboxes/dev" || filePath === "/repo/.agents/jobs/shelved/my_job/sandboxes/other" ? Promise.reject(missingError()) : { mtimeMs: 1 })
+    test("removes only an empty workspace sandbox directory", async () => {
+        const owner = createSandboxOwner("/repo", "my_job")
+        const deps = createDeps({ existing: [owner.jobSandboxRoot, owner.workspacePath] })
+        deps.fileSystem.readdir = mock(async () => [])
 
-        const result = await archiveJobSandboxesForShelvedJob("/repo", "my_job", "/repo/.agents/jobs/shelved/my_job", deps)
-
-        expect(result).toEqual(expect.objectContaining({ ok: true, status: "archived", job_name: "my_job", archived: 2 }))
-        expect(deps.fileSystem.mkdir).toHaveBeenCalledWith("/repo/.agents/jobs/shelved/my_job/sandboxes", { recursive: true })
-        expect(deps.fileSystem.rename).toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job/dev", "/repo/.agents/jobs/shelved/my_job/sandboxes/dev")
-        expect(deps.fileSystem.rename).toHaveBeenCalledWith("/repo/.agents/sandboxes/my_job/other", "/repo/.agents/jobs/shelved/my_job/sandboxes/other")
-    })
-
-    test("does not create shelved sandbox archive directory when root is missing or empty", async () => {
-        const missingDeps = createDeps()
-        const emptyDeps = createDeps({ existing: ["/repo/.agents/sandboxes/my_job"] })
-        emptyDeps.fileSystem.readdir = mock(async () => [])
-
-        expect(await archiveJobSandboxesForShelvedJob("/repo", "my_job", "/repo/.agents/jobs/shelved/my_job", missingDeps)).toEqual({ ok: true, status: "missing", job_name: "my_job", archived: 0, items: [] })
-        expect(await archiveJobSandboxesForShelvedJob("/repo", "my_job", "/repo/.agents/jobs/shelved/my_job", emptyDeps)).toEqual({ ok: true, status: "empty", job_name: "my_job", archived: 0, items: [] })
-        expect(missingDeps.fileSystem.mkdir).not.toHaveBeenCalledWith("/repo/.agents/jobs/shelved/my_job/sandboxes", expect.any(Object))
-        expect(emptyDeps.fileSystem.mkdir).not.toHaveBeenCalledWith("/repo/.agents/jobs/shelved/my_job/sandboxes", expect.any(Object))
-    })
-
-    test("sandbox archive collision does not overwrite destination", async () => {
-        const deps = createDeps({ existing: ["/repo/.agents/sandboxes/my_job", "/repo/.agents/sandboxes/my_job/dev", "/repo/.agents/jobs/shelved/my_job/sandboxes/dev"] })
-        deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => filePath === "/repo/.agents/sandboxes/my_job" && options?.withFileTypes ? [dirent("dev")] : [])
-
-        const result = await archiveJobSandboxesForShelvedJob("/repo", "my_job", "/repo/.agents/jobs/shelved/my_job", deps)
-
-        expect(result).toEqual({ ok: false, status: "collision", job_name: "my_job", collision_path: "/repo/.agents/jobs/shelved/my_job/sandboxes/dev", collision_name: "dev", reason: "Sandbox archive destination already exists: /repo/.agents/jobs/shelved/my_job/sandboxes/dev" })
-        expect(deps.fileSystem.rename).not.toHaveBeenCalled()
+        expect(await cleanupEmptyJobSandboxRoot(owner, deps)).toBe(true)
+        expect(deps.fileSystem.rm).toHaveBeenCalledWith(owner.jobSandboxRoot, { recursive: true, force: true })
+        expect(deps.fileSystem.rm).not.toHaveBeenCalledWith(owner.workspacePath, expect.any(Object))
     })
 
     test("file tool path guards reject malformed roots and symlink escapes", async () => {

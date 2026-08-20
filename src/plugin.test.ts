@@ -240,6 +240,15 @@ describe("autocode plugin config", () => {
 		const order: string[] = [];
 		const client = {
 			session: {
+				get: mock(async () => ({ data: { title: "Source session" } })),
+				create: mock(async () => {
+					order.push("create");
+					return { data: { id: "destination-session" } };
+				}),
+				update: mock(async () => {
+					order.push("archive");
+					return { data: true };
+				}),
 				messages: mock(async () => ({
 					data: [
 						{
@@ -262,7 +271,7 @@ describe("autocode plugin config", () => {
 					return {};
 				}),
 			},
-		} as RestartTestClient;
+		} as unknown as RestartTestClient;
 		const hooks = (await autocode({
 			...createInput(worktree),
 			client,
@@ -281,41 +290,106 @@ describe("autocode plugin config", () => {
 			ask: createNoopAsk(),
 		};
 
-		const result = await createTool.execute({ agent: "advise" }, context);
+		const result = await createTool.execute(
+			{ prompt: "Resume compacted session", agent: "advise" },
+			context,
+		);
 
 		expect(
 			JSON.parse(typeof result === "string" ? result : result.output),
-		).toEqual({
-			session_id: "session-1",
-			current_agent: "assist",
-			target_agent: "advise",
-			compaction_pending: true,
-			continuation_pending: true,
+		).toMatchObject({
+			session_id: "destination-session",
+			session_title: "Source session (advise)",
+			message:
+				"Created new session for advise: Source session (advise) (destination-session). Handoff registered.",
 		});
 		expect(client.session.summarize).not.toHaveBeenCalled();
-		await Promise.all([
-			hooks.event({
-				event: {
-					type: "session.compacted",
-					properties: { sessionID: "session-1" },
-				} as unknown as Event,
-			}),
-			hooks.event({
-				event: {
-					type: "session.status",
-					properties: { sessionID: "session-1", status: { type: "idle" } },
-				} as unknown as Event,
-			}),
-			hooks.event({
-				event: {
-					type: "session.idle",
-					properties: { sessionID: "session-1" },
-				} as unknown as Event,
-			}),
-		]);
+		await hooks.event({
+			event: {
+				type: "session.status",
+				properties: { sessionID: "session-1", status: { type: "idle" } },
+			} as unknown as Event,
+		});
 
-		expect(order).toEqual(["summarize", "prompt"]);
-		expect(client.session.summarize).toHaveBeenCalledTimes(1);
+		expect(order).toEqual(["create", "archive", "prompt"]);
+		expect(client.session.summarize).not.toHaveBeenCalled();
+		expect(client.session.promptAsync).toHaveBeenCalledTimes(1);
+	});
+
+	test("forwards title tool events while preserving deferred restart handling", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({
+				autocode: { tiers: { balanced: { model: "openai/gpt-5" } } },
+			}),
+		);
+		const updates: unknown[] = [];
+		const client = {
+			session: {
+				get: mock(async ({ path }: { path: { id: string } }) => ({
+					data: {
+						id: path.id,
+						title: "Source session",
+						...(path.id === "session-1" ? {} : { parentID: "session-1" }),
+					},
+				})),
+				create: mock(async () => ({ data: { id: "destination-session" } })),
+				messages: mock(async () => ({
+					data: [{
+						info: { id: "message-1", role: "assistant", agent: "assist" },
+						parts: [{ type: "text", text: "# 🚀 Plugin title" }],
+					}],
+				})),
+				update: mock(async (input: unknown) => {
+					updates.push(input);
+					return { data: true };
+				}),
+				promptAsync: mock(async () => ({})),
+			},
+		} as unknown as RestartTestClient;
+		const hooks = (await autocode({
+			...createInput(worktree),
+			client,
+		})) as unknown as PluginRestartHooks;
+		const createTool = hooks.tool?.autocode_session_create;
+		if (!createTool || !hooks.event)
+			throw new Error("plugin lifecycle hooks unavailable");
+		const context: ToolContext = {
+			sessionID: "session-1",
+			messageID: "message-1",
+			agent: "assist",
+			directory: worktree,
+			worktree,
+			abort: new AbortController().signal,
+			metadata() {},
+			ask: createNoopAsk(),
+		};
+
+		await createTool.execute({ prompt: "Resume", agent: "advise" }, context);
+		await hooks.event({
+			event: {
+				type: "message.part.updated",
+				properties: {
+					sessionID: "session-1",
+					part: { type: "tool", messageID: "message-1" },
+				},
+			} as unknown as Event,
+		});
+		await hooks.event({
+			event: {
+				type: "session.status",
+				properties: { sessionID: "session-1", status: { type: "idle" } },
+			} as unknown as Event,
+		});
+
+		expect(updates).toContainEqual({
+			path: { id: "session-1" },
+			query: { directory: worktree },
+			body: { title: "Source session (🚀 Plugin title)" },
+		});
 		expect(client.session.promptAsync).toHaveBeenCalledTimes(1);
 	});
 
@@ -380,8 +454,6 @@ describe("autocode plugin config", () => {
 			JSON.parse(typeof result === "string" ? result : result.output),
 		).toMatchObject({
 			session_id: "destination-session",
-			agent: "auto",
-			handoff_state: "registered",
 		});
 		expect(order).toEqual(["create"]);
 		expect(sourceUpdate).not.toHaveBeenCalled();
@@ -518,7 +590,6 @@ describe("autocode plugin config", () => {
 					"job-design",
 					"job-draft",
 					"job-facilitate",
-					"job-shelve",
 					"assist",
 					"new-advise",
 					"new-assist",

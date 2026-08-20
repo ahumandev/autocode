@@ -88,10 +88,11 @@ function createMockClient(events: string[], messageIDs = ["user-1", "assistant-1
     } as unknown as MockClient
 }
 
-function configureResolvedDraft(fs: ReturnType<typeof createMockFs>, plan = "# Problem\n\nShip execution\n"): void {
-    fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["test_job"] : [])
+function configureResolvedWorkspace(fs: ReturnType<typeof createMockFs>, plan = "# Problem\n\nShip execution\n"): void {
+    const workspace = "2026-08-20_10-30-00_test_job"
+    fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs" ? [workspace] : [])
     fs.readFile.mockImplementation(async (filePath: string) => {
-        if (filePath === "/workspace/.agents/jobs/drafts/test_job/plan.md") return plan
+        if (filePath === `/workspace/.agents/jobs/${workspace}/plan.md`) return plan
         throw createMissingError()
     })
 }
@@ -115,7 +116,7 @@ describe("autocode_job_execute tool", () => {
     test("creates isolated job session, persists it, then dispatches selected plan", async () => {
         const fs = createMockFs()
         const events: string[] = []
-        configureResolvedDraft(fs)
+        configureResolvedWorkspace(fs)
         const client = createMockClient(events, ["user-1", "assistant-1", "assistant-2"])
 
         const parsed = parseToolResult(await createAutocodeJobExecuteTool(client, fs).execute({ agent: "assist" }, createToolContext()))
@@ -124,8 +125,8 @@ describe("autocode_job_execute tool", () => {
             result_type: "session_created",
             job_name: "test_job",
             session_id: "new-session",
-            session_title: "Test Job (facilitate)",
-            message: "Created new session for assist: Test Job (facilitate) (new-session).",
+            session_title: "Test Job",
+            message: "Created new session for assist: Test Job (new-session).",
         })
         expect(client.session.summarize).not.toHaveBeenCalled()
         expect(client.session.update).not.toHaveBeenCalled()
@@ -133,7 +134,7 @@ describe("autocode_job_execute tool", () => {
         expect(client.session.promptAsync).not.toHaveBeenCalled()
         expect(client.session.create).toHaveBeenCalledWith({
             query: { directory: "/workspace" },
-            body: { title: "Test Job (facilitate)" },
+            body: { title: "Test Job" },
         })
         await waitForPostTurnDispatch()
         expect(events).toEqual(["dispatch"])
@@ -142,36 +143,11 @@ describe("autocode_job_execute tool", () => {
             query: { directory: "/workspace" },
             body: {
                 agent: "assist",
-                parts: [{ type: "text", text: "Selected job: test_job\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan.md:\n# Problem\n\nShip execution\n" }],
+                parts: [{ type: "text", text: "Selected job: test_job\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan:\n# Problem\n\nShip execution\n" }],
             },
         })
-        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/facilitate/test_job")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: new-session\n")
-    })
-
-    test("dispatches advise plan in isolated job session", async () => {
-        const fs = createMockFs()
-        const events: string[] = []
-        configureResolvedDraft(fs, "# Lesson\n\nExplain this change\n")
-        const client = createMockClient(events)
-
-        await createAutocodeJobExecuteTool(client, fs).execute({ agent: "advise" }, createToolContext())
-
-        expect(events).toEqual([])
-        expect(client.session.summarize).not.toHaveBeenCalled()
-        expect(client.session.update).not.toHaveBeenCalled()
-        expect(client.session.promptAsync).not.toHaveBeenCalled()
-        await waitForPostTurnDispatch()
-        expect(events).toEqual(["dispatch"])
-        expect(client.session.promptAsync).toHaveBeenCalledWith(expect.objectContaining({
-            path: { id: "new-session" },
-            body: expect.objectContaining({
-                agent: "advise",
-                parts: [{ type: "text", text: "Selected job: test_job\n\nUse this plan as job instructions. Start first actionable unblocked step. Ask user when decision needed. Do safe work. Do not assume later plan context.\n\nplan.md:\n# Lesson\n\nExplain this change\n" }],
-            }),
-        }))
-        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/facilitate/test_job")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/facilitate/test_job/session.yml", "session_id: new-session\n")
+        expect(fs.rename).not.toHaveBeenCalled()
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/2026-08-20_10-30-00_test_job/session.yml", "session_id: new-session\n")
     })
 
     test("dispatches assist with balanced model in isolated job session", async () => {
@@ -182,9 +158,10 @@ describe("autocode_job_execute tool", () => {
                 autocode: { tiers: { balanced: { model: "anthropic/claude-sonnet-4-5", variant: "standard" } } },
             }))
             const fs = createMockFs()
-            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs/drafts` ? ["test_job"] : [])
+            const workspace = "2026-08-20_10-30-00_test_job"
+            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs` ? [workspace] : [])
             fs.readFile.mockImplementation(async (filePath: string) => {
-                if (filePath === `${worktree}/.agents/jobs/drafts/test_job/plan.md`) return "plan"
+                if (filePath === `${worktree}/.agents/jobs/${workspace}/plan.md`) return "plan"
                 throw createMissingError()
             })
             const client = createMockClient([])
@@ -202,10 +179,10 @@ describe("autocode_job_execute tool", () => {
             }))
             expect(client.session.create).toHaveBeenCalledWith({
                 query: { directory: worktree },
-                body: { title: "Test Job (facilitate)" },
+                body: { title: "Test Job" },
             })
-            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/test_job`, `${worktree}/.agents/jobs/facilitate/test_job`)
-            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/facilitate/test_job/session.yml`, "session_id: new-session\n")
+            expect(fs.rename).not.toHaveBeenCalled()
+            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/${workspace}/session.yml`, "session_id: new-session\n")
         } finally {
             rmSync(worktree, { recursive: true, force: true })
         }
@@ -219,9 +196,10 @@ describe("autocode_job_execute tool", () => {
                 autocode: { tiers: { smart: { model: "openai/gpt-5.5", variant: "thinking" } } },
             }))
             const fs = createMockFs()
-            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs/drafts` ? ["test_job"] : [])
+            const workspace = "2026-08-20_10-30-00_test_job"
+            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs` ? [workspace] : [])
             fs.readFile.mockImplementation(async (filePath: string) => {
-                if (filePath === `${worktree}/.agents/jobs/drafts/test_job/plan.md`) return "plan"
+                if (filePath === `${worktree}/.agents/jobs/${workspace}/plan.md`) return "plan"
                 throw createMissingError()
             })
             const client = createMockClient([])
@@ -239,18 +217,18 @@ describe("autocode_job_execute tool", () => {
             }))
             expect(client.session.create).toHaveBeenCalledWith({
                 query: { directory: worktree },
-                body: { title: "Test Job (executing)" },
+                body: { title: "Test Job" },
             })
-            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/test_job`, `${worktree}/.agents/jobs/executing/test_job`)
-            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/executing/test_job/session.yml`, "session_id: new-session\n")
+            expect(fs.rename).not.toHaveBeenCalled()
+            expect(fs.writeFile).toHaveBeenCalledWith(`${worktree}/.agents/jobs/${workspace}/session.yml`, "session_id: new-session\n")
         } finally {
             rmSync(worktree, { recursive: true, force: true })
         }
     })
 
-    test("starts job when post-turn isolated-session dispatch fails", async () => {
+    test("starts timestamped workspace when post-turn isolated-session dispatch fails", async () => {
         const fs = createMockFs()
-        configureResolvedDraft(fs)
+        configureResolvedWorkspace(fs)
         const client = createMockClient([])
         client.session.promptAsync.mockImplementationOnce(async () => ({ error: "prompt failed" }))
 
@@ -263,30 +241,45 @@ describe("autocode_job_execute tool", () => {
         })
         expect(client.session.create).toHaveBeenCalledWith({
             query: { directory: "/workspace" },
-            body: { title: "Test Job (executing)" },
+            body: { title: "Test Job" },
         })
         expect(client.session.promptAsync).not.toHaveBeenCalled()
-        expect(fs.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/test_job", "/workspace/.agents/jobs/executing/test_job")
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/executing/test_job/session.yml", "session_id: new-session\n")
+        expect(fs.rename).not.toHaveBeenCalled()
+        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/2026-08-20_10-30-00_test_job/session.yml", "session_id: new-session\n")
         await waitForPostTurnDispatch()
         expect(client.session.promptAsync).toHaveBeenCalledTimes(1)
     })
 
-    test("returns retry without session changes when resolved plan is missing", async () => {
+    test("returns retry without session changes when resolved workspace files are missing", async () => {
         const fs = createMockFs()
-        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["test_job"] : [])
+        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs" ? ["2026-08-20_10-30-00_test_job"] : [])
         const client = createMockClient([])
 
         const result = await createAutocodeJobExecuteTool(client, fs).execute({ agent: "assist" }, createToolContext())
 
         expect(result).toBe(createRetryResponse(
             "autocode_job_execute",
-            "Resolved planned job is missing a required file: test_job",
-            "Restore the planned job plan.md file under .agents/jobs/ before retrying execution."
+            "Job workspace is missing design.md or plan.md: test_job",
+            "Restore design.md or plan.md in the timestamped job workspace before retrying execution."
         ))
         expect(client.session.summarize).not.toHaveBeenCalled()
         expect(client.session.update).not.toHaveBeenCalled()
         expect(client.session.create).not.toHaveBeenCalled()
+    })
+
+    test("returns no_workspaces when no timestamped workspaces exist", async () => {
+        const fs = createMockFs()
+        const result = parseToolResult(await createAutocodeJobExecuteTool(createMockClient([]), fs).execute({ agent: "assist" }, createToolContext()))
+
+        expect(result).toEqual({ result_type: "no_workspaces" })
+    })
+
+    test("returns workspace_required when current session does not resolve a workspace", async () => {
+        const fs = createMockFs()
+        fs.readdir.mockImplementation(async (): Promise<string[]> => ["2026-08-20_10-30-00_other_job"])
+        const result = parseToolResult(await createAutocodeJobExecuteTool(createMockClient([]), fs).execute({ agent: "assist" }, createToolContext()))
+
+        expect(result).toMatchObject({ result_type: "workspace_required" })
     })
 
     test("rejects invalid agent without job lookup or session changes", async () => {
@@ -298,7 +291,7 @@ describe("autocode_job_execute tool", () => {
         expect(result).toBe(createRetryResponse(
             "autocode_job_execute",
             "Invalid agent: invalid",
-            "Provide agent as one of: auto, assist, advise."
+            "Provide agent as one of: auto, assist."
         ))
         expect(fs.readdir).not.toHaveBeenCalled()
         expect(client.session.summarize).not.toHaveBeenCalled()

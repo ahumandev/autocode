@@ -3,8 +3,8 @@
 ### Implementation Modes
 
 - 💡 **Advise mode** — *guidance*: agent researches topics, answers questions, and guides manual implementation.
-- 🧑‍💻 **Assist mode** — *interactive*: you make decisions, agent orchestration do the work, manage job lifecycle and suggest next steps.
-- 🤖 **Auto mode** — *autonomous*: agent oversee full lifecycle of structured jobs until completion.
+- 🧑‍💻 **Assist mode** — *interactive*: you make decisions while agent orchestration does the work and suggests next steps.
+- 🤖 **Auto mode** — *autonomous*: agent executes structured design work until completion.
 
 ### Workflow Optimizations
 

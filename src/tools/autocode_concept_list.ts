@@ -46,30 +46,20 @@ async function readDescription(fileSystem: FileSystem, filePath: string): Promis
     }
 }
 
-export function createAutocodeConceptListTool(fileSystem: FileSystem = defaultFileSystem) {
+export function createAutocodeConceptListTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
     return tool({
         description: "List available concepts.",
         args: {},
         async execute(_, context) {
-            const conceptsDirectory = path.join(resolveAgentsStorageRoot(context), ".agents", "jobs", "concepts")
+            const conceptsDirectory = path.join(resolveAgentsStorageRoot(context), ".agents", "concepts")
             try {
-                const storageRoot = resolveAgentsStorageRoot(context)
                 const conceptEntries = (await readDirectoryEntries(fileSystem, conceptsDirectory))
                     .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
                     .map((entry): ConceptListEntry => ({
                         label: entry.name.slice(0, -3),
                         path: path.join(conceptsDirectory, entry.name),
                     }))
-                const jobEntries = (await Promise.all(["drafts", "executing", "facilitate"].map(async (directory) => {
-                    const jobDirectory = path.join(storageRoot, ".agents", "jobs", directory)
-                    return (await readDirectoryEntries(fileSystem, jobDirectory))
-                        .filter((entry) => entry.isDirectory())
-                        .map((entry): ConceptListEntry => ({
-                            label: entry.name,
-                            path: path.join(jobDirectory, entry.name, "plan.md"),
-                        }))
-                }))).flat()
-                const backlog = await Promise.all([...conceptEntries, ...jobEntries]
+                const backlog = await Promise.all(conceptEntries
                     .sort((left, right) => left.label.localeCompare(right.label) || left.path.localeCompare(right.path))
                     .map(async (entry) => ({
                         label: entry.label,

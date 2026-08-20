@@ -1,9 +1,10 @@
 # Terminology
 
-| Term       | Definition                                                                           |
-| ---------- | ------------------------------------------------------------------------------------ |
-| Concept    | Early Markdown description of a desired change, saved before a solution plan exists. |
-| Draft      | Approved solution plan saved under `.agents/jobs/drafts/{job_name}/`.                |
-| Job        | A tracked unit of work that moves through AutoCode lifecycle directories.            |
-| Facilitate | Blocked autonomous work that needs human help before it can continue safely.         |
-| Shelved    | Closed job state used after accepted review or explicit shelving.                    |
+| Term | Definition |
+| ---- | ---------- |
+| Concept | Early Markdown description of desired change, saved in `.agents/concepts/`; `/job-concepts` creates concepts. |
+| Design | Selected solution specification saved as `design.md` by `autocode_design_write` and read by `autocode_design_read`. |
+| Job workspace | Durable directory `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/` containing `design.md`; timestamp is UTC and directory remains at its original path. |
+| Assist selector | `/job-facilitate` selects `assist` execution for design workspace. It does not name workspace state. |
+| Auto selector | `/job-execute` selects `auto` execution for design workspace. |
+| Root session heading | `# {emoji} {title}` first eligible text line from `advise`, `assist`, or `auto`; updates root title as advisory postfix. |

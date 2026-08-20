@@ -1,27 +1,21 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { stripLeadingYamlFrontMatter } from "@/utils/frontmatter"
-import { deriveJobNameFromTitle, findExistingJobFile, getJobDirectoryPath, getRelativeConceptFilePath, isMissingFile, resolveAgentsStorageRoot, updateCurrentSessionTitleToJobName } from "@/utils/jobs"
+import { getRelativeConceptFilePath, isMissingFile, resolveAgentsStorageRoot } from "@/utils/jobs"
 
 type FileSystem = {
-    mkdir?: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
-    rename?: (oldPath: string, newPath: string) => Promise<void>
-    writeFile?: (filePath: string, content: string) => Promise<void>
 }
 
 const defaultFileSystem: FileSystem = {
-    mkdir,
     readFile,
-    rename,
-    writeFile,
 }
 
 function getBacklogPath(worktree: string, label: string): string {
-    const conceptsRoot = path.resolve(worktree, ".agents", "jobs", "concepts")
+    const conceptsRoot = path.resolve(worktree, ".agents", "concepts")
     const conceptPath = path.resolve(worktree, getRelativeConceptFilePath(label))
     if (!conceptPath.startsWith(`${conceptsRoot}${path.sep}`)) {
         throw new Error(`Invalid concept path: ${label}`)
@@ -46,8 +40,8 @@ function normalizeConceptReadToolArgs(clientOrFileSystem?: OpencodeClient | File
     return { client: clientOrFileSystem as OpencodeClient | undefined, fileSystem: defaultFileSystem }
 }
 
-export function createAutocodeConceptReadTool(clientOrFileSystem?: OpencodeClient | FileSystem, maybeFileSystem?: FileSystem) {
-    const { client, fileSystem } = normalizeConceptReadToolArgs(clientOrFileSystem, maybeFileSystem)
+export function createAutocodeConceptReadTool(clientOrFileSystem?: OpencodeClient | FileSystem, maybeFileSystem?: FileSystem): ReturnType<typeof tool> {
+    const { fileSystem } = normalizeConceptReadToolArgs(clientOrFileSystem, maybeFileSystem)
 
     return tool({
         description: "Read concept content.",
@@ -59,43 +53,13 @@ export function createAutocodeConceptReadTool(clientOrFileSystem?: OpencodeClien
             try {
                 const conceptPath = getBacklogPath(storageRoot, args.label)
                 const conceptContent = await fileSystem.readFile(conceptPath, "utf8")
-                const jobName = deriveJobNameFromTitle(args.label.replace(/\.md$/i, ""))
-
-                if (!jobName) {
-                    return createErrorResponse("read concept", `Unable to derive job_name from concept label: ${args.label}`, "Rename the concept label to include letters or numbers.")
-                }
-
-                const draftDirectory = getJobDirectoryPath(storageRoot, "drafts", jobName)
-                await (fileSystem.mkdir ?? (async () => { throw new Error("File system mkdir is unavailable.") }))(draftDirectory, { recursive: true })
-                await (fileSystem.rename ?? (async () => { throw new Error("File system rename is unavailable.") }))(conceptPath, path.join(draftDirectory, "concept.md"))
-                await updateCurrentSessionTitleToJobName(client, context, jobName)
-
                 return stripLeadingYamlFrontMatter(conceptContent)
             }
             catch (error) {
-                if (!isMissingFile(error)) return createAbortResponse("read concept", error)
-            }
-
-            try {
-                const jobName = deriveJobNameFromTitle(args.label.replace(/\.md$/i, ""))
-                if (!jobName) {
-                    return createErrorResponse("read concept", `Concept not found: ${args.label}`, "Ask the user to choose another concept or provide their requirement directly.")
-                }
-                const draftDirectory = getJobDirectoryPath(storageRoot, "drafts", jobName)
-                const existingPlan = await findExistingJobFile(fileSystem, storageRoot, jobName, "plan.md", ["drafts", "executing", "facilitate"])
-                if (!existingPlan) {
+                if (isMissingFile(error)) {
                     return createErrorResponse("read concept", `Concept not found: ${args.label}`, "Ask the user to choose another concept or provide their requirement directly.")
                 }
 
-                if (existingPlan.directory !== "drafts") {
-                    await (fileSystem.mkdir ?? (async () => { throw new Error("File system mkdir is unavailable.") }))(getJobDirectoryPath(storageRoot, "drafts", ""), { recursive: true })
-                    await (fileSystem.rename ?? (async () => { throw new Error("File system rename is unavailable.") }))(getJobDirectoryPath(storageRoot, existingPlan.directory, jobName), draftDirectory)
-                }
-                await updateCurrentSessionTitleToJobName(client, context, jobName)
-
-                return stripLeadingYamlFrontMatter(existingPlan.content)
-            }
-            catch (error) {
                 return createAbortResponse("read concept", error)
             }
         },

@@ -3,7 +3,7 @@ import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "n
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { getSandboxPaths, type SandboxDependencies } from "@/utils/sandbox"
+import type { SandboxDependencies, SandboxPaths } from "@/utils/sandbox"
 import { createToolContext } from "./test_context"
 import type { ConfigMode } from "./config/types"
 import {
@@ -25,7 +25,23 @@ function createProjectToolContext(projectRoot: string): ReturnType<typeof create
     return { ...createToolContext(), directory: projectRoot, worktree: projectRoot }
 }
 
-function createBubblewrapMetadata(paths: ReturnType<typeof getSandboxPaths>, backendData: Record<string, string | number | boolean | undefined> = { bwrap: "bwrap" }): string {
+function createSandboxPaths(projectRoot: string, jobName: string, sandboxName: string, workspaceName = `2026-08-20_10-30-00_${jobName}`): SandboxPaths {
+    const workspacePath = path.join(projectRoot, ".agents", "jobs", workspaceName)
+    const jobSandboxRoot = path.join(workspacePath, "sandboxes")
+    const sandboxPath = path.join(jobSandboxRoot, sandboxName)
+    return {
+        storageRoot: projectRoot,
+        workspace: { job_name: jobName, job_path: `.agents/jobs/${workspaceName}/`, absolute_path: workspacePath },
+        jobName,
+        workspacePath,
+        jobSandboxRoot,
+        sandboxName,
+        sandboxPath,
+        metadataFile: path.join(sandboxPath, "sandbox.json"),
+    }
+}
+
+function createBubblewrapMetadata(paths: SandboxPaths, backendData: Record<string, string | number | boolean | undefined> = { bwrap: "bwrap" }): string {
     return JSON.stringify({ sandbox_name: paths.sandboxName, job_name: paths.jobName, distro: "alpine", backend: "bubblewrap", root_path: paths.sandboxPath, backend_data: backendData })
 }
 
@@ -58,13 +74,14 @@ function createInMemoryDeps(): SandboxDependencies {
     }
 }
 
-async function withSandboxFixture<T>(fn: (fixture: { projectRoot: string, paths: ReturnType<typeof getSandboxPaths>, deps: SandboxDependencies, client: OpencodeClient, context: ReturnType<typeof createToolContext> }) => Promise<T>): Promise<T> {
+async function withSandboxFixture<T>(fn: (fixture: { projectRoot: string, paths: SandboxPaths, deps: SandboxDependencies, client: OpencodeClient, context: ReturnType<typeof createToolContext> }) => Promise<T>): Promise<T> {
     const projectRoot = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-config-tools-"))
-    const paths = getSandboxPaths(projectRoot, "my_feature", "dev")
+    const paths = createSandboxPaths(projectRoot, "my_feature", "dev")
     const deps = createRealDeps()
     try {
         await mkdir(paths.sandboxPath, { recursive: true })
         await writeFile(paths.metadataFile, createBubblewrapMetadata(paths))
+        await writeFile(path.join(paths.workspacePath, "session.yml"), "session_id: session-1\n")
         return await fn({ projectRoot, paths, deps, client: createClient("My Feature", projectRoot), context: createProjectToolContext(projectRoot) })
     }
     finally {
@@ -187,6 +204,59 @@ describe("createSandboxConfigAdapter", () => {
 })
 
 describe("createAutocodeSandboxConfigEditTool", () => {
+    test("edits only current session's workspace sandbox with duplicate names", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        const foreign = createSandboxPaths(projectRoot, "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
+        await mkdir(foreign.sandboxPath, { recursive: true })
+        await writeFile(foreign.metadataFile, createBubblewrapMetadata(foreign))
+        await writeFile(path.join(foreign.workspacePath, "session.yml"), "session_id: session-2\n")
+        await writeFile(path.join(paths.sandboxPath, "app.json"), JSON.stringify({ owner: "current" }))
+        await writeFile(path.join(foreign.sandboxPath, "app.json"), JSON.stringify({ owner: "foreign" }))
+        const tool = createAutocodeSandboxConfigEditTool(client, deps)
+
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", path: "app.json", current_key: "owner", content: '"updated"' }, context))
+
+        expect(result.action).toBe("replace")
+        expect(JSON.parse(await readFile(path.join(paths.sandboxPath, "app.json"), "utf8")).owner).toBe("updated")
+        expect(JSON.parse(await readFile(path.join(foreign.sandboxPath, "app.json"), "utf8")).owner).toBe("foreign")
+    }))
+
+    test("missing session owner leaves config storage unchanged", async () => {
+        const deps = createInMemoryDeps()
+        const tool = createAutocodeSandboxConfigEditTool(createClient(), deps)
+
+        const result = parseResult(await tool.execute({ sandbox_name: "dev", path: "app.json", current_key: "owner", content: '"updated"' }, createToolContext()))
+
+        expect(result.failedAction).toBe("edit sandbox config file")
+        expect(deps.fileSystem.mkdir).not.toHaveBeenCalled()
+        expect(deps.fileSystem.writeFile).not.toHaveBeenCalled()
+        expect(deps.fileSystem.rm).not.toHaveBeenCalled()
+    })
+
+    test("stale session owner falls back to matching title workspace config paths", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        const foreignPaths = createSandboxPaths(projectRoot, "other_feature", "dev", "2026-08-21_10-30-00_other_feature")
+        await writeFile(path.join(paths.workspacePath, "session.yml"), "session_id: prior-session\n")
+        const configPath = path.join(paths.sandboxPath, "app.json")
+        const originalContent = JSON.stringify({ owner: "current", mode: "keep" })
+        await writeFile(configPath, originalContent)
+        await mkdir(foreignPaths.sandboxPath, { recursive: true })
+        await writeFile(foreignPaths.metadataFile, createBubblewrapMetadata(foreignPaths))
+        await writeFile(path.join(foreignPaths.workspacePath, "session.yml"), "session_id: session-2\n")
+        await writeFile(path.join(foreignPaths.sandboxPath, "app.json"), JSON.stringify({ owner: "foreign", mode: "keep" }))
+        const readdirSpy = mock(deps.fileSystem.readdir)
+        deps.fileSystem.readdir = readdirSpy
+
+        const edit = parseResult(await createAutocodeSandboxConfigEditTool(client, deps).execute({ sandbox_name: "dev", path: "app.json", current_key: "owner", content: '"updated"' }, context))
+        const remove = parseResult(await createAutocodeSandboxConfigRemoveTool(client, deps).execute({ sandbox_name: "dev", path: "app.json", key_path: "mode" }, context))
+        const read = parseResult(await createAutocodeSandboxConfigReadTool(client, deps).execute({ sandbox_name: "dev", file_path_glob: "app.json" }, context))
+
+        expect(edit.action).toBe("replace")
+        expect(remove.removed).toEqual(["mode"])
+        expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({ owner: "updated" })
+        expect(read.file_paths["app.json"].key_paths.owner).toBe("updated")
+        expect(JSON.parse(await readFile(path.join(foreignPaths.sandboxPath, "app.json"), "utf8"))).toEqual({ owner: "foreign", mode: "keep" })
+        expect(readdirSpy.mock.calls.map((call) => String(call[0]))).not.toContain(foreignPaths.jobSandboxRoot)
+    }))
+
     test("REPLACE updates existing key in real sandbox file", async () => withSandboxFixture(async ({ paths, deps, client, context }) => {
         await writeFile(path.join(paths.sandboxPath, "app.json"), JSON.stringify({ server: { port: 3000 } }))
         const tool = createAutocodeSandboxConfigEditTool(client, deps)

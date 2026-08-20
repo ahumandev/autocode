@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFile, readdir } from "node:fs/promises"
-import { createAbortResponse, createRetryResponse } from "../utils/tools"
-import { listPlannedJobs, listedActiveJobStatuses, normalizeJobStatusInput, resolveAgentsStorageRoot, type JobStatus } from "@/utils/jobs"
+import { createAbortResponse } from "../utils/tools"
+import { listJobWorkspaces, resolveAgentsStorageRoot } from "@/utils/jobs"
 
 type FileSystem = {
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
@@ -17,11 +17,14 @@ const defaultFileSystem: FileSystem = {
     readdir: readDirectory,
 }
 
-export async function executePlannedJobList(fileSystem: FileSystem, worktree: string, options: { resultKey: string, failedAction: string, filter?: JobStatus }): Promise<string> {
+export async function executeJobWorkspaceList(fileSystem: FileSystem, worktree: string, options: { resultKey: string, failedAction: string }): Promise<string> {
     try {
-        const listed = await listPlannedJobs(fileSystem, worktree, { filter: options.filter })
+        const listed = await listJobWorkspaces(fileSystem, worktree)
         return JSON.stringify({
-            [options.resultKey]: listed.jobs,
+            [options.resultKey]: listed.jobs.map((workspace) => ({
+                job_name: workspace.job_name,
+                job_path: workspace.job_path,
+            })),
         })
     }
     catch (error) {
@@ -29,30 +32,14 @@ export async function executePlannedJobList(fileSystem: FileSystem, worktree: st
     }
 }
 
-export function createAutocodeJobListTool(fileSystem: FileSystem = defaultFileSystem) {
+export function createAutocodeJobListTool(fileSystem: FileSystem = defaultFileSystem): ReturnType<typeof tool> {
     return tool({
-        description: "List active drafts/jobs.",
-        args: {
-            filter: tool.schema.string().optional().describe("Optional filter limits results to one active status; omit to list all active jobs. Omit to view all or provide one of these status filters: concepts, drafts, facilitate, executing, review"),
-        },
-        async execute(args, context) {
-            const requestedFilter = args.filter
-            const filter = requestedFilter === "" || requestedFilter === undefined
-                ? undefined
-                : normalizeJobStatusInput(requestedFilter)
-
-            if (requestedFilter !== "" && requestedFilter !== undefined && (filter === undefined || !(listedActiveJobStatuses as readonly string[]).includes(filter))) {
-                return createRetryResponse(
-                    "list jobs",
-                    `Invalid filter: ${requestedFilter}`,
-                    "Omit to view all or provide one of these status filters: concepts, drafts, facilitate, executing, review"
-                )
-            }
-
-            return executePlannedJobList(fileSystem, resolveAgentsStorageRoot(context), {
+        description: "List timestamped job workspaces.",
+        args: {},
+        async execute(_args, context): Promise<string> {
+            return executeJobWorkspaceList(fileSystem, resolveAgentsStorageRoot(context), {
                 resultKey: "jobs",
                 failedAction: "list jobs",
-                filter: filter as JobStatus | undefined,
             })
         },
     })

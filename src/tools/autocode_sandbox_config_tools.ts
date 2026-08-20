@@ -70,9 +70,9 @@ function createSandboxConfigExecute(
 
 export function createAutocodeSandboxConfigEditTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies): ReturnType<typeof tool> {
     return tool({
-        description: "Create, replace, or rename key-values in config files (.json/.jsonc/.yaml/.yml/.toml/.ini/.properties/.conf/.env) inside a sandbox's storage.",
+        description: "Create, replace, or rename key-values in config files (.json/.jsonc/.yaml/.yml/.toml/.ini/.properties/.conf/.env) inside sandbox storage for current resolved job. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before sandbox access. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`.",
         args: {
-            sandbox_name: tool.schema.string().describe("Existing sandbox name."),
+            sandbox_name: tool.schema.string().describe("Existing sandbox name inside current resolved job. Same names in other jobs are independent."),
             path: tool.schema.string().describe("Sandbox-root-relative path to config file."),
             current_key: configPathSchema.optional().describe("Existing dotted key path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') to operate on. If omitted, a new_key must be given (CREATE)."),
             new_key: configPathSchema.optional().describe("Target key path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') for RENAME or CREATE. Must not already exist."),
@@ -85,9 +85,9 @@ export function createAutocodeSandboxConfigEditTool(client?: OpencodeClient, dep
 
 export function createAutocodeSandboxConfigRemoveTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies): ReturnType<typeof tool> {
     return tool({
-        description: "Remove a key and its entire subtree from a structured config file inside a sandbox (JSON/JSONC, YAML/YML, TOML, INI/properties/conf, .env). Refuses to remove the root key. Refuses markdown. Path is sandbox-root-relative.",
+        description: "Remove a key and its entire subtree from a structured config file inside sandbox storage for current resolved job (JSON/JSONC, YAML/YML, TOML, INI/properties/conf, .env). The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before sandbox access. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Refuses to remove the root key. Refuses markdown. Path is sandbox-root-relative.",
         args: {
-            sandbox_name: tool.schema.string().describe("Existing sandbox name."),
+            sandbox_name: tool.schema.string().describe("Existing sandbox name inside current resolved job. Same names in other jobs are independent."),
             path: tool.schema.string().describe("Sandbox-root-relative path to the config file."),
             key_path: configPathSchema.describe("Dotted key path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') of the key to remove. Cannot be the document root."),
         },
@@ -97,9 +97,9 @@ export function createAutocodeSandboxConfigRemoveTool(client?: OpencodeClient, d
 
 export function createAutocodeSandboxConfigReadTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies): ReturnType<typeof tool> {
     return tool({
-        description: "Read config/data files (.json/.jsonc/.yaml/.yml/.toml/.ini/.properties/.conf/.env) inside a sandbox's storage by glob pattern. Outlines config/data file or drills into specific key_path.",
+        description: "Read config/data files (.json/.jsonc/.yaml/.yml/.toml/.ini/.properties/.conf/.env) by glob pattern inside sandbox storage for current resolved job. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before sandbox access. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Outlines config/data file or drills into specific key_path.",
         args: {
-            sandbox_name: tool.schema.string().describe("Existing sandbox name."),
+            sandbox_name: tool.schema.string().describe("Existing sandbox name inside current resolved job. Same names in other jobs are independent."),
             file_path_glob: tool.schema.string().describe("Sandbox-root-relative glob pattern for config files, e.g. 'configs/**/*.json' or 'package.json'."),
             key_path: tool.schema.string().optional().describe("Optional dotted path with bracket array indexing (e.g. 'server.port', 'ports[0]', 'grid[1][2]') to drill into a specific key. Default = root."),
             key_depth: tool.schema.number().int().min(0).optional().default(100).describe("Maximum traversal depth from key_path. Default = 100."),

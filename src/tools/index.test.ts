@@ -12,8 +12,8 @@ import { createAutocodeConceptReadTool } from "./autocode_concept_read"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createTaskResumeTool } from "./task_resume"
-import { createAutocodePlanReadTool } from "./autocode_plan_read"
-import { composePlanMarkdown, createAutocodeJobDraftTool } from "./autocode_job_draft"
+import { createAutocodeDesignReadTool, parseDesignMarkdown } from "./autocode_design_read"
+import { composeDesignMarkdown, createAutocodeDesignWriteTool } from "./autocode_design_write"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
 import { createAbortResponse, createErrorResponse } from "@/utils/tools"
 import { applySandboxPlatformPolicy } from "@/agents"
@@ -123,6 +123,12 @@ function parseToolResult(result: string | { output: string }) {
     return JSON.parse(typeof result === "string" ? result : result.output)
 }
 
+function expectTimestampedDesignPath(parsed: Record<string, unknown>, root = "/workspace"): string {
+    expect(parsed.job_name).toBe("my_feature")
+    expect(parsed.job_path).toMatch(new RegExp(`^${root}/\\.agents/jobs/\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_my_feature/design\\.md$`))
+    return parsed.job_path as string
+}
+
 type ToolSurface = {
     args?: Record<string, {
         def?: { innerType?: { description?: string } }
@@ -136,10 +142,6 @@ function toolSurfaceText(tool: unknown) {
     const surface = tool as ToolSurface
     const argDescriptions = Object.values(surface.args ?? {}).map((arg) => arg.description ?? arg.unwrap?.().description ?? arg.def?.innerType?.description ?? "")
     return [surface.description ?? "", ...argDescriptions].join("\n")
-}
-
-function executePlanDraft(tool: ReturnType<typeof createAutocodeJobDraftTool>, args: Record<string, string>) {
-    return tool.execute(args as never, createToolContext())
 }
 
 function createSession(id: string, directory: string, permission?: unknown): Session & { permission?: unknown } {
@@ -396,31 +398,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("does not register removed job_draft command and keeps current design-advise agents", async () => {
-        await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-
-                await configurePlugin(plugin, cfg)
-
-                expect(cfg.command.job_draft).toBeUndefined()
-                expect(cfg.agent.plan).toEqual({ disable: true })
-                expect(cfg.agent.design?.prompt).toContain("# Solution Designer")
-                expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
-        })
-    })
-
-    test("registers job-draft command with canonical execute command follow-up", async () => {
+    test("registers job-draft command with canonical design write follow-up", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -431,9 +409,9 @@ describe("auto resume wiring", () => {
                 await configurePlugin(plugin, cfg)
 
                 expect(cfg.command["job-draft"]?.agent).toBe("design")
-                expect(cfg.command["job-draft"]?.template).toContain("autocode_job_draft")
-                expect(cfg.command["job-draft"]?.template).toContain("Your plan is saved at: `[job_path]`")
-                expect(cfg.command["job-draft"]?.template).toContain("Replace [job_path] with `job_path` value from `autocode_job_draft` tool response.")
+                expect(cfg.command["job-draft"]?.template).toContain("autocode_design_write")
+                expect(cfg.command["job-draft"]?.template).toContain("Your design is saved at: `[job_path]`")
+                expect(cfg.command["job-draft"]?.template).toContain("Replace [job_path] with `job_path` value from `autocode_design_write` tool response.")
                 expect(cfg.command["job-draft"]?.template).toContain("/job-execute")
                 expect(cfg.command["job-draft"]?.template).toContain("/job-facilitate")
             } finally {
@@ -459,7 +437,7 @@ describe("auto resume wiring", () => {
                 expect(cfg.command["job-execute"]?.agent).toBe("design")
                 expect(cfg.command["job-execute"]?.template).toContain("autocode_job_execute")
                 expect(cfg.command["job-execute"]?.template).toContain("`agent` = `auto`")
-                expect(cfg.command["job-execute"]?.template).toContain("draft_required")
+                expect(cfg.command["job-execute"]?.template).toContain("workspace_required")
                 expect(cfg.command["job-execute"]?.template).not.toContain("list_plans")
                 expect(cfg.command["job-execute"]?.template).not.toContain("result_type == \"workflow\"")
             } finally {
@@ -483,10 +461,10 @@ describe("auto resume wiring", () => {
                 await configurePlugin(plugin, cfg)
 
                 expect(cfg.command["job-facilitate"]?.agent).toBe("design")
-                expect(cfg.command["job-facilitate"]?.description).toContain(".agents/jobs/facilitate")
+                expect(cfg.command["job-facilitate"]?.description).toBe("Start assisted execution in a new session.")
                 expect(cfg.command["job-facilitate"]?.template).toContain("autocode_job_execute")
                 expect(cfg.command["job-facilitate"]?.template).toContain("`agent` = `assist`")
-                expect(cfg.command["job-facilitate"]?.template).toContain("draft_required")
+                expect(cfg.command["job-facilitate"]?.template).toContain("workspace_required")
                 expect(cfg.command["job-facilitate"]?.template).not.toContain("list_plans")
                 expect(cfg.command["job-facilitate"]?.template).not.toContain("result_type == \"workflow\"")
             } finally {
@@ -523,55 +501,6 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("registers only canonical lifecycle commands", async () => {
-        await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-
-                await configurePlugin(plugin, cfg)
-
-                expect(cfg.command["save-ideas"]).toBeUndefined()
-                expect(cfg.command["auto-redesign"]).toBeUndefined()
-                expect(cfg.command["auto-reviewed"]).toBeUndefined()
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
-        })
-    })
-
-    test("registers canonical commit and shelve lifecycle commands", async () => {
-        await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-
-                await configurePlugin(plugin, cfg)
-
-                expect(cfg.command.commit?.description).toBe("Commit added changes to Git and shelve job: args = reason for commit")
-                expect(cfg.command.commit?.template).toContain("git_commit")
-                expect(cfg.command.commit?.template).toContain("autocode_job_shelve")
-                expect(cfg.command["job-shelve"]?.description).toContain("Shelve current job and move job to .agents/jobs/shelved/{name}/")
-                expect(cfg.command["job-shelve"]?.agent).toBe("auto")
-                expect(cfg.command["job-shelve"]?.template).toContain("autocode_job_shelve")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
-        })
-    })
-
     test("createTools exposes sandbox tools", () => {
         const tools = createTools(createMockClient())
         const sandboxCreate = tools.autocode_sandbox_create as unknown as { description: string, args: Record<string, unknown> }
@@ -585,7 +514,7 @@ describe("auto resume wiring", () => {
         const skillLearn = tools.skill_learn as unknown as { description: string, args: Record<string, unknown> }
         const skill = tools.skill as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_job_shelve", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_create", "autocode_md_h1", "autocode_md_read", "autocode_md_remove", "autocode_md_update", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_create", "autocode_md_h1", "autocode_md_read", "autocode_md_remove", "autocode_md_update", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
         expect(tools.skill).toBeDefined()
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
@@ -1084,7 +1013,7 @@ describe("autocode_concept_list tool", () => {
     test("returns sorted backlog JSON with names and first non-heading text descriptions after optional front-matter", async () => {
         const reads: string[] = []
         const tool = createAutocodeConceptListTool({
-            async readdir(filePath): Promise<Dirent[]> {
+            async readdir(filePath: string, _options: { withFileTypes: true }): Promise<Dirent[]> {
                 if (!String(filePath).endsWith("/concepts")) return []
                 return [
                     createDirent("zeta.md", "file"),
@@ -1094,7 +1023,7 @@ describe("autocode_concept_list tool", () => {
                     createDirent("plain.md", "file"),
                 ]
             },
-            async readFile(filePath) {
+            async readFile(filePath: string, _encoding: "utf8"): Promise<string> {
                 reads.push(String(filePath))
 
                 if (String(filePath).endsWith("alpha.md")) {
@@ -1123,9 +1052,9 @@ describe("autocode_concept_list tool", () => {
             ],
         }))
         expect(reads).toEqual([
-            "/workspace/.agents/jobs/concepts/alpha.md",
-            "/workspace/.agents/jobs/concepts/plain.md",
-            "/workspace/.agents/jobs/concepts/zeta.md",
+            "/workspace/.agents/concepts/alpha.md",
+            "/workspace/.agents/concepts/plain.md",
+            "/workspace/.agents/concepts/zeta.md",
         ])
     })
 
@@ -1146,17 +1075,14 @@ describe("autocode_concept_list tool", () => {
         expect(result).toBe(JSON.stringify({ backlog: [] }))
     })
 
-    test("includes draft, executing, and facilitate jobs", async () => {
+    test("lists only available concept files", async () => {
         const tool = createAutocodeConceptListTool({
-            async readdir(filePath): Promise<Dirent[]> {
+            async readdir(filePath: string, _options: { withFileTypes: true }): Promise<Dirent[]> {
                 const directory = String(filePath)
-                if (directory.endsWith("/concepts")) return [createDirent("idea.md", "file")]
-                if (directory.endsWith("/drafts")) return [createDirent("draft_job")]
-                if (directory.endsWith("/executing")) return [createDirent("executing_job")]
-                if (directory.endsWith("/facilitate")) return [createDirent("facilitate_job")]
+                if (directory.endsWith("/.agents/concepts")) return [createDirent("idea.md", "file")]
                 return []
             },
-            async readFile(filePath) {
+            async readFile(filePath: string, _encoding: "utf8"): Promise<string> {
                 return `Description for ${String(filePath).split("/").at(-2)}`
             },
         })
@@ -1165,9 +1091,6 @@ describe("autocode_concept_list tool", () => {
 
         expect(parseToolResult(result)).toEqual({
             backlog: [
-                { label: "draft_job", description: "Description for draft_job" },
-                { label: "executing_job", description: "Description for executing_job" },
-                { label: "facilitate_job", description: "Description for facilitate_job" },
                 { label: "idea", description: "Description for concepts" },
             ],
         })
@@ -1213,51 +1136,26 @@ describe("autocode_concept_read tool", () => {
         })
     })
 
-    test("omits one leading front-matter block, creates the draft job directory, and moves the concept", async () => {
+    test("omits one leading front-matter block without moving the concept", async () => {
         const reads: string[] = []
-        const client: OpencodeClient = {
-            session: {
-                update: mock(async (args: { path: { id: string }, query: { directory: string }, body: { title: string } }) => ({
-                    data: { id: args.path.id, title: args.body.title },
-                })),
-            },
-        } as unknown as OpencodeClient
-        const mkdir = mock(async (_dirPath: string, _options?: { recursive?: boolean }) => undefined as string | undefined)
-        const rename = mock(async (_oldPath: string, _newPath: string) => { })
-        const writeFile = mock(async (_filePath: string, _content: string) => { })
-        const tool = createAutocodeConceptReadTool(client, {
-            mkdir,
-            async readFile(filePath) {
+        const tool = createAutocodeConceptReadTool({
+            async readFile(filePath: string, _encoding: "utf8"): Promise<string> {
                 reads.push(String(filePath))
                 return "---\nsource session title: \"Session\"\nsource directory: \"/workspace\"\ncreate: \"2026-06-02 10:11:12\"\nconcept title: \"Item Title\"\n---\n\n# Item Title\n\nRaw body\n---\nKeep separator\n"
             },
-            rename,
-            writeFile,
         })
 
         const result = await tool.execute({ label: "example-item" }, createToolContext())
 
         expect(result).toBe("# Item Title\n\nRaw body\n---\nKeep separator\n")
         expect(reads).toEqual([
-            "/workspace/.agents/jobs/concepts/example-item.md",
+            "/workspace/.agents/concepts/example-item.md",
         ])
-        expect(mkdir).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/example_item", { recursive: true })
-        expect(writeFile).not.toHaveBeenCalled()
-        expect(rename).toHaveBeenCalledWith(
-            "/workspace/.agents/jobs/concepts/example-item.md",
-            "/workspace/.agents/jobs/drafts/example_item/concept.md"
-        )
-        expect(client.session.update).toHaveBeenCalledWith({
-            path: { id: "session-1" },
-            query: { directory: "/workspace" },
-            body: { title: "Example Item" },
-        })
     })
 
     test("rejects portable concept path escapes before file operations", async () => {
         const readFile = mock(async (_filePath: string, _encoding: "utf8") => "# Outside concept")
-        const rename = mock(async (_oldPath: string, _newPath: string) => { })
-        const tool = createAutocodeConceptReadTool({ readFile, rename })
+        const tool = createAutocodeConceptReadTool({ readFile })
 
         for (const label of [
             ".",
@@ -1274,7 +1172,6 @@ describe("autocode_concept_read tool", () => {
         }
 
         expect(readFile).not.toHaveBeenCalled()
-        expect(rename).not.toHaveBeenCalled()
     })
 
     test("returns a plain text message when the backlog file does not exist", async () => {
@@ -1289,28 +1186,6 @@ describe("autocode_concept_read tool", () => {
         const result = await tool.execute({ label: "missing-item" }, createToolContext())
 
         expect(result).toBe(createErrorResponse("read concept", "Concept not found: missing-item", "Ask the user to choose another concept or provide their requirement directly."))
-    })
-
-    test("restores executing job to drafts and returns plan body without front matter", async () => {
-        const worktree = mkdtempSync(join(tmpdir(), "autocode-concept-read-"))
-        const executingDirectory = join(worktree, ".agents", "jobs", "executing", "existing_job")
-        const draftDirectory = join(worktree, ".agents", "jobs", "drafts", "existing_job")
-        mkdirSync(executingDirectory, { recursive: true })
-        writeFileSync(join(executingDirectory, "plan.md"), "---\nsource: test\n---\n\n# Existing Job\n\nPlan body")
-
-        try {
-            const result = await createAutocodeConceptReadTool().execute({ label: "existing_job" }, {
-                ...createToolContext(),
-                directory: worktree,
-                worktree,
-            })
-
-            expect(result).toBe("# Existing Job\n\nPlan body")
-            expect(existsSync(executingDirectory)).toBe(false)
-            expect(readFileSync(join(draftDirectory, "plan.md"), "utf8")).toContain("Plan body")
-        } finally {
-            rmSync(worktree, { recursive: true, force: true })
-        }
     })
 
     test("uses the default file system when called with a client only", async () => {
@@ -1355,10 +1230,10 @@ describe("autocode_concept_create tool", () => {
 
         expect(parseToolResult(result)).toEqual({
             label: "checkout_flow",
-            file_path: ".agents/jobs/concepts/checkout_flow.md",
+            file_path: ".agents/concepts/checkout_flow.md",
         })
         expect(writes).toEqual([{
-            filePath: "/workspace/.agents/jobs/concepts/checkout_flow.md",
+            filePath: "/workspace/.agents/concepts/checkout_flow.md",
             content: "---\nsource session title: \"Current Session\"\nsource directory: \"/workspace\"\ncreate: \"2026-06-02 10:11:12\"\nconcept title: \"Checkout Flow\"\n---\n\n# Idea\n\nBuild it.",
         }])
     })
@@ -1390,10 +1265,10 @@ describe("autocode_concept_create tool", () => {
 
         expect(parseToolResult(result)).toEqual({
             label: "checkout_flow",
-            file_path: ".agents/jobs/concepts/checkout_flow.md",
+            file_path: ".agents/concepts/checkout_flow.md",
         })
         expect(writes).toEqual([{
-            filePath: "/workspace/fallback/.agents/jobs/concepts/checkout_flow.md",
+            filePath: "/workspace/fallback/.agents/concepts/checkout_flow.md",
             content: "---\nsource session title: \"Current Session\"\nsource directory: \"/workspace/fallback\"\ncreate: \"2026-06-02 10:11:12\"\nconcept title: \"Checkout Flow\"\n---\n\nBody",
         }])
     })
@@ -1444,8 +1319,8 @@ describe("shared tool error handling", () => {
     })
 })
 
-describe("autocode_job_draft tool", () => {
-    test("registers consolidated plan tools and grants plan permission", async () => {
+describe("autocode_design tools", () => {
+    test("registers design tools and grants design permission", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -1469,16 +1344,14 @@ describe("autocode_job_draft tool", () => {
                     "autocode_md_update",
                     "autocode_md_frontmatter_read",
                     "autocode_md_frontmatter_edit",
-                    "autocode_plan_read",
+                    "autocode_design_read",
                     "autocode_process_kill",
-                    "autocode_job_draft",
+                    "autocode_design_write",
                     "autocode_db_table",
                     "autocode_db_table_read",
                     "autocode_db_tables",
                     "autocode_job_execute",
                     "autocode_job_list",
-                    "autocode_job_shelve",
-                    "autocode_job_status",
                     "autocode_kill",
                     "autocode_logo_find",
                     "autocode_db_schemas",
@@ -1531,33 +1404,27 @@ describe("autocode_job_draft tool", () => {
                 ].sort())
                 expect(plugin.tool?.autocode_draft_job_create).toBeUndefined()
                 expect(plugin.tool?.autocode_draft_job_update).toBeUndefined()
-                expect(plugin.tool?.autocode_job_draft).toBeDefined()
-                expect(plugin.tool?.autocode_plan_read).toBeDefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).toContain("Create or update plan.md for a planned job.")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).toContain("Define observed wrong/missing project behavior or missing info.")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).toContain("Define expected outcome from user perspective.")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).toContain("Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).not.toContain("job_name")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).not.toContain("suggested_name")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).not.toContain("concept_label")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_draft)).not.toContain("Compatibility alias")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_read)).toContain("Read your solution plan of your job.")
-                expect(toolSurfaceText(plugin.tool?.autocode_plan_read)).toContain("Planned job_name if known, otherwise omit to look it up.")
+                expect(plugin.tool?.autocode_design_write).toBeDefined()
+                expect(plugin.tool?.autocode_design_read).toBeDefined()
+                expect(plugin.tool?.autocode_job_draft).toBeUndefined()
+                expect(plugin.tool?.autocode_plan_read).toBeUndefined()
+                expect(toolSurfaceText(plugin.tool?.autocode_design_write)).toContain("Create design.md for a new job workspace.")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_write)).toContain("Define observed wrong/missing project behavior or missing info.")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_write)).toContain("Define expected outcome from user perspective.")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_write)).toContain("Propose simplest approach to meet REQUIREMENTS within CONSTRAINTS:")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_write)).not.toContain("job_name")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_write)).not.toContain("suggested_name")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_write)).not.toContain("concept_label")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_write)).not.toContain("Compatibility alias")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_read)).toContain("Read design.md from a job workspace.")
+                expect(toolSurfaceText(plugin.tool?.autocode_design_read)).toContain("Design job_name if known, otherwise omit to infer from current session title.")
                 expect(plugin.tool?.autocode_plan_load_problem).toBeUndefined()
                 expect(plugin.tool?.autocode_plan_load_risks).toBeUndefined()
                 expect(plugin.tool?.autocode_draft_job_read).toBeUndefined()
                 expect(plugin.tool?.autocode_job_list).toBeDefined()
-                expect(plugin.tool?.autocode_job_status).toBeDefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_job_status)).toContain("Update current job status.\ndrafts, executing, facilitate, review, shelved")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_status)).not.toContain("agent=assist")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_status)).not.toContain("job_name")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_status)).not.toContain("report_content")
                 expect(plugin.tool?.autocode_logo_find).toBeDefined()
                 expect(plugin.tool?.autocode_logo).toBeUndefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("List active drafts/jobs.")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("Optional filter limits results to one active status")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("omit to list all active jobs")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("Omit to view all or provide one of these status filters: concepts, drafts, facilitate, executing, review")
+                expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("List timestamped job workspaces.")
                 expect(plugin.tool?.autocode_act_prompt).toBeUndefined()
                 expect(plugin.tool?.autocode_act).toBeUndefined()
                 expect(plugin.tool?.autocode_agent_execute).toBeDefined()
@@ -1569,10 +1436,10 @@ describe("autocode_job_draft tool", () => {
                 expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
                 expect(plugin.tool?.autocode_job_execute).toBeDefined()
                 expect(plugin.tool?.autocode_execute_job).toBeUndefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Move selected job to execution status")
-                expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Selected planned job_name in safe snake_case.")
+                expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Swap current session to selected agent with job workspace instructions injected.")
+                expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Selected job_name in safe snake_case.")
                 const sessionCreateToolText = toolSurfaceText(plugin.tool?.autocode_session_create)
-                expect(sessionCreateToolText).toContain("Create a fresh same-title session and queue its agent prompt, or restart current session when prompt is omitted.")
+                expect(sessionCreateToolText).toContain("Only call when requested by user.")
                 expect(toolSurfaceText(plugin.tool?.autocode_job_execute)).not.toContain("job_name")
                 expect(plugin.tool?.autocode_concept_create).toBeDefined()
                 expect(plugin.tool?.autocode_plan_start).toBeUndefined()
@@ -1593,7 +1460,8 @@ describe("autocode_job_draft tool", () => {
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_execute")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_draft")).toBe("allow")
+                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_design_write")).toBe("allow")
+                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_design_read")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo_find")).toBeUndefined()
@@ -1608,18 +1476,17 @@ describe("autocode_job_draft tool", () => {
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_feedback")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_review")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_job_list")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_plan_read")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_job_draft")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_design_read")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_design_write")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_draft_job_create")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_create")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_plan_read")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_design_read")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_list")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_status")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_auto_start")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_draft")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_design_write")).toBeUndefined()
                 expect(Object.keys(cfg.agent).filter((name) => name.startsWith("auto-") || name.startsWith("assist-"))).toEqual([])
                 expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
-                expect(cfg.agent.design?.prompt).toContain("autocode_job_draft")
+                expect(cfg.agent.design?.prompt).toContain("autocode_design_write")
                 expect(cfg.agent.design?.prompt).toContain("autocode_job_execute")
                 expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
                 expect(cfg.agent.advise?.prompt).toContain("`task` query subagents")
@@ -1771,7 +1638,7 @@ describe("autocode_logo_find tool", () => {
     })
 })
 
-describe("autocode_job_draft behaviour", () => {
+describe("autocode_design_write behaviour", () => {
     function createMockFs(readdirResult: { name: string, type?: "file" | "directory" }[][] = []) {
         let readdirCallCount = 0
         const readdir: ReaddirWithFileTypes = async (_dirPath, _opts) => {
@@ -1807,132 +1674,141 @@ describe("autocode_job_draft behaviour", () => {
         } as unknown as OpencodeClient
     }
 
-    test("creates a new draft plan from the current session title", async () => {
+    test("creates statusless timestamped design.md from the current session title", async () => {
         const fs = createMockFs()
         const client = createPlanSaveClient("My Feature")
-        const tool = createAutocodeJobDraftTool(client, fs)
-        const parsed = parseToolResult(await executePlanDraft(tool, { problems: "Problem text" }))
+        const tool = createAutocodeDesignWriteTool(client, fs)
+        const parsed = parseToolResult(await tool.execute({ problems: "Problem text" }, createToolContext()))
 
-        expect(parsed).toEqual({
-            job_name: "my_feature",
-            job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-        })
-        expect(fs.mkdir).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature", { recursive: true })
+        expectTimestampedDesignPath(parsed)
+        expect(fs.mkdir).toHaveBeenCalledWith("/workspace/.agents/jobs", { recursive: true })
+        expect(fs.mkdir).toHaveBeenCalledWith(parsed.job_path.replace(/\/design\.md$/, ""))
         expect(fs.writeFile).toHaveBeenCalledWith(
-            "/workspace/.agents/jobs/drafts/my_feature/plan.md",
+            parsed.job_path,
             "\n## Problems\n\nProblem text\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Proposal\n\n\n"
         )
-        expect((client as unknown as { session: { update: unknown } }).session.update).toHaveBeenCalledWith({
-            path: { id: "session-1" },
-            query: { directory: "/workspace" },
-            body: { title: "My Feature" },
-        })
-        expect(fs.rename).not.toHaveBeenCalled()
     })
 
     test("saves current problems arg", async () => {
         const fs = createMockFs()
         const client = createPlanSaveClient("My Feature")
-        const tool = createAutocodeJobDraftTool(client, fs)
+        const tool = createAutocodeDesignWriteTool(client, fs)
 
-        await executePlanDraft(tool, { problems: "Legacy problem text" })
+        await tool.execute({ problems: "Legacy problem text" }, createToolContext())
 
-        expect(fs.writeFile).toHaveBeenCalledWith(
-            "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-            expect.stringContaining("## Problems\n\nLegacy problem text")
-        )
+        expect(fs.writeFile).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/\.agents\/jobs\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature\/design\.md$/), expect.stringContaining("## Problems\n\nLegacy problem text"))
     })
 
-    test("updates the title-inferred job when the draft already exists", async () => {
-        const fs = createMockFs([[{ name: "my_feature" }]])
-        fs.readFile.mockImplementation(async (filePath: string) => {
-            if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") {
-                return "# Problems\n\nOld problem\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nOld solution\n"
-            }
-            const error = new Error("missing") as NodeJS.ErrnoException
-            error.code = "ENOENT"
-            throw error
-        })
-        const tool = createAutocodeJobDraftTool(createPlanSaveClient("My Feature"), fs)
+    test("creates a new timestamped workspace for each design save", async () => {
+        const fs = createMockFs()
+        const tool = createAutocodeDesignWriteTool(createPlanSaveClient("My Feature"), fs)
         const parsed = parseToolResult(await tool.execute({ problems: "Updated problem" }, createToolContext()))
 
-        expect(parsed).toEqual({
-            job_name: "my_feature",
-            job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
+        const designPath = expectTimestampedDesignPath(parsed)
+        expect(fs.writeFile).toHaveBeenCalledWith(designPath, expect.stringContaining("## Problems\n\nUpdated problem"))
+    })
+
+    test("aborts same-second same-title design save without overwriting first design", async () => {
+        const fs = createMockFs()
+        const directories = new Set<string>()
+        const designs = new Map<string, string>()
+        fs.mkdir.mockImplementation(async (dirPath: string, options?: { recursive?: boolean }): Promise<string | undefined> => {
+            if (!options?.recursive && directories.has(dirPath)) {
+                const error = new Error("exists") as NodeJS.ErrnoException
+                error.code = "EEXIST"
+                throw error
+            }
+
+            directories.add(dirPath)
+            return undefined
         })
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "\n## Problems\n\nUpdated problem\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Proposal\n\nOld solution\n")
+        fs.writeFile.mockImplementation(async (filePath: string, content: string): Promise<void> => {
+            designs.set(filePath, content)
+        })
+
+        const RealDate = Date
+        const fixedMs = new RealDate("2026-06-02T10:11:12Z").valueOf()
+        class FixedDate extends RealDate {
+            constructor(value?: string | number | Date) {
+                super(value === undefined ? fixedMs : value)
+            }
+
+            static now(): number {
+                return fixedMs
+            }
+        }
+
+        ;(globalThis as typeof globalThis & { Date: DateConstructor }).Date = FixedDate as unknown as DateConstructor
+        try {
+            const tool = createAutocodeDesignWriteTool(createPlanSaveClient("Same Title"), fs)
+            const first = parseToolResult(await tool.execute({ problems: "First design" }, createToolContext()))
+            const second = parseToolResult(await tool.execute({ problems: "Second design" }, createToolContext()))
+
+            expect(second.error).toBe("Job workspace already exists: .agents/jobs/2026-06-02_10-11-12_same_title")
+            expect(designs.get(first.job_path)).toBe(composeDesignMarkdown({
+                problems: "First design",
+                impact: "",
+                expectations: "",
+                requirements: "",
+                constraints: "",
+                proposal: "",
+            }))
+        }
+        finally {
+            ;(globalThis as typeof globalThis & { Date: DateConstructor }).Date = RealDate
+        }
     })
 
     test("uses session-title slug derivation for special characters and truncation", async () => {
         const fs = createMockFs()
-        const parsed = parseToolResult(await executePlanDraft(createAutocodeJobDraftTool(createPlanSaveClient("Hello World! Test--Case"), fs), { problems: "Problem text" }))
-        expect(parsed).toEqual({
-            job_name: "hello_world_test_case",
-            job_path: "/workspace/.agents/jobs/drafts/hello_world_test_case/plan.md",
-        })
+        const parsed = parseToolResult(await createAutocodeDesignWriteTool(createPlanSaveClient("Hello World! Test--Case"), fs).execute({ problems: "Problem text" }, createToolContext()))
+        expect(parsed.job_name).toBe("hello_world_test_case")
+        expect(parsed.job_path).toMatch(/^\/workspace\/\.agents\/jobs\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_hello_world_test_case\/design\.md$/)
 
         const longTitle = "a".repeat(150)
-        const parsed2 = parseToolResult(await executePlanDraft(createAutocodeJobDraftTool(createPlanSaveClient(longTitle), createMockFs()), { problems: "Problem text" }))
+        const parsed2 = parseToolResult(await createAutocodeDesignWriteTool(createPlanSaveClient(longTitle), createMockFs()).execute({ problems: "Problem text" }, createToolContext()))
         expect(parsed2.job_name).toBe("a".repeat(100))
-        expect(parsed2.job_path).toBe(`/workspace/.agents/jobs/drafts/${"a".repeat(100)}/plan.md`)
+        expect(parsed2.job_path).toMatch(new RegExp(`^/workspace/\\.agents/jobs/\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}_${"a".repeat(100)}/design\\.md$`))
     })
 
-    test("preserves missing sections during partial update without moving concept files", async () => {
-        const fs = createMockFs([[{ name: "my_feature" }]])
-        fs.readFile.mockImplementation(async (filePath: string) => {
-            if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") {
-                return "# Problems\n\nOld problem\n\n---\n\n# Requirements\n\n### Requirement One\nKeep this\n\n---\n\n# Constraints\n\n### Constraint One\nKeep this\n\n---\n\n# Proposal\n\nShip it\n"
-            }
-            const error = new Error("missing") as NodeJS.ErrnoException
-            error.code = "ENOENT"
-            throw error
-        })
-        const tool = createAutocodeJobDraftTool(createPlanSaveClient("My Feature"), fs)
+    test("writes only supplied sections into a new design workspace", async () => {
+        const fs = createMockFs()
+        const tool = createAutocodeDesignWriteTool(createPlanSaveClient("My Feature"), fs)
         const parsed = parseToolResult(await tool.execute({ constraints: "### Constraint Two\nChange this" }, createToolContext()))
 
-        expect(parsed).toEqual({
-            job_name: "my_feature",
-            job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-        })
-        expect(fs.writeFile).toHaveBeenCalledWith(
-            "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-            "\n## Problems\n\nOld problem\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n### Requirement One\nKeep this\n\n---\n\n## Constraints\n\n### Constraint Two\nChange this\n\n---\n\n## Proposal\n\nShip it\n"
-        )
-        expect(fs.rename).not.toHaveBeenCalled()
+        const designPath = expectTimestampedDesignPath(parsed)
+        expect(fs.writeFile).toHaveBeenCalledWith(designPath, expect.stringContaining("## Constraints\n\n### Constraint Two\nChange this"))
     })
 
     test("returns retry response when the current session title cannot produce a valid job_name", async () => {
         const fs = createMockFs()
-        const tool = createAutocodeJobDraftTool(createPlanSaveClient("***"), fs)
+        const tool = createAutocodeDesignWriteTool(createPlanSaveClient("***"), fs)
         const parsed = parseToolResult(await tool.execute({ problems: "Problem text" }, createToolContext()))
 
-        expect(parsed.failedAction).toBe("save plan")
+        expect(parsed.failedAction).toBe("save design")
         expect(parsed.error).toBe("Unable to derive a valid job_name from the current session title: ***")
     })
 
     test("missing content returns retry response", async () => {
         const fs = createMockFs()
-        const tool = createAutocodeJobDraftTool(createPlanSaveClient("My Feature"), fs)
-        const parsed = parseToolResult(await executePlanDraft(tool, {}))
-        expect(parsed.error).toBe("Missing required plan content")
+        const tool = createAutocodeDesignWriteTool(createPlanSaveClient("My Feature"), fs)
+        const parsed = parseToolResult(await tool.execute({}, createToolContext()))
+        expect(parsed.error).toBe("Missing required design content")
     })
 
-    test("save still succeeds when session title update fails", async () => {
+    test("save succeeds without session title update", async () => {
         const fs = createMockFs()
         const client = createPlanSaveClient("My Feature", async () => ({ error: "update failed" }))
-        const tool = createAutocodeJobDraftTool(client, fs)
-        const parsed = parseToolResult(await executePlanDraft(tool, { problems: "Problem text" }))
+        const tool = createAutocodeDesignWriteTool(client, fs)
+        const parsed = parseToolResult(await tool.execute({ problems: "Problem text" }, createToolContext()))
 
-        expect(parsed).toEqual({
-            job_name: "my_feature",
-            job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-        })
+        expectTimestampedDesignPath(parsed)
     })
 
-    test("writes plan under context.directory when worktree is filesystem root", async () => {
+    test("writes design under context.directory when worktree is filesystem root", async () => {
         const fs = createMockFs()
         const client = createPlanSaveClient("My Feature")
-        const tool = createAutocodeJobDraftTool(client, fs)
+        const tool = createAutocodeDesignWriteTool(client, fs)
 
         const parsed = parseToolResult(await tool.execute({ problems: "Problem text" }, {
             ...createToolContext(),
@@ -1940,15 +1816,9 @@ describe("autocode_job_draft behaviour", () => {
             worktree: "/",
         }))
 
-        expect(parsed).toEqual({
-            job_name: "my_feature",
-            job_path: "/workspace/fallback/.agents/jobs/drafts/my_feature/plan.md",
-        })
-        expect(fs.mkdir).toHaveBeenCalledWith("/workspace/fallback/.agents/jobs/drafts/my_feature", { recursive: true })
-        expect(fs.writeFile).toHaveBeenCalledWith(
-            "/workspace/fallback/.agents/jobs/drafts/my_feature/plan.md",
-            "\n## Problems\n\nProblem text\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Proposal\n\n\n"
-        )
+        const designPath = expectTimestampedDesignPath(parsed, "/workspace/fallback")
+        expect(fs.mkdir).toHaveBeenCalledWith("/workspace/fallback/.agents/jobs", { recursive: true })
+        expect(fs.writeFile).toHaveBeenCalledWith(designPath, expect.stringContaining("## Problems\n\nProblem text"))
     })
 
     test("FS error on mkdir returns abort response", async () => {
@@ -1961,15 +1831,15 @@ describe("autocode_job_draft behaviour", () => {
             stat: mock(async () => ({ mtimeMs: Date.now() })),
             readdir: mock(readdir),
         }
-        const tool = createAutocodeJobDraftTool(createPlanSaveClient("My Feature"), fsErr)
-        const parsed = parseToolResult(await executePlanDraft(tool, { problems: "Problem text" }))
+        const tool = createAutocodeDesignWriteTool(createPlanSaveClient("My Feature"), fsErr)
+        const parsed = parseToolResult(await tool.execute({ problems: "Problem text" }, createToolContext()))
         expect(parsed.instruction).toContain("ABORT")
     })
 })
 
-describe("autocode_plan tools", () => {
-    test("composes canonical requirements-and-constraints plan.md structure", () => {
-        const plan = composePlanMarkdown({
+describe("autocode_design tools", () => {
+    test("composes canonical requirements-and-constraints design.md structure", () => {
+        const plan = composeDesignMarkdown({
             problems: "Problem text",
             impact: "Impact text",
             expectations: "Expectation text",
@@ -1991,10 +1861,10 @@ describe("autocode_plan tools", () => {
         expect(plan).not.toContain("goal.md")
     })
 
-    test("updates an existing execute plan by job_name", async () => {
+    test("creates a timestamped design workspace by job_name", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nOld\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nShip it\n"
+                if (filePath === "/workspace/.agents/jobs/2026-08-20_10-30-00_my_feature/plan.md") return "# Problems\n\nOld\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nShip it\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -2015,36 +1885,33 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodeJobDraftTool(client, fs)
+        const tool = createAutocodeDesignWriteTool(client, fs)
 
-        const result = await executePlanDraft(tool, { problems: "Problem text" })
+        const result = await tool.execute({ problems: "Problem text" }, createToolContext())
 
         const parsed = parseToolResult(result)
-        expect(parsed).toEqual({
-            job_name: "my_feature",
-            job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-        })
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "\n## Problems\n\nProblem text\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n\n\n---\n\n## Constraints\n\n\n\n---\n\n## Proposal\n\nShip it\n")
+        const designPath = expectTimestampedDesignPath(parsed)
+        expect(fs.writeFile).toHaveBeenCalledWith(designPath, expect.stringContaining("## Problems\n\nProblem text"))
     })
 
-    test("reads whole new-format plan.md fields", async () => {
-        const plan = "# Problems\n\nProblem text\n\n---\n\n# Impact\n\nImpact text\n\n---\n\n# Expectations\n\nExpectation text\n\n---\n\n# Requirements\n\n### Preserve Markdown\n- Keep lists\n> Keep quotes\n```ts\nconst value = \"## not a section\"\n```\n\n---\n\n# Constraints\n\n### Keep Configs\n```yaml\nkey: value\n```\n\n---\n\n# Proposal\n\nShip it\n"
+    test("reads whole timestamped design.md fields", async () => {
+        const design = "# Problems\n\nProblem text\n\n---\n\n# Impact\n\nImpact text\n\n---\n\n# Expectations\n\nExpectation text\n\n---\n\n# Requirements\n\n### Preserve Markdown\n- Keep lists\n> Keep quotes\n```ts\nconst value = \"## not a section\"\n```\n\n---\n\n# Constraints\n\n### Keep Configs\n```yaml\nkey: value\n```\n\n---\n\n# Proposal\n\nShip it\n"
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return plan
+                if (filePath === "/workspace/.agents/jobs/2026-08-20_10-11-12_my_feature/design.md") return design
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
             }),
-            writeFile: mock(async () => { }),
+            readdir: mock(async () => [createDirent("2026-08-20_10-11-12_my_feature")]),
         }
-        const tool = createAutocodePlanReadTool(fs)
+        const tool = createAutocodeDesignReadTool(fs)
 
         const result = await tool.execute({ job_name: "my_feature" }, createToolContext())
         const parsed = parseToolResult(result)
         expect(parsed).toEqual({
             job_name: "my_feature",
-            file_path: ".agents/jobs/drafts/my_feature/plan.md",
+            file_path: "/workspace/.agents/jobs/2026-08-20_10-11-12_my_feature/design.md",
             problems: "Problem text",
             impact: "Impact text",
             expectations: "Expectation text",
@@ -2052,13 +1919,13 @@ describe("autocode_plan tools", () => {
             constraints: "### Keep Configs\n```yaml\nkey: value\n```",
             proposal: "Ship it",
         })
-        expect(parsed.problem).toBeUndefined()
+        expect(parseDesignMarkdown(design).problems).toBe("Problem text")
     })
 
-    test("preserves missing sections during partial updates", async () => {
+    test("writes supplied design sections", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Requirements\n\n### Requirement One\nKeep this\n\n---\n\n# Constraints\n\nOld constraints\n\n---\n\n# Proposal\n\nShip it\n"
+                if (filePath === "/workspace/.agents/jobs/2026-08-20_10-30-00_my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Requirements\n\n### Requirement One\nKeep this\n\n---\n\n# Constraints\n\nOld constraints\n\n---\n\n# Proposal\n\nShip it\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -2079,21 +1946,18 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodeJobDraftTool(client, fs)
+        const tool = createAutocodeDesignWriteTool(client, fs)
 
-        const result = await executePlanDraft(tool, { constraints: "### Constraint One\nChanged constraints" })
+        const result = await tool.execute({ constraints: "### Constraint One\nChanged constraints" }, createToolContext())
 
-        expect(parseToolResult(result)).toEqual({
-            job_name: "my_feature",
-            job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md",
-        })
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", "\n## Problems\n\nProblem text\n\n---\n\n## Impact\n\n\n\n---\n\n## Expectations\n\n\n\n---\n\n## Requirements\n\n### Requirement One\nKeep this\n\n---\n\n## Constraints\n\n### Constraint One\nChanged constraints\n\n---\n\n## Proposal\n\nShip it\n")
+        const designPath = expectTimestampedDesignPath(parseToolResult(result))
+        expect(fs.writeFile).toHaveBeenCalledWith(designPath, expect.stringContaining("## Constraints\n\n### Constraint One\nChanged constraints"))
     })
 
     test("strips major headings when saving proposal content", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nOld\n"
+                if (filePath === "/workspace/.agents/jobs/2026-08-20_10-30-00_my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nOld\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -2114,15 +1978,15 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodeJobDraftTool(client, fs)
+        const tool = createAutocodeDesignWriteTool(client, fs)
 
-        await executePlanDraft(tool, { proposal: "## Proposed Solution\nShip it\n## Solution\nAgain" })
+        await tool.execute({ proposal: "## Proposed Solution\nShip it\n## Solution\nAgain" }, createToolContext())
 
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("## Proposal\n\nShip it"))
-        expect(fs.writeFile).toHaveBeenCalledWith("/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("Again\n"))
+        expect(fs.writeFile).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/\.agents\/jobs\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature\/design\.md$/), expect.stringContaining("## Proposal\n\nShip it"))
+        expect(fs.writeFile).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/\.agents\/jobs\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature\/design\.md$/), expect.stringContaining("Again\n"))
     })
 
-    test("returns retry response when plan.md is missing", async () => {
+    test("returns retry response when design.md is missing", async () => {
         const fs = {
             readFile: mock(async () => {
                 const error = new Error("missing") as NodeJS.ErrnoException
@@ -2131,55 +1995,49 @@ describe("autocode_plan tools", () => {
             }),
             writeFile: mock(async () => { }),
         }
-        const tool = createAutocodePlanReadTool(fs)
+        const tool = createAutocodeDesignReadTool(fs)
 
         const result = await tool.execute({ job_name: "my_feature" }, createToolContext())
 
         expect(parseToolResult(result)).toMatchObject({
-            failedAction: "read plan",
-            error: "Plan not found for job: my_feature",
+            failedAction: "read design",
+            error: "Design not found for job: my_feature",
         })
     })
 
-    test("reads plan.md from executing when the job has started", async () => {
+    test("reads design.md from a timestamped workspace", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (String(filePath).includes(".agents/jobs/drafts/")) {
-                    const error = new Error("missing") as NodeJS.ErrnoException
-                    error.code = "ENOENT"
-                    throw error
-                }
-
-                if (filePath === "/workspace/.agents/jobs/executing/my_feature/plan.md") return "# Problems\n\nProblem in executing\n\n---\n\n# Requirements\n\n### Executing Requirement\n- req in executing\n\n---\n\n# Constraints\n\n### Executing Constraint\n- constraint in executing\n\n---\n\n# Proposal\n\nShip it in executing\n"
+                if (filePath === "/workspace/.agents/jobs/2026-08-20_10-11-12_my_feature/design.md") return "# Problems\n\nProblem in design\n\n---\n\n# Requirements\n\n### Design Requirement\n- req in design\n\n---\n\n# Constraints\n\n### Design Constraint\n- constraint in design\n\n---\n\n# Proposal\n\nShip it in design\n"
 
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
             }),
-            writeFile: mock(async () => { }),
+            readdir: mock(async () => [createDirent("2026-08-20_10-11-12_my_feature")]),
         }
-        const tool = createAutocodePlanReadTool(fs)
+        const tool = createAutocodeDesignReadTool(fs)
 
         const result = await tool.execute({ job_name: "my_feature" }, createToolContext())
 
         expect(parseToolResult(result)).toMatchObject({
-            file_path: ".agents/jobs/executing/my_feature/plan.md",
-            problems: "Problem in executing",
+            file_path: "/workspace/.agents/jobs/2026-08-20_10-11-12_my_feature/design.md",
+            problems: "Problem in design",
             impact: "",
             expectations: "",
-            requirements: "### Executing Requirement\n- req in executing",
-            constraints: "### Executing Constraint\n- constraint in executing",
-            proposal: "Ship it in executing",
+            requirements: "### Design Requirement\n- req in design",
+            constraints: "### Design Constraint\n- constraint in design",
+            proposal: "Ship it in design",
         })
     })
 
-    test("infers plan_read job_name from the current session title", async () => {
-        const readdir: ReaddirWithFileTypes = async (dirPath, _opts) => dirPath === "/workspace/.agents/jobs/drafts"
-            ? [createDirent("my_feature")]
+    test("infers design job_name from the current session title", async () => {
+        const readdir: ReaddirWithFileTypes = async (dirPath, _opts) => dirPath === "/workspace/.agents/jobs"
+            ? [createDirent("2026-08-20_10-11-12_my_feature")]
             : []
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Impact\n\nImpact text\n\n---\n\n# Expectations\n\nExpectation text\n\n---\n\n# Requirements\n\n### Requirement\nKeep it\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nShip it\n"
+                if (filePath === "/workspace/.agents/jobs/2026-08-20_10-11-12_my_feature/design.md") return "# Problems\n\nProblem text\n\n---\n\n# Impact\n\nImpact text\n\n---\n\n# Expectations\n\nExpectation text\n\n---\n\n# Requirements\n\n### Requirement\nKeep it\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nShip it\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -2197,11 +2055,11 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodePlanReadTool(client, fs)
+        const tool = createAutocodeDesignReadTool(client, fs)
         const parsed = parseToolResult(await tool.execute({}, createToolContext()))
 
         expect(parsed.job_name).toBe("my_feature")
-        expect(parsed.file_path).toBe(".agents/jobs/drafts/my_feature/plan.md")
+        expect(parsed.file_path).toBe("/workspace/.agents/jobs/2026-08-20_10-11-12_my_feature/design.md")
         expect(parsed.warning).toBeUndefined()
         expect((client as unknown as { session: { update: unknown } }).session.update).toHaveBeenCalledWith({
             path: { id: "session-1" },
@@ -2210,17 +2068,17 @@ describe("autocode_plan tools", () => {
         })
     })
 
-    test("reads plans from context.directory when worktree is filesystem root", async () => {
+    test("reads designs from context.directory when worktree is filesystem root", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/fallback/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\nProblem text\n\n---\n\n# Impact\n\n\n\n---\n\n# Expectations\n\n\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nShip it\n"
+                if (filePath === "/workspace/fallback/.agents/jobs/2026-08-20_10-11-12_my_feature/design.md") return "# Problems\n\nProblem text\n\n---\n\n# Impact\n\n\n\n---\n\n# Expectations\n\n\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\nShip it\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
             }),
-            writeFile: mock(async () => { }),
+            readdir: mock(async () => [createDirent("2026-08-20_10-11-12_my_feature")]),
         }
-        const tool = createAutocodePlanReadTool(fs)
+        const tool = createAutocodeDesignReadTool(fs)
 
         const parsed = parseToolResult(await tool.execute({ job_name: "my_feature" }, {
             ...createToolContext(),
@@ -2230,7 +2088,7 @@ describe("autocode_plan tools", () => {
 
         expect(parsed).toEqual({
             job_name: "my_feature",
-            file_path: ".agents/jobs/drafts/my_feature/plan.md",
+            file_path: "/workspace/fallback/.agents/jobs/2026-08-20_10-11-12_my_feature/design.md",
             problems: "Problem text",
             impact: "",
             expectations: "",
@@ -2240,7 +2098,7 @@ describe("autocode_plan tools", () => {
         })
     })
 
-    test("returns retryable identity error when plan_read omission cannot be resolved", async () => {
+    test("returns retryable identity error when design omission cannot be resolved", async () => {
         const readdir: ReaddirWithFileTypes = async () => []
         const fs = {
             readFile: mock(async () => {
@@ -2258,18 +2116,18 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodePlanReadTool(client, fs)
+        const tool = createAutocodeDesignReadTool(client, fs)
 
         expect(parseToolResult(await tool.execute({}, createToolContext()))).toMatchObject({
-            failedAction: "read plan",
-            error: "No job_name was found for current session.",
+            failedAction: "read design",
+            error: "Design not found for job: missing_job",
         })
     })
 
     test("saves requirements and constraints as raw markdown", async () => {
         const fs = {
             readFile: mock(async (filePath: string) => {
-                if (filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md") return "# Problems\n\n\n\n---\n\n# Impact\n\n\n\n---\n\n# Expectations\n\n\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
+                if (filePath === "/workspace/.agents/jobs/2026-08-20_10-30-00_my_feature/plan.md") return "# Problems\n\n\n\n---\n\n# Impact\n\n\n\n---\n\n# Expectations\n\n\n\n---\n\n# Requirements\n\n\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
@@ -2287,16 +2145,16 @@ describe("autocode_plan tools", () => {
                 })),
             },
         } as unknown as OpencodeClient
-        const tool = createAutocodeJobDraftTool(client, fs)
+        const tool = createAutocodeDesignWriteTool(client, fs)
 
-        const functionalResult = await executePlanDraft(tool, { requirements: "### First Requirement\n- list item\n> quote\n```json\n{ \"key\": \"value\" }\n```\n### Second Requirement\nAcceptance detail" })
-        const constraintsResult = await executePlanDraft(tool, { constraints: "### First Constraint\n```yaml\ncache: true\n```" })
+        const functionalResult = await tool.execute({ requirements: "### First Requirement\n- list item\n> quote\n```json\n{ \"key\": \"value\" }\n```\n### Second Requirement\nAcceptance detail" }, createToolContext())
+        const constraintsResult = await tool.execute({ constraints: "### First Constraint\n```yaml\ncache: true\n```" }, createToolContext())
 
-        expect(parseToolResult(functionalResult)).toEqual({ job_name: "my_feature", job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md" })
-        expect(parseToolResult(constraintsResult)).toEqual({ job_name: "my_feature", job_path: "/workspace/.agents/jobs/drafts/my_feature/plan.md" })
-        const planWrites = fs.writeFile.mock.calls.filter(([filePath]) => filePath === "/workspace/.agents/jobs/drafts/my_feature/plan.md")
-        expect(planWrites[0]).toEqual(["/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("### First Requirement\n- list item\n> quote\n```json\n{ \"key\": \"value\" }\n```\n### Second Requirement\nAcceptance detail")])
-        expect(planWrites[1]).toEqual(["/workspace/.agents/jobs/drafts/my_feature/plan.md", expect.stringContaining("### First Constraint\n```yaml\ncache: true\n```")])
+        const functionalDesignPath = expectTimestampedDesignPath(parseToolResult(functionalResult))
+        const constraintsDesignPath = expectTimestampedDesignPath(parseToolResult(constraintsResult))
+        const designWrites = fs.writeFile.mock.calls.filter(([filePath]) => filePath === functionalDesignPath || filePath === constraintsDesignPath)
+        expect(designWrites[0]).toEqual([functionalDesignPath, expect.stringContaining("### First Requirement\n- list item\n> quote\n```json\n{ \"key\": \"value\" }\n```\n### Second Requirement\nAcceptance detail")])
+        expect(designWrites[1]).toEqual([constraintsDesignPath, expect.stringContaining("### First Constraint\n```yaml\ncache: true\n```")])
     })
 })
 

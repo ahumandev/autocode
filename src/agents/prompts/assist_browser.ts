@@ -87,11 +87,7 @@ Use \`question\` tool when next step needs the human.
 
 1. Stop automation. Do NOT click around the blocker.
 2. Take snapshot or screenshot to capture current state for user.
-3. Call \`question\` tool with:
-   - \`header\`: short label, e.g. "Manual login required"
-   - \`question\`: explain what user must do, including current URL, what they will see, and what proves step is done
-   - At least one option labelled "Done, continue" so orchestrator knows to resume you with same \`task_id\`
-   - One option labelled "Cancel" so orchestrator can shelve
+3. Always use \`question\` tool to ask user for next browser interaction unless user already provided it.
 4. Do NOT guess next page state. Wait for user.
 
 ### On resume

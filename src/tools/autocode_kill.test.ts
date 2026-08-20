@@ -1,8 +1,11 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { Dirent } from "node:fs"
 import path from "node:path"
+import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { ToolContext } from "@opencode-ai/plugin"
 import type { SandboxDependencies } from "@/utils/sandbox"
 import { createAutocodeKillTool, runAutocodeKill } from "./autocode_kill"
+import { createToolContext } from "./test_context"
 
 type AutocodeKillResult = {
     ok: boolean
@@ -32,7 +35,23 @@ type FakeEntry = {
 }
 
 type TestAutocodeKillDependencies = SandboxDependencies & {
+    fileSystem: SandboxDependencies["fileSystem"] & TestFileSystem
     signalProcess: (pid: number, signal: NodeJS.Signals) => void
+}
+
+type TestFileSystem = {
+    mkdir: ReturnType<typeof mock>
+    readFile: ReturnType<typeof mock>
+    readdir: ReturnType<typeof mock>
+    rm: ReturnType<typeof mock>
+    stat: ReturnType<typeof mock>
+    writeFile: ReturnType<typeof mock>
+}
+
+type FileSystemPathCall = [filePath: string, ...args: unknown[]]
+
+type DirectAutocodeKillTool = {
+    execute: (args: { port?: unknown, name?: string }, context: ToolContext) => Promise<string>
 }
 
 type CreateDepsOptions = {
@@ -73,15 +92,48 @@ function fakeDirent(name: string, type: "dir" | "file"): Dirent {
     return { name, isDirectory: () => type === "dir", isFile: () => type === "file" } as Dirent
 }
 
+function createClient(title: string): OpencodeClient {
+    return { session: { get: mock(async (): Promise<{ data: { title: string } }> => ({ data: { title } })) } } as unknown as OpencodeClient
+}
+
+function getMockedPaths(operation: ReturnType<typeof mock>): string[] {
+    const calls = operation.mock.calls as FileSystemPathCall[]
+    return calls.map(([filePath]: FileSystemPathCall): string => filePath)
+}
+
+function targetsPath(filePath: string, rootPath: string): boolean {
+    return filePath === rootPath || filePath.startsWith(`${rootPath}${path.sep}`)
+}
+
+function expectNoSandboxAccess(deps: TestAutocodeKillDependencies, protectedRoots: readonly string[]): void {
+    const operations: Array<ReturnType<typeof mock>> = [
+        deps.fileSystem.readFile,
+        deps.fileSystem.readdir,
+        deps.fileSystem.rm,
+        deps.fileSystem.writeFile,
+        deps.fileSystem.mkdir,
+    ]
+    for (const operation of operations) {
+        expect(getMockedPaths(operation).some((filePath: string): boolean => protectedRoots.some((rootPath: string): boolean => targetsPath(filePath, rootPath)))).toBe(false)
+    }
+}
+
+function executeAutocodeKill(tool: ReturnType<typeof createAutocodeKillTool>, args: { port?: unknown, name?: string }, context: ToolContext): Promise<string> {
+    return (tool as unknown as DirectAutocodeKillTool).execute(args, context)
+}
+
 function createDeps(projectRoot: string, entries: Record<string, FakeEntry>, options: CreateDepsOptions = {}): TestAutocodeKillDependencies {
+    const fakeEntries: Record<string, FakeEntry> = { ...entries }
+    const relativeEntryPath = (filePath: string): string => path.relative(projectRoot, filePath)
+    const hasEntry = (entryPath: string): boolean => entryPath in fakeEntries || Object.keys(fakeEntries).some((candidatePath: string): boolean => candidatePath.startsWith(`${entryPath}/`))
     const fileSystem = {
-        readFile: mock(async (filePath: string) => entries[path.relative(projectRoot, filePath)]?.content ?? ""),
-        readdir: mock(async (dirPath: string) => {
-            const directory = path.relative(projectRoot, dirPath)
+        readFile: mock(async (filePath: string): Promise<string> => fakeEntries[relativeEntryPath(filePath)]?.content ?? ""),
+        readdir: mock(async (dirPath: string): Promise<Dirent[]> => {
+            const directory = relativeEntryPath(dirPath)
             const prefix = directory ? `${directory}/` : ""
             const children = new Map<string, "dir" | "file">()
 
-            for (const [entryPath, entry] of Object.entries(entries)) {
+            for (const [entryPath, entry] of Object.entries(fakeEntries)) {
                 if (!entryPath.startsWith(prefix)) continue
                 const childPath = entryPath.slice(prefix.length)
                 if (!childPath || childPath.includes("/")) continue
@@ -90,9 +142,18 @@ function createDeps(projectRoot: string, entries: Record<string, FakeEntry>, opt
 
             return [...children.entries()].map(([name, type]) => fakeDirent(name, type))
         }),
-        async mkdir() {},
-        async stat() { return {} },
-        async writeFile() {},
+        mkdir: mock(async (_dirPath: string): Promise<undefined> => undefined),
+        rm: mock(async (filePath: string): Promise<void> => {
+            const entryPath = relativeEntryPath(filePath)
+            for (const candidatePath of Object.keys(fakeEntries)) {
+                if (candidatePath === entryPath || candidatePath.startsWith(`${entryPath}/`)) delete fakeEntries[candidatePath]
+            }
+        }),
+        stat: mock(async (filePath: string): Promise<Record<string, never>> => {
+            if (hasEntry(relativeEntryPath(filePath))) return {}
+            throw new Error(`Missing path: ${filePath}`)
+        }),
+        writeFile: mock(async (_filePath: string, _content: string | Uint8Array): Promise<void> => {}),
     }
     const spawn = mock(async (command: string, args: readonly string[]) => {
         if (command === "ss" && args.join(" ") === "-ltnp") {
@@ -258,6 +319,30 @@ describe("autocode_kill", () => {
         expect(deps.signalProcess).not.toHaveBeenCalled()
     })
 
+    test("skips agents storage before walking descendants", async () => {
+        const projectRoot = "/workspace/project"
+        const deps = createDeps(projectRoot, {
+            ".agents": { type: "dir" },
+            ".agents/sandboxes": { type: "dir" },
+            ".agents/sandboxes/legacy.yml": { type: "file", content: "port: 9999\n" },
+            ".agents/jobs": { type: "dir" },
+            ".agents/jobs/2026-08-20_10-30-00_feature": { type: "dir" },
+            ".agents/jobs/2026-08-20_10-30-00_feature/sandboxes": { type: "dir" },
+            ".agents/jobs/2026-08-20_10-30-00_feature/sandboxes/owned.yml": { type: "file", content: "port: 9999\n" },
+            ".agents/jobs/2026-08-20_10-30-00_feature/service.yml": { type: "file", content: "port: 10001\n" },
+            ".agents/jobs/not_a_workspace": { type: "dir" },
+            ".agents/jobs/not_a_workspace/sandboxes": { type: "dir" },
+            ".agents/jobs/not_a_workspace/sandboxes/service.yml": { type: "file", content: "port: 11111\n" },
+        })
+
+        const output = parseResult(await runAutocodeKill({}, { cwd: projectRoot }, deps))
+        const files = output.candidates?.map((candidate) => candidate.config_file).sort()
+        const agentsPath = path.join(projectRoot, ".agents")
+
+        expect(files).toEqual([])
+        expect(getMockedPaths(deps.fileSystem.readdir).some((directoryPath: string): boolean => targetsPath(directoryPath, agentsPath))).toBe(false)
+    })
+
     test("kills one explicit port listener through injected signalProcess", async () => {
         const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {}, {
@@ -279,6 +364,65 @@ describe("autocode_kill", () => {
         expect(output.port).toBe(3000)
         expect(deps.signalProcess).toHaveBeenCalledTimes(1)
         expect(deps.signalProcess).toHaveBeenCalledWith(3000, "SIGTERM")
+    })
+
+    test("cleans only linked job sandbox storage after a successful kill", async () => {
+        const projectRoot = "/workspace/project"
+        const ownerWorkspace = "2026-08-20_10-30-00_my_feature"
+        const siblingWorkspace = "2026-08-19_10-30-00_sibling_feature"
+        const ownerRoot = path.join(projectRoot, ".agents", "jobs", ownerWorkspace)
+        const ownerSandboxRoot = path.join(ownerRoot, "sandboxes")
+        const ownerSandbox = path.join(ownerSandboxRoot, "dev")
+        const siblingSandboxRoot = path.join(projectRoot, ".agents", "jobs", siblingWorkspace, "sandboxes")
+        const legacySandboxRoot = path.join(projectRoot, ".agents", "sandboxes")
+        const deps = createDeps(projectRoot, {
+            ".agents": { type: "dir" },
+            ".agents/sandboxes": { type: "dir" },
+            ".agents/sandboxes/dev": { type: "dir" },
+            ".agents/sandboxes/dev/sandbox.json": { type: "file", content: "legacy" },
+            ".agents/jobs": { type: "dir" },
+            [`.agents/jobs/${ownerWorkspace}`]: { type: "dir" },
+            [`.agents/jobs/${ownerWorkspace}/session.yml`]: { type: "file", content: "session_id: session-1\n" },
+            [`.agents/jobs/${ownerWorkspace}/sandboxes`]: { type: "dir" },
+            [`.agents/jobs/${ownerWorkspace}/sandboxes/dev`]: { type: "dir" },
+            [`.agents/jobs/${ownerWorkspace}/sandboxes/dev/sandbox.json`]: {
+                type: "file",
+                content: JSON.stringify({ sandbox_name: "dev", job_name: "my_feature", distro: "quick", backend: "bubblewrap", root_path: ownerSandbox }),
+            },
+            [`.agents/jobs/${siblingWorkspace}`]: { type: "dir" },
+            [`.agents/jobs/${siblingWorkspace}/session.yml`]: { type: "file", content: "session_id: session-2\n" },
+            [`.agents/jobs/${siblingWorkspace}/sandboxes`]: { type: "dir" },
+            [`.agents/jobs/${siblingWorkspace}/sandboxes/dev`]: { type: "dir" },
+            [`.agents/jobs/${siblingWorkspace}/sandboxes/dev/sandbox.json`]: { type: "file", content: "sibling" },
+        })
+
+        const output = parseResult(await executeAutocodeKill(
+            createAutocodeKillTool(createClient("Sibling Feature"), deps),
+            { port: 3000, name: "node" },
+            createToolContext({ sessionID: "session-1", directory: projectRoot, worktree: projectRoot }),
+        ))
+
+        expect(output).toEqual({ ok: true, mode: "kill", action: "kill", port: 3000, name: "node", pid: 3000, owner: "alice" })
+        expect(getMockedPaths(deps.fileSystem.rm)).toEqual([ownerSandbox, ownerSandboxRoot])
+        expectNoSandboxAccess(deps, [siblingSandboxRoot, legacySandboxRoot])
+    })
+
+    test("keeps successful kill result when no job workspace owns the session or title", async () => {
+        const projectRoot = "/workspace/project"
+        const deps = createDeps(projectRoot, {
+            ".agents": { type: "dir" },
+            ".agents/jobs": { type: "dir" },
+        })
+
+        const output = parseResult(await executeAutocodeKill(
+            createAutocodeKillTool(createClient("Missing Owner"), deps),
+            { port: 3000, name: "node" },
+            createToolContext({ sessionID: "session-1", directory: projectRoot, worktree: projectRoot }),
+        ))
+
+        expect(output).toEqual({ ok: true, mode: "kill", action: "kill", port: 3000, name: "node", pid: 3000, owner: "alice" })
+        expect(deps.fileSystem.rm).not.toHaveBeenCalled()
+        expect(deps.fileSystem.mkdir).not.toHaveBeenCalled()
     })
 
     test("returns retry when explicit port has no listener", async () => {

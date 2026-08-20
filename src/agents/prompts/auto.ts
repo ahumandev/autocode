@@ -21,7 +21,7 @@ ${implementationDefinitions}
 - Keep \`todowrite\` tool updated with current GOALS.
 - Decide on task execution order.
 - Evaluate your own work against CRITERIA and NEVER stop until SOLUTION is complete.
-- When SOLUTION is complete and evaluated: tell the user to accept it with \`/job-review-commit\` or reject it with \`/job-shelve\`.
+- When SOLUTION is complete and evaluated: report completed work and remaining follow-up to user.
 
 ## Your Subagents Responsibilities
 
@@ -60,8 +60,7 @@ If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREME
 
 * PROPOSAL has failed if \`task\` output of last \`auto_troubleshoot\` requested workaround for current PROPOSAL.
 
-1. Call autocode_job_status with status=\`executing\`
-2. Loop this *PROPOSAL Loop* while PROPOSAL is unclear or failed:
+1. Loop this *PROPOSAL Loop* while PROPOSAL is unclear or failed:
     * \`task\` subagent \`auto_design\` to determine PROPOSAL. 
     * Then if \`task\` output shows:
         - no PROPOSAL is possible, then:
@@ -70,26 +69,14 @@ If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREME
         - new PROPOSAL, then:
             1. replace old PROPOSAL, STEPS and GOALS with new PROPOSAL, STEPS and GOALS
             2. call \`todowrite\` tool to cancel deprecated todos items
-3. Call \`todowrite\` tool to update todos where each item = GOAL in new PROPOSAL
-4. Loop this *Todos Loop* while pending todos items remains:
+2. Call \`todowrite\` tool to update todos where each item = GOAL in new PROPOSAL
+3. Loop this *Todos Loop* while pending todos items remains:
     1. Call \`todowrite\` to set highest priority unblocked pending todos item to \`in_progress\`
     2. Call \`task\` tool to solve todo item.
     3. Evaluate \`task\` output against todo item:
         - pass: Call \`todowrite\` to mark todo item complete and repeat *Todos Loop* with next todo item
         - false: Troubleshoot according to "Trouble Shooting Workflow" section.
-5. When no more todo items remain resume with "Auto Workflow" section.
-
----
-
-## Job Statuses
-
-- when Task Execution: \`status\` = \`executing\`
-- when blocked with same OBSTACLE after 5 attempts: \`status\` = \`facilitate\`
-- when Manual User Task is required: \`status\` = \`facilitate\`
-- when tool output abort error: \`status\` = \`facilitate\`
-- when SOLUTION is complete: \`status\` = \`review\`
-
-Whenever job status changes, call \`autocode_job_status\` with updated \`status\` and reason for status change.
+4. When no more todo items remain resume with "Auto Workflow" section.
 
 ---
 
@@ -118,7 +105,7 @@ Whenever job status changes, call \`autocode_job_status\` with updated \`status\
         - ask for work-around
     5. Use \`task\` output as updated INSTRUCTIONS to alternative PROPOSAL that resolve OBSTACLE.
         
-After the 5 failed PROPOSALS of same OBSTACLE you must abort PROPOSAL and call \`autocode_status\` tool with \`status\` = \`facilitate\`
+After 5 failed PROPOSALS for same OBSTACLE, stop work and report obstacle to user.
 
 ---
 

@@ -1,7 +1,7 @@
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { cp, lstat, realpath } from "node:fs/promises"
 import path from "node:path"
-import { assertSafeSandboxPath, findSandboxLookupMatches, getSandboxPaths, normalizeSandboxName, readSandboxMetadata, resolveSandboxJob, type SandboxDependencies, type SandboxLookupMatch, type SandboxMetadata, type SandboxPaths } from "@/utils/sandbox"
+import { assertDirectSandboxPath, normalizeSandboxName, readSandboxMetadata, resolveSandboxOwner, validateSandboxMetadata, type SandboxDependencies, type SandboxMetadata, type SandboxPaths } from "@/utils/sandbox"
 import { pathExists } from "@/utils/autocode_sandbox_helpers"
 import { createRetryResponse } from "@/utils/tools"
 import type { SessionJobContext } from "@/utils/jobs"
@@ -87,32 +87,19 @@ async function resolveNearestExistingParent(parentPath: string, root: string): P
 export async function resolveSandboxForFileTool(client: OpencodeClient | undefined, context: SessionJobContext, deps: SandboxDependencies, sandboxNameInput: unknown, action: string): Promise<SandboxFileToolResolution> {
     const sandboxName = normalizeSandboxName(sandboxNameInput)
     if (!sandboxName.ok) return { ok: false, response: createRetryResponse(action, sandboxName.reason, "Use an existing sandbox name with lowercase letters, numbers, and underscores only.") }
-    const job = await resolveSandboxJob(client, context, deps.fileSystem)
-    if (!job.ok) return { ok: false, response: createRetryResponse(action, job.reason, "Start or select a planned lifecycle job before using a sandbox.") }
-    const paths = getSandboxPaths(job.storageRoot, job.jobName, sandboxName.value)
-    const safePath = assertSafeSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
+    const owner = await resolveSandboxOwner(deps.fileSystem, client, context, sandboxName.value)
+    if (!owner.ok) return { ok: false, response: createRetryResponse(action, owner.reason, "Start or select a timestamped job workspace before using a sandbox.") }
+    const paths = owner.owner
+    const safePath = assertDirectSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
     if (!safePath.ok) return { ok: false, response: JSON.stringify({ ok: false, status: "unsafe_path", reason: safePath.reason, guidance: limitationGuidance }) }
     const currentPathExists = await pathExists(deps, paths.sandboxPath)
     const metadata = currentPathExists ? await readSandboxMetadata(deps.fileSystem, paths.metadataFile) : undefined
-    if (metadata) {
-        const safeRootPath = assertSafeSandboxPath(metadata.root_path, paths.jobSandboxRoot)
-        if (!safeRootPath.ok) return { ok: false, response: JSON.stringify({ ok: false, status: "unsafe_path", reason: safeRootPath.reason, guidance: limitationGuidance }) }
-        return { ok: true, storageRoot: job.storageRoot, paths, metadata }
+    if (metadata !== undefined) {
+        const metadataValidation = validateSandboxMetadata(paths, metadata)
+        if (!metadataValidation.ok) return { ok: false, response: JSON.stringify({ ok: false, status: "invalid_metadata", reason: metadataValidation.reason, guidance: limitationGuidance }) }
+        return { ok: true, storageRoot: paths.storageRoot, paths, metadata }
     }
-    const matches = await findSandboxLookupMatches(deps.fileSystem, job.storageRoot, sandboxName.value)
-    if (matches.length === 1) return { ok: true, storageRoot: job.storageRoot, paths: matches[0].paths, metadata: matches[0].metadata }
-    if (matches.length > 1) return { ok: false, response: createAmbiguousSandboxResponse(sandboxName.value, matches) }
-    return { ok: false, response: JSON.stringify({ ok: false, status: currentPathExists ? "missing_metadata" : "missing", sandbox_name: sandboxName.value, job_name: job.jobName, guidance: limitationGuidance }) }
-}
-
-function createAmbiguousSandboxResponse(sandboxName: string, matches: SandboxLookupMatch[]): string {
-    return JSON.stringify({
-        ok: false,
-        status: "ambiguous",
-        sandbox_name: sandboxName,
-        candidate_job_names: matches.map((match) => match.paths.jobName),
-        guidance: "Multiple sandboxes have this name; run from the parent job namespace or recreate/delete duplicates before executing.",
-    })
+    return { ok: false, response: JSON.stringify({ ok: false, status: currentPathExists ? "missing_metadata" : "missing", sandbox_name: sandboxName.value, job_name: paths.jobName, guidance: limitationGuidance }) }
 }
 
 export function sandboxRelativePath(root: string, absolutePath: string): string {

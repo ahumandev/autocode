@@ -25,13 +25,11 @@ import { createAutocodeDependenciesTool } from "./autocode_dependencies"
 import { createGitTools } from "./git"
 import { createAutocodeJobExecuteTool } from "./autocode_job_execute"
 import { createAutocodeJobListTool } from "./autocode_job_list"
-import { createAutocodeJobShelveTool } from "./autocode_job_shelve"
-import { createAutocodeJobStatusTool } from "./autocode_job_status"
 import { createAutocodeKillTool } from "./autocode_kill"
 import { createAutocodeProcessKillTool } from "./autocode_process_kill"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
-import { createAutocodePlanReadTool } from "./autocode_plan_read"
-import { createAutocodeJobDraftTool } from "./autocode_job_draft"
+import { createAutocodeDesignReadTool } from "./autocode_design_read"
+import { createAutocodeDesignWriteTool } from "./autocode_design_write"
 import { createAutocodeRestTool } from "./autocode_rest"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
@@ -95,9 +93,7 @@ export function createTools(
         autocode_dependencies: createAutocodeDependenciesTool(undefined, capabilities),
         autocode_job_execute: createAutocodeJobExecuteTool(client),
         autocode_job_list: createAutocodeJobListTool(),
-        autocode_job_shelve: createAutocodeJobShelveTool(client),
-        autocode_job_status: createAutocodeJobStatusTool(client),
-        autocode_kill: createAutocodeKillTool(),
+        autocode_kill: createAutocodeKillTool(client),
         autocode_process_kill: createAutocodeProcessKillTool(),
         autocode_logo_find: createAutocodeLogoFindTool(),
         autocode_md_create: createAutocodeMdCreateTool(),
@@ -107,8 +103,8 @@ export function createTools(
         autocode_md_read: createAutocodeMdReadTool(),
         autocode_md_remove: createAutocodeMdRemoveTool(),
         autocode_md_update: createAutocodeMdUpdateTool(),
-        autocode_plan_read: createAutocodePlanReadTool(client),
-        autocode_job_draft: createAutocodeJobDraftTool(client),
+        autocode_design_read: createAutocodeDesignReadTool(client),
+        autocode_design_write: createAutocodeDesignWriteTool(client),
         autocode_rest: createAutocodeRestTool(client),
         
         autocode_session_context: createAutocodeSessionContextTool(client),

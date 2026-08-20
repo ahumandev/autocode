@@ -94,8 +94,8 @@ export function createLifecycleJobRequiredRetryResponse(failedAction: string, su
 
     return createRetryResponse(
         failedAction,
-        `${target} This tool requires a lifecycle job directory.`,
-        "Switch to a lifecycle job directory under .agents/jobs/*, then retry this tool."
+        `${target} This tool requires a timestamped job workspace.`,
+        "Switch to a timestamped job workspace under .agents/jobs/*, then retry this tool."
     )
 }
 

@@ -14,7 +14,13 @@ flowchart LR
 
 The managed agent catalogue lives in [`src/agents/index.ts`](../src/agents/index.ts), and prompt templates live under [`src/agents/prompts/`](../src/agents/prompts/). Commands are registered in [`src/commands/index.ts`](../src/commands/index.ts), so the published package does not need separate command Markdown files. Generated skills are bundled from source during builds, and [`scripts/copy-skill-sources.ts`](../scripts/copy-skill-sources.ts) copies them into `dist/skills`.
 
-Runtime tools live in [`src/tools/`](../src/tools/). They cover concept and plan management, job lifecycle updates, criteria tracking, read-only database discovery and table reads, REST requests and cached response lookup, sandbox lifecycle operations, cross-project task execution, and session resume support. Shared tool error handling should stay aligned with [`src/utils/tools.ts`](../src/utils/tools.ts) and the agent error rules.
+Runtime tools live in [`src/tools/`](../src/tools/). They cover concepts, design workspace read/write, execution handoff, criteria tracking, read-only database discovery and table reads, REST requests and cached response lookup, sandbox operations, cross-project task execution, and session resume support. Shared tool error handling should stay aligned with [`src/utils/tools.ts`](../src/utils/tools.ts) and the agent error rules.
+
+## Concept and Design Workspace Architecture
+
+`/job-concepts` stores concepts in `.agents/concepts/`; `/job-design` uses a selected concept or current context to prepare a design. `autocode_design_write` creates `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md`, where timestamp is UTC and `{title_dir}` derives from current session title. `autocode_design_read` resolves a supplied `job_name`, or title-derived name, to newest matching workspace.
+
+`autocode_session_create` uses explicit nonblank `prompt` without lookup. A blank prompt derives current-title slug and loads newest matching design; absent match returns retriable provide-`prompt` error. Workspaces persist at creation path: execution does not relocate them or use workspace status transitions. `/job-facilitate` only selects `assist` execution; `/job-execute` selects `auto` execution.
 
 ## Generated skills
 
@@ -35,6 +41,10 @@ Legal files retain their original names in `github/{owner}/{project}/`. Projects
 Linux sandbox execution requires usable [Bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`).
 
 Sandbox tools include `autocode_sandbox_create`, `autocode_sandbox_cli`, `autocode_sandbox_delete`, `autocode_sandbox_read`, `autocode_sandbox_glob`, `autocode_sandbox_grep`, `autocode_sandbox_edit`, and `autocode_sandbox_copy`. Sandboxes expose `/sandbox` for writable work, `/home` for the sandbox home, and `/workspace` as a read-only project mount.
+
+Canonical sandbox path is exactly `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Resolve current job first from its linked session; otherwise use deterministic newest timestamped workspace matching current session-title slug. No owner returns an error before filesystem mutation or process spawn. All sandbox access, list, create, copy, and delete operations stay in resolved current job; never look up sandbox names across jobs, so same `{sandbox_name}` may exist independently in multiple jobs. Never access, fall back to, migrate, scan, delete, or write legacy `.agents/sandboxes`; legacy data remains untouched and inaccessible.
+
+Process kill scans exclude canonical sandbox trees for valid job workspaces; they still scan all other job-workspace files. Cleanup may remove an empty workspace `sandboxes` directory, never its job workspace.
 
 Unsupported hosts include macOS, Windows, Android or Termux, non-Linux systems, and Linux systems without usable `bwrap` or user namespace support. When sandboxing is unsupported, AutoCode disables the sandbox execution agent and force-denies sandbox create, CLI, delete, read, glob, grep, edit, and copy tools.
 

@@ -52,7 +52,7 @@ function deriveSlug(value: string): string {
 }
 
 async function resolveAvailableBacklogPath(fileSystem: FileSystem, worktree: string, baseLabel: string): Promise<{ filePath: string, label: string }> {
-    const backlogDirectory = path.resolve(worktree, ".agents", "jobs", "concepts")
+    const backlogDirectory = path.resolve(worktree, ".agents", "concepts")
 
     for (let attempt = 0; attempt < 1000; attempt++) {
         const label = attempt === 0 ? baseLabel : `${baseLabel}_${attempt + 1}`
@@ -82,9 +82,9 @@ export function createAutocodeConceptCreateTool(
     client?: OpencodeClient,
     fileSystem: FileSystem = defaultFileSystem,
     getNow: () => Date = () => new Date(),
-) {
+): ReturnType<typeof tool> {
     return tool({
-        description: "Create one concept Markdown file in .agents/jobs/concepts/ from a title or label and raw Markdown body.",
+        description: "Create one concept Markdown file in .agents/concepts/ from a title or label and raw Markdown body.",
         args: {
             label: tool.schema.string().optional().describe("Summarize concept in < 10 words."),
             concept: tool.schema.string().describe("Complete concept formatted in Markdown."),
@@ -117,7 +117,7 @@ export function createAutocodeConceptCreateTool(
             }
 
             const storageRoot = resolveAgentsStorageRoot(context)
-            const backlogDirectory = path.join(storageRoot, ".agents", "jobs", "concepts")
+            const backlogDirectory = path.join(storageRoot, ".agents", "concepts")
 
             try {
                 await fileSystem.mkdir(backlogDirectory, { recursive: true })

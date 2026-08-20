@@ -8,7 +8,6 @@ import { createAutocodeAgentExecuteTool } from "./autocode_agent_execute"
 import { createToolContext } from "./test_context"
 
 type ParsedToolResult = {
-    current_status?: string
     error?: string
     failedAction?: string
     instruction?: string
@@ -85,25 +84,7 @@ describe("autocode_agent_execute tool", () => {
         writeFileSync(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: autocodeConfig }))
     }
 
-    test("retries when selected job is already in review", async () => {
-        const fs = createMockFs()
-        const client = createMockClient()
-        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/review" ? ["review_job"] : [])
-
-        const tool = createAutocodeAgentExecuteTool(client, fs)
-        const parsed = parseToolResult(await tool.execute({ job_name: "review_job", agent: "assist" }, createToolContext()))
-
-        expect(parsed).toEqual({
-            failedAction: "autocode_agent_execute",
-            error: "Selected job already in review: review_job",
-            instruction: "Select job outside review before retrying autocode_agent_execute.",
-        })
-        expect(fs.readFile).not.toHaveBeenCalled()
-        expect(fs.rename).not.toHaveBeenCalled()
-        expect(client.session.promptAsync).not.toHaveBeenCalled()
-    })
-
-    test("hands off advise to facilitate lifecycle status", async () => {
+    test.each(["assist", "auto"] as const)("swaps current session to %s with timestamped workspace plan", async (agent) => {
         const worktree = mkdtempSync(join(tmpdir(), "autocode-agent-execute-"))
         try {
             const fs = createMockFs()
@@ -111,30 +92,35 @@ describe("autocode_agent_execute tool", () => {
             writeAutocodeTierConfig(worktree, {
                 tiers: {
                     balanced: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
+                    smart: { model: "openai/gpt-5.5", variant: "thinking" },
                 },
             })
-            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs/drafts` ? ["advise_job"] : [])
+            const workspace = "2026-08-20_10-30-00_advise_job"
+            fs.readdir.mockImplementation(async (dirPath: string) => dirPath === `${worktree}/.agents/jobs` ? [workspace] : [])
             fs.readFile.mockImplementation(async (filePath: string) => {
-                if (filePath === `${worktree}/.agents/jobs/drafts/advise_job/plan.md`) return "# Problem\n\nAdvise execution\n"
+                if (filePath === `${worktree}/.agents/jobs/${workspace}/plan.md`) return "# Problem\n\nExecution\n"
                 throw createMissingError()
             })
 
             const tool = createAutocodeAgentExecuteTool(client, fs)
-            const parsed = parseToolResult(await tool.execute({ job_name: "advise_job", agent: "advise" }, createToolContext({ directory: worktree, worktree })))
+            const parsed = parseToolResult(await tool.execute({ job_name: "advise_job", agent }, createToolContext({ directory: worktree, worktree })))
 
             expect(parsed).toEqual({
-                current_status: "facilitate",
+                job_name: "advise_job",
+                agent,
             })
-            expect(fs.rename).toHaveBeenCalledWith(`${worktree}/.agents/jobs/drafts/advise_job`, `${worktree}/.agents/jobs/facilitate/advise_job`)
             expect(client.session.promptAsync).toHaveBeenCalledWith({
                 path: { id: "session-1" },
                 query: { directory: worktree },
                 body: {
-                    agent: "advise",
-                    model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
-                    parts: [{ type: "text", text: "Selected job: advise_job\n\nplan.md:\n# Problem\n\nAdvise execution\n" }],
+                    agent,
+                    model: agent === "assist"
+                        ? { providerID: "anthropic", modelID: "claude-sonnet-4-5" }
+                        : { providerID: "openai", modelID: "gpt-5.5", variant: "thinking" },
+                    parts: [{ type: "text", text: "Selected job: advise_job\n\nplan:\n# Problem\n\nExecution\n" }],
                 },
             })
+            expect(fs.rename).not.toHaveBeenCalled()
         } finally {
             rmSync(worktree, { recursive: true, force: true })
         }

@@ -1,9 +1,8 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { spawn as nodeSpawn } from "node:child_process"
-import path from "node:path"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
-import { assertSafeSandboxPath, defaultSandboxDependencies, detectSandboxBackend, findSandboxLookupMatches, getSandboxPaths, normalizeSandboxName, readSandboxMetadata, resolveSandboxJob, type SandboxDependencies, type SandboxLookupMatch, type SandboxMetadata, type SandboxPaths } from "@/utils/sandbox"
+import { assertDirectSandboxPath, assertOwnedSandboxRootPath, assertSandboxDescendantPath, defaultSandboxDependencies, detectSandboxBackend, getSandboxHomePath, getSandboxRunLockPath, normalizeSandboxName, readSandboxMetadata, resolveSandboxOwner, validateSandboxMetadata, type SandboxDependencies, type SandboxMetadata, type SandboxPaths } from "@/utils/sandbox"
 import { addBubblewrapBind, addBubblewrapProxyEnv, addOptionalBubblewrapReadOnlyBind, bubblewrapHostNetworkReadOnlyBinds, bubblewrapQuickEtcReadOnlyBinds, bubblewrapQuickRootReadOnlyBinds, optionalPathExists, pathExists } from "@/utils/autocode_sandbox_helpers"
 
 type CliRunResult = {
@@ -56,35 +55,21 @@ type RootfsMetadataValidation =
     | { ok: true, rootfsPath: string }
     | { ok: false, reason: string }
 
-async function resolveSandboxForCli(deps: SandboxDependencies, storageRoot: string, jobName: string, sandboxName: string): Promise<SandboxResolution> {
-    const paths = getSandboxPaths(storageRoot, jobName, sandboxName)
-    const safePath = assertSafeSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
+async function resolveSandboxForCli(deps: SandboxDependencies, paths: SandboxPaths): Promise<SandboxResolution> {
+    const safePath = assertDirectSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
     if (!safePath.ok) return { ok: false, response: JSON.stringify({ ok: false, status: "unsafe_path", reason: safePath.reason, guidance: limitationGuidance }) }
 
     const currentPathExists = await pathExists(deps, paths.sandboxPath)
     const metadata = currentPathExists ? await readSandboxMetadata(deps.fileSystem, paths.metadataFile) : undefined
-    if (metadata) return { ok: true, paths, metadata }
-
-    const matches = await findSandboxLookupMatches(deps.fileSystem, storageRoot, sandboxName)
-    if (matches.length === 1) return { ok: true, paths: matches[0].paths, metadata: matches[0].metadata }
-    if (matches.length > 1) return createAmbiguousSandboxResolution(sandboxName, matches)
-
-    return {
-        ok: false,
-        response: JSON.stringify({ ok: false, status: currentPathExists ? "missing_metadata" : "missing", sandbox_name: sandboxName, job_name: jobName, guidance: limitationGuidance }),
+    if (metadata !== undefined) {
+        const metadataValidation = validateSandboxMetadata(paths, metadata)
+        if (!metadataValidation.ok) return { ok: false, response: JSON.stringify({ ok: false, status: "invalid_metadata", reason: metadataValidation.reason, guidance: limitationGuidance }) }
+        return { ok: true, paths, metadata }
     }
-}
 
-function createAmbiguousSandboxResolution(sandboxName: string, matches: SandboxLookupMatch[]): SandboxResolution {
     return {
         ok: false,
-        response: JSON.stringify({
-            ok: false,
-            status: "ambiguous",
-            sandbox_name: sandboxName,
-            candidate_job_names: matches.map((match) => match.paths.jobName),
-            guidance: "Multiple sandboxes have this name; run from the parent job namespace or recreate/delete duplicates before executing.",
-        }),
+        response: JSON.stringify({ ok: false, status: currentPathExists ? "missing_metadata" : "missing", sandbox_name: paths.sandboxName, job_name: paths.jobName, guidance: limitationGuidance }),
     }
 }
 
@@ -103,22 +88,17 @@ async function validateRootfsMetadata(deps: SandboxDependencies, paths: SandboxP
     const rootfsPath = typeof metadata.backend_data?.rootfs_path === "string" ? metadata.backend_data.rootfs_path : undefined
     if (!rootfsPath) return { ok: false, reason: "Rootfs sandbox metadata must include backend_data.rootfs_path." }
 
-    const safeRootfsPath = assertSafeSandboxPath(rootfsPath, paths.jobSandboxRoot)
+    const safeRootfsPath = assertSandboxDescendantPath(rootfsPath, paths)
     if (!safeRootfsPath.ok) return { ok: false, reason: safeRootfsPath.reason }
-
-    const sandboxRelativePath = path.relative(path.resolve(metadata.root_path), safeRootfsPath.value)
-    if (!sandboxRelativePath || sandboxRelativePath.startsWith("..") || path.isAbsolute(sandboxRelativePath)) {
-        return { ok: false, reason: "Rootfs path must be inside the sandbox root path." }
-    }
 
     if (!await optionalPathExists(deps, safeRootfsPath.value)) return { ok: false, reason: "Rootfs path from sandbox metadata does not exist." }
     return { ok: true, rootfsPath: safeRootfsPath.value }
 }
 
-async function createCommand(deps: SandboxDependencies, metadata: SandboxMetadata, projectRoot: string, workingDir: string, command: string): Promise<{ command: string, args: string[] } | undefined> {
+async function createCommand(deps: SandboxDependencies, paths: SandboxPaths, metadata: SandboxMetadata, projectRoot: string, workingDir: string, command: string): Promise<{ command: string, args: string[] } | undefined> {
     if (metadata.backend !== "bubblewrap") return undefined
 
-    const sandboxHome = path.join(metadata.root_path, "home")
+    const sandboxHome = getSandboxHomePath(paths)
     const filesystemMode = metadata.backend_data?.filesystem_mode === "rootfs" ? "rootfs" : "quick"
     const internetEnabled = metadata.backend_data?.internet_enabled === true
     const args = [
@@ -202,9 +182,9 @@ function runSandboxCommand(command: string, args: string[], timeoutMs: number, d
 
 export function createAutocodeSandboxCliTool(client?: OpencodeClient, deps: SandboxCliDependencies = defaultSandboxDependencies) {
     return tool({
-        description: "Run shell command inside existing sandbox.",
+        description: "Run shell command inside existing sandbox in current resolved job. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before spawning command. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`.",
         args: {
-            sandbox_name: tool.schema.string().describe("Existing sandbox name."),
+            sandbox_name: tool.schema.string().describe("Existing sandbox name inside current resolved job. Same names in other jobs are independent."),
             command: tool.schema.string().describe("Shell command to execute with /bin/sh -lc."),
             working_dir: tool.schema.string().optional().describe("Absolute guest path; defaults to /home/root."),
             timeout: tool.schema.number().optional().describe("Timeout in milliseconds; defaults to 300000."),
@@ -220,9 +200,9 @@ export function createAutocodeSandboxCliTool(client?: OpencodeClient, deps: Sand
             if (!timeout.ok) return createRetryResponse("run sandbox command", timeout.reason, "Provide a positive timeout in milliseconds.")
 
             try {
-                const job = await resolveSandboxJob(client, context, deps.fileSystem)
-                if (!job.ok) return createRetryResponse("run sandbox command", job.reason, "Start or select a planned lifecycle job before using a sandbox.")
-                const sandbox = await resolveSandboxForCli(deps, job.storageRoot, job.jobName, sandboxName.value)
+                const owner = await resolveSandboxOwner(deps.fileSystem, client, context, sandboxName.value)
+                if (!owner.ok) return createRetryResponse("run sandbox command", owner.reason, "Start or select a timestamped job workspace before using a sandbox.")
+                const sandbox = await resolveSandboxForCli(deps, owner.owner)
                 if (!sandbox.ok) return sandbox.response
                 const { paths, metadata } = sandbox
                 const legacyDiagnostic = getLegacyBackendDiagnostic(metadata)
@@ -231,17 +211,17 @@ export function createAutocodeSandboxCliTool(client?: OpencodeClient, deps: Sand
                 if (backend.backend !== "bubblewrap") {
                     return JSON.stringify({ ok: false, status: "unsupported", backend: backend.backend, reason: backend.reason, guidance: backend.guidance ?? limitationGuidance, signals: backend.signals })
                 }
-                const safeRootPath = assertSafeSandboxPath(metadata.root_path, paths.jobSandboxRoot)
+                const safeRootPath = assertOwnedSandboxRootPath(metadata.root_path, paths.sandboxPath, paths.jobSandboxRoot)
                 if (!safeRootPath.ok) return JSON.stringify({ ok: false, status: "unsafe_path", backend: metadata.backend, reason: safeRootPath.reason, guidance: limitationGuidance })
                 if (metadata.backend_data?.filesystem_mode === "rootfs") {
                     const rootfsMetadata = await validateRootfsMetadata(deps, paths, metadata)
                     if (!rootfsMetadata.ok) return JSON.stringify({ ok: false, status: "invalid_metadata", backend: metadata.backend, reason: rootfsMetadata.reason, guidance: limitationGuidance })
                     metadata.backend_data.rootfs_path = rootfsMetadata.rootfsPath
                 }
-                const command = await createCommand(deps, metadata, job.storageRoot, workingDir.value, commandText)
+                const command = await createCommand(deps, paths, metadata, paths.storageRoot, workingDir.value, commandText)
                 if (!command) return JSON.stringify({ ok: false, status: "unsupported", backend: metadata.backend, reason: "Sandbox backend metadata is unsupported or incomplete; bubblewrap metadata is required.", guidance: limitationGuidance })
 
-                const lockPath = path.join(paths.sandboxPath, ".autocode_run_lock")
+                const lockPath = getSandboxRunLockPath(paths)
                 if (!await acquireLock(deps, lockPath)) return JSON.stringify({ ok: false, status: "busy", sandbox_name: sandboxName.value, job_name: paths.jobName, guidance: "A sandbox command is already running for this sandbox." })
                 try {
                     const result = await runSandboxCommand(command.command, command.args, timeout.value, deps)

@@ -35,11 +35,17 @@ Before tool calls, summarize next ACTION in format:
 
 {main reason why ACTION needed summarized in 1 sentence}
 
-{main expectation what ACTION will accomplish summarized in 1 sentence}
+{main expectation what ACTION should accomplish summarized in 1 sentence}
 \`\`\`
 
-* After intermediate tool calls, summarize tool result in one concise sentence.
-* After final tool call or *before* question, provide User Report.
+After intermediate tool calls:
+\`\`\`md
+{summarize tool result in 1 sentence}
+
+* {list discoveries and md links to sources, if any}
+\`\`\`
+
+* After final tool call but *before* question, provide User Report.
 * Inline Markdown links in summary text referring to sources.
 * Never echo tool outputs, except user ask proof
 * When asking user decision/APPROACH/PROPOSAL choice, then present PROPOSAL REPORT:

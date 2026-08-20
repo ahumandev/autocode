@@ -1,17 +1,23 @@
 import { tool } from "@opencode-ai/plugin";
 import type { OpencodeClient } from "@opencode-ai/sdk";
+import { readFile, readdir } from "node:fs/promises";
 import type {
 	PendingAgentHandoffLifecycleFailure,
 	PendingAgentRestartCoordinator,
 } from "@/hooks/agent_restart_coordinator";
-import { restartAutocodeAgentInSession } from "@/hooks/agent_restart";
 import {
 	createAutocodeSession,
 	formatAutocodeSessionTitleForAgent,
 	resolveAutocodeAgentSessionSettings,
 	validateAutocodeSessionCreateInput,
 } from "@/utils/agent_swap";
-import { isJobStatus } from "@/utils/jobs";
+import {
+	deriveJobNameFromTitle,
+	findLatestJobDesignFile,
+	getCurrentSessionTitle,
+	resolveAgentsStorageRoot,
+	type JobDesignFileSystem,
+} from "@/utils/jobs";
 import { cleanSessionTitleSuffix } from "@/utils/session_title";
 import {
 	createAbortResponse,
@@ -27,12 +33,48 @@ type ClientBaseUrlCapability = {
 	};
 };
 
+const defaultJobDesignFileSystem: JobDesignFileSystem = { readdir, readFile };
+
+function hasNonblankPrompt(
+	prompt: string | null | undefined,
+): prompt is string {
+	return prompt !== undefined && prompt !== null && prompt.trim().length > 0;
+}
+
+async function resolveLatestJobDesign(
+	client: OpencodeClient,
+	context: {
+		sessionID: string;
+		directory: string;
+		worktree: string;
+	},
+	fileSystem: JobDesignFileSystem,
+): Promise<string | undefined> {
+	const currentSession = await getCurrentSessionTitle(client, context);
+	if (currentSession.title === undefined) {
+		return undefined;
+	}
+
+	const derivedTitleDirectory = deriveJobNameFromTitle(
+		cleanSessionTitleSuffix(currentSession.title),
+	);
+	if (derivedTitleDirectory.length === 0) {
+		return undefined;
+	}
+
+	return (await findLatestJobDesignFile(
+		fileSystem,
+		resolveAgentsStorageRoot(context),
+		derivedTitleDirectory,
+	))?.content;
+}
+
 function getUsableSourceTitle(title: unknown, fallbackTitle: string): string {
 	if (typeof title !== "string") {
 		return fallbackTitle;
 	}
 
-	const cleanedTitle = cleanSessionTitleSuffix(title, isJobStatus);
+	const cleanedTitle = cleanSessionTitleSuffix(title);
 	return cleanedTitle.trim().length > 0 &&
 		cleanedTitle.trim().toLowerCase() !== "new session"
 		? cleanedTitle
@@ -215,10 +257,10 @@ export function createAutocodeSessionCreateTool(
 	serverUrl?: string | URL,
 	getServerUrl?: () => string | URL | undefined,
 	getWebUrl?: () => string | URL | undefined,
+	fileSystem: JobDesignFileSystem = defaultJobDesignFileSystem,
 ): ReturnType<typeof tool> {
 	return tool({
-		description:
-			"Create a fresh same-title session and queue its agent prompt, or restart current session when prompt is omitted.",
+		description: "Only call when requested by user.",
 		args: {
 			prompt: tool.schema
 				.string()
@@ -227,7 +269,10 @@ export function createAutocodeSessionCreateTool(
 			agent: tool.schema.string().describe("Agent to run after handoff."),
 		},
 		async execute(args, context): Promise<string> {
-			if (args.prompt === undefined || args.prompt === null) {
+			let prompt: string;
+			if (hasNonblankPrompt(args.prompt)) {
+				prompt = args.prompt;
+			} else {
 				if (!client) {
 					return createAbortResponse(
 						"autocode_session_create",
@@ -237,25 +282,31 @@ export function createAutocodeSessionCreateTool(
 				if (!coordinator) {
 					return createAbortResponse(
 						"autocode_session_create",
-						"Unable to create session: handoff lifecycle is unavailable",
+						"Unable to create session: handoff coordinator is unavailable",
 					);
 				}
 
-				return restartAutocodeAgentInSession({
-					client,
-					context: {
-						sessionID: context.sessionID,
-						directory: context.directory,
-						worktree: context.worktree,
-					},
-					targetAgent: args.agent,
-					abort: context.abort,
-					coordinator,
-				});
+				try {
+					const designContent = await resolveLatestJobDesign(
+						client,
+						context,
+						fileSystem,
+					);
+					if (designContent === undefined) {
+						return createRetryResponse(
+							"autocode_session_create",
+							"No matching job design.md found for current session title.",
+							"Provide a nonempty prompt and retry autocode_session_create.",
+						);
+					}
+					prompt = designContent;
+				} catch (error) {
+					return createAbortResponse("autocode_session_create", error);
+				}
 			}
 
 			const validation = validateAutocodeSessionCreateInput(
-				args.prompt,
+				prompt,
 				args.agent,
 			);
 			if ("error" in validation) {
@@ -276,7 +327,7 @@ export function createAutocodeSessionCreateTool(
 			if (!coordinator) {
 				return createAbortResponse(
 					"autocode_session_create",
-					"Unable to create session: handoff lifecycle is unavailable",
+						"Unable to create session: handoff coordinator is unavailable",
 				);
 			}
 			try {
@@ -286,10 +337,10 @@ export function createAutocodeSessionCreateTool(
 					context.sessionID,
 					validation.title,
 				);
-				const destinationTitle =
-					validation.agent === "auto"
-						? formatAutocodeSessionTitleForAgent(cleanSourceTitle, "executing")
-						: cleanSourceTitle;
+				const destinationTitle = formatAutocodeSessionTitleForAgent(
+					cleanSourceTitle,
+					validation.agent,
+				);
 				const sessionSettings = await resolveAutocodeAgentSessionSettings(
 					validation.agent,
 					context.worktree,
@@ -373,9 +424,6 @@ export function createAutocodeSessionCreateTool(
 				return JSON.stringify({
 					session_id: createdSession.sessionID,
 					session_title: destinationTitle,
-					agent: validation.agent,
-					handoff_state: "registered",
-					session_action: "created",
 					message: createSessionMessage(
 						destinationTitle,
 						createdSession.sessionID,

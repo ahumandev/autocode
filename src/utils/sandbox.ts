@@ -4,7 +4,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { cp, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import path from "node:path"
-import { createDirectoryFileSystem, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type PlannedJobIdentityResolution, type ResolvedPlannedJob, type SessionJobContext } from "./jobs"
+import { resolveAgentsStorageRoot, resolveJobWorkspaceIdentity, type JobToolFileSystem, type JobWorkspaceEntry, type SessionJobContext } from "./jobs"
 
 export const allowedSandboxDistros = ["alpine", "debian", "ubuntu", "archlinux", "opensuse"] as const
 export const supportedAlpineArchitectures = ["x86_64", "aarch64", "armv7"] as const
@@ -98,10 +98,6 @@ export type SandboxCleanupDependencies = Omit<SandboxDependencies, "fileSystem">
     fileSystem: SandboxCleanupFileSystem
 }
 
-export type SandboxArchiveDependencies = Omit<SandboxDependencies, "fileSystem"> & {
-    fileSystem: SandboxCleanupFileSystem & Pick<SandboxFileSystem, "mkdir" | "rename">
-}
-
 export type SandboxBackendDetection = {
     backend: SandboxBackend
     reason?: string
@@ -115,19 +111,27 @@ export type SandboxPlatformSupportOptions = {
     bwrapUsable?: boolean
 }
 
-export type SandboxJobResolution =
-    | { ok: true, storageRoot: string, jobName: string, resolvedJob?: ResolvedPlannedJob }
-    | { ok: false, storageRoot: string, identity: PlannedJobIdentityResolution, reason: string }
-
-export type SandboxPaths = {
+export type SandboxOwner = {
     storageRoot: string
+    workspace: JobWorkspaceEntry
     jobName: string
-    sandboxName: string
-    sandboxesRoot: string
+    workspacePath: string
     jobSandboxRoot: string
+}
+
+export type SandboxPaths = SandboxOwner & {
+    sandboxName: string
     sandboxPath: string
     metadataFile: string
 }
+
+export type SandboxOwnerResolution =
+    | { ok: true, owner: SandboxOwner }
+    | { ok: false, reason: string, jobName?: string }
+
+export type NamedSandboxOwnerResolution =
+    | { ok: true, owner: SandboxPaths }
+    | { ok: false, reason: string, jobName?: string }
 
 export type SandboxMetadata = {
     sandbox_name: string
@@ -138,11 +142,6 @@ export type SandboxMetadata = {
     created_at?: string
     updated_at?: string
     backend_data?: Record<string, string | number | boolean | undefined>
-}
-
-export type SandboxLookupMatch = {
-    paths: SandboxPaths
-    metadata: SandboxMetadata
 }
 
 export type SandboxCleanupItemResult = {
@@ -160,16 +159,6 @@ export type SandboxCleanupResult = {
     items: SandboxCleanupItemResult[]
     guidance: string
 }
-
-export type SandboxArchiveItemResult = {
-    sandbox_name: string
-    status: "archived"
-    path: string
-}
-
-export type SandboxArchiveResult =
-    | { ok: true, status: "missing" | "empty" | "archived", job_name: string, archived: number, items: SandboxArchiveItemResult[] }
-    | { ok: false, status: "collision" | "unsafe_path", job_name: string, collision_path?: string, collision_name?: string, reason: string }
 
 export type ManualRootfsDownloadResolution =
     | { ok: true, distro: SandboxDistro, architecture: ManualArchitecture, url: string, archive_format: ManualRootfsArchiveFormat, strip_components?: number, version?: string, verification?: Record<string, string | number | boolean | undefined> }
@@ -715,25 +704,22 @@ function parseExpire(value: string | number | undefined, effectiveMethod: Effect
     return amount
 }
 
-async function collectReferencedCacheEntries(fileSystem: Pick<SandboxFileSystem, "readFile" | "readdir" | "stat">, sandboxesRoot: string): Promise<Set<string>> {
+async function collectReferencedCacheEntries(fileSystem: Pick<SandboxFileSystem, "readFile" | "readdir" | "stat">, jobSandboxRoot: string): Promise<Set<string>> {
     const references = new Set<string>()
-    for (const jobEntry of await readDirectoryEntries(fileSystem, sandboxesRoot)) {
-        if (!jobEntry.isDirectory()) continue
-        for (const sandboxEntry of await readDirectoryEntries(fileSystem, path.join(sandboxesRoot, jobEntry.name))) {
-            if (!sandboxEntry.isDirectory()) continue
-            const metadata = await readSandboxMetadata(fileSystem, path.join(sandboxesRoot, jobEntry.name, sandboxEntry.name, metadataFileName))
-            const entry = metadata?.backend_data?.cache_entry_path
-            if (typeof entry === "string") references.add(path.resolve(entry))
-        }
+    for (const sandboxEntry of await readDirectoryEntries(fileSystem, jobSandboxRoot)) {
+        if (!sandboxEntry.isDirectory()) continue
+        const metadata = await readSandboxMetadata(fileSystem, path.join(jobSandboxRoot, sandboxEntry.name, metadataFileName))
+        const entry = metadata?.backend_data?.cache_entry_path
+        if (typeof entry === "string") references.add(path.resolve(entry))
     }
     return references
 }
 
-export async function cleanupExpiredSandboxCacheEntries(cache: SandboxCacheEntry, storageRoot: string, config: SandboxConfig | undefined, effectiveMethod: EffectiveSandboxSyncMethod, deps: SandboxDependencies = defaultSandboxDependencies): Promise<void> {
+export async function cleanupExpiredSandboxCacheEntries(cache: SandboxCacheEntry, owner: SandboxOwner, config: SandboxConfig | undefined, effectiveMethod: EffectiveSandboxSyncMethod, deps: SandboxDependencies = defaultSandboxDependencies): Promise<void> {
     const ttl = parseExpire(config?.distro_expire, effectiveMethod)
     if (ttl === undefined) return
     const parent = path.dirname(cache.entry_path)
-    const references = await collectReferencedCacheEntries(deps.fileSystem, path.join(storageRoot, ".agents", "sandboxes"))
+    const references = await collectReferencedCacheEntries(deps.fileSystem, owner.jobSandboxRoot)
     const now = Date.now()
     for (const entry of await readDirectoryEntries(deps.fileSystem, parent)) {
         if (!entry.isDirectory()) continue
@@ -743,34 +729,6 @@ export async function cleanupExpiredSandboxCacheEntries(cache: SandboxCacheEntry
         const createdAt = metadata?.created_at ? Date.parse(metadata.created_at) : NaN
         if (Number.isFinite(createdAt) && now - createdAt > ttl) await deps.fileSystem.rm?.(entryPath, { recursive: true, force: true })
     }
-}
-
-export function getJobSandboxRoot(storageRoot: string, jobName: string): string {
-    return path.join(storageRoot, ".agents", "sandboxes", jobName)
-}
-
-export function getNamedSandboxPath(storageRoot: string, jobName: string, sandboxName: string): string {
-    return path.join(getJobSandboxRoot(storageRoot, jobName), sandboxName)
-}
-
-export function getSandboxPaths(storageRoot: string, jobName: string, sandboxName: string): SandboxPaths {
-    const jobSandboxRoot = getJobSandboxRoot(storageRoot, jobName)
-    const sandboxPath = path.join(jobSandboxRoot, sandboxName)
-
-    return {
-        storageRoot,
-        jobName,
-        sandboxName,
-        sandboxesRoot: path.join(storageRoot, ".agents", "sandboxes"),
-        jobSandboxRoot,
-        sandboxPath,
-        metadataFile: path.join(sandboxPath, metadataFileName),
-    }
-}
-
-export function createSandboxAlias(jobName: string, sandboxName: string): string {
-    const hash = createHash("sha256").update(jobName).digest("hex").slice(0, 12)
-    return `autocode_${hash}_${sandboxName}`.slice(0, 48)
 }
 
 export function assertSafeSandboxPath(candidatePath: string, jobSandboxRoot: string): SandboxValidationResult<string> {
@@ -792,57 +750,145 @@ export function assertSafeSandboxPath(candidatePath: string, jobSandboxRoot: str
     return { ok: true, value: resolvedPath }
 }
 
-export function assertSafeSandboxDeletionPath(candidatePath: string, storageRoot: string, jobSandboxRoot: string): SandboxValidationResult<string> {
-    const resolvedStorageRoot = path.resolve(storageRoot)
-    const resolvedAgentsRoot = path.join(resolvedStorageRoot, ".agents")
-    const resolvedSandboxesRoot = path.join(resolvedAgentsRoot, "sandboxes")
-    const resolvedPath = path.resolve(candidatePath)
-
-    if ([resolvedAgentsRoot, resolvedSandboxesRoot, path.resolve(jobSandboxRoot)].includes(resolvedPath)) {
-        return { ok: false, reason: "Refusing to delete protected sandbox storage directory." }
+export function assertDirectSandboxPath(candidatePath: string, jobSandboxRoot: string): SandboxValidationResult<string> {
+    const safePath = assertSafeSandboxPath(candidatePath, jobSandboxRoot)
+    if (!safePath.ok) return safePath
+    if (path.dirname(safePath.value) !== path.resolve(jobSandboxRoot)) {
+        return { ok: false, reason: "Sandbox path must be a direct child of the current job sandbox root." }
     }
-
-    return assertSafeSandboxPath(candidatePath, jobSandboxRoot)
+    return safePath
 }
 
-function assertSafeJobSandboxRootDeletionPath(candidatePath: string, storageRoot: string, jobName: string): SandboxValidationResult<string> {
-    const resolvedStorageRoot = path.resolve(storageRoot)
-    const resolvedAgentsRoot = path.join(resolvedStorageRoot, ".agents")
-    const resolvedSandboxesRoot = path.join(resolvedAgentsRoot, "sandboxes")
-    const resolvedExpectedRoot = path.resolve(getJobSandboxRoot(storageRoot, jobName))
-    const resolvedPath = path.resolve(candidatePath)
-    const relativePath = path.relative(resolvedSandboxesRoot, resolvedExpectedRoot)
-
+export function assertSandboxDescendantPath(candidatePath: string, paths: SandboxPaths): SandboxValidationResult<string> {
+    const safePath = assertSafeSandboxPath(candidatePath, paths.jobSandboxRoot)
+    if (!safePath.ok) return safePath
+    const relativePath = path.relative(path.resolve(paths.sandboxPath), safePath.value)
     if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+        return { ok: false, reason: "Sandbox path must be inside the resolved sandbox directory." }
+    }
+    return safePath
+}
+
+export function assertOwnedSandboxRootPath(candidatePath: string, sandboxPath: string, jobSandboxRoot: string): SandboxValidationResult<string> {
+    const safePath = assertDirectSandboxPath(candidatePath, jobSandboxRoot)
+    if (!safePath.ok) return safePath
+    if (safePath.value !== path.resolve(sandboxPath)) {
+        return { ok: false, reason: "Sandbox root path must match the resolved sandbox directory." }
+    }
+    return safePath
+}
+
+export function validateSandboxMetadata(paths: SandboxPaths, metadata: SandboxMetadata): SandboxValidationResult<SandboxMetadata> {
+    const metadataValue: unknown = metadata
+    if (typeof metadataValue !== "object" || metadataValue === null || Array.isArray(metadataValue)) {
+        return { ok: false, reason: "Sandbox metadata must be an object." }
+    }
+
+    const record = metadataValue as Record<string, unknown>
+    if (record.sandbox_name !== paths.sandboxName) {
+        return { ok: false, reason: "Sandbox metadata name must match the resolved sandbox name." }
+    }
+    if (record.job_name !== paths.jobName) {
+        return { ok: false, reason: "Sandbox metadata job name must match the resolved job workspace." }
+    }
+    if (typeof record.root_path !== "string") {
+        return { ok: false, reason: "Sandbox metadata root path must be a string." }
+    }
+
+    const safeRootPath = assertOwnedSandboxRootPath(record.root_path, paths.sandboxPath, paths.jobSandboxRoot)
+    if (!safeRootPath.ok) return safeRootPath
+    return { ok: true, value: metadata }
+}
+
+export function getSandboxHomePath(paths: SandboxPaths): string {
+    return path.join(paths.sandboxPath, "home")
+}
+
+export function getSandboxRootHomePath(paths: SandboxPaths): string {
+    return path.join(getSandboxHomePath(paths), "root")
+}
+
+export function getSandboxRootfsPath(paths: SandboxPaths): string {
+    return path.join(paths.sandboxPath, "rootfs")
+}
+
+export function getSandboxRunLockPath(paths: SandboxPaths): string {
+    return path.join(paths.sandboxPath, ".autocode_run_lock")
+}
+
+export function assertSafeSandboxDeletionPath(candidatePath: string, jobSandboxRoot: string): SandboxValidationResult<string> {
+    const resolvedJobSandboxRoot = path.resolve(jobSandboxRoot)
+    const resolvedPath = path.resolve(candidatePath)
+
+    if (resolvedPath === resolvedJobSandboxRoot) {
         return { ok: false, reason: "Refusing to delete protected sandbox storage directory." }
     }
-    if ([resolvedAgentsRoot, resolvedSandboxesRoot].includes(resolvedPath)) {
+
+    return assertDirectSandboxPath(candidatePath, jobSandboxRoot)
+}
+
+function assertSafeJobSandboxRootDeletionPath(candidatePath: string, owner: SandboxOwner): SandboxValidationResult<string> {
+    const resolvedWorkspacePath = path.resolve(owner.workspacePath)
+    const resolvedExpectedRoot = path.join(resolvedWorkspacePath, "sandboxes")
+    const resolvedPath = path.resolve(candidatePath)
+
+    if (path.resolve(owner.jobSandboxRoot) !== resolvedExpectedRoot || resolvedPath !== resolvedExpectedRoot || resolvedPath === resolvedWorkspacePath) {
         return { ok: false, reason: "Refusing to delete protected sandbox storage directory." }
-    }
-    if (resolvedPath !== resolvedExpectedRoot) {
-        return { ok: false, reason: "Job sandbox root must match the resolved job sandbox directory." }
     }
 
     return { ok: true, value: resolvedPath }
 }
 
-export async function resolveSandboxJob(
+export function resolveSandboxOwner(
+    fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir">,
     client: OpencodeClient | undefined,
     context: SessionJobContext,
-    fileSystem: JobToolFileSystem = defaultSandboxDependencies.fileSystem,
-    jobNameOverride?: string,
-): Promise<SandboxJobResolution> {
-    const storageRoot = resolveAgentsStorageRoot(context)
-    const identity = await resolvePlannedJobIdentity(createDirectoryFileSystem(fileSystem), client, context, { jobNameOverride: jobNameOverride ?? "", includeShelved: true, ignoreCollisions: true })
-
-    if (identity.resolution === "found" && identity.resolved_job && identity.job_name) {
-        return { ok: true, storageRoot, jobName: identity.job_name, resolvedJob: identity.resolved_job }
+): Promise<SandboxOwnerResolution>
+export function resolveSandboxOwner(
+    fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir">,
+    client: OpencodeClient | undefined,
+    context: SessionJobContext,
+    sandboxName: string,
+): Promise<NamedSandboxOwnerResolution>
+export async function resolveSandboxOwner(
+    fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir">,
+    client: OpencodeClient | undefined,
+    context: SessionJobContext,
+    sandboxName?: string,
+): Promise<SandboxOwnerResolution | NamedSandboxOwnerResolution> {
+    const identity = await resolveJobWorkspaceIdentity(fileSystem, client, {
+        sessionID: context.sessionID,
+        directory: context.directory,
+        worktree: context.worktree,
+    })
+    if (identity.resolution !== "found" || !identity.workspace || !identity.job_name) {
+        return {
+            ok: false,
+            reason: "No timestamped job workspace was found for the current session.",
+            jobName: identity.job_name,
+        }
     }
-    if (identity.job_name) {
-        return { ok: true, storageRoot, jobName: identity.job_name }
-    }
 
-    return { ok: false, storageRoot, identity, reason: identity.warning ?? "Sandbox operations require a resolved planned lifecycle job." }
+    const owner: SandboxOwner = {
+        storageRoot: resolveAgentsStorageRoot(context),
+        workspace: identity.workspace,
+        jobName: identity.job_name,
+        workspacePath: identity.workspace.absolute_path,
+        jobSandboxRoot: path.join(identity.workspace.absolute_path, "sandboxes"),
+    }
+    if (sandboxName === undefined) return { ok: true, owner }
+
+    return { ok: true, owner: createSandboxPaths(owner, sandboxName) }
+}
+
+function createSandboxPaths(owner: SandboxOwner, sandboxName: string): SandboxPaths {
+    const sandboxPath = path.join(owner.jobSandboxRoot, sandboxName)
+    return {
+        ...owner,
+        sandboxName,
+        sandboxPath,
+        metadataFile: path.join(sandboxPath, metadataFileName),
+    }
 }
 
 async function isCommandCallable(command: string, deps: Pick<SandboxDependencies, "commandExists" | "spawn" | "process">): Promise<boolean> {
@@ -1016,40 +1062,6 @@ async function readDirectoryEntries(fileSystem: Pick<SandboxFileSystem, "readdir
     }
 }
 
-async function readValidSandboxLookupMatch(fileSystem: Pick<SandboxFileSystem, "readFile" | "stat">, paths: SandboxPaths): Promise<SandboxLookupMatch | undefined> {
-    const safeSandboxPath = assertSafeSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
-    if (!safeSandboxPath.ok) return undefined
-    if (!await pathExists(fileSystem, safeSandboxPath.value)) return undefined
-
-    const metadata = await readSandboxMetadata(fileSystem, paths.metadataFile)
-    if (!metadata) return undefined
-    if (metadata.sandbox_name !== paths.sandboxName || metadata.job_name !== paths.jobName) return undefined
-
-    const safeRootPath = assertSafeSandboxPath(metadata.root_path, paths.jobSandboxRoot)
-    if (!safeRootPath.ok) return undefined
-
-    return { paths, metadata }
-}
-
-export async function findSandboxLookupMatches(
-    fileSystem: Pick<SandboxFileSystem, "readFile" | "readdir" | "stat">,
-    storageRoot: string,
-    sandboxName: string,
-): Promise<SandboxLookupMatch[]> {
-    const sandboxesRoot = path.join(storageRoot, ".agents", "sandboxes")
-    const entries = await readDirectoryEntries(fileSystem, sandboxesRoot)
-    const matches: SandboxLookupMatch[] = []
-
-    for (const entry of entries) {
-        if (!entry.isDirectory()) continue
-        const paths = getSandboxPaths(storageRoot, entry.name, sandboxName)
-        const match = await readValidSandboxLookupMatch(fileSystem, paths)
-        if (match) matches.push(match)
-    }
-
-    return matches
-}
-
 async function pathExists(fileSystem: Pick<SandboxFileSystem, "stat">, candidatePath: string): Promise<boolean> {
     try {
         await fileSystem.stat(candidatePath)
@@ -1077,17 +1089,11 @@ async function removePath(fileSystem: Pick<SandboxCleanupFileSystem, "rm">, cand
     await fileSystem.rm(candidatePath, { recursive: true, force: true })
 }
 
-function isPathCollisionError(error: unknown): boolean {
-    return ["EEXIST", "ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code ?? "")
-}
-
 export async function cleanupEmptyJobSandboxRoot(
-    storageRoot: string,
-    jobName: string,
+    owner: SandboxOwner,
     deps: SandboxCleanupDependencies = defaultSandboxDependencies,
 ): Promise<boolean> {
-    const jobSandboxRoot = getJobSandboxRoot(storageRoot, jobName)
-    const safePath = assertSafeJobSandboxRootDeletionPath(jobSandboxRoot, storageRoot, jobName)
+    const safePath = assertSafeJobSandboxRootDeletionPath(owner.jobSandboxRoot, owner)
     if (!safePath.ok) return false
     if (!await pathExists(deps.fileSystem, safePath.value)) return false
 
@@ -1098,89 +1104,19 @@ export async function cleanupEmptyJobSandboxRoot(
     return true
 }
 
-function assertSafeShelvedSandboxArchivePath(candidatePath: string, shelvedJobPath: string): SandboxValidationResult<string> {
-    if (!candidatePath.trim()) return { ok: false, reason: "Sandbox archive path must be non-empty." }
-    if (candidatePath.split(/[\\/]+/).includes("..")) {
-        return { ok: false, reason: "Sandbox archive path must not contain unsafe relative traversal." }
-    }
-
-    const resolvedRoot = path.resolve(shelvedJobPath)
-    const resolvedPath = path.resolve(candidatePath)
-    const relativePath = path.relative(resolvedRoot, resolvedPath)
-    if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-        return { ok: false, reason: "Sandbox archive path must be inside the shelved job directory." }
-    }
-    if (relativePath.split(path.sep).includes("..")) {
-        return { ok: false, reason: "Sandbox archive path must not contain unsafe relative traversal." }
-    }
-
-    return { ok: true, value: resolvedPath }
-}
-
-export async function archiveJobSandboxesForShelvedJob(
-    storageRoot: string,
-    jobName: string,
-    shelvedJobPath: string,
-    deps: SandboxArchiveDependencies = defaultSandboxDependencies,
-): Promise<SandboxArchiveResult> {
-    const jobSandboxRoot = getJobSandboxRoot(storageRoot, jobName)
-    const safeSourcePath = assertSafeJobSandboxRootDeletionPath(jobSandboxRoot, storageRoot, jobName)
-    if (!safeSourcePath.ok) return { ok: false, status: "unsafe_path", job_name: jobName, reason: safeSourcePath.reason }
-    if (!await pathExists(deps.fileSystem, safeSourcePath.value)) {
-        return { ok: true, status: "missing", job_name: jobName, archived: 0, items: [] }
-    }
-
-    const entries = await deps.fileSystem.readdir(safeSourcePath.value, { withFileTypes: true }) as import("fs").Dirent[]
-    const sandboxDirectories = entries.filter((entry) => entry.isDirectory())
-    if (sandboxDirectories.length === 0) {
-        await cleanupEmptyJobSandboxRoot(storageRoot, jobName, deps)
-        return { ok: true, status: "empty", job_name: jobName, archived: 0, items: [] }
-    }
-
-    const archiveRoot = path.join(shelvedJobPath, "sandboxes")
-    const safeArchiveRoot = assertSafeShelvedSandboxArchivePath(archiveRoot, shelvedJobPath)
-    if (!safeArchiveRoot.ok) return { ok: false, status: "unsafe_path", job_name: jobName, reason: safeArchiveRoot.reason }
-
-    for (const entry of sandboxDirectories) {
-        const destinationPath = path.join(safeArchiveRoot.value, entry.name)
-        const safeDestinationPath = assertSafeShelvedSandboxArchivePath(destinationPath, shelvedJobPath)
-        if (!safeDestinationPath.ok) return { ok: false, status: "unsafe_path", job_name: jobName, reason: safeDestinationPath.reason }
-        if (await pathExists(deps.fileSystem, safeDestinationPath.value)) {
-            return { ok: false, status: "collision", job_name: jobName, collision_path: safeDestinationPath.value, collision_name: entry.name, reason: `Sandbox archive destination already exists: ${safeDestinationPath.value}` }
-        }
-    }
-
-    await deps.fileSystem.mkdir(safeArchiveRoot.value, { recursive: true })
-    const items: SandboxArchiveItemResult[] = []
-    for (const entry of sandboxDirectories) {
-        const sourcePath = path.join(safeSourcePath.value, entry.name)
-        const destinationPath = path.join(safeArchiveRoot.value, entry.name)
-        if (!deps.fileSystem.rename) throw new Error("Unable to archive sandbox directory: rename is unavailable")
-        try {
-            await deps.fileSystem.rename(sourcePath, destinationPath)
-        }
-        catch (error) {
-            if (isPathCollisionError(error)) {
-                return { ok: false, status: "collision", job_name: jobName, collision_path: destinationPath, collision_name: entry.name, reason: `Sandbox archive destination already exists: ${destinationPath}` }
-            }
-            throw error
-        }
-        items.push({ sandbox_name: entry.name, status: "archived", path: destinationPath })
-    }
-
-    await cleanupEmptyJobSandboxRoot(storageRoot, jobName, deps)
-    return { ok: true, status: "archived", job_name: jobName, archived: items.length, items }
-}
-
 export async function deleteSandboxPath(
     paths: SandboxPaths,
     deps: SandboxCleanupDependencies = defaultSandboxDependencies,
 ): Promise<SandboxCleanupItemResult> {
-    const safePath = assertSafeSandboxDeletionPath(paths.sandboxPath, paths.storageRoot, paths.jobSandboxRoot)
+    const safePath = assertSafeSandboxDeletionPath(paths.sandboxPath, paths.jobSandboxRoot)
     if (!safePath.ok) return { sandbox_name: paths.sandboxName, status: "warning", warning: safePath.reason }
     if (!await pathExists(deps.fileSystem, safePath.value)) return { sandbox_name: paths.sandboxName, status: "missing" }
 
     const metadata = await readSandboxMetadata(deps.fileSystem, paths.metadataFile)
+    if (metadata !== undefined) {
+        const metadataValidation = validateSandboxMetadata(paths, metadata)
+        if (!metadataValidation.ok) return { sandbox_name: paths.sandboxName, status: "warning", warning: metadataValidation.reason }
+    }
     const warning = metadata?.backend === "termux_proot_distro" || metadata?.backend === "manual_proot"
         ? `Legacy sandbox backend ${metadata.backend} is unsupported; deleted sandbox storage only. Recreate the sandbox under bubblewrap.`
         : undefined
@@ -1192,14 +1128,13 @@ export async function deleteSandboxPath(
 }
 
 export async function cleanupJobSandboxes(
-    storageRoot: string,
-    jobName: string,
+    owner: SandboxOwner,
     deps: SandboxCleanupDependencies = defaultSandboxDependencies,
 ): Promise<SandboxCleanupResult> {
-    const jobSandboxRoot = getJobSandboxRoot(storageRoot, jobName)
+    const jobSandboxRoot = owner.jobSandboxRoot
     const guidance = "Sandbox cleanup removes bubblewrap sandbox storage directories; legacy proot metadata is not executed or removed through proot-distro."
     if (!await pathExists(deps.fileSystem, jobSandboxRoot)) {
-        return { ok: true, status: "missing", job_name: jobName, deleted: 0, warnings: [], items: [], guidance }
+        return { ok: true, status: "missing", job_name: owner.jobName, deleted: 0, warnings: [], items: [], guidance }
     }
 
     const entries = await deps.fileSystem.readdir(jobSandboxRoot, { withFileTypes: true }) as import("fs").Dirent[]
@@ -1212,15 +1147,15 @@ export async function cleanupJobSandboxes(
             items.push({ sandbox_name: name, status: "warning", warning: validName.reason })
             continue
         }
-        items.push(await deleteSandboxPath(getSandboxPaths(storageRoot, jobName, validName.value), deps))
+        items.push(await deleteSandboxPath(createSandboxPaths(owner, validName.value), deps))
     }
-    await cleanupEmptyJobSandboxRoot(storageRoot, jobName, deps)
+    await cleanupEmptyJobSandboxRoot(owner, deps)
 
     const warnings = items.flatMap((item) => item.warning ? [item.warning] : [])
     return {
         ok: warnings.length === 0,
         status: warnings.length > 0 ? "warning" : "deleted",
-        job_name: jobName,
+        job_name: owner.jobName,
         deleted: items.filter((item) => item.status === "deleted").length,
         warnings,
         items,

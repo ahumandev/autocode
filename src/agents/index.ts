@@ -122,7 +122,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         permission: {
             "*": "deny",
             autocode_config_read: "allow",
-            autocode_job_status: "allow",
             autocode_md_frontmatter_read: "allow",
             autocode_md_read: "allow",
             autocode_session_create: "allow",
@@ -162,7 +161,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         permission: {
             "*": "deny",
             "autocode_config_*": "allow",
-            autocode_job_status: "allow",
             "autocode_md_*": "allow",
             autocode_sandbox_create: "ask",
             autocode_sandbox_delete: "allow",
@@ -207,8 +205,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         mode: "primary",
         permission: {
             "*": "deny",
-            autocode_job_shelve: "allow",
-            autocode_job_status: "allow",
             autocode_session_create: "allow",
             git_commit: "allow",
             skill: {
@@ -245,7 +241,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             autocode_concept_read: "allow",
             autocode_job_execute: "allow",
             autocode_job_list: "allow",
-            autocode_job_draft: "allow",
+            autocode_design_read: "allow",
+            autocode_design_write: "allow",
             autocode_session_create: "allow",
             doom_loop: "ask",
             external_directory: "ask",

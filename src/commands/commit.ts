@@ -13,5 +13,5 @@ $ARGUMENTS
 4. Use \`git-commit\` skill to Create Git Commit message based on SOLUTION + Reason.
 5. Commit with \`git_commit\` tool - NEVER any other tool
 6. Only if git tools fails: Tell user exact Git commit message wrapped in md block.
-7. Lastly when done, call \`autocode_job_shelve\` tool (if possible), then stop.
+7. Then stop.
 `

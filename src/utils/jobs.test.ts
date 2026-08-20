@@ -1,409 +1,99 @@
-import { describe, expect, mock, test } from "bun:test"
-import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createShelvedCollisionJobName, deriveJobNameFromTitle, deriveJobTitleFromFileName, formatJobSessionTitle, getCanonicalDirectoryForStatus, getCanonicalDirectoryPathForStatus, getCurrentSessionTitle, getDefaultStatusForDirectory, getRelativeConceptFilePath, getStorageRelativePath, isCompatibleJobName, isJobStatus, jobStatuses, moveResolvedPlannedJobToStatus, resolveAgentsStorageRoot, resolvePlannedJobIdentity } from "./jobs"
+import { describe, expect, test } from "bun:test"
+import { createJobWorkspace, deriveJobNameFromTitle, resolveAgentsStorageRoot, resolveJobWorkspaceIdentity, type JobToolFileSystem, type JobWorkspaceFileSystem } from "./jobs"
 
-function createFileSystem(activeJobs: Record<string, string[]> = {}, files: Record<string, string> = {}) {
+function createFileSystem(): { fileSystem: JobWorkspaceFileSystem, files: Map<string, string> } {
+    const directories = new Set<string>()
+    const files = new Map<string, string>()
+    const fileSystem: JobWorkspaceFileSystem = {
+        async mkdir(dirPath: string, options?: { recursive?: boolean }): Promise<string | undefined> {
+            if (!options?.recursive && directories.has(dirPath)) {
+                const error = new Error("exists") as NodeJS.ErrnoException
+                error.code = "EEXIST"
+                throw error
+            }
+
+            directories.add(dirPath)
+            return undefined
+        },
+        async writeFile(filePath: string, content: string): Promise<void> {
+            files.set(filePath, content)
+        },
+    }
+
+    return { fileSystem, files }
+}
+
+function createIdentityFileSystem(workspaces: string[], sessionFiles: Record<string, string>): Pick<JobToolFileSystem, "readFile" | "readdir"> {
     return {
-        readFile: mock(async (filePath: string, _encoding: "utf8") => {
-            if (filePath in files) return files[filePath]
+        async readdir(): Promise<string[]> {
+            return workspaces
+        },
+        async readFile(filePath: string): Promise<string> {
+            const content = sessionFiles[filePath]
+            if (content !== undefined) return content
             const error = new Error("missing") as NodeJS.ErrnoException
             error.code = "ENOENT"
             throw error
-        }),
-        readdir: mock(async (dirPath: string, _options: { withFileTypes: true }) => {
-            const lifecycle = dirPath.replace("/workspace/.agents/jobs/", "").replace(/\/$/, "")
-            return (activeJobs[lifecycle] ?? []).map((name) => ({
-                name,
-                isDirectory: () => true,
-                isFile: () => false,
-            })) as import("fs").Dirent[]
-        }),
+        },
     }
 }
 
-function createClient(title: string | null | undefined, messages: Array<{ info: { id: string, role: "user" | "assistant", time: { created: number } }, parts: Array<{ type: "text", text: string, messageID?: string }> }> = []): OpencodeClient {
-    return {
-        session: {
-            get: mock(async (args: { path: { id: string }, query: { directory: string } }) => ({
-                data: {
-                    id: args.path.id,
-                    title,
-                },
-            })),
-            messages: mock(async () => ({ data: messages })),
-        },
-    } as unknown as OpencodeClient
-}
+describe("job workspace utilities", () => {
+    test("creates timestamped design workspace with stable title conversion", async () => {
+        const { fileSystem, files } = createFileSystem()
+        const workspace = await createJobWorkspace(
+            fileSystem,
+            { directory: "/workspace", worktree: "/workspace" },
+            "Feature: Fix API / UI",
+            "# Design\n",
+            new Date("2026-06-02T10:11:12Z"),
+        )
 
-function createSessionChainClient(sessions: Record<string, { parentID?: string | null, title?: string | null }>, messages: Array<{ info: { id: string, role: "user" | "assistant", time: { created: number } }, parts: Array<{ type: "text", text: string, messageID?: string }> }> = [], failingSessionIDs: string[] = []): OpencodeClient {
-    return {
-        session: {
-            get: mock(async (args: { path: { id: string }, query: { directory: string } }) => {
-                if (failingSessionIDs.includes(args.path.id)) {
-                    return { error: `missing ${args.path.id}` }
-                }
-
-                const session = sessions[args.path.id]
-                return {
-                    data: {
-                        id: args.path.id,
-                        parentID: session?.parentID,
-                        title: session?.title,
-                    },
-                }
-            }),
-            messages: mock(async () => ({ data: messages })),
-        },
-    } as unknown as OpencodeClient
-}
-
-function createCollisionError(): NodeJS.ErrnoException {
-    const error = new Error("collision") as NodeJS.ErrnoException
-    error.code = "EEXIST"
-    return error
-}
-
-const sessionContext = {
-    sessionID: "session-1",
-    directory: "/workspace",
-    worktree: "/workspace",
-}
-
-describe("jobs utilities", () => {
-    test("sanitizes session titles into compatible job names", () => {
-        expect(deriveJobNameFromTitle("  Feature: Fix API / UI  ")).toBe("feature_fix_api_ui")
-        expect(deriveJobNameFromTitle("Already___slugged")).toBe("already_slugged")
-        expect(deriveJobNameFromTitle("Jira 25422 (executing)")).toBe("jira_25422")
-        expect(deriveJobNameFromTitle("Jira 25422 (custom)")).toBe("jira_25422_custom")
-        expect(deriveJobNameFromTitle("***")).toBe("")
-        expect(deriveJobNameFromTitle("A".repeat(120))).toHaveLength(100)
-        expect(isCompatibleJobName("feature_fix_api_ui")).toBe(true)
-        expect(isCompatibleJobName("Feature_Fix")).toBe(false)
-        expect(isCompatibleJobName("feature-fix")).toBe(false)
+        expect(workspace).toEqual({
+            jobName: "feature_fix_api_ui",
+            designPath: "/workspace/.agents/jobs/2026-06-02_10-11-12_feature_fix_api_ui/design.md",
+        })
+        expect(files.get(workspace.designPath)).toBe("# Design\n")
     })
 
-    test("formats job names as title-cased session titles with optional lifecycle status", () => {
-        expect(formatJobSessionTitle("jira_25422")).toBe("Jira 25422")
-        expect(formatJobSessionTitle("jira_25422", "executing")).toBe("Jira 25422 (executing)")
+    test("rejects same timestamp and title without overwriting first design", async () => {
+        const { fileSystem, files } = createFileSystem()
+        const context = { directory: "/workspace", worktree: "/workspace" }
+        const now = new Date("2026-06-02T10:11:12Z")
+        const first = await createJobWorkspace(fileSystem, context, "Same Title", "first", now)
+
+        await expect(createJobWorkspace(fileSystem, context, "Same Title", "second", now))
+            .rejects.toThrow("Job workspace already exists: .agents/jobs/2026-06-02_10-11-12_same_title")
+        expect(files.get(first.designPath)).toBe("first")
     })
 
-    test("maps canonical directories and statuses without legacy final status", () => {
-        const legacyFinalStatus = ["termi", "nated"].join("")
-
-        expect(getCanonicalDirectoryForStatus("concepts")).toBe("concepts")
-        expect(getCanonicalDirectoryForStatus("drafts")).toBe("drafts")
-        expect(getCanonicalDirectoryForStatus("facilitate")).toBe("facilitate")
-        expect(getCanonicalDirectoryForStatus("executing")).toBe("executing")
-        expect(getCanonicalDirectoryForStatus("facilitate")).toBe("facilitate")
-        expect(getCanonicalDirectoryForStatus("review")).toBe("review")
-        expect(getCanonicalDirectoryForStatus("shelved")).toBe("shelved")
-        expect(getCanonicalDirectoryPathForStatus("drafts")).toBe(".agents/jobs/drafts")
-        expect(getCanonicalDirectoryPathForStatus("facilitate")).toBe(".agents/jobs/facilitate")
-        expect(getCanonicalDirectoryPathForStatus("shelved")).toBe(".agents/jobs/shelved")
-        expect(getDefaultStatusForDirectory("drafts")).toBe("drafts")
-        expect(getDefaultStatusForDirectory("facilitate")).toBe("facilitate")
-        expect(getDefaultStatusForDirectory("executing")).toBe("executing")
-        expect(isJobStatus("facilitate")).toBe(true)
-        expect(isJobStatus("shelved")).toBe(true)
-        expect(isJobStatus("failed")).toBe(false)
-        expect(isJobStatus(legacyFinalStatus)).toBe(false)
-        expect(jobStatuses).toContain("shelved")
-        expect(jobStatuses).not.toContain(legacyFinalStatus)
-    })
-
-    test("resolves a safe .agents storage root and relative path", () => {
+    test("uses context directory when worktree is filesystem root", () => {
         expect(resolveAgentsStorageRoot({ worktree: "/", directory: "/workspace/project" })).toBe("/workspace/project")
-        expect(resolveAgentsStorageRoot({ worktree: "", directory: "/workspace/project" })).toBe("/workspace/project")
-        expect(resolveAgentsStorageRoot({ worktree: "/workspace/project", directory: "/other" })).toBe("/workspace/project")
-        expect(resolveAgentsStorageRoot({ worktree: "/", directory: "/" })).toBe("/")
-        expect(getStorageRelativePath("/workspace/project", "/workspace/project/.agents/jobs/drafts/my_feature/plan.md")).toBe(".agents/jobs/drafts/my_feature/plan.md")
     })
 
-    test("resolves safe concept labels and rejects portable path escapes", () => {
-        expect(getRelativeConceptFilePath("example-item")).toBe(".agents/jobs/concepts/example-item.md")
+    test("normal resolver keeps title fallback when no session-owned workspace exists", async () => {
+        const workspace = "2026-08-20_10-30-00_my_feature"
+        const sessionFile = `/workspace/.agents/jobs/${workspace}/session.yml`
+        const result = await resolveJobWorkspaceIdentity(
+            createIdentityFileSystem([workspace], { [sessionFile]: "session_id: prior-session\n" }),
+            { session: { get: async () => ({ data: { title: "My Feature" } }) } } as never,
+            { sessionID: "session-1", directory: "/workspace", worktree: "/workspace" },
+        )
 
-        for (const label of [
-            ".",
-            "..",
-            "../outside",
-            "..\\outside",
-            "/outside",
-            "C:\\outside",
-            "C:outside",
-            "\\\\server\\share\\outside",
-            "../concepts-sibling/outside",
-        ]) {
-            expect(() => getRelativeConceptFilePath(label)).toThrow(`Invalid concept label: ${label}`)
-        }
+        expect(result).toEqual(expect.objectContaining({ resolution: "found", job_name: "my_feature", title_derived_candidate: "my_feature" }))
     })
 
-    test("derives job titles from timestamped filenames with extensions", () => {
-        expect(deriveJobTitleFromFileName("26-01-31_12-59-59.Some_Job_Name.md", "drafts")).toBe("Some Job Name (drafts)")
-    })
+    test("session-only resolver uses exact session ownership after title changes", async () => {
+        const workspace = "2026-08-20_10-30-00_original_feature"
+        const workspacePath = `/workspace/.agents/jobs/${workspace}/session.yml`
+        const result = await resolveJobWorkspaceIdentity(
+            createIdentityFileSystem([workspace], { [workspacePath]: "session_id: session-1\n" }),
+            { session: { get: async () => ({ data: { title: "Renamed Feature" } }) } } as never,
+            { sessionID: "session-1", directory: "/workspace", worktree: "/workspace" },
+            { sessionOnly: true },
+        )
 
-    test("derives job titles from non-timestamped filenames with extensions", () => {
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "executing")).toBe("Some Job Name (executing)")
-    })
-
-    test("derives job titles from timestamped filenames without extensions", () => {
-        expect(deriveJobTitleFromFileName("26-01-31_12-59-59.Some_Job_Name", "facilitate")).toBe("Some Job Name (facilitate)")
-    })
-
-    test("appends required status suffixes to derived job titles", () => {
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "drafts")).toBe("Some Job Name (drafts)")
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "facilitate")).toBe("Some Job Name (facilitate)")
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "executing")).toBe("Some Job Name (executing)")
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "facilitate")).toBe("Some Job Name (facilitate)")
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "review")).toBe("Some Job Name (review)")
-        expect(deriveJobTitleFromFileName("Some_Job_Name.md", "shelved")).toBe("Some Job Name (shelved)")
-    })
-
-    test("derives job titles from path-qualified filenames using the basename", () => {
-        expect(deriveJobTitleFromFileName("nested/path/26-01-31_12-59-59.Some_Job_Name.md", "review")).toBe("Some Job Name (review)")
-    })
-
-    test("postfixes shelved collision job names with timestamp", () => {
-        expect(createShelvedCollisionJobName("some_job", new Date("2026-05-27T10:11:12Z"))).toBe("some_job_26-05-27_10-11-12")
-    })
-
-    test("renames shelved job with timestamp when destination already exists", async () => {
-        const fileSystem = {
-            mkdir: mock(async () => undefined as string | undefined),
-            readFile: mock(async () => ""),
-            readdir: mock(async () => [] as import("fs").Dirent[]),
-            rename: mock(async (_oldPath: string, newPath: string) => {
-                if (newPath === "/workspace/.agents/jobs/shelved/my_feature") throw createCollisionError()
-            }),
-            rm: mock(async () => { }),
-            stat: mock(async () => ({ mtimeMs: Date.now() })),
-            writeFile: mock(async () => { }),
-        }
-
-        const result = await moveResolvedPlannedJobToStatus("/workspace", {
-            job_name: "my_feature",
-            status: "review",
-            directory: "review",
-            absolute_path: "/workspace/.agents/jobs/review/my_feature",
-            job_path: ".agents/jobs/review/my_feature/",
-            relative_job_path: ".agents/jobs/review/my_feature/",
-        }, "shelved", fileSystem, {
-            shelvedCollisionTimestamp: new Date("2026-05-27T10:11:12Z"),
-        })
-
-        expect(result).toEqual({
-            type: "success",
-            job: {
-                job_name: "my_feature_26-05-27_10-11-12",
-                status: "shelved",
-                directory: "shelved",
-                absolute_path: "/workspace/.agents/jobs/shelved/my_feature_26-05-27_10-11-12",
-                job_path: ".agents/jobs/shelved/my_feature_26-05-27_10-11-12/",
-                relative_job_path: ".agents/jobs/shelved/my_feature_26-05-27_10-11-12/",
-            },
-            from_status: "review",
-        })
-        expect(fileSystem.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature")
-        expect(fileSystem.rename).toHaveBeenCalledWith("/workspace/.agents/jobs/review/my_feature", "/workspace/.agents/jobs/shelved/my_feature_26-05-27_10-11-12")
-    })
-
-    test("infers planned identity from matching session title and lets explicit job_name override stale title", async () => {
-        const fileSystem = createFileSystem({ drafts: ["active_job"], review: ["review_job"] })
-        const inferred = await resolvePlannedJobIdentity(fileSystem, createClient("Active Job (drafts)"), sessionContext)
-        const overridden = await resolvePlannedJobIdentity(fileSystem, createClient("Wrong Title"), sessionContext, "review_job")
-
-        expect(inferred).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            explicit_override: false,
-            job_name: "active_job",
-            session_title: "Active Job (drafts)",
-            title_derived_candidate: "active_job",
-        })
-        expect(overridden).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            explicit_override: true,
-            job_name: "review_job",
-        })
-        expect(overridden.session_title).toBeUndefined()
-    })
-
-    test("uses title-derived lookup as the fast path before persisted session_id fallback", async () => {
-        const fileSystem = createFileSystem({ drafts: ["active_job"], executing: ["session_job"] }, {
-            "/workspace/.agents/jobs/executing/session_job/session.yml": "session_id: session-1\n",
-        })
-
-        const identity = await resolvePlannedJobIdentity(fileSystem, createClient("Active Job"), sessionContext)
-
-        expect(identity).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            job_name: "active_job",
-            title_derived_candidate: "active_job",
-        })
-        expect(fileSystem.readFile).not.toHaveBeenCalledWith("/workspace/.agents/jobs/executing/session_job/session.yml", "utf8")
-    })
-
-    test("falls back to persisted session_id when title-derived lookup misses", async () => {
-        const fileSystem = createFileSystem({ executing: ["session_job"] }, {
-            "/workspace/.agents/jobs/executing/session_job/session.yml": "session_id: session-1\n",
-        })
-
-        const identity = await resolvePlannedJobIdentity(fileSystem, createClient("Mutated Title"), sessionContext)
-
-        expect(identity).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            explicit_override: false,
-            job_name: "session_job",
-            session_title: "Mutated Title",
-            title_derived_candidate: "mutated_title",
-        })
-        expect(identity.warning).toContain("Resolved planned job session_job from persisted session_id session-1")
-    })
-
-    test("prefers root session title over worker title when resolving planned job identity", async () => {
-        const fileSystem = createFileSystem({ drafts: ["root_job", "worker_noise"] })
-        const client = createSessionChainClient({
-            "session-1": { parentID: "session-2", title: "Worker Noise" },
-            "session-2": { parentID: "session-3", title: "Mid Noise" },
-            "session-3": { title: "Root Job" },
-        })
-
-        const identity = await resolvePlannedJobIdentity(fileSystem, client, sessionContext)
-
-        expect(identity).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            explicit_override: false,
-            job_name: "root_job",
-            session_title: "Root Job",
-            title_derived_candidate: "root_job",
-        })
-    })
-
-    test("keeps explicit override over parent-chain root title", async () => {
-        const fileSystem = createFileSystem({ drafts: ["root_job"], review: ["review_job"] })
-        const client = createSessionChainClient({
-            "session-1": { parentID: "session-2", title: "Worker Noise" },
-            "session-2": { title: "Root Job" },
-        })
-
-        const identity = await resolvePlannedJobIdentity(fileSystem, client, sessionContext, "review_job")
-
-        expect(identity).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            explicit_override: true,
-            job_name: "review_job",
-        })
-        expect(identity.session_title).toBeUndefined()
-    })
-
-    test("falls back to current worker title when root title is blank/default", async () => {
-        const fileSystem = createFileSystem({ drafts: ["worker_job"] })
-        const client = createSessionChainClient({
-            "session-1": { parentID: "session-2", title: "Worker Job" },
-            "session-2": { title: "New Session" },
-        })
-
-        const identity = await resolvePlannedJobIdentity(fileSystem, client, sessionContext)
-
-        expect(identity).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            explicit_override: false,
-            job_name: "worker_job",
-            session_title: "Worker Job",
-            title_derived_candidate: "worker_job",
-        })
-    })
-
-    test("falls back to current title then persisted session_id when parent lookup fails", async () => {
-        const fileSystem = createFileSystem({ executing: ["session_job"] }, {
-            "/workspace/.agents/jobs/executing/session_job/session.yml": "session_id: session-1\n",
-        })
-        const client = createSessionChainClient({
-            "session-1": { parentID: "session-2", title: "Worker Noise" },
-        }, [], ["session-2"])
-
-        const identity = await resolvePlannedJobIdentity(fileSystem, client, sessionContext)
-
-        expect(identity).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            explicit_override: false,
-            job_name: "session_job",
-            session_title: "Worker Noise",
-            title_derived_candidate: "worker_noise",
-        })
-        expect(identity.warning).toContain("Resolved planned job session_job from persisted session_id session-1")
-    })
-
-    test("resolves planned identity after session title mutation", async () => {
-        const identity = await resolvePlannedJobIdentity(createFileSystem({ review: ["stable_job"] }, {
-            "/workspace/.agents/jobs/review/stable_job/session.yml": "session_id: session-1\n",
-        }), createClient("User Renamed This Session"), sessionContext)
-
-        expect(identity).toMatchObject({
-            mode: "planned",
-            resolution: "found",
-            job_name: "stable_job",
-            resolved_job: {
-                directory: "review",
-                status: "review",
-            },
-        })
-    })
-
-    test("returns a collision when persisted session_id matches multiple active jobs", async () => {
-        const identity = await resolvePlannedJobIdentity(createFileSystem({ drafts: ["first_job"], executing: ["second_job"] }, {
-            "/workspace/.agents/jobs/drafts/first_job/session.yml": "session_id: session-1\n",
-            "/workspace/.agents/jobs/executing/second_job/session.yml": "session_id: session-1\n",
-        }), createClient("Missing Job"), sessionContext)
-
-        expect(identity).toMatchObject({
-            mode: "ad_hoc",
-            resolution: "collision",
-            job_name: "session_id session-1",
-        })
-        expect(identity.collision?.entries.map((entry) => entry.job_name)).toEqual(["first_job", "second_job"])
-    })
-
-    test("returns ad_hoc identity when current session title does not resolve to a lifecycle job", async () => {
-        const identity = await resolvePlannedJobIdentity(createFileSystem({ drafts: ["other_job"] }), createClient("Missing Job"), sessionContext)
-
-        expect(identity).toMatchObject({
-            mode: "ad_hoc",
-            resolution: "missing",
-            explicit_override: false,
-            job_name: "missing_job",
-            session_title: "Missing Job",
-            title_derived_candidate: "missing_job",
-        })
-        expect(identity.warning).toContain("did not match a planned job")
-    })
-
-    test("falls back to the first user prompt when the session title is blank or default", async () => {
-        const blank = await getCurrentSessionTitle(createClient("", [{
-            info: { id: "user-1", role: "user", time: { created: 1 } },
-            parts: [{ type: "text", text: "Implement my feature request with tests.", messageID: "user-1" }],
-        }]), sessionContext)
-        const defaultTitle = await getCurrentSessionTitle(createClient("New Session", [{
-            info: { id: "user-1", role: "user", time: { created: 1 } },
-            parts: [{ type: "text", text: "   Improve dashboard exports immediately   ", messageID: "user-1" }],
-        }]), sessionContext)
-
-        expect(blank).toEqual({ title: "Implement my feature request with tests." })
-        expect(defaultTitle).toEqual({ title: "Improve dashboard exports immediately" })
-    })
-
-    test("falls back to a timestamp title when the first user prompt is not valid text", async () => {
-        const title = await getCurrentSessionTitle(createClient("New Session", [{
-            info: { id: "user-1", role: "user", time: { created: 1 } },
-            parts: [{ type: "text", text: "!!!", messageID: "user-1" }],
-        }]), sessionContext)
-
-        expect(title.title).toMatch(/^\d{2}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/)
+        expect(result).toEqual(expect.objectContaining({ resolution: "found", job_name: "original_feature" }))
+        expect(result.session_title).toBeUndefined()
     })
 })

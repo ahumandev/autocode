@@ -1,8 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import path from "node:path"
 import { createAbortResponse, createRetryResponse, flattenError } from "@/utils/tools"
-import { assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupExpiredSandboxCacheEntries, defaultSandboxDependencies, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getSandboxPaths, materializeSandboxRootfs, normalizeOptionalDistro, normalizeSandboxName, readSandboxMetadata, resolveSandboxJob, writeSandboxMetadata, type EffectiveSandboxSyncMethod, type SandboxConfig, type SandboxDependencies, type SandboxDistro, type SandboxMetadata } from "@/utils/sandbox"
+import { assertDirectSandboxPath, assertSafeSandboxDeletionPath, cleanupExpiredSandboxCacheEntries, defaultSandboxDependencies, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, getSandboxHomePath, getSandboxRootHomePath, getSandboxRootfsPath, materializeSandboxRootfs, normalizeOptionalDistro, normalizeSandboxName, readSandboxMetadata, resolveSandboxOwner, validateSandboxMetadata, writeSandboxMetadata, type EffectiveSandboxSyncMethod, type SandboxConfig, type SandboxDependencies, type SandboxDistro, type SandboxMetadata, type SandboxPaths } from "@/utils/sandbox"
 import { addBubblewrapBind, addBubblewrapProxyEnv, addOptionalBubblewrapReadOnlyBind, bubblewrapHostNetworkReadOnlyBinds, bubblewrapQuickEtcReadOnlyBinds, bubblewrapQuickRootReadOnlyBinds, pathExists, redactProxyCredentials } from "@/utils/autocode_sandbox_helpers"
 
 const limitationGuidance = "Sandbox uses bubblewrap (bwrap) only; proot and proot-distro are unsupported."
@@ -42,18 +41,18 @@ function internetEnabled(input: unknown): boolean {
     return input === true
 }
 
-async function createBubblewrapSandbox(deps: SandboxDependencies, paths: ReturnType<typeof getSandboxPaths>, distro: SandboxDistro | "quick", backendData: SandboxMetadata["backend_data"]): Promise<SandboxMetadata | string> {
-    const safePath = assertSafeSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
+async function createBubblewrapSandbox(deps: SandboxDependencies, paths: SandboxPaths, distro: SandboxDistro | "quick", backendData: SandboxMetadata["backend_data"]): Promise<SandboxMetadata | string> {
+    const safePath = assertDirectSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
     if (!safePath.ok) return JSON.stringify({ ok: false, status: "unsafe_path", reason: safePath.reason, guidance: limitationGuidance })
 
     await deps.fileSystem.mkdir(safePath.value, { recursive: true })
-    await deps.fileSystem.mkdir(`${safePath.value}/home/root`, { recursive: true })
+    await deps.fileSystem.mkdir(getSandboxRootHomePath(paths), { recursive: true })
     const metadata = createMetadata(paths.sandboxName, paths.jobName, distro, "bubblewrap", safePath.value, backendData)
     await writeSandboxMetadata(deps.fileSystem, paths.metadataFile, metadata)
     return metadata
 }
 
-async function validateInternet(deps: SandboxDependencies, metadata: SandboxMetadata): Promise<{ ok: true } | { ok: false, diagnostics: Record<string, unknown> }> {
+async function validateInternet(deps: SandboxDependencies, paths: SandboxPaths, metadata: SandboxMetadata): Promise<{ ok: true } | { ok: false, diagnostics: Record<string, unknown> }> {
     const filesystemMode = metadata.backend_data?.filesystem_mode === "rootfs" ? "rootfs" : "quick"
     const rootfsPath = typeof metadata.backend_data?.rootfs_path === "string" ? metadata.backend_data.rootfs_path : undefined
     const baseArgs = ["--die-with-parent", "--unshare-all", "--share-net", "--new-session"]
@@ -78,7 +77,7 @@ async function validateInternet(deps: SandboxDependencies, metadata: SandboxMeta
             await addOptionalBubblewrapReadOnlyBind(deps, baseArgs, hostPath)
         }
     }
-    baseArgs.push("--bind", metadata.root_path, "/sandbox", "--bind", path.join(metadata.root_path, "home"), "/home")
+    baseArgs.push("--bind", metadata.root_path, "/sandbox", "--bind", getSandboxHomePath(paths), "/home")
 
     const endpointDiagnostics: InternetEndpointDiagnostics[] = []
     for (const url of internetValidationUrls) {
@@ -105,7 +104,7 @@ async function cleanupInternetValidationFailure(deps: SandboxDependencies, sandb
     }
 }
 
-function createSuccessResponse(paths: ReturnType<typeof getSandboxPaths>, metadata: SandboxMetadata, repaired: boolean): string {
+function createSuccessResponse(paths: SandboxPaths, metadata: SandboxMetadata, repaired: boolean): string {
     const backendData = metadata.backend_data ?? {}
     return JSON.stringify({
         ok: true,
@@ -144,9 +143,9 @@ function createInternetValidationFailureResponse(validationDiagnostics: Record<s
 
 export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies, sandboxConfig: SandboxConfig = {}) {
     return tool({
-        description: "Create sandbox environment when you need to test deployments, isolate dependency problem, run experimental scripts in isolated environment. Always run `autocode_sandbox_create` before tasking `execute_sandbox` agents.",
+        description: "Create sandbox environment in current resolved job when you need to test deployments, isolate dependency problem, or run experimental scripts. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before creation. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Always run `autocode_sandbox_create` before tasking `execute_sandbox` agents.",
         args: {
-            sandbox_name: tool.schema.string().describe("Lowercase sandbox name using letters, numbers, and underscores only."),
+            sandbox_name: tool.schema.string().describe("Lowercase name inside current resolved job, using letters, numbers, and underscores only. Same names in other jobs are independent."),
             distro: tool.schema.string().optional().describe("Omit `distro` for fast startup using read-only host OS filesystem mounts. Use `alpine` for isolated OS/installation testing and experimentation. Use `debian` when Alpine is incompatible with project dependencies or glibc expectations."),
             internet_enabled: tool.schema.boolean().optional().describe("Enable sandbox network access; defaults to false."),
         },
@@ -158,19 +157,23 @@ export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: S
             const network = internetEnabled(args.internet_enabled)
 
             try {
-                const job = await resolveSandboxJob(client, context, deps.fileSystem)
-                if (!job.ok) return createRetryResponse("create sandbox", job.reason, "Start or select a planned lifecycle job before creating a sandbox.")
-                const paths = getSandboxPaths(job.storageRoot, job.jobName, sandboxName.value)
-                const safePath = assertSafeSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
+                const owner = await resolveSandboxOwner(deps.fileSystem, client, context, sandboxName.value)
+                if (!owner.ok) return createRetryResponse("create sandbox", owner.reason, "Start or select a timestamped job workspace before creating a sandbox.")
+                const paths = owner.owner
+                const safePath = assertDirectSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
                 if (!safePath.ok) return JSON.stringify({ ok: false, status: "unsafe_path", reason: safePath.reason, guidance: limitationGuidance })
                 let repaired = false
                 if (await pathExists(deps, paths.sandboxPath)) {
                     const metadata = await readSandboxMetadata(deps.fileSystem, paths.metadataFile)
-                    if (metadata) return JSON.stringify({ ok: true, status: "exists", warning: "Sandbox already exists; not overwriting.", sandbox_name: sandboxName.value, job_name: job.jobName, sandbox_path: paths.sandboxPath, guidance: limitationGuidance })
+                    if (metadata !== undefined) {
+                        const metadataValidation = validateSandboxMetadata(paths, metadata)
+                        if (!metadataValidation.ok) return JSON.stringify({ ok: false, status: "invalid_metadata", reason: metadataValidation.reason, guidance: limitationGuidance })
+                        return JSON.stringify({ ok: true, status: "exists", warning: "Sandbox already exists; not overwriting.", sandbox_name: sandboxName.value, job_name: paths.jobName, sandbox_path: paths.sandboxPath, guidance: limitationGuidance })
+                    }
 
-                    const safeDeletionPath = assertSafeSandboxDeletionPath(paths.sandboxPath, paths.storageRoot, paths.jobSandboxRoot)
+                    const safeDeletionPath = assertSafeSandboxDeletionPath(paths.sandboxPath, paths.jobSandboxRoot)
                     if (!safeDeletionPath.ok) return JSON.stringify({ ok: false, status: "unsafe_path", reason: safeDeletionPath.reason, guidance: limitationGuidance })
-                    if (!deps.fileSystem.rm) return JSON.stringify({ ok: false, status: "stale_directory_error", reason: "Unable to remove stale sandbox directory: rm is unavailable.", sandbox_name: sandboxName.value, job_name: job.jobName, sandbox_path: paths.sandboxPath, guidance: limitationGuidance })
+                    if (!deps.fileSystem.rm) return JSON.stringify({ ok: false, status: "stale_directory_error", reason: "Unable to remove stale sandbox directory: rm is unavailable.", sandbox_name: sandboxName.value, job_name: paths.jobName, sandbox_path: paths.sandboxPath, guidance: limitationGuidance })
                     await deps.fileSystem.rm(safeDeletionPath.value, { recursive: true, force: true })
                     repaired = true
                 }
@@ -186,9 +189,9 @@ export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: S
                     effectiveSyncMethod = await detectEffectiveSandboxSyncMethod(sandboxConfig, deps)
                     const cache = await ensureSandboxRootfsCache(distro.value, sandboxConfig, deps)
                     if (!cache.ok) return JSON.stringify({ ok: false, status: cache.status ?? "rootfs_error", reason: cache.reason, source_url: cache.source_url, stdout: cache.stdout, stderr: cache.stderr, exit_code: cache.exit_code, command: cache.command, guidance: limitationGuidance })
-                    const rootfsPath = path.join(safePath.value, "rootfs")
+                    const rootfsPath = getSandboxRootfsPath(paths)
                     const actualSyncMethod = await materializeSandboxRootfs(cache.cache.rootfs_path, rootfsPath, effectiveSyncMethod, deps)
-                    await cleanupExpiredSandboxCacheEntries(cache.cache, paths.storageRoot, sandboxConfig, actualSyncMethod, deps)
+                    await cleanupExpiredSandboxCacheEntries(cache.cache, paths, sandboxConfig, actualSyncMethod, deps)
                     backendData = { ...backendData, distro_mode: "rootfs", filesystem_mode: "rootfs", rootfs_path: rootfsPath, cache_entry_path: cache.cache.entry_path, cache_rootfs_path: cache.cache.rootfs_path, requested_sync_method: requestedSyncMethod, effective_sync_method: actualSyncMethod, cache_source_url: cache.cache.source_url, cache_version: cache.cache.version, cache_architecture: cache.cache.architecture }
                 }
                 else {
@@ -197,7 +200,7 @@ export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: S
                 const metadataResult = await createBubblewrapSandbox(deps, paths, distro.value ?? "quick", backendData)
                 if (typeof metadataResult === "string") return metadataResult
                 if (network) {
-                    const validation = await validateInternet(deps, metadataResult)
+                    const validation = await validateInternet(deps, paths, metadataResult)
                     if (!validation.ok) {
                         const cleanupDiagnostics = await cleanupInternetValidationFailure(deps, paths.sandboxPath)
                         return createInternetValidationFailureResponse(validation.diagnostics, cleanupDiagnostics)

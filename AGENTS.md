@@ -1,7 +1,7 @@
 # Purpose of project
 
-OpenCode plugin/library for tracked job flow, safe execution, and docs.
-It turns concepts into plans, runs work in OpenCode, and keeps state in text files.
+OpenCode plugin/library for concepts, durable design workspaces, safe execution, and docs.
+It turns concepts into designs, runs work in OpenCode, and keeps workspace state in text files.
 
 ## Primary features
 
@@ -9,7 +9,7 @@ It turns concepts into plans, runs work in OpenCode, and keeps state in text fil
 - **GitHub skill snapshots**: Bundles reviewed reusable skills from supported GitHub sources.
 - **SSH tool suite**: Runs remote commands and manages files through environment-keyed tools.
 
-# Architecture map
+## Architecture map
 
 - `src/plugin.ts`: Plugin entry; registers agents, commands, tools, skills, config, and guidance.
 - `src/agents/`: Managed agents and prompts.
@@ -18,7 +18,7 @@ It turns concepts into plans, runs work in OpenCode, and keeps state in text fil
 - `src/skills/`: Source guidance bundled into `dist/skills`.
 - `src/install.ts`: Installs shim at `~/.config/opencode/plugins/autocode.js`.
 
-# Rules
+## Rules
 
 - Treat repo as OpenCode plugin/library, not standalone app or web server.
 - Keep tool error handling aligned with `src/utils/tools.ts` and `src/agents/prompts/error.ts`.

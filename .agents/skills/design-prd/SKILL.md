@@ -5,15 +5,18 @@ description: Use `design-prd` to get Product Requirements when planning any feat
 
 ## Problem Statement
 
-AutoCode turns rough ideas into traceable OpenCode jobs. Files keep plan, work, review, and close trail. Users choose auto work or human-steered work. Unsafe work stops for human help.
+AutoCode turns rough ideas into concepts, durable designs, and OpenCode work. Users choose autonomous or human-steered execution. Unsafe work gets manual hand-off.
 
 ## Feature Requirements
 
-- **Job lifecycle**: Keep concept, draft, assist, executing, facilitate, review, and shelved jobs under `.agents/jobs/`.
-- **Planning flow**: User creates concept. Design makes plan. User saves draft before work.
-- **Execution modes**: Run drafted job in `auto` mode or human-steered `assist` mode.
-- **Review flow**: Accept reviewed work only after all criteria clear. Then shelve job.
-- **Safety gates**: Move blocked unsafe work to `facilitate`. Give human manual steps.
+- **Concept flow**: User saves early Markdown concepts in `.agents/concepts/` with `/job-concepts`.
+- **Design flow**: `/job-design` investigates selected concept or current context. `autocode_design_write` saves `design.md` in `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/`; timestamp is UTC.
+- **Design read**: `autocode_design_read` resolves supplied `job_name` or current-title slug and returns newest matching design.
+- **Execution modes**: User selects `auto` with `/job-execute` or human-steered `assist` with `/job-facilitate`.
+- **Durability**: Workspace persists at creation path. No status directories or lifecycle transitions.
+- **Session fallback**: Blank `autocode_session_create` prompt loads newest current-title design. No design gives retriable provide-`prompt` error. Nonblank prompt bypasses lookup.
+- **Heading contract**: Only `advise`, `assist`, `auto` turns with first eligible text line `# {emoji} {title}` update root title. Generated postfix replaces; other title appends. Failure advisory.
+- **Safety hand-off**: Give human manual steps for unsafe work.
 - **Read-only DB**: Read one configured table at time. No DB writes or cross-table joins.
 - **Sandboxing**: Run supported risky commands in Linux Bubblewrap sandbox when host supports it.
 - **Cross-project tasking**: Start isolated OpenCode work in other project only after directory permission check.
@@ -22,38 +25,39 @@ AutoCode turns rough ideas into traceable OpenCode jobs. Files keep plan, work, 
 
 ## User Roles
 
-- **User**: Create, approve, steer, review, accept, or shelve jobs.
+- **User**: Create concepts, choose design, steer execution, and confirm results.
 - **advise agent**: Gather evidence, answer questions, and guide manual work.
-- **design agent**: Make plans and drafts from concept or context.
-- **auto agent**: Run drafted job alone.
+- **design agent**: Make designs from concept or context.
+- **auto agent**: Run design work alone.
 - **assist agent**: Run work with user steering.
 
 ## Constraints & Assumptions
 
 - Plugin runs inside OpenCode. No web server or special UI.
-- Job state lives in version-control text files.
+- Concepts and job workspaces live in version-control text files.
+- Workspace paths stay stable after design creation.
 - External directory rule is `allow`, `ask`, or `deny`.
 - SSH targets use `AUTOCODE_SSH_{ssh_key}_*` environment values.
 - Learned skills prune per category by configured newest-item limit.
 
 ## Success Metrics
 
-- Jobs move lifecycle dirs. No silent state drift.
-- Criteria block acceptance until clear.
+- Design workspace path stays stable during execution.
+- Criteria measure solution completion.
 - Unsafe work gets human hand-off.
-- User resumes and audits work from job files and session IDs.
+- User resumes and audits work from design files and session IDs.
 - Learned facts help later sessions.
 
 ## UX/UI Considerations
 
-No special UI. Work uses OpenCode agents, slash commands, and text files. Show job path, state, next action, and whether user approval or manual help is needed.
+No special UI. Work uses OpenCode agents, slash commands, and text files. Show design path, selected execution mode, next action, and whether manual help is needed.
 
 ## User Stories
 
-- As a user, I want concept and draft files so work starts from clear requirements.
+- As a user, I want concept and design files so work starts from clear requirements.
 - As a user, I want auto or assist mode so I choose autonomy level.
 - As a user, I want blocked unsafe work stopped so I can help safely.
-- As a user, I want criteria gate before accept so done work stays trusted.
+- As a user, I want criteria so done work stays trusted.
 - As a user, I want safe read-only DB lookup so data stays unchanged.
 - As a user, I want saved corrections and preferences so later work fits my needs.
 

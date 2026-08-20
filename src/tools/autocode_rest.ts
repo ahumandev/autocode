@@ -2,7 +2,7 @@ import path from "node:path"
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
-import { createDirectoryFileSystem, deriveJobNameFromTitle, ensurePlannedJobFiles, getJobDirectoryPath, isMissingFile, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
+import { createDirectoryFileSystem, isMissingFile, resolveJobWorkspaceIdentity, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
 import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
@@ -266,37 +266,20 @@ async function resolveCurrentJobRestDirectory(action: string, fileSystem: RestTo
         rename: undefined,
         rm: undefined,
     })
-    const identity = await resolvePlannedJobIdentity(directoryFileSystem, client, context)
-
-    // Ad-hoc auto-provision: when no planned job matches the session title, spin up
-    // .agents/jobs/facilitate/<slug>/ so autocode_rest is usable without manual
-    // /job-draft or /job-facilitate setup. Other resolutions keep their retry error.
-    if (identity.resolution === "missing" && identity.session_title) {
-        const slug = identity.title_derived_candidate || deriveJobNameFromTitle(identity.session_title)
-        if (slug) {
-            const storageRoot = resolveAgentsStorageRoot(context)
-            const jobDir = getJobDirectoryPath(storageRoot, "facilitate", slug)
-            await ensurePlannedJobFiles(directoryFileSystem, jobDir)
-            const restDir = path.join(jobDir, "rest")
-            await ensurePlannedJobFiles(directoryFileSystem, restDir)
-            await fileSystem.writeFile(path.join(jobDir, "session.yml"), `session_id: ${context.sessionID}\n`)
-            return { jobName: slug, restDir }
-        }
-    }
-
-    if (identity.mode !== "planned" || !identity.job_name || !identity.resolved_job) {
+    const identity = await resolveJobWorkspaceIdentity(directoryFileSystem, client, context)
+    if (!identity.job_name || !identity.workspace) {
         return {
             error: createRetryResponse(
                 action,
-                "No active planned job context was found for current session.",
-                `Switch to an active lifecycle job session under .agents/jobs/*, then retry ${action}.`
-            )
+                "No job workspace was found for current session.",
+                `Switch to a timestamped job workspace session under .agents/jobs/, then retry ${action}.`,
+            ),
         }
     }
 
     return {
         jobName: identity.job_name,
-        restDir: path.join(identity.resolved_job.absolute_path, "rest"),
+        restDir: path.join(identity.workspace.absolute_path, "rest"),
     }
 }
 

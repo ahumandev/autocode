@@ -1,7 +1,7 @@
 import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk"
 import { readFile, readdir } from "node:fs/promises"
 import { createAgentRestartPrompt } from "@/hooks/agent_restart_prompt"
-import { createDirectoryFileSystem, getJobFilePath, isMissingFile, resolveAgentsStorageRoot, resolvePlannedJobIdentity, type JobToolFileSystem } from "@/utils/jobs"
+import { createDirectoryFileSystem, getJobWorkspaceFilePath, isMissingFile, resolveJobWorkspaceIdentity, type JobToolFileSystem } from "@/utils/jobs"
 import {
     isPrimaryAutocodeAgent,
     resolveAutocodeAgentSessionSettings,
@@ -168,13 +168,20 @@ export async function readCurrentJobPlan(
     fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir"> = defaultJobFileSystem,
 ): Promise<CurrentJobPlan | undefined> {
     const directoryFileSystem = createDirectoryFileSystem(fileSystem)
-    const identity = await resolvePlannedJobIdentity(directoryFileSystem, client, context)
-    const job = identity.resolved_job
-    if (!job) return undefined
+    const identity = await resolveJobWorkspaceIdentity(directoryFileSystem, client, context)
+    const workspace = identity.workspace
+    if (!workspace) return undefined
 
     try {
-        const plan = await fileSystem.readFile(getJobFilePath(resolveAgentsStorageRoot(context), job.directory, job.job_name, "plan.md"), "utf8")
-        return { jobName: job.job_name, plan }
+        let plan: string
+        try {
+            plan = await fileSystem.readFile(getJobWorkspaceFilePath(workspace, "plan.md"), "utf8")
+        }
+        catch (error) {
+            if (!isMissingFile(error)) throw error
+            plan = await fileSystem.readFile(getJobWorkspaceFilePath(workspace, "design.md"), "utf8")
+        }
+        return { jobName: workspace.job_name, plan }
     }
     catch (error) {
         if (isMissingFile(error)) return undefined

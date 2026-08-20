@@ -62,8 +62,8 @@ describe("agent swap utilities", () => {
 
     test("formats session title with agent postfix while preserving unrelated parentheses", () => {
         expect(formatAutocodeSessionTitleForAgent("Create login screen", "design")).toBe("Create login screen (design)")
-        expect(formatAutocodeSessionTitleForAgent("Some title (executing)", "design")).toBe("Some title (design)")
-        expect(formatAutocodeSessionTitleForAgent("Some title (advise)", "design")).toBe("Some title (advise) (design)")
+        expect(formatAutocodeSessionTitleForAgent("Some title (2026-08-18 14:30)", "design")).toBe("Some title (design)")
+        expect(formatAutocodeSessionTitleForAgent("Some title (advise)", "design")).toBe("Some title (design)")
         expect(formatAutocodeSessionTitleForAgent("Some title (design) ", "design")).toBe("Some title (design)")
         expect(formatAutocodeSessionTitleForAgent("Fix (critical issue)", "design")).toBe("Fix (critical issue) (design)")
     })

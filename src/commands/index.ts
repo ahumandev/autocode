@@ -27,14 +27,13 @@ export function createCommands(capabilities: PlatformCapabilities): CommandMap {
     const assistCommand = { description: "Create new 🧑‍💻 assist session to semi-autonomously assist with problems/improvements.", subtask: false, template: newSessionTemplate("assist", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION") }
     return {
 
-        // Job lifecycle commands
+        // Job workspace commands
 
-        "job-concepts": { agent: "design", description: "Save concepts in .agents/jobs/concepts/.", template: jobConceptsCommandTemplate },
-        "job-design": { agent: "design", description: "Design new plan based on existing concept or job.", subtask: false, template: jobDesignCommandTemplate },
-        "job-draft": { agent: "design", description: "Draft proposed plan in .agents/jobs/drafts/{name}/plan.md", subtask: false, template: jobDraftCommandTemplate },
-        "job-execute": { agent: "design", description: "Execute job autonomously in new session and move job to .agents/jobs/executing/{name}/", subtask: false, template: jobExecuteCommandTemplate },
-        "job-facilitate": { agent: "design", description: "Facilitate job execution in new session. Job will move to .agents/jobs/facilitate/{name}/.", subtask: false, template: jobFacilitateCommandTemplate },
-        "job-shelve": { agent: "auto", description: "Shelve current job and move job to .agents/jobs/shelved/{name}/", subtask: false, template: "Call `autocode_job_shelve` tool, then stop." },
+        "job-concepts": { agent: "design", description: "Save concepts in .agents/concepts/.", template: jobConceptsCommandTemplate },
+        "job-design": { agent: "design", description: "Design solution from existing concept or job.", subtask: false, template: jobDesignCommandTemplate },
+        "job-draft": { agent: "design", description: "Save proposed design in .agents/jobs/{timestamp}_{name}/design.md", subtask: false, template: jobDraftCommandTemplate },
+        "job-execute": { agent: "design", description: "Start autonomous execution in a new session.", subtask: false, template: jobExecuteCommandTemplate },
+        "job-facilitate": { agent: "design", description: "Start assisted execution in a new session.", subtask: false, template: jobFacilitateCommandTemplate },
 
         // New session commands
 
@@ -55,7 +54,7 @@ Report to user:
 * Autocode version: !\`echo ${packageJson.version}\`
 ` },
         "author": { agent: "execute_author", description: "Author a professional article/report.", subtask: false, template: authorArticleCommandTemplate },
-        "commit": { description: "Commit added changes to Git and shelve job: args = reason for commit", subtask: false, template: gitCommitCommandTemplate },
+        "commit": { description: "Commit added changes to Git: args = reason for commit", subtask: false, template: gitCommitCommandTemplate },
         "docs": { agent: "execute_document", description: "Document recent project changes.", subtask: false, template: docsCommandTemplate },
         "docs-conventions": { agent: "document_conventions", description: "Document recently updated naming conventions and terminology.", subtask: false, template: docsSubagentCommandTemplate },
         "docs-code": { agent: "document_code", description: "Document recently updated technical architecture and design decisions.", subtask: false, template: docsSubagentCommandTemplate },

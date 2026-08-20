@@ -1,7 +1,8 @@
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import { tool, type ToolContext } from "@opencode-ai/plugin"
-import { defaultSandboxDependencies, type SandboxCommandResult, type SandboxDependencies } from "@/utils/sandbox"
+import type { OpencodeClient } from "@opencode-ai/sdk"
+import { cleanupJobSandboxes, defaultSandboxDependencies, resolveSandboxOwner, type SandboxCommandResult, type SandboxDependencies } from "@/utils/sandbox"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type AutocodeKillArgs = {
@@ -41,7 +42,7 @@ type AutocodeKillDependencies = SandboxDependencies & {
 
 const candidateSuffixes = [".yaml", ".yml", ".conf", ".json", ".jsonc", ".ts", ".env"]
 const requiredLinuxCommands = ["ss", "ps"]
-const skippedDirs = new Set([".git", "node_modules", "dist", "build", "coverage", "caches", ".cache", "tmp", "temp"])
+const skippedDirs = new Set([".git", ".agents", "node_modules", "dist", "build", "coverage", "caches", ".cache", "tmp", "temp"])
 const hostPortPattern = /\b(?:localhost|127\.0\.0\.1):(\d{1,5})\b/g
 const keywordPortPattern = /(?:\bport\b|\bPORT\b|--port)\D{0,40}(\d{1,5})/g
 const unsupportedPlatformInstruction = "Use native CLI commands for your OS instead, such as macOS/BSD `lsof -nP -iTCP:<port> -sTCP:LISTEN` then `kill <pid>`, or Windows `netstat -ano | findstr :<port>` then `taskkill /PID <pid> /T`."
@@ -57,9 +58,8 @@ function resolveProjectRoot(context: AutocodeKillContext | undefined, deps: Auto
     return deps.getCwd?.() ?? process.cwd()
 }
 
-function shouldSkipDirectory(relativePath: string, entryName: string): boolean {
-    if (skippedDirs.has(entryName)) return true
-    return relativePath === path.join(".agents", "sandboxes") || relativePath.startsWith(`${path.join(".agents", "sandboxes")}${path.sep}`)
+function shouldSkipDirectory(entryName: string): boolean {
+    return skippedDirs.has(entryName)
 }
 
 function isCandidateFile(relativePath: string): boolean {
@@ -178,7 +178,7 @@ async function listCandidateFiles(projectRoot: string, deps: AutocodeKillDepende
             const fullPath = path.join(directory, entry.name)
             const relativePath = path.relative(projectRoot, fullPath)
             if (entry.isDirectory()) {
-                if (!shouldSkipDirectory(relativePath, entry.name)) await visit(fullPath)
+                if (!shouldSkipDirectory(entry.name)) await visit(fullPath)
                 continue
             }
             if (entry.isFile() && isCandidateFile(relativePath)) files.push(fullPath)
@@ -455,7 +455,26 @@ export async function runAutocodeKill(rawArgs: AutocodeKillArgs = {}, context?: 
     }
 }
 
-export function createAutocodeKillTool(deps: AutocodeKillDependencies = defaultSandboxDependencies): ReturnType<typeof tool> {
+function isSuccessfulOperation(result: string): boolean {
+    try {
+        const parsed: unknown = JSON.parse(result)
+        return typeof parsed === "object" && parsed !== null && "ok" in parsed && parsed.ok === true
+    }
+    catch {
+        return false
+    }
+}
+
+async function cleanupCurrentJobSandboxes(client: OpencodeClient | undefined, context: ToolContext, deps: AutocodeKillDependencies): Promise<void> {
+    try {
+        const owner = await resolveSandboxOwner(deps.fileSystem, client, context)
+        if (!owner.ok) return
+        await cleanupJobSandboxes(owner.owner, deps)
+    }
+    catch {}
+}
+
+export function createAutocodeKillTool(client?: OpencodeClient, deps: AutocodeKillDependencies = defaultSandboxDependencies): ReturnType<typeof tool> {
     return tool({
         description: "List config-backed local dev server candidates, or SIGTERM one exact listener when port is supplied.",
         args: {
@@ -463,7 +482,9 @@ export function createAutocodeKillTool(deps: AutocodeKillDependencies = defaultS
             name: tool.schema.string().optional().describe("Optional exact process name required before killing."),
         },
         async execute(args: AutocodeKillArgs, context: ToolContext): Promise<string> {
-            return runAutocodeKill(args, context, deps)
+            const result = await runAutocodeKill(args, context, deps)
+            if (isSuccessfulOperation(result)) await cleanupCurrentJobSandboxes(client, context, deps)
+            return result
         },
     })
 }

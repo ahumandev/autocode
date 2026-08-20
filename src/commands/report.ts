@@ -34,7 +34,7 @@ In above template replace [PLACEHODERS] with following sections:
 - Replace [ACTIONS] with section that has:
     - An H2 heading that summarize overall action taken so far and include section that:
     - If < 10 project actions, then list project actions individually, otherwise group project actions up to 10 groups of project actions where each numbered list item:
-        - Project actions exclude internal task management actions like "Update job status", "Add/Set criteria", "Report results to user" - NEVER report internal task management actions
+        - Project actions exclude internal task management actions like "Question user", "Update todo list", "Report results to user" - NEVER report internal task management actions
         - Describe action item (20 words max)
         - Inline critical command/url/values used by group of actions
         - Reason why action item were taken (20 words max)

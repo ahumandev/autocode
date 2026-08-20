@@ -1,7 +1,7 @@
 import { describe, beforeEach, expect, mock, test } from "bun:test"
 import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createNoopAsk } from "./test_context"
-import { createAbortResponse, createRetryResponse, resetRetryCounts } from "@/utils/tools"
+import { createAbortResponse, resetRetryCounts } from "@/utils/tools"
 import type { ToolContext } from "@opencode-ai/plugin"
 
 function parseToolResult(result: string | { output: string }) {
@@ -38,23 +38,11 @@ describe("autocode_job_list tool", () => {
         }
     }
 
-    test("correctly lists jobs from active lifecycle directories", async () => {
+    test("lists timestamped workspaces with statusless identities", async () => {
         const fs = createMockFs()
-        fs.readdir.mockImplementation(async (dirPath: string) => {
-            if (dirPath === "/workspace/.agents/jobs/drafts") return ["job-1"]
-            if (dirPath === "/workspace/.agents/jobs/executing") return ["job-2"]
-            if (dirPath === "/workspace/.agents/jobs/drafts/job-1") return []
-            if (dirPath === "/workspace/.agents/jobs/executing/job-2") return []
-            if (dirPath === "/workspace/.agents/jobs/review") return ["job-3"]
-            if (dirPath === "/workspace/.agents/jobs/review/job-3") return []
-            return []
-        })
-        fs.readFile.mockImplementation(async (filePath: string) => {
-            if (filePath.endsWith("job-1/plan.md")) return "# Problem\n\nProblem 1\n\n---\n\n# Impact\n\nImpact 1\n\n---\n\n# Expectations\n\nExpectation 1\n\n---\n\n# Requirements\n\n### Requirement 1\n\n#### Criteria\n- C1\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-            if (filePath.endsWith("job-2/plan.md")) return "# Problem\n\nProblem 2\n\n---\n\n# Impact\n\nImpact 2\n\n---\n\n# Expectations\n\nExpectation 2\n\n---\n\n# Requirements\n\n### Requirement 2\n\n#### Criteria\n- C2\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-            if (filePath.endsWith("job-3/plan.md")) return "# Problem\n\nProblem 3\n\n---\n\n# Impact\n\nImpact 3\n\n---\n\n# Expectations\n\nExpectation 3\n\n---\n\n# Requirements\n\n### Requirement 3\n\n#### Criteria\n- C3\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-            throw createMissingError()
-        })
+        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs"
+            ? ["2026-08-20_10-30-00_job_1", "2026-08-21_10-30-00_job_2", "not-a-workspace"]
+            : [])
 
         const tool = createAutocodeJobListTool(fs)
         const result = await tool.execute({}, createToolContext())
@@ -62,121 +50,41 @@ describe("autocode_job_list tool", () => {
 
         expect(result).toBe(JSON.stringify({
             jobs: [
-                { label: "job-1", job_name: "job-1", status: "drafts", job_path: ".agents/jobs/drafts/job-1/", description: "Problem 1" },
-                { label: "job-2", job_name: "job-2", status: "executing", job_path: ".agents/jobs/executing/job-2/", description: "Problem 2" },
-                { label: "job-3", job_name: "job-3", status: "review", job_path: ".agents/jobs/review/job-3/", description: "Problem 3" },
+                { job_name: "job_2", job_path: ".agents/jobs/2026-08-21_10-30-00_job_2/" },
+                { job_name: "job_1", job_path: ".agents/jobs/2026-08-20_10-30-00_job_1/" },
             ],
         }))
         expect(Object.keys(parsed)).toEqual(["jobs"])
     })
 
-    test("truncates first qualifying plan.md line after 80 characters", async () => {
+    test("lists jobs without reading plan content", async () => {
         const fs = createMockFs()
-        const longProblem = `Problem ${"a".repeat(90)}`
-        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs/drafts" ? ["long-job"] : dirPath === "/workspace/.agents/jobs/drafts/long-job" ? [] : [])
-        fs.readFile.mockImplementation(async (filePath: string) => {
-            if (filePath === "/workspace/.agents/jobs/drafts/long-job/plan.md") return `# Problem\n\n${longProblem}\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Long Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n`
-            throw createMissingError()
-        })
+        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs" ? ["2026-08-20_10-30-00_long_job"] : [])
 
         const tool = createAutocodeJobListTool(fs)
         const result = await tool.execute({}, createToolContext())
 
         const parsed = parseToolResult(result)
         expect(parsed.jobs[0]).toEqual({
-            label: "long-job",
-            job_name: "long-job",
-            status: "drafts",
-            job_path: ".agents/jobs/drafts/long-job/",
-            description: `${longProblem.slice(0, 80)}...`,
+            job_name: "long_job",
+            job_path: ".agents/jobs/2026-08-20_10-30-00_long_job/",
         })
     })
 
-    test("returns empty description when plan.md is missing", async () => {
+    test("ignores non-workspace entries", async () => {
         const fs = createMockFs()
-        fs.readdir.mockImplementation(async (dirPath: string) => {
-            if (dirPath === "/workspace/.agents/jobs/facilitate") return ["missing-plan"]
-            if (dirPath === "/workspace/.agents/jobs/facilitate/missing-plan") return []
-            return []
-        })
-        fs.readFile.mockRejectedValue(createMissingError())
+        fs.readdir.mockImplementation(async (): Promise<string[]> => ["notes", "2026-08-20_10-30-00_", "2026-08-20_10-30-00_valid_job"])
 
         const tool = createAutocodeJobListTool(fs)
         const result = await tool.execute({}, createToolContext())
 
         const parsed = parseToolResult(result)
         expect(parsed.jobs).toEqual([
-            { label: "missing-plan", job_name: "missing-plan", status: "facilitate", job_path: ".agents/jobs/facilitate/missing-plan/", description: "" },
+            { job_name: "valid_job", job_path: ".agents/jobs/2026-08-20_10-30-00_valid_job/" },
         ])
     })
 
-    for (const filter of ["concepts", "drafts", "facilitate", "executing", "review"] as const) {
-        test(`filters jobs to ${filter}`, async () => {
-            const fs = createMockFs()
-            fs.readdir.mockImplementation(async (dirPath: string) => {
-                if (dirPath === "/workspace/.agents/jobs/concepts") return ["concepts-job"]
-                if (dirPath === "/workspace/.agents/jobs/drafts") return ["drafts-job"]
-                if (dirPath === "/workspace/.agents/jobs/executing") return ["executing-job"]
-                if (dirPath === "/workspace/.agents/jobs/facilitate") return ["facilitate-job"]
-                if (dirPath === "/workspace/.agents/jobs/review") return ["review-job"]
-                if (dirPath === "/workspace/.agents/jobs/concepts/concepts-job") return []
-                if (dirPath === "/workspace/.agents/jobs/drafts/drafts-job") return []
-                if (dirPath === "/workspace/.agents/jobs/executing/executing-job") return []
-                if (dirPath === "/workspace/.agents/jobs/facilitate/facilitate-job") return []
-                if (dirPath === "/workspace/.agents/jobs/review/review-job") return []
-                return []
-            })
-            fs.readFile.mockImplementation(async (filePath: string) => {
-                if (filePath.endsWith("concepts-job/plan.md")) return "# Problem\n\nConcepts problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Concepts Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-                if (filePath.endsWith("drafts-job/plan.md")) return "# Problem\n\nDrafts problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Drafts Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-                if (filePath.endsWith("executing-job/plan.md")) return "# Problem\n\nExecuting problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Executing Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-                if (filePath.endsWith("facilitate-job/plan.md")) return "# Problem\n\nFacilitate problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Facilitate Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-                if (filePath.endsWith("review-job/plan.md")) return "# Problem\n\nReview problem\n\n---\n\n# Observation\n\nObserved\n\n---\n\n# Impact\n\nImpact\n\n---\n\n# Expectation\n\nExpectation\n\n---\n\n# Requirements\n\n### Review Requirement\n\n#### Criteria\n- C1\n\n---\n\n# Constraints\n\n\n\n---\n\n# Proposal\n\n"
-                throw createMissingError()
-            })
-
-            const tool = createAutocodeJobListTool(fs)
-            const parsed = parseToolResult(await tool.execute({ filter }, createToolContext()))
-
-            expect(parsed.jobs).toHaveLength(1)
-            expect(parsed.jobs[0].status).toBe(filter)
-        })
-    }
-
-    test("returns retry response for invalid status filters", async () => {
-        const fs = createMockFs()
-
-        const tool = createAutocodeJobListTool(fs)
-        const result = await tool.execute({ filter: "drafting" }, createToolContext())
-
-        expect(result).toBe(createRetryResponse(
-            "list jobs",
-            "Invalid filter: drafting",
-            "Omit to view all or provide one of these status filters: concepts, drafts, facilitate, executing, review"
-        ))
-        expect(fs.readFile).not.toHaveBeenCalled()
-        expect(fs.readdir).not.toHaveBeenCalled()
-    })
-
-    test("keeps first job when active lifecycle collisions are detected", async () => {
-        const fs = createMockFs()
-        fs.readdir.mockImplementation(async (dirPath: string) => {
-            if (dirPath === "/workspace/.agents/jobs/drafts") return ["same-job"]
-            if (dirPath === "/workspace/.agents/jobs/executing") return ["same-job"]
-            return []
-        })
-
-        const tool = createAutocodeJobListTool(fs)
-        const result = await tool.execute({}, createToolContext())
-
-        expect(result).toBe(JSON.stringify({
-            jobs: [
-                { label: "same-job", job_name: "same-job", status: "drafts", job_path: ".agents/jobs/drafts/same-job/", description: "" },
-            ],
-        }))
-    })
-
-    test("returns empty jobs if lifecycle directories do not exist", async () => {
+    test("returns empty jobs if workspace directory does not exist", async () => {
         const fs = createMockFs()
         fs.readdir.mockRejectedValue(createMissingError())
         fs.readFile.mockRejectedValue(createMissingError())
