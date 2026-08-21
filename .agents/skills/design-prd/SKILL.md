@@ -10,8 +10,7 @@ AutoCode turns rough ideas into concepts, durable designs, and OpenCode work. Us
 ## Feature Requirements
 
 - **Concept flow**: User saves early Markdown concepts in `.agents/concepts/` with `/job-concepts`.
-- **Design flow**: `/job-design` investigates selected concept or current context. `autocode_design_write` saves `design.md` in `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/`; timestamp is UTC.
-- **Design read**: `autocode_design_read` resolves supplied `job_name` or current-title slug and returns newest matching design.
+- **Design flow**: `/job-design` investigates selected concept or current context.
 - **Execution modes**: User selects `auto` with `/job-execute` or human-steered `assist` with `/job-facilitate`.
 - **Durability**: Workspace persists at creation path. No status directories or lifecycle transitions.
 - **Session fallback**: Blank `autocode_session_create` prompt loads newest current-title design. No design gives retriable provide-`prompt` error. Nonblank prompt bypasses lookup.

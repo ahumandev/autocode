@@ -25,7 +25,6 @@ describe("commands", () => {
         expect(Object.keys(commands)).toEqual([
             "job-concepts",
             "job-design",
-            "job-draft",
             "job-execute",
             "job-facilitate",
             "assist",
@@ -167,10 +166,6 @@ describe("commands", () => {
 
     test("keeps key command template substrings stable", () => {
         expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
-        expect(commands["job-draft"]?.description).toBe("Save proposed design in .agents/jobs/{timestamp}_{name}/design.md")
-        expect(commands["job-draft"]?.template).toContain("Call `autocode_design_write` tool with design sections: PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CONSTRAINTS, and user chosen PROPOSAL.")
-        expect(commands["job-draft"]?.template).not.toContain("RISKS")
-        expect(commands["job-draft"]?.template).not.toContain("OBSERVATION")
         expect(commands["job-execute"]?.template).toContain("Call `autocode_job_execute` with `agent` = `auto`")
         expect(commands.commit?.description).toBe("Commit added changes to Git: args = reason for commit")
         expect(commands.commit?.subtask).toBe(false)

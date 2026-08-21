@@ -16,18 +16,16 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 ```mermaid
 flowchart TD
   Concepts([.agents/concepts])
-  Concepts -- 📐 design --> Design[.agents/job/.../design.md]
-  
+  Concepts -- 📐 design --> Design([proposal in current session])
+
   Design -- 💡 advise --> Advise([manual execution])
   Design -- 🧑‍💻 assist --> Assist([interactive execution])
   Design -- 🤖 auto --> Auto([autonomous execution])
-  
 ```
 
-1. Use `/job-concepts` to save an early idea under `.agents/concepts`, then run `/job-design` to investigate and select a solution.
-2. `autocode_design_write` saves the selected design at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title}/design.md`; timestamp is UTC and workspace remains in place.
-3. `autocode_design_read` reads a design by `job_name` or current session title and selects newest matching timestamped workspace.
-4. Select `/job-execute` for `auto` execution or `/job-facilitate` for `assist` execution. `/job-facilitate` is an assist-mode selector, not a workspace state.
+1. Use `/job-concepts` to save an early idea under `.agents/concepts`, then run `/job-design` to investigate and select a solution in the current session.
+2. Existing or manually authored design workspaces use `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title}/design.md`; timestamps are UTC and workspaces remain in place.
+3. Select `/job-execute` for `auto` execution or `/job-facilitate` for `assist` execution. `/job-facilitate` is an assist-mode selector, not a workspace state.
 
 ### Hybrid Workflow
 
@@ -55,7 +53,7 @@ For example you may start in `assist` mode and then later when you get busy, swi
 
 Concepts are early Markdown descriptions saved in `.agents/concepts/`. `/job-concepts` remains available for creating them.
 
-`autocode_design_write` creates durable design workspaces at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md`. The timestamp is UTC, `{title_dir}` is slug derived from current session title, and workspace stays at that path during and after execution.
+Durable design workspaces use `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md`. The timestamp is UTC, `{title_dir}` is a slug derived from the session title, and the workspace stays at that path during and after execution.
 
 | Path | Purpose |
 | ---- | ------- |
@@ -64,7 +62,7 @@ Concepts are early Markdown descriptions saved in `.agents/concepts/`. `/job-con
 | `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/session.yml` | Optional linked OpenCode session ID. |
 | `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}` | Canonical per-job sandbox storage. |
 
-`autocode_design_read` accepts an optional `job_name`; without one it derives name from current session title and reads newest matching timestamped design. `autocode_session_create` bypasses design lookup when `prompt` is nonblank. With blank `prompt`, it derives current-title slug and uses newest matching `design.md`; no match returns retriable error instructing caller to provide nonblank `prompt`.
+`autocode_session_create` uses a nonblank `prompt` directly. With a blank `prompt`, it derives the current-title slug and uses the newest matching `design.md`; no match returns a retriable error instructing the caller to provide a nonblank `prompt`.
 
 ### Sandbox ownership
 

@@ -241,8 +241,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             autocode_concept_read: "allow",
             autocode_job_execute: "allow",
             autocode_job_list: "allow",
-            autocode_design_read: "allow",
-            autocode_design_write: "allow",
             autocode_session_create: "allow",
             doom_loop: "ask",
             external_directory: "ask",
@@ -332,7 +330,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     auto_design: {
         color: colorAutonomousOrchestrator,
-        description: "task auto_design to redesign failed PROPOSALS.",
+        description: "task auto_design to redesign failed PROPOSALS when new unresolvable blocking CONSTRAINTS arise. Always try resolve OBSTACLES first with auto_troubleshoot. Only task auto_design as last resort when unresolvable root cause (new CONSTRAINT) is clear.",
         hidden: false,
         mode: "subagent",
         permission: {
@@ -1000,7 +998,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     execute_script: {
         color: colorWritableWorker,
-        description: "task execute_script to execute repetitive actions, data/document/media conversions, generate/render content, utilize scriptable libraries/utils via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
+        description: "task execute_script to execute repetitive actions, data/document/media conversions, generate/render content, or control external apps via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
         mode: "subagent",
         permission: {
             "*": "deny",

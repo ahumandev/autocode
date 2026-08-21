@@ -18,9 +18,9 @@ Runtime tools live in [`src/tools/`](../src/tools/). They cover concepts, design
 
 ## Concept and Design Workspace Architecture
 
-`/job-concepts` stores concepts in `.agents/concepts/`; `/job-design` uses a selected concept or current context to prepare a design. `autocode_design_write` creates `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md`, where timestamp is UTC and `{title_dir}` derives from current session title. `autocode_design_read` resolves a supplied `job_name`, or title-derived name, to newest matching workspace.
+`/job-concepts` stores concepts in `.agents/concepts/`; `/job-design` uses a selected concept or current context to prepare a design proposal in the current session. Existing design workspaces follow `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md`, where timestamps are UTC and `{title_dir}` derives from the session title.
 
-`autocode_session_create` uses explicit nonblank `prompt` without lookup. A blank prompt derives current-title slug and loads newest matching design; absent match returns retriable provide-`prompt` error. Workspaces persist at creation path: execution does not relocate them or use workspace status transitions. `/job-facilitate` only selects `assist` execution; `/job-execute` selects `auto` execution.
+`autocode_session_create` uses an explicit nonblank `prompt` without lookup. A blank prompt derives the current-title slug and loads the newest matching design; an absent match returns a retriable provide-`prompt` error. Workspaces persist at their original paths: execution does not relocate them or use workspace status transitions. `/job-facilitate` only selects `assist` execution; `/job-execute` selects `auto` execution.
 
 ## Generated skills
 

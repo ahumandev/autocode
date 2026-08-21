@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
+import type { ToolContext } from "@opencode-ai/plugin"
 import { validateFilePath } from "./validate_file_path"
 
 const tempPaths: string[] = []
@@ -78,7 +79,12 @@ describe("validate file path", () => {
 
     test("Rejects missing bare filename", async () => {
         const filename = `vfp-missing-${randomUUID()}.json`
-        const result = await validateFilePath(filename, { failedAction: "test-bare", existence: "bare-filename-only" })
+        const directory = track(await mkdtemp(join(tmpdir(), "vfp-")))
+        const result = await validateFilePath(filename, {
+            failedAction: "test-bare",
+            context: { directory } as ToolContext,
+            existence: "bare-filename-only",
+        })
         expect(result.ok).toBe(false)
         if (!result.ok) expect(result.response).toContain("file not found")
     })

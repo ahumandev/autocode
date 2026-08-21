@@ -9,16 +9,6 @@ export type SessionJobContext = {
     worktree: string
 }
 
-export type JobWorkspaceFileSystem = {
-    mkdir: (dirPath: string, options?: { recursive?: boolean }) => Promise<string | undefined>
-    writeFile: (filePath: string, content: string) => Promise<void>
-}
-
-export type JobWorkspace = {
-    jobName: string
-    designPath: string
-}
-
 export type JobDesignFileSystem = {
     readdir: (directory: string, options: { withFileTypes: true }) => Promise<Dirent[]>
     readFile: (filePath: string, encoding: "utf8") => Promise<string>
@@ -85,15 +75,6 @@ function resolveNonRootProjectPath(candidate: string | undefined): string | unde
 
     const resolved = path.resolve(trimmed)
     return resolved === path.parse(resolved).root ? undefined : resolved
-}
-
-function formatWorkspaceTimestamp(date: Date): string {
-    const pad = (value: number): string => String(value).padStart(2, "0")
-    return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}_${pad(date.getUTCHours())}-${pad(date.getUTCMinutes())}-${pad(date.getUTCSeconds())}`
-}
-
-function isWorkspaceCollision(error: unknown): boolean {
-    return (error as NodeJS.ErrnoException).code === "EEXIST"
 }
 
 function formatJobName(jobName: string): string {
@@ -412,38 +393,4 @@ export async function getCurrentSessionTitle(
         const message = error instanceof Error ? error.message : String(error)
         return { warning: `Unable to read current session title: ${message}` }
     }
-}
-
-export async function createJobWorkspace(
-    fileSystem: JobWorkspaceFileSystem,
-    context: Pick<SessionJobContext, "directory" | "worktree">,
-    title: string,
-    designContent: string,
-    now: Date = new Date(),
-): Promise<JobWorkspace> {
-    const jobName = deriveJobNameFromTitle(title)
-    if (!jobName) {
-        throw new Error(`Unable to derive a valid job_name from the current session title: ${title}`)
-    }
-
-    const storageRoot = resolveAgentsStorageRoot(context)
-    const workspaceName = `${formatWorkspaceTimestamp(now)}_${jobName}`
-    const jobsDirectory = path.join(storageRoot, jobWorkspacesDirectory)
-    const workspaceDirectory = path.join(jobsDirectory, workspaceName)
-    const designPath = path.join(workspaceDirectory, "design.md")
-
-    await fileSystem.mkdir(jobsDirectory, { recursive: true })
-    try {
-        await fileSystem.mkdir(workspaceDirectory)
-    }
-    catch (error) {
-        if (isWorkspaceCollision(error)) {
-            throw new Error(`Job workspace already exists: ${jobWorkspacesDirectory}/${workspaceName}`)
-        }
-
-        throw error
-    }
-
-    await fileSystem.writeFile(designPath, designContent)
-    return { jobName, designPath }
 }

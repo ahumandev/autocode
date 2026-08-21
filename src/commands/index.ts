@@ -10,7 +10,6 @@ import { gitConflictCommandTemplate } from "./git-conflict"
 import { createInstallCommand } from "./install"
 import { jobConceptsCommandTemplate } from "./job-concepts"
 import { jobDesignCommandTemplate } from "./job-design"
-import { jobDraftCommandTemplate } from "./job-draft"
 import { jobExecuteCommandTemplate } from "./job-execute"
 import { jobFacilitateCommandTemplate } from "./job-facilitate"
 import { learnCommand } from "./learn"
@@ -31,7 +30,6 @@ export function createCommands(capabilities: PlatformCapabilities): CommandMap {
 
         "job-concepts": { agent: "design", description: "Save concepts in .agents/concepts/.", template: jobConceptsCommandTemplate },
         "job-design": { agent: "design", description: "Design solution from existing concept or job.", subtask: false, template: jobDesignCommandTemplate },
-        "job-draft": { agent: "design", description: "Save proposed design in .agents/jobs/{timestamp}_{name}/design.md", subtask: false, template: jobDraftCommandTemplate },
         "job-execute": { agent: "design", description: "Start autonomous execution in a new session.", subtask: false, template: jobExecuteCommandTemplate },
         "job-facilitate": { agent: "design", description: "Start assisted execution in a new session.", subtask: false, template: jobFacilitateCommandTemplate },
 

@@ -28,8 +28,6 @@ OpenCode plugin injects agents, commands, tools, generated skills, bundled GitHu
 
 - `/job-concepts` (`src/commands/index.ts`): Save concept Markdown.
 - `/job-design` (`src/commands/index.ts`): Design solution from concept or context.
-- `autocode_design_write` (`src/tools/autocode_design_write.ts`): Create workspace `design.md` from design sections.
-- `autocode_design_read` (`src/tools/autocode_design_read.ts`): Read newest matching workspace design.
 - `/job-facilitate` (`src/commands/index.ts`): Select assisted execution.
 - `/job-execute` (`src/commands/index.ts`): Select autonomous execution.
 - `autocode_session_create` (`src/tools/autocode_session_create.ts`): Blank prompt loads newest current-title design; explicit nonblank prompt bypasses lookup.

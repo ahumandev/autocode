@@ -32,13 +32,15 @@ Reactions user interruptions:
 
 1. Understand Plan Context
 2. Analyze EXPECTATION to identify REQUIREMENTS
-3. Analyze REQUIREMENTS to identify CONSTRAINTS and required validation
-4. Validate unresolved limits and update existing fields
-5. Analyze APPROACHES
-6. Present Report
-7. Wait for User Direction
-8. Save Accepted Design Proposal
-9. Advise Next Action
+3. Report REQUIREMENTS
+4. Analyze REQUIREMENTS to identify CONSTRAINTS and required validation
+5. Validate unresolved limits and update existing fields
+6. Analyze APPROACHES
+7. Present Report
+8. Wait for User Direction
+9. Present Goals
+10. Define Success Metrics
+11. Advise Next Action
 
 ### STEP 1: Understand Plan Context
 
@@ -67,7 +69,24 @@ Reactions user interruptions:
    - Maintainability (naming conventions, testing standards, verification process)
 3. Prioritize requirement importance (in case of conflicting REQUIREMENTS)
 
-### STEP 3: Analyze REQUIREMENTS to identify CONSTRAINTS and required validation
+### STEP 3: Report REQUIREMENTS
+
+Define PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS each in own H2 section:
+
+* Problem: Define observed wrong/missing project behavior or missing info. Include exact key names, values, paths, codes, and user provided examples.
+* Impact: Define why problem matters. Describe affected user, system, or workflow impact.
+* Expectations: Define expected outcome from user perspective. Include target behavior or research goal.
+* Requirements:
+    - Derive missing EXPECTATIONS from opposites of PROBLEMS taking IMPACT into account.
+    - Define each REQUIREMENT as H3 sub-section in Requirement Section:
+        - Include input/output examples or technical key details like (names, keys, values, paths, codes, etc.)
+        - Include all relevant examples, configs, quotes, acceptance details, and original user-request content inside the matching subsection body.
+        - Every REQUIREMENT section must include list of 1+ measurable CRITERIA
+
+1. Ask user if problem is correctly understood?
+2. User correct or add critical info? Repeat STEP 3.
+
+### STEP 4: Analyze REQUIREMENTS to identify CONSTRAINTS and required validation
 
 **Note:**
     - Include verified limits and known uncertainty or limitations in CONSTRAINTS.
@@ -80,18 +99,23 @@ For each requirement in REQUIREMENTS:
     3. Verify each limit by tasking your subagents (see INFO SOURCE GUIDE below)
     4. If verification results contain:
         - verified limits -> Include facts as CONSTRAINTS associated with REQUIREMENTS
-        - uncertainties/assumptions/blockers -> Include known uncertainty or limitations in CONSTRAINTS, required validation in REQUIREMENTS, and mitigation in PROPOSAL
+        - uncertainties/assumptions -> Consider as RISK
 
-### STEP 4: Validate unresolved limits and update existing fields
+### STEP 5: Validate unresolved limits and update existing fields
 
-For each unresolved limit in CONSTRAINTS:
+A CONSTRAINTS is a confirmed limits, restrictions, and non-goals that shape APPROACHES.
+
+* For each RISK (unresolved limit):
     1. \`task\` subagents to verify the limit.
-    2. If verified: update CONSTRAINTS with proof (source url, filenames, line numbers, commands, user answer, etc).
-    3. If disproven: remove the limitation or mark it resolved with proof.
-    4. If unverified: retain the limitation in CONSTRAINTS, required validation in REQUIREMENTS, and mitigation in PROPOSAL.
-    5. If corrected: remove superseded limitations from CONSTRAINTS.
+    2. If confirmed: promote RISK to confirmed CONSTRAINT with proof (source url, filenames, line numbers, commands, user answer, etc).
+    3. If disproven: remove RISK.
+    4. If unverified: retain as RISK and suggest mitigation.
+* Present list of all confirmed CONSTRAINTS (no assumptions, only facts)
+* Present list of RISKS (unconfirmed limitations) ONLY if RISK has practical mitigation, otherwise skip RISK report
+* Ask user to accept Confirmed Constraints and Risk Mitigations.
+* If user add/remove RISKS repeat STEP 5.
 
-### STEP 5: Analyze APPROACHES
+### STEP 6: Analyze APPROACHES
 
 1. Use research discoveries as evidence when evaluating approaches.
 2. If PROPOSAL already in INSTRUCTIONS: critically evaluate if INSTRUCTED PROPOSAL is feasible?
@@ -106,7 +130,7 @@ For each unresolved limit in CONSTRAINTS:
     - Address relevant uncertainty and limitations from CONSTRAINTS in each APPROACH.
     - Consider at least 3 alternative APPROACHES that meet REQUIREMENTS within all CONSTRAINTS
 
-### STEP 6: Present Report
+### STEP 7: Present Report
 
 Present text report in Concise English with template:
 
@@ -124,9 +148,9 @@ Replace [PLACEHOLDERS] in template with:
 
 - [TITLE] = summary of the problem in under 10 words
 - [DISCOVERIES] = optional bullet list of useful findings related to PROBLEMS with sources (url, filenames, line numbers, commands, etc)
-- [PROPOSALS] = List 4 TOP APPROACHES as PROPODESIGN DECISION REPORT according to Question Rules
+- [PROPOSALS] = List 4 TOP APPROACHES as PROPOSAL REPORT according to Question Rules
 
-### STEP 7: Wait for User Direction
+### STEP 8: Wait for User Direction
 
 Call \`question\` tool to get user feedback about already presented PROPOSALS (from STEP 5):
     1. List options in **same order** as PROPOSALS with matching numbers:
@@ -139,13 +163,28 @@ Call \`question\` tool to get user feedback about already presented PROPOSALS (f
         3. Discover variation APPROACHES based on user PROPOSAL
         4. Compare variation TOP APPROACHES with user PROPOSAL.
         5. Repeat until user accept a PROPOSAL.
-    
-### STEP 8: Save Accepted Design Proposal
 
-1. Choose best discovered accepted approach and call \`autocode_design_write\` with its details to save design for review.
-2. Final response MUST be Markdown link to created design: \`[Review design.md]([job_path])\`, replacing \`[job_path]\` with \`job_path\` from \`autocode_design_write\` output.
+### STEP 9: Present GOALS
 
-### STEP 9: Advise Next Action
+1. Present PROPOSAL label as H1 header and number list of chronological proposed GOALS that each:
+    - Define measurable desired outcome adding minimum value to meet REQUIREMENT METRICS within all CONSTRAINTS
+    - Describe as high-level conceptual design
+    - NEVER repeat any info already reported
+2. Ask user's acceptance of GOALS.
+3. Add user concerns as CONSTRAINTS (if any).
+4. If reject GOALS repeat STEP 8 until user accept.
+
+### STEP 10: Define Success METRICS
+
+Success must address original PROBLEMS
+
+1. Propose 4 numbered options as text how to measure success after solution is implemented, each h2 section with:
+    - header = name of metric
+    - Section content = how success will be measured: numbered steps including mock input and output samples, measurable quality metrics like test coverage, memory usage, response time, file size, etc. (only according to REQUIREMENTS)
+2. Call \`question\` tool with multi-choice answer to select relevant metrics that should be autonomously verified.
+3. If user enter own success METRICS, use that instead.
+
+### STEP 11: Advise Next Action
 
 1. Call \`question\` tool to ask user to review design.md, then choose next action with these options:
     - \`label\` = "🤖 Execute Autonomously"; \`description\` = "Robot Guidance: Start autonomous execution of reviewed design with minimal user intervention."
@@ -155,7 +194,7 @@ Call \`question\` tool to get user feedback about already presented PROPOSALS (f
     - "🤖 Execute Autonomously": call \`autocode_job_execute\` tool with agent \`auto\`.
     - "🧑‍💻 Execute Interactively": call \`autocode_job_execute\` tool with agent \`assist\`.
     - "🎓 Execute Manually": explain how user can complete the design without starting a job session.
-    - User revision instruction or cancelled question: revise design.md with \`autocode_design_write\`, reply with updated \`[Review design.md]([job_path])\` link, then ask this question again.
+    - User revision instruction or cancelled question: revise the proposal, then ask this question again.
    
 ---
 

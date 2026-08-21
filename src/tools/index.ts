@@ -28,8 +28,6 @@ import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createAutocodeKillTool } from "./autocode_kill"
 import { createAutocodeProcessKillTool } from "./autocode_process_kill"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
-import { createAutocodeDesignReadTool } from "./autocode_design_read"
-import { createAutocodeDesignWriteTool } from "./autocode_design_write"
 import { createAutocodeRestTool } from "./autocode_rest"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
@@ -103,8 +101,6 @@ export function createTools(
         autocode_md_read: createAutocodeMdReadTool(),
         autocode_md_remove: createAutocodeMdRemoveTool(),
         autocode_md_update: createAutocodeMdUpdateTool(),
-        autocode_design_read: createAutocodeDesignReadTool(client),
-        autocode_design_write: createAutocodeDesignWriteTool(client),
         autocode_rest: createAutocodeRestTool(client),
         
         autocode_session_context: createAutocodeSessionContextTool(client),

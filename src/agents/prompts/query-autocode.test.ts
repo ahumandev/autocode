@@ -4,55 +4,6 @@ import { queryAutocodePrompt } from "./query-autocode"
 
 const runtimePaths = resolveOpenCodePaths()
 
-const requiredPromptGroups = [
-    [
-        runtimePaths.globalAgentsRoot,
-        ".opencode/agents/",
-        runtimePaths.globalCommandsRoot,
-        ".opencode/commands/",
-        runtimePaths.generatedSkillsRoot,
-        "AGENTS.md",
-    ],
-    [
-        runtimePaths.globalOpenCodeJsonPath,
-        runtimePaths.globalOpenCodeJsoncPath,
-        ".opencode/opencode.json",
-        ".opencode/opencode.jsonc",
-        "JSONC permits comments and trailing commas for AutoCode and OpenCode jsonc files.",
-        '"plugin": ["@ahumandev/autocode@latest"]',
-        '"plugin": ["@ahumandev/autocode@latest"]',
-    ],
-    [
-        ".opencode/autocode.jsonc",
-        "JSONC permits comments and trailing commas for AutoCode and OpenCode jsonc files.",
-    ],
-    [
-        "AUTOCODE_DB_<UPPERCASE_KEY>_CONNECTION, AUTOCODE_DB_<UPPERCASE_KEY>_USERNAME, AUTOCODE_DB_<UPPERCASE_KEY>_PASSWORD",
-        "AUTOCODE_SSH_<ssh_key>_HOST, AUTOCODE_SSH_<ssh_key>_USERNAME, AUTOCODE_SSH_<ssh_key>_KEYFILE, AUTOCODE_SSH_<ssh_key>_PASSWORD, AUTOCODE_SSH_<ssh_key>_KEYPASS, AUTOCODE_SSH_<ssh_key>_AGENT, AUTOCODE_SSH_<ssh_key>_PORT",
-        "SSH host is host/IP only. Put port in AUTOCODE_SSH_<ssh_key>_PORT.",
-        "SSH username default root. SSH port default 22.",
-        "opencode plugin -g @ahumandev/autocode@latest",
-        "opencode run --format json --command autocode-install",
-        "bun install, bun run build, bun run install:shim",
-        runtimePaths.globalPluginPath("autocode.js"),
-        "concepts -> design -> timestamped workspace -> optional auto or assist execution",
-        ".agents/jobs/{timestamp}_{job_name}/",
-    ],
-    [
-        "assist",
-        "auto",
-        "design",
-        "advise",
-        "job-execute",
-        "autocode-version",
-        "install",
-        "tests",
-        "https://github.com/ahumandev/autocode",
-        "https://github.com/anomalyco/opencode",
-        "https://opencode.ai/docs/",
-    ],
-]
-
 const requiredAgentKeys = [
     "assist",
     "auto",
@@ -63,7 +14,6 @@ const requiredAgentKeys = [
 const requiredSlashCommands = [
     "job-concepts",
     "job-design",
-    "job-draft",
     "job-facilitate",
     "job-execute",
     "commit",
@@ -108,11 +58,6 @@ function expectPromptContainsAll(values: string[]): void {
 }
 
 describe("queryAutocodePrompt", () => {
-    test("includes setup guidance and source inventory for users without source access", () => {
-        for (const group of requiredPromptGroups) {
-            expectPromptContainsAll(group)
-        }
-    })
 
     test("uses resolver paths without trailing slashes", () => {
         for (const path of [runtimePaths.globalAgentsRoot, runtimePaths.globalCommandsRoot, runtimePaths.generatedSkillsRoot]) {

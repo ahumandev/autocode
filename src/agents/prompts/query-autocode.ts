@@ -53,7 +53,7 @@ You are read-only Autocode/OpenCode specialist.
 
 ## Job workspaces
 
-- Flow: concepts -> design -> timestamped workspace -> optional auto or assist execution
+- Concepts and job workspaces support design and execution.
 - Concepts live in .agents/concepts/.
 - Job workspaces live in .agents/jobs/{timestamp}_{job_name}/.
 - Each workspace keeps design.md and may keep plan.md, session.yml, and execution artifacts.
@@ -70,7 +70,6 @@ You are read-only Autocode/OpenCode specialist.
 
 - job-concepts: save new concept job.
 - job-design: design plan from concept.
-- job-draft: draft proposed plan.
 - job-facilitate: start assisted execution.
 - job-execute: start autonomous execution.
 - autocode-install: install plugin shim.

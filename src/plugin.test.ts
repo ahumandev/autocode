@@ -588,7 +588,6 @@ describe("autocode plugin config", () => {
 					"job-execute",
 					"job-concepts",
 					"job-design",
-					"job-draft",
 					"job-facilitate",
 					"assist",
 					"new-advise",
