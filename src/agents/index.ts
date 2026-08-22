@@ -32,14 +32,14 @@ import { executeOpencodePrompt } from "./prompts/execute_opencode";
 import { executeRestPrompt } from "./prompts/execute_rest";
 import { executeScriptPrompt } from "./prompts/execute_script";
 import { isSandboxPlatformSupported, type SandboxPlatformSupportOptions } from "@/utils/sandbox"
-import { queryArchitectPrompt } from "./prompts/query_architect";
-import { queryAutocodePrompt } from "./prompts/query-autocode";
+import { queryAutocodePrompt } from "./prompts/query_autocode";
 import { queryBrowserPrompt } from "./prompts/query_browser";
 import { queryCodePrompt } from "./prompts/query_code";
 import { queryDbPrompt } from "./prompts/query_db";
 import { queryExcelPrompt } from "./prompts/query_excel";
 import { queryGitPrompt } from "./prompts/query_git";
-import { buildQueryOsPrompt } from "./prompts/query_os";
+import { queryOsPrompt as buildQueryOsPrompt } from "./prompts/query_os";
+import { querySkillsPrompt } from "./prompts/query_skills";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
 import { advisePrompt } from "./prompts/advise";
@@ -1238,7 +1238,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             },
             "todo*": "allow"
         },
-        prompt: queryArchitectPrompt,
+        prompt: querySkillsPrompt,
         tier: "fast",
     },
 
@@ -1271,11 +1271,12 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     query_text: {
         color: colorReadOnlyWorker,
-        description: "task query_text to answer questions (presence?, contains?, outline?) about: md content, md front-matter, articles/document sections, styling, templates, assets, resources; NEVER to return full file content.",
+        description: "task query_text to answer questions (presence?, contains?, outline?, fallacies?, debatable claims?, arguments?) or to evaluate/criticize textual content: md content, md front-matter, articles/document sections, styling, templates, assets, resources; NEVER to return full file content.",
         hidden: true,
         mode: "subagent",
         permission: {
             "*": "deny",
+            "author-*": "allow",
             "autocode_config_read": "allow",
             "autocode_md_frontmatter_read": "allow",
             "autocode_md_read": "allow",

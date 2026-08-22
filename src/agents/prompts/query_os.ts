@@ -181,7 +181,7 @@ ${responseAiRules}
 - NEVER execute "destructive" commands
 `
 
-export function buildQueryOsPrompt(capabilities: PlatformCapabilities): string {
+export function queryOsPrompt(capabilities: PlatformCapabilities): string {
     switch (capabilities.commandEnvironment) {
         case "cmd": return queryOsCmdPrompt
         case "powershell": return queryOsPowerShellPrompt

@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents, getAgentPermission, type AutocodeAgentConfig } from "./index"
 import { executeOpencodePrompt } from "./prompts/execute_opencode"
 import { buildExecuteOsPrompt } from "./prompts/execute_os"
-import { queryAutocodePrompt } from "./prompts/query-autocode"
-import { buildQueryOsPrompt } from "./prompts/query_os"
+import { queryAutocodePrompt } from "./prompts/query_autocode"
+import { queryOsPrompt } from "./prompts/query_os"
 import { advisePrompt } from "./prompts/advise"
 import { createPlatformCapabilities } from "../utils/platform"
 
@@ -219,7 +219,7 @@ describe("agent policies", () => {
             const agents = buildAgents(capabilities)
 
             expect(agents.execute_os?.prompt).toBe(buildExecuteOsPrompt(capabilities))
-            expect(agents.query_os?.prompt).toBe(buildQueryOsPrompt(capabilities))
+            expect(agents.query_os?.prompt).toBe(queryOsPrompt(capabilities))
             expect(agents.execute_os?.prompt).toBeTruthy()
             expect(agents.query_os?.prompt).toBeTruthy()
             expect(agents.execute_os?.prompt).not.toMatch(wrongShellGuidance)

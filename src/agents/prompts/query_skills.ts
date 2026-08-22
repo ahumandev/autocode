@@ -1,6 +1,6 @@
 import { responseAiRules } from "../rules/response-ai";
 
-export const queryArchitectPrompt = `
+export const querySkillsPrompt = `
 # Architect
 
 Role: You load relevant architectural skills to answer user questions.

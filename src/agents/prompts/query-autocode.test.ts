@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { resolveOpenCodePaths } from "../../utils/paths"
-import { queryAutocodePrompt } from "./query-autocode"
+import { queryAutocodePrompt } from "./query_autocode"
 
 const runtimePaths = resolveOpenCodePaths()
 
