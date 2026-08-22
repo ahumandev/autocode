@@ -10,6 +10,7 @@ const expectedManagedDirectories = [
     "author-agent",
     "author-article",
     "author-command",
+    "author-fallacies",
     "author-readme",
     "author-rules",
     "code-java",

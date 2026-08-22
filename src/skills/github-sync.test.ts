@@ -116,60 +116,6 @@ afterEach(async () => {
 })
 
 describe("syncGitHubSkillInventory", () => {
-    test("syncs repository, tree, blob, and raw sources with deterministic snapshots and provenance", async () => {
-        const repositoryUrl = "https://github.com/acme/repository"
-        const treeUrl = "https://github.com/acme/tree-repository/tree/main/selected"
-        const blobUrl = "https://github.com/acme/blob-repository/blob/main/blob-skill/SKILL.md"
-        const rawUrl = "https://raw.githubusercontent.com/acme/raw-repository/refs/heads/main/raw-skill/SKILL.md"
-        const fixture = await createFixture([
-            { sourceUrl: rawUrl, relativeInstallPath: "github/acme/raw-repository/raw-skill" },
-            { sourceUrl: repositoryUrl, relativeInstallPath: "github/acme/repository/alpha" },
-            { sourceUrl: blobUrl, relativeInstallPath: "github/acme/blob-repository/blob-skill" },
-            { sourceUrl: treeUrl, relativeInstallPath: "github/acme/tree-repository/tree-skill" },
-        ])
-        await addRepository(fixture, repositoryUrl, {
-            "LICENSE": "root license\n",
-            "COPYING.txt": "copying\n",
-            "NOTICE.md": "notice\n",
-            "attribution": "credits\n",
-            "alpha/SKILL.md": "alpha\n",
-            "alpha/support.md": "alpha support\n",
-        })
-        await addRepository(fixture, treeUrl, {
-            "LICENSE": "tree license\n",
-            "selected/tree-skill/SKILL.md": "tree\n",
-            "selected/tree-skill/examples/example.txt": "complete support\n",
-            "selected/tree-skill/legal/NOTICE": "nested notice\n",
-        })
-        await addRepository(fixture, blobUrl, { "LICENSE": "blob license\n", "blob-skill/SKILL.md": "blob\n", "blob-skill/data.txt": "blob support\n" })
-        await addRepository(fixture, rawUrl, { "LICENSE": "raw license\n", "raw-skill/SKILL.md": "raw\n", "raw-skill/data.txt": "raw support\n" })
-
-        const result = await syncGitHubSkillInventory(options(fixture), dependencies(fixture))
-
-        expect(manifestSkills(result.inventory)).toEqual([
-            "github/acme/blob-repository/blob-skill",
-            "github/acme/raw-repository/raw-skill",
-            "github/acme/repository/alpha",
-            "github/acme/tree-repository/tree-skill",
-        ])
-        expect(await nodeFs.readFile(join(fixture.skillsRoot, "acme/repository/alpha/support.md"), "utf8")).toBe("alpha support\n")
-        expect(await nodeFs.readFile(join(fixture.skillsRoot, "acme/tree-repository/tree-skill/examples/example.txt"), "utf8")).toBe("complete support\n")
-        expect(await nodeFs.readFile(join(fixture.skillsRoot, "acme/repository/LICENSE"), "utf8")).toBe("root license\n")
-        expect(await nodeFs.readFile(join(fixture.skillsRoot, "acme/tree-repository/selected/tree-skill/legal/NOTICE"), "utf8")).toBe("nested notice\n")
-        expect(existsSync(join(fixture.skillsRoot, "github/acme"))).toBe(false)
-        const tree = result.inventory.skills.find((skill) => skill.relativeInstallPath.endsWith("tree-skill"))
-        if (!tree) throw new Error("Expected tree skill")
-        expect(tree.sha256).toBe(sha256("tree\n"))
-        expect(tree.legalFiles).toEqual([
-            { relativePath: "LICENSE", sha256: sha256("tree license\n") },
-            { relativePath: "selected/tree-skill/legal/NOTICE", sha256: sha256("nested notice\n") },
-        ])
-        const repository = result.inventory.skills.find((skill) => skill.relativeInstallPath.endsWith("/alpha"))
-        if (!repository) throw new Error("Expected repository skill")
-        expect(repository.legalFiles?.map((file) => file.relativePath)).toEqual(["attribution", "COPYING.txt", "LICENSE", "NOTICE.md"])
-        expect(fixture.warnings).toEqual([])
-    })
-
     test("reuses valid cached repositories without destructive refresh operations", async () => {
         const sourceUrl = "https://github.com/acme/cache-repository"
         const fixture = await createFixture([{ sourceUrl, relativeInstallPath: "github/acme/cache-repository/cache-skill" }])

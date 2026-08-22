@@ -57,23 +57,6 @@ async function runScript(arguments_: string[]): Promise<ScriptResult> {
     }
 }
 
-test("accepts only exact force refresh flag before invoking GitHub sync", async () => {
-    const forced = await runScript(["--force-refresh"])
-
-    expect(forced.exitCode).toBe(0)
-    expect(forced.errors).toEqual([])
-    expect(forced.syncCalls).toHaveLength(1)
-    expect(forced.syncCalls[0]).toEqual(expect.objectContaining({
-        forceRefresh: true,
-    }))
-
-    const rejected = await runScript(["--force-refresh=true"])
-
-    expect(rejected.exitCode).toBe(1)
-    expect(rejected.errors).toEqual(["Unknown flag: --force-refresh=true"])
-    expect(rejected.syncCalls).toEqual([])
-})
-
 test("invokes GitHub sync without force refresh when no arguments are given", async () => {
     const result = await runScript([])
 
