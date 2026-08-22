@@ -95,7 +95,15 @@ At startup, AutoCode detects OS. Agents use CMD on Windows and Bash on Linux. Wi
 | 🤖   | `auto`     | **Autonomously** solve problems.        |
 | 🧑‍💻   | `assist`   | Assist **interactively** with problems. |
 
-### Concept, Design, and Execution Workflow
+### Behavioural Differences
+
+| Agent         | Investigations | Next Action     | Apply Changes |
+| ------------- | -------------- | --------------- | ------------- |
+| 💡 advise     | Autonomous     | Interactive     | Human         |
+| 🧑‍💻 assist     | Autonomous     | Interactive     | AI*           |
+| 🤖 auto       | Autonomous     | Autonomous      | AI*           |
+
+### Typical Workflow
 
 ```mermaid
 flowchart TD
@@ -108,12 +116,7 @@ flowchart TD
   
 ```
 
-1. Use `/job-concepts` to save an early idea under `.agents/concepts`, then run `/job-design` to investigate and select a solution.
-2. Select `/job-execute` for `auto` execution or `/job-facilitate` for `assist` execution. `/job-facilitate` is an assist-mode selector, not a workspace state.
-
-### Hybrid Workflow
-
-Switch between `auto` and `assist` when work needs a different autonomy level; workspace path does not change.
+Switch any time between `💡 advise` and `🧑‍💻 assist` and `🤖 auto` when work needs a different autonomy level.
 
 ### Session Design Fallback
 

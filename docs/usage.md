@@ -23,9 +23,15 @@ flowchart TD
   Design -- 🤖 auto --> Auto([autonomous execution])
 ```
 
-1. Use `/job-concepts` to save an early idea under `.agents/concepts`, then run `/job-design` to investigate and select a solution in the current session.
-2. Existing or manually authored design workspaces use `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title}/design.md`; timestamps are UTC and workspaces remain in place.
-3. Select `/job-execute` for `auto` execution or `/job-facilitate` for `assist` execution. `/job-facilitate` is an assist-mode selector, not a workspace state.
+### Behavioural Differences
+
+| Agent         | Investigations | Next Action     | Apply Changes |
+| ------------- | -------------- | --------------- | ------------- |
+| 💡 advise     | Autonomous     | Interactive     | Human         |
+| 🧑‍💻 assist     | Autonomous     | Interactive     | AI*           |
+| 🤖 auto       | Autonomous     | Autonomous      | AI*           |
+
+*Except dangerous tasks.
 
 ### Hybrid Workflow
 
