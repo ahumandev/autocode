@@ -23,6 +23,7 @@ import { createAutocodeSshConfigEditTool } from "./autocode_ssh_config_edit"
 import { createAutocodeSshConfigRemoveTool } from "./autocode_ssh_config_remove"
 import { createAutocodeDbSchemasTool, createAutocodeDbTableReadTool, createAutocodeDbTableTool, createAutocodeDbTablesTool } from "./autocode_db"
 import { createAutocodeDependenciesTool } from "./autocode_dependencies"
+import { createAutocodeYoutubeTranscribeTool } from "./autocode_youtube_transcribe"
 import { createGitTools } from "./git"
 import { createAutocodeJobExecuteTool } from "./autocode_job_execute"
 import { createAutocodeJobListTool } from "./autocode_job_list"
@@ -127,6 +128,7 @@ export function createTools(
         autocode_ssh_read_file: createAutocodeSshReadFileTool(),
         autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool(),
         autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
+        autocode_youtube_transcribe: createAutocodeYoutubeTranscribeTool(),
         skill: createSkillTool(client, undefined, runtime),
         skill_edit: createAutocodeSkillEditTool(),
         skill_learn: createSkillLearnTool(),

@@ -516,6 +516,14 @@ describe("auto resume wiring", () => {
         ])
     })
 
+    test("createTools registers exact YouTube transcription tool name", () => {
+        const tools = createTools(createMockClient())
+        const youtubeToolNames = Object.keys(tools).filter((toolName) => toolName.includes("youtube"))
+
+        expect(youtubeToolNames).toEqual(["autocode_youtube_transcribe"])
+        expect(Object.keys((tools.autocode_youtube_transcribe as unknown as { args: Record<string, unknown> }).args)).toEqual(["url"])
+    })
+
     test("createTools omits every sandbox tool on Windows", () => {
         const tools = createTools(createMockClient(), {}, undefined, { isWindows: true })
 
@@ -1343,6 +1351,7 @@ describe("tool registrations", () => {
                     "autocode_script_service",
                     "autocode_session_context",
                     "autocode_session_create",
+                    "autocode_youtube_transcribe",
                     "skill_edit",
                     "autocode_ssh_command",
                     "autocode_ssh_config_read",

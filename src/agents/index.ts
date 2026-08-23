@@ -42,6 +42,7 @@ import { queryOsPrompt as buildQueryOsPrompt } from "./prompts/query_os";
 import { querySkillsPrompt } from "./prompts/query_skills";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
+import { queryYoutubePrompt } from "./prompts/query_youtube";
 import { advisePrompt } from "./prompts/advise";
 import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
@@ -1306,6 +1307,20 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         },
         prompt: queryWebPrompt,
         temperature: 0.5,
+        tier: "context",
+    },
+
+    query_youtube: {
+        color: colorReadOnlyWorker,
+        description: "task query_youtube to transcribe YouTube videos.",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            autocode_youtube_transcribe: "allow",
+        },
+        prompt: queryYoutubePrompt,
+        temperature: 0.1,
         tier: "context",
     },
 

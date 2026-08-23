@@ -4,6 +4,7 @@ import { executeOpencodePrompt } from "./prompts/execute_opencode"
 import { buildExecuteOsPrompt } from "./prompts/execute_os"
 import { queryAutocodePrompt } from "./prompts/query_autocode"
 import { queryOsPrompt } from "./prompts/query_os"
+import { queryYoutubePrompt } from "./prompts/query_youtube"
 import { advisePrompt } from "./prompts/advise"
 import { createPlatformCapabilities } from "../utils/platform"
 
@@ -77,6 +78,7 @@ const managedAgentTiers = {
     query_excel: "context",
     query_text: "context",
     query_web: "context",
+    query_youtube: "context",
 } as const
 
 describe("agent policies", () => {
@@ -465,6 +467,48 @@ describe("agent policies", () => {
             .filter(([, value]) => value === "allow")
             .map(([key]) => key)
             .sort()).toEqual([...queryAutocodeAllowedSkillNames].sort())
+    })
+
+    test("buildAgents exposes query_youtube as hidden caption-only worker with timestamp citations", () => {
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
+        const permission = agents.query_youtube?.permission
+        const rules = permission as Record<string, unknown>
+
+        expect(agents.query_youtube?.hidden).toBe(true)
+        expect(agents.query_youtube?.mode).toBe("subagent")
+        expect(agents.query_youtube?.prompt).toBe(queryYoutubePrompt)
+        expect(permissionRule(permission, "*")).toBe("deny")
+        expect(Object.keys(rules).sort()).toEqual(["*", "autocode_youtube_transcribe", "external_directory"])
+        expect(Object.entries(rules).filter(([, action]) => action === "allow").map(([key]) => key)).toEqual(["autocode_youtube_transcribe"])
+        expect(permissionRule(permission, "external_directory")).toEqual({ "*": "deny" })
+        for (const toolName of [
+            "apply_patch",
+            "autocode_audio_transcribe",
+            "autocode_file_read",
+            "autocode_media_transcribe",
+            "autocode_rest",
+            "autocode_script_run",
+            "bash",
+            "context7",
+            "context7_resolve-library-id",
+            "edit",
+            "execute",
+            "file",
+            "ffmpeg",
+            "filesystem",
+            "glob",
+            "grep",
+            "lsp",
+            "read",
+            "search",
+            "webfetch",
+            "websearch",
+            "websearch_query",
+            "whisper",
+            "write",
+        ]) {
+            expect(resolvePermissionRule(rules, toolName)).toBe("deny")
+        }
     })
 
     test("buildAgents exposes execute_opencode as scoped OpenCode authoring worker", () => {
