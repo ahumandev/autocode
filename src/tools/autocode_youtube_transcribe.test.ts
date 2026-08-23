@@ -92,7 +92,7 @@ async function execute(url = `https://youtu.be/${VIDEO_ID}`): Promise<Record<str
 
 describe("autocode_youtube_transcribe", () => {
     beforeEach(() => {
-        globalThis.fetch = captionFetch
+        globalThis.fetch = captionFetch as unknown as typeof fetch
         resetRetryCounts()
         currentInfo = createInfo()
         currentTranscript = [transcriptCue(0, 1, "Caption")]
