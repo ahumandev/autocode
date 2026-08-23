@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,9 +11,57 @@ import type { Event, OpencodeClient } from "@opencode-ai/sdk";
 import type { Config as PluginConfig } from "@opencode-ai/sdk/v2";
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox";
 import { createCommands } from "./commands";
-import autocode from "./plugin";
+import {
+	createPendingAgentRestartCoordinator as createActualPendingAgentRestartCoordinator,
+	type PendingAgentHandoffRegistration,
+	type PendingAgentRestartCoordinator,
+	type PendingAgentRestartRegistration,
+} from "./hooks/agent_restart_coordinator";
+import {
+	createManagedScriptLifecycle as createActualManagedScriptLifecycle,
+	type ManagedScriptLifecycle,
+} from "./hooks/managed_script_lifecycle";
 import { createNoopAsk } from "./tools/test_context";
 import { createPlatformCapabilities } from "./utils/platform";
+
+let managedScriptLifecycleFactoryOverride:
+	| ((...args: Parameters<typeof createActualManagedScriptLifecycle>) => ManagedScriptLifecycle)
+	| undefined;
+let restartCoordinatorFactoryOverride:
+	| ((...args: Parameters<typeof createActualPendingAgentRestartCoordinator>) => PendingAgentRestartCoordinator)
+	| undefined;
+const actualManagedScriptLifecycles: ManagedScriptLifecycle[] = [];
+const actualRestartCoordinators: PendingAgentRestartCoordinator[] = [];
+const actualCreateManagedScriptLifecycle = createActualManagedScriptLifecycle;
+const actualCreatePendingAgentRestartCoordinator =
+	createActualPendingAgentRestartCoordinator;
+
+mock.module("./hooks/managed_script_lifecycle", () => ({
+	createManagedScriptLifecycle: (...args: Parameters<typeof createActualManagedScriptLifecycle>): ManagedScriptLifecycle => {
+		if (managedScriptLifecycleFactoryOverride) {
+			return managedScriptLifecycleFactoryOverride(...args);
+		}
+		const lifecycle = actualCreateManagedScriptLifecycle(...args);
+		actualManagedScriptLifecycles.push(lifecycle);
+		return lifecycle;
+	},
+}));
+mock.module("./hooks/agent_restart_coordinator", () => ({
+	createPendingAgentRestartCoordinator: (...args: Parameters<typeof createActualPendingAgentRestartCoordinator>): PendingAgentRestartCoordinator => {
+		if (restartCoordinatorFactoryOverride) {
+			return restartCoordinatorFactoryOverride(...args);
+		}
+		const coordinator = actualCreatePendingAgentRestartCoordinator(...args);
+		actualRestartCoordinators.push(coordinator);
+		return coordinator;
+	},
+}));
+
+const { default: autocode } = await import("./plugin");
+
+afterAll(() => {
+	mock.restore();
+});
 
 const tempRoots: string[] = [];
 
@@ -26,6 +74,7 @@ type CreateTool = {
 };
 type PluginRestartHooks = PluginConfigHook & {
 	event?: (input: { event: Event }) => Promise<void>;
+	dispose?: () => Promise<void>;
 	tool?: {
 		autocode_session_create?: CreateTool;
 	};
@@ -149,6 +198,12 @@ function skillPermissions(
 }
 
 afterEach(async () => {
+	await Promise.all([
+		...actualManagedScriptLifecycles.splice(0).map((lifecycle) => lifecycle.dispose()),
+		...actualRestartCoordinators.splice(0).map((coordinator) => coordinator.dispose()),
+	]);
+	managedScriptLifecycleFactoryOverride = undefined;
+	restartCoordinatorFactoryOverride = undefined;
 	await Promise.all(
 		tempRoots
 			.splice(0)
@@ -164,6 +219,136 @@ describe("autocode plugin config", () => {
 		)) as unknown as PluginRestartHooks;
 
 		expect(hooks.tool?.autocode_session_create).toBeDefined();
+	});
+
+	test("forwards each plugin event to managed lifecycle before restart handling", async () => {
+		const root = await createTempRoot();
+		const order: string[] = [];
+		const lifecycle: ManagedScriptLifecycle = {
+			registerStart: mock((): void => {}),
+			handleEvent: mock(async (): Promise<void> => {
+				order.push("managed-lifecycle");
+			}),
+			dispose: mock(async (): Promise<void> => {}),
+		};
+		const restartCoordinator: PendingAgentRestartCoordinator = {
+			register: mock((): PendingAgentRestartRegistration => "registered"),
+			registerHandoff: mock((): PendingAgentHandoffRegistration => ({
+				status: "registered",
+				sourceSessionID: "source-session",
+				destinationSessionID: "destination-session",
+			})),
+			handleEvent: mock(async (): Promise<void> => {
+				order.push("restart-coordinator");
+			}),
+			dispose: mock((): void => {}),
+			pendingCount: mock((): number => 0),
+		};
+		managedScriptLifecycleFactoryOverride = () => lifecycle;
+		restartCoordinatorFactoryOverride = () => restartCoordinator;
+		const hooks = (await autocode(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
+		if (!hooks.event) throw new Error("plugin event hook unavailable");
+		const event = {
+			type: "session.status",
+			properties: { sessionID: "session-1", status: { type: "idle" } },
+		} as unknown as Event;
+
+		await hooks.event({ event });
+
+		expect(lifecycle.handleEvent).toHaveBeenCalledWith(event);
+		expect(restartCoordinator.handleEvent).toHaveBeenCalledWith(event);
+		expect(order).toEqual(["managed-lifecycle", "restart-coordinator"]);
+	});
+
+	test("awaits managed lifecycle disposal while invoking restart disposal", async () => {
+		const root = await createTempRoot();
+		const order: string[] = [];
+		let releaseLifecycleCleanup: (() => void) | undefined;
+		const lifecycleCleanup = new Promise<void>((resolve) => {
+			releaseLifecycleCleanup = resolve;
+		});
+		const lifecycle: ManagedScriptLifecycle = {
+			registerStart: mock((): void => {}),
+			handleEvent: mock(async (): Promise<void> => {}),
+			dispose: mock(async (): Promise<void> => {
+				order.push("managed-cleanup");
+				await lifecycleCleanup;
+				order.push("managed-cleanup-complete");
+			}),
+		};
+		const restartCoordinator: PendingAgentRestartCoordinator = {
+			register: mock((): PendingAgentRestartRegistration => "registered"),
+			registerHandoff: mock((): PendingAgentHandoffRegistration => ({
+				status: "registered",
+				sourceSessionID: "source-session",
+				destinationSessionID: "destination-session",
+			})),
+			handleEvent: mock(async (): Promise<void> => {}),
+			dispose: mock((): void => {
+				order.push("restart-dispose");
+			}),
+			pendingCount: mock((): number => 0),
+		};
+		managedScriptLifecycleFactoryOverride = () => lifecycle;
+		restartCoordinatorFactoryOverride = () => restartCoordinator;
+		const hooks = (await autocode(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
+		if (!hooks.dispose || !releaseLifecycleCleanup) throw new Error("plugin dispose hook unavailable");
+		let disposeComplete = false;
+		const disposing = hooks.dispose().then((): void => {
+			disposeComplete = true;
+		});
+
+		expect(order).toEqual(["managed-cleanup", "restart-dispose"]);
+		expect(disposeComplete).toBe(false);
+		releaseLifecycleCleanup();
+		await disposing;
+
+		expect(order).toEqual(["managed-cleanup", "restart-dispose", "managed-cleanup-complete"]);
+		expect(disposeComplete).toBe(true);
+	});
+
+	test("contains lifecycle cleanup rejection after disposing restart coordinator", async () => {
+		const root = await createTempRoot();
+		const order: string[] = [];
+		const lifecycle: ManagedScriptLifecycle = {
+			registerStart: mock((): void => {}),
+			handleEvent: mock(async (): Promise<void> => {}),
+			dispose: mock(async (): Promise<void> => {
+				order.push("managed-cleanup");
+				throw new Error("managed cleanup denied");
+			}),
+		};
+		const restartCoordinator: PendingAgentRestartCoordinator = {
+			register: mock((): PendingAgentRestartRegistration => "registered"),
+			registerHandoff: mock((): PendingAgentHandoffRegistration => ({
+				status: "registered",
+				sourceSessionID: "source-session",
+				destinationSessionID: "destination-session",
+			})),
+			handleEvent: mock(async (): Promise<void> => {}),
+			dispose: mock((): void => {
+				order.push("restart-dispose");
+			}),
+			pendingCount: mock((): number => 0),
+		};
+		managedScriptLifecycleFactoryOverride = () => lifecycle;
+		restartCoordinatorFactoryOverride = () => restartCoordinator;
+		const originalWarn = console.warn;
+		const warn = mock((): void => {});
+		console.warn = warn;
+		try {
+			const hooks = (await autocode(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
+			if (!hooks.dispose) throw new Error("plugin dispose hook unavailable");
+
+			await hooks.dispose();
+		} finally {
+			console.warn = originalWarn;
+		}
+
+		expect(order).toEqual(["managed-cleanup", "restart-dispose"]);
+		expect(warn).toHaveBeenCalledWith(
+			"autocode: plugin lifecycle cleanup failed: managed cleanup denied",
+		);
 	});
 
 	test("uses PluginInput server URL when AUTOCODE_WEB_URL is absent", async () => {

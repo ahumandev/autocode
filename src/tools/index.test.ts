@@ -504,6 +504,18 @@ describe("auto resume wiring", () => {
         expect(Object.keys(skill.args)).not.toContain("subjects")
     })
 
+    test("createTools registers exact managed script tool set", () => {
+        const tools = createTools(createMockClient())
+        const scriptToolNames = Object.keys(tools).filter((toolName) => toolName.startsWith("autocode_script_"))
+
+        expect(scriptToolNames).toEqual([
+            "autocode_script_install",
+            "autocode_script_project",
+            "autocode_script_run",
+            "autocode_script_service",
+        ])
+    })
+
     test("createTools omits every sandbox tool on Windows", () => {
         const tools = createTools(createMockClient(), {}, undefined, { isWindows: true })
 
@@ -1325,6 +1337,10 @@ describe("tool registrations", () => {
                     "autocode_sandbox_glob",
                     "autocode_sandbox_grep",
                     "autocode_sandbox_read",
+                    "autocode_script_install",
+                    "autocode_script_project",
+                    "autocode_script_run",
+                    "autocode_script_service",
                     "autocode_session_context",
                     "autocode_session_create",
                     "skill_edit",

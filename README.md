@@ -31,9 +31,10 @@ No special UI required. AutoCode runs in OpenCode and keeps concepts and durable
 
 - 🗄️ **Read-only database inspection** — discover configured database tables and read one table at a time without write access.
 - 🌐 **HTTP REST client** — simulate API calls for troubleshooting.
-- 🧪 **Sandbox isolation** — agents automatically manage and experiment in their own isolated sandboxes.
-- 🔐 **SSH tools** — run remote commands and manage files through environment-keyed tools.
 - 🔀 **Git tools** — inspect changes and commit updates to Git repositories.
+- 🔐 **SSH tools** — run remote commands and manage files through environment-keyed tools.
+- 🧪 **Sandbox isolation** — agents automatically manage and experiment in their own isolated sandboxes.
+- 🛠️ **Self-building tools** — agents create durable per-job Node `.mjs` tools, reconcile dependencies, run finite scripts, and manage long-running services.
 
 As well as [OpenCode bundled tools](https://opencode.ai/docs/tools/).
 
@@ -103,6 +104,8 @@ At startup, AutoCode detects OS. Agents use CMD on Windows and Bash on Linux. Wi
 | 🧑‍💻 assist     | Autonomous     | Interactive     | AI*           |
 | 🤖 auto       | Autonomous     | Autonomous      | AI*           |
 
+*Except dangerous tasks.
+
 ### Typical Workflow
 
 ```mermaid
@@ -117,14 +120,6 @@ flowchart TD
 ```
 
 Switch any time between `💡 advise` and `🧑‍💻 assist` and `🤖 auto` when work needs a different autonomy level.
-
-### Session Design Fallback
-
-`autocode_session_create` uses explicit nonblank `prompt` input directly. With blank input, it derives a slug from current title, loads newest matching timestamped `design.md`, and uses that content as prompt. If no matching design exists, it returns a retriable error that asks for a nonblank `prompt`.
-
-### Root Session Heading
-
-Only `advise`, `assist`, and `auto` assistant turns can update root session title. First eligible text line must be `# {emoji} {title}`. Generated parenthesized title postfix is replaced; otherwise heading appends as postfix. Title-update failure is advisory and does not interrupt work.
 
 ## Reference
 

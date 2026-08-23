@@ -57,6 +57,8 @@ export type JobWorkspaceIdentityResolution = {
     warning?: string
 }
 
+export type CreateSessionJobWorkspaceContext = Pick<SessionJobContext, "sessionID" | "directory"> & Partial<Pick<SessionJobContext, "worktree">>
+
 export type ResolveJobWorkspaceIdentityOptions = {
     sessionOnly?: boolean
 }
@@ -177,6 +179,8 @@ export function isCompatibleJobName(value: string): boolean {
 }
 
 const jobDesignDirectoryTimestampPattern = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/
+const jobWorkspaceCreationAttempts = 10
+const sessionJobWorkspaceCreationLocks = new Map<string, Promise<JobWorkspaceEntry>>()
 
 export function isMatchingJobDesignDirectory(directoryName: string, designName: string): boolean {
     return directoryName.length === 20 + designName.length
@@ -244,7 +248,7 @@ async function resolveUniqueJobWorkspaceBySessionID(
     fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir">,
     storageRoot: string,
     sessionID: string,
-): Promise<JobWorkspaceEntry> {
+): Promise<JobWorkspaceEntry | undefined> {
     const matchingWorkspaces: JobWorkspaceEntry[] = []
     const workspaceNames = await readWorkspaceDirectoryNames(fileSystem, storageRoot)
     for (const workspaceName of workspaceNames) {
@@ -267,9 +271,6 @@ async function resolveUniqueJobWorkspaceBySessionID(
         if (workspaceSessionID === sessionID) matchingWorkspaces.push(workspace)
     }
 
-    if (matchingWorkspaces.length === 0) {
-        throw new Error(`No job workspace is owned by current session: ${sessionID}. Ensure session.yml records current session_id.`)
-    }
     if (matchingWorkspaces.length > 1) {
         throw new Error(`Multiple job workspaces are owned by current session: ${sessionID}. Remove stale session.yml ownership metadata before retrying.`)
     }
@@ -289,6 +290,7 @@ export async function resolveJobWorkspaceIdentity(
     })
     if (options.sessionOnly) {
         const workspace = await resolveUniqueJobWorkspaceBySessionID(fileSystem, storageRoot, context.sessionID)
+        if (workspace === undefined) return { resolution: "missing" }
         return {
             resolution: "found",
             job_name: workspace.job_name,
@@ -392,5 +394,108 @@ export async function getCurrentSessionTitle(
     catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         return { warning: `Unable to read current session title: ${message}` }
+    }
+}
+
+function createJobWorkspaceTimestamp(): string {
+    return new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-")
+}
+
+function createCollisionWorkspaceName(timestamp: string, jobName: string, attempt: number): string {
+    if (attempt === 0) return `${timestamp}_${jobName}`
+    const suffix = `_${attempt + 1}`
+    return `${timestamp}_${jobName.slice(0, 100 - suffix.length)}${suffix}`
+}
+
+function isExistingDirectory(error: unknown): boolean {
+    return typeof error === "object"
+        && error !== null
+        && "code" in error
+        && error.code === "EEXIST"
+}
+
+async function writeSessionBindingAtomically(
+    fileSystem: Pick<JobToolFileSystem, "rename" | "writeFile">,
+    workspace: JobWorkspaceEntry,
+    sessionID: string,
+): Promise<void> {
+    const sessionPath = getJobWorkspaceFilePath(workspace, "session.yml")
+    const temporaryPath = `${sessionPath}.autocode-tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    await fileSystem.writeFile(temporaryPath, `session_id: ${sessionID}\n`)
+    await fileSystem.rename(temporaryPath, sessionPath)
+}
+
+async function createSessionJobWorkspaceUnlocked(
+    fileSystem: Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "rename" | "rm" | "writeFile">,
+    client: OpencodeClient | undefined,
+    context: CreateSessionJobWorkspaceContext,
+    storageRoot: string,
+    sessionID: string,
+): Promise<JobWorkspaceEntry> {
+    const existing = await resolveUniqueJobWorkspaceBySessionID(fileSystem, storageRoot, sessionID)
+    if (existing !== undefined) return existing
+    if (!client) throw new Error("Current session client is unavailable.")
+
+    const currentSession = await getCurrentSessionTitle(client, { sessionID, directory: context.directory })
+    if (!currentSession.title) throw new Error(currentSession.warning ?? "Current session title is required.")
+    const jobName = deriveJobNameFromTitle(cleanSessionTitleSuffix(currentSession.title))
+    if (!jobName) throw new Error("Current session title must contain letters or numbers.")
+
+    const jobsRoot = path.join(storageRoot, jobWorkspacesDirectory)
+    await fileSystem.mkdir(jobsRoot, { recursive: true })
+    const timestamp = createJobWorkspaceTimestamp()
+    for (let attempt = 0; attempt < jobWorkspaceCreationAttempts; attempt += 1) {
+        const workspaceName = createCollisionWorkspaceName(timestamp, jobName, attempt)
+        const workspace = createJobWorkspaceEntry(storageRoot, workspaceName)
+        if (!workspace.absolute_path.startsWith(`${jobsRoot}${path.sep}`)) throw new Error("Resolved job workspace path is unsafe.")
+
+        let created = false
+        try {
+            await fileSystem.mkdir(workspace.absolute_path)
+            created = true
+            await writeSessionBindingAtomically(fileSystem, workspace, sessionID)
+            return workspace
+        }
+        catch (error) {
+            if (created) {
+                try {
+                    await fileSystem.rm(workspace.absolute_path, { recursive: true, force: true })
+                }
+                catch {
+                }
+            }
+            if (isExistingDirectory(error)) continue
+            throw error
+        }
+    }
+    throw new Error("Unable to create unique timestamped job workspace; retry setup.")
+}
+
+export async function createSessionJobWorkspace(
+    fileSystem: Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "rename" | "rm" | "writeFile">,
+    client: OpencodeClient | undefined,
+    context: CreateSessionJobWorkspaceContext,
+): Promise<JobWorkspaceEntry> {
+    const sessionID = context.sessionID.trim()
+    if (!sessionID || /\s/.test(sessionID)) throw new Error("Current session ID is invalid.")
+    const directory = context.directory.trim()
+    if (!directory) throw new Error("Current session directory is invalid.")
+    const storageRoot = path.resolve(resolveAgentsStorageRoot({
+        directory,
+        worktree: context.worktree?.trim() || directory,
+    }))
+    if (storageRoot === path.parse(storageRoot).root) throw new Error("Current job storage root is invalid.")
+
+    const lockKey = `${storageRoot}\u0000${sessionID}`
+    const locked = sessionJobWorkspaceCreationLocks.get(lockKey)
+    if (locked) return await locked
+
+    const creation = createSessionJobWorkspaceUnlocked(fileSystem, client, context, storageRoot, sessionID)
+    sessionJobWorkspaceCreationLocks.set(lockKey, creation)
+    try {
+        return await creation
+    }
+    finally {
+        if (sessionJobWorkspaceCreationLocks.get(lockKey) === creation) sessionJobWorkspaceCreationLocks.delete(lockKey)
     }
 }

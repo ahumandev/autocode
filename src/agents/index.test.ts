@@ -19,6 +19,7 @@ function resolvePermissionRule(rules: Record<string, unknown>, name: string): un
 }
 
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]
+const executeScriptSandboxToolNames = ["autocode_sandbox_cli", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove", "autocode_sandbox_copy", "autocode_sandbox_create", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]
 const primaryAgents = ["assist", "advise", "auto", "design"] as const
 const executeRestToolNames = ["autocode_rest"]
 const executeOpencodeAllowedPermissionKeys = ["autocode_config_*", "autocode_md_*"]
@@ -203,10 +204,8 @@ describe("agent policies", () => {
     test("document_env allows skill_edit without broader permission grants", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
         const permission = agents.document_env?.permission
-        const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
 
         expect(permissionRule(permission, "skill_edit")).toBe("allow")
-        expect(skillPermission.skill_edit).toBe("allow")
         expect(permissionRule(permission, "external_directory")).toEqual({ "*": "deny" })
     })
 
@@ -378,6 +377,70 @@ describe("agent policies", () => {
         expect(permissionRule(agents.auto_review_api?.permission, "task")).toEqual(expect.objectContaining({
             execute_rest: "allow",
         }))
+    })
+
+    test("execute_script permits only managed script workflow tools", () => {
+        const permission = getAgentPermission("execute_script", createPlatformCapabilities("linux"))
+        const rules = permission as Record<string, unknown>
+
+        expect(permissionRule(permission, "*")).toBe("deny")
+        expect(Object.entries(rules)
+            .filter(([, action]) => action === "allow")
+            .map(([toolName]) => toolName)
+            .sort()).toEqual([
+                "autocode_script_install",
+                "autocode_script_project",
+                "autocode_script_run",
+                "autocode_script_service",
+                "edit",
+                "glob",
+                "grep",
+                "read",
+                "skill_learn",
+                "write",
+            ])
+        for (const toolName of [
+            "read",
+            "write",
+            "edit",
+            "glob",
+            "grep",
+            "autocode_script_project",
+            "autocode_script_install",
+            "autocode_script_run",
+            "autocode_script_service",
+        ]) {
+            expect(resolvePermissionRule(rules, toolName)).toBe("allow")
+        }
+        for (const toolName of [
+            "bash",
+            "pty",
+            "pty_spawn",
+            "pty_exec",
+            "pty_write",
+            ...executeScriptSandboxToolNames,
+            "autocode_kill",
+            "autocode_process_kill",
+            "task_external",
+            "autocode_ssh_command",
+            "autocode_dependencies",
+            "list",
+            "apply_patch",
+            "filesystem",
+            "config",
+            "autocode_config_read",
+            "autocode_config_edit",
+            "autocode_config_remove",
+            "webfetch",
+            "skill",
+            "todo",
+            "todowrite",
+            "autocode_script_unknown",
+            "unknown_tool",
+        ]) {
+            const rule = resolvePermissionRule(rules, toolName)
+            expect(permissionRule(rule as AutocodeAgentConfig["permission"], "*") ?? rule).toBe("deny")
+        }
     })
 
     test("buildAgents exposes query_autocode as read-only query worker", () => {

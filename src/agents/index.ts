@@ -181,6 +181,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "skill-write": "allow",
                 "ui-craft": "allow",
             },
+            skill_edit: "allow",
             skill_learn: "allow",
             task: {
                 "*": "allow",
@@ -211,8 +212,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 "git-commit": "allow",
                 "learned-permissions*": "allow",
-                "primary-manual": "allow",
-                "skill-write": "allow",
+                "primary-manual": "allow"
             },
             skill_learn: "allow",
             task: {
@@ -280,7 +280,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             skill: {
                 "*": "deny",
                 "execute-ux": "allow",
+                "skill-write": "allow",
             },
+            skill_learn: "allow",
             "todo*": "allow",
         },
         prompt: assistBrowserPrompt,
@@ -535,9 +537,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 "test*": "allow",
                 "learned-corrections*": "allow",
-                "skill-write": "allow"
             },
-            skill_learn: "allow",
             task: {
                 "*": "deny",
                 execute_code: "allow",
@@ -608,8 +608,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             skill: {
                 "*": "deny",
                 "author-rules": "allow"
-            },
-            skill_edit: "allow",
+            }
         },
         prompt: documentAgentsPrompt,
         temperature: 0.3,
@@ -630,7 +629,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_edit": "allow"
+                "skill-write": "allow"
             },
             skill_edit: "allow",
         },
@@ -653,7 +652,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_edit": "allow"
+                "skill-write": "allow"
             },
             skill_edit: "allow",
         },
@@ -675,7 +674,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             skill: {
                 "*": "deny",
                 "learned-env*": "allow",
-                "skill_edit": "allow"
+                "skill-write": "allow",
             },
             skill_edit: "allow",
             skill_learn: "allow",
@@ -703,7 +702,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_edit": "allow"
+                "skill-write": "allow"
             },
             skill_edit: "allow",
         },
@@ -726,7 +725,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_edit": "allow"
+                "skill-write": "allow"
             },
             skill_edit: "allow",
         },
@@ -749,7 +748,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             read: "allow",
             skill: {
                 "*": "deny",
-                "skill_edit": "allow"
+                "skill-write": "allow"
             },
             skill_edit: "allow",
         },
@@ -829,11 +828,23 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         permission: {
             "*": "deny",
             "autocode_config_*": "allow",
+            autocode_process_kill: "allow",
+            bash: "allow",
+            doom_loop: "deny",
             edit: "allow",
             glob: "allow",
             grep: "allow",
             lsp: "allow",
-            read: "allow"
+            "pty*": "allow",
+            read: "allow",
+            skill: {
+                "*": "deny",
+                "learned-corrections*": "allow",
+                "learned-env*": "allow",
+                "learned-permissions*": "allow",
+                "skill-write": "allow"
+            },
+            skill_learn: "allow",
         },
         prompt: executeDebugPrompt,
         temperature: 0.6,
@@ -901,6 +912,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "author-rules": "allow",
                 "customize-opencode": "allow" // Build-in to OpenCode
             },
+            skill_edit: "allow",
         },
         prompt: executeOpencodePrompt,
         temperature: 0.3,
@@ -1002,33 +1014,24 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         mode: "subagent",
         permission: {
             "*": "deny",
-            "autocode_config_*": "allow",
-            autocode_sandbox_cli: "allow",
-            autocode_sandbox_copy: sandboxCopyTargetPermission,
-            autocode_sandbox_edit: "allow",
-            autocode_sandbox_glob: "allow",
-            autocode_sandbox_grep: "allow",
-            autocode_sandbox_read: "allow",
-            bash: "allow",
-            doom_loop: "deny",
+            autocode_script_install: "allow",
+            autocode_script_project: "allow",
+            autocode_script_run: "allow",
+            autocode_script_service: "allow",
             edit: "allow",
-            "filesystem*": "allow",
             glob: "allow",
             grep: "allow",
-            "pty*": "allow",
             read: "allow",
             skill: {
                 "*": "deny",
                 "execute-install": "allow",
-                "execute-sandbox": "allow",
                 "learned-corrections*": "allow",
                 "learned-env*": "allow",
                 "learned-permissions*": "allow",
                 "skill-write": "allow"
             },
             skill_learn: "allow",
-            "todo*": "allow",
-            webfetch: "allow",
+            write: "allow",
         },
         prompt: executeScriptPrompt,
         temperature: 0.3,

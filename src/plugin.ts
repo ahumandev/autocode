@@ -11,6 +11,7 @@ import { cleanupLearnedSkills, reconcileGeneratedSkills } from "./skills"
 import { createTools } from "./tools"
 import { createPlatformCapabilities, type PlatformCapabilities } from "./utils/platform"
 import { createPendingAgentRestartCoordinator } from "./hooks/agent_restart_coordinator"
+import { createManagedScriptLifecycle } from "./hooks/managed_script_lifecycle"
 import { createRootSessionTitleHook } from "./hooks/root_session_title"
 import { resolveAgentsStorageRoot } from "@/utils/jobs"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
@@ -134,6 +135,7 @@ async function createPluginHooks(
 ): Promise<Hooks> {
     const capabilities = createPlatformCapabilities(input.platformOverride ?? process.platform, process.env)
     const restartCoordinator = createPendingAgentRestartCoordinator()
+    const managedScriptLifecycle = createManagedScriptLifecycle({ client: input.client })
     const rootSessionTitleHook = createRootSessionTitleHook(input.client, input.directory)
     const commandDefinitions = createCommands(capabilities)
     const path = capabilities.isWindows ? win32 : posix
@@ -158,9 +160,18 @@ async function createPluginHooks(
 
     return {
         async dispose(): Promise<void> {
-            restartCoordinator.dispose()
+            const results = await Promise.allSettled([
+                managedScriptLifecycle.dispose(),
+                (async (): Promise<void> => { restartCoordinator.dispose() })(),
+            ])
+            for (const result of results) {
+                if (result.status === "rejected") {
+                    console.warn(`autocode: plugin lifecycle cleanup failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`)
+                }
+            }
         },
         async event({ event }): Promise<void> {
+            await managedScriptLifecycle.handleEvent(event)
             try {
                 await restartCoordinator.handleEvent(event)
             }
@@ -176,6 +187,7 @@ async function createPluginHooks(
             serverUrl: input.serverUrl,
             getWebUrl: () => process.env.AUTOCODE_WEB_URL,
             restartCoordinator,
+            managedScriptLifecycle,
         }, capabilities),
     }
 }

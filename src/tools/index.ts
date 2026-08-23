@@ -3,6 +3,7 @@ import type { ToolDefinition } from "@opencode-ai/plugin"
 import type { AutocodeSandboxConfig } from "../config"
 import type { PlatformCapabilities } from "../utils/platform"
 import type { PendingAgentRestartCoordinator } from "../hooks/agent_restart_coordinator"
+import type { ManagedScriptLifecycle } from "../hooks/managed_script_lifecycle"
 import { createAutocodeAgentExecuteTool } from "./autocode_agent_execute"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
@@ -34,6 +35,10 @@ import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 import { createAutocodeSandboxConfigEditTool, createAutocodeSandboxConfigReadTool, createAutocodeSandboxConfigRemoveTool } from "./autocode_sandbox_config_tools"
+import { createAutocodeScriptInstallTool } from "./autocode_script_install"
+import { createAutocodeScriptProjectTool } from "./autocode_script_project"
+import { createAutocodeScriptRunTool } from "./autocode_script_run"
+import { createAutocodeScriptServiceTool } from "./autocode_script_service"
 import { createAutocodeSessionContextTool } from "./autocode_session_context"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createAutocodeSkillEditTool } from "./skill_edit"
@@ -50,6 +55,7 @@ type ToolRuntime = {
     getServerUrl?: () => string | URL | undefined
     getWebUrl?: () => string | URL | undefined
     restartCoordinator?: PendingAgentRestartCoordinator
+    managedScriptLifecycle?: ManagedScriptLifecycle
 }
 
 type ToolMap = Record<string, ToolDefinition>
@@ -102,7 +108,10 @@ export function createTools(
         autocode_md_remove: createAutocodeMdRemoveTool(),
         autocode_md_update: createAutocodeMdUpdateTool(),
         autocode_rest: createAutocodeRestTool(client),
-        
+        autocode_script_install: createAutocodeScriptInstallTool(client),
+        autocode_script_project: createAutocodeScriptProjectTool(client),
+        autocode_script_run: createAutocodeScriptRunTool(client),
+        autocode_script_service: createAutocodeScriptServiceTool(client, {}, undefined, runtime?.managedScriptLifecycle),
         autocode_session_context: createAutocodeSessionContextTool(client),
         autocode_session_create: createAutocodeSessionCreateTool(client, runtime?.restartCoordinator, runtime?.serverUrl, runtime?.getServerUrl, runtime?.getWebUrl),
         autocode_ssh_command: createAutocodeSshCommandTool(),

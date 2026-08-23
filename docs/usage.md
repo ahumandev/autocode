@@ -59,22 +59,42 @@ For example you may start in `assist` mode and then later when you get busy, swi
 
 Concepts are early Markdown descriptions saved in `.agents/concepts/`. `/job-concepts` remains available for creating them.
 
-Durable design workspaces use `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md`. The timestamp is UTC, `{title_dir}` is a slug derived from the session title, and the workspace stays at that path during and after execution.
-
 | Path | Purpose |
 | ---- | ------- |
 | `.agents/concepts/{label}.md` | Early concept selected by `/job-design`. |
-| `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md` | Solution design with problems, impact, expectations, requirements, constraints, and proposal. |
-| `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/session.yml` | Optional linked OpenCode session ID. |
-| `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}` | Canonical per-job sandbox storage. |
+| `.agents/jobs/{name}/design.md` | Solution design with problems, impact, expectations, requirements, constraints, and proposal. |
+| `.agents/jobs/{name}/session.yml` | Optional linked OpenCode session ID. |
+| `.agents/jobs/{name}/sandboxes/{sandbox_name}` | Canonical per-job sandbox storage. |
 
 `autocode_session_create` uses a nonblank `prompt` directly. With a blank `prompt`, it derives the current-title slug and uses the newest matching `design.md`; no match returns a retriable error instructing the caller to provide a nonblank `prompt`.
 
 ### Sandbox ownership
 
-Canonical sandbox path is exactly `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Resolve current job first from its linked session; otherwise use deterministic newest timestamped workspace matching current session-title slug. No owner returns an error before filesystem mutation or process spawn.
+Canonical sandbox path is exactly `.agents/jobs/{name}/sandboxes/{sandbox_name}`. Resolve current job first from its linked session; otherwise use deterministic newest timestamped workspace matching current session-title slug. No owner returns an error before filesystem mutation or process spawn.
 
 All sandbox access, list, create, copy, and delete operations stay in resolved current job. Never look up sandbox names across jobs: same `{sandbox_name}` may exist independently in multiple jobs. Never access, fall back to, migrate, scan, delete, or write legacy `.agents/sandboxes`; legacy data remains untouched and inaccessible.
+
+### Managed Script Workflow
+
+Each managed script project belongs to its current job:
+
+```text
+.agents/jobs/{name}/scripts/
+├── AGENTS.md
+├── package.json
+├── package-lock.json
+├── node_modules/
+├── src/
+│   └── *.mjs
+├── logs/
+└── services/                  # when applicable
+```
+
+Log filenames vary, but all managed logs remain in current job's `scripts/logs/`. Agents in same job reuse one scripts project; different jobs or sessions resolve separate job roots. Missing or ambiguous job ownership rejects the operation. Script-project files persist across managed tool calls until whole-job cleanup.
+
+`scripts/src` is the canonical managed `sourceRoot`; runtime fixes it and callers cannot supply another source root. `autocode_script_run` and `autocode_script_service` with `action` `start` accept entries relative to it, such as `task.mjs` or `nested/task.mjs`. Entries reject `src/` prefixes, absolute paths, backslashes, traversal, symlink escapes, broken symlinks, non-files, and extensions other than `.mjs`.
+
+Managed processes use `scripts` root as cwd. `AUTOCODE_SCRIPT_ROOT` is `scripts` root, and `AUTOCODE_WORKSPACE_ROOT` remains unchanged. Dependency specs accept npm registry versions, ranges, and tags only; `file:`, `link:`, relative or absolute paths, URLs, Git sources, and filesystem or network archive sources are rejected.
 
 ### Root Session Heading Contract
 

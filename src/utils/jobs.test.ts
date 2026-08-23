@@ -46,4 +46,16 @@ describe("job workspace utilities", () => {
         expect(result).toEqual(expect.objectContaining({ resolution: "found", job_name: "original_feature" }))
         expect(result.session_title).toBeUndefined()
     })
+
+    test("session-only resolver reports missing without title fallback", async () => {
+        const workspace = "2026-08-20_10-30-00_matching_title"
+        const result = await resolveJobWorkspaceIdentity(
+            createIdentityFileSystem([workspace], { [`/workspace/.agents/jobs/${workspace}/session.yml`]: "session_id: another-session\n" }),
+            { session: { get: async () => ({ data: { title: "Matching title" } }) } } as never,
+            { sessionID: "session-1", directory: "/workspace", worktree: "/workspace" },
+            { sessionOnly: true },
+        )
+
+        expect(result).toEqual({ resolution: "missing" })
+    })
 })

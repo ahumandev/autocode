@@ -36,6 +36,32 @@ Run `bun run build` to copy committed skill snapshots from `src/skills` into `di
 
 Legal files retain their original names in `github/{owner}/{project}/`. Projects under one owner can have different legal files. Sync warns when a repository-root license is missing. Syncing accepts redistribution risk and grants no rights.
 
+## Managed script execution
+
+When agents lack tools, the build their own tools on the fly to complete their tasks. These node script artifacts live at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/scripts`. Each `scripts` project root can contain `src/`, `logs/`, `package.json`, `package-lock.json`, `node_modules/`, and `services/`; these artifacts persist until whole-job cleanup. `scripts/src` is the canonical managed `sourceRoot`, fixed by the runtime and never caller input.
+
+Original project remains authoring context; managed Node processes use `scripts` root as current working directory. Node.js 20 or later and npm are required. Run and service-start entries accept filename-only paths such as `task.mjs` or `nested/task.mjs`, relative to fixed `sourceRoot`. They reject `src/`-prefixed entries, absolute paths, backslashes, traversal, symlink escapes, broken symlinks, non-files, and extensions other than `.mjs`. `AUTOCODE_SCRIPT_ROOT` is `scripts` root; `AUTOCODE_WORKSPACE_ROOT` is unchanged.
+
+| Operation or event | Structure, log, and lifecycle behavior |
+| --- | --- |
+| `autocode_script_project` | Ensures the directory structure, including `logs/`, and programmatically generates or refreshes `AGENTS.md`. Repeated setup preserves existing `scripts/` and `logs/`. |
+| `autocode_script_install` | Installs or reconciles dependencies and writes npm reconciliation logs only when reconciliation work occurs. |
+| `autocode_script_run` | Runs finite work and writes execution logs, including for failure and timeout. Finite runs clean up on timeout. |
+| `autocode_script_service` `start` | Starts long-running work and creates lifecycle logs; `status` and `stop` use the opaque service `run_id`. Stop services when done. |
+| Editing a script | Editing `src/*.mjs` alone creates no run log. |
+
+Typical finite workflow:
+
+1. Prepare project with `autocode_script_project`.
+2. Install dependencies with `autocode_script_install` using npm registry version, range, or tag specs only.
+3. Run with `autocode_script_run` using `entry`, optional string `argv`, and optional `timeout_ms`.
+
+For long-running work, use `autocode_script_service` with `action` `start`, `status`, or `stop`; service runs use opaque `run_id`. Finite runs clean up on timeout. Services have managed ownership and lifecycle cleanup; stop a service when done.
+
+Dependencies inherited from ancestor workspaces are resolved there; local dependencies install under script `node_modules/`. Dependency specs allow npm registry versions, ranges, and tags only. They reject `file:`, `link:`, relative or absolute paths, URLs, Git sources, and filesystem or network archive sources. Provenance metadata records dependency source and, where applicable, version, path, workspace, and requested range. npm cache reuse may avoid downloads, but does not mean installed `node_modules` files are inherited or shared.
+
+Finite runs start a direct Node process; timeout terminates its process group, and complete output is stored under script `logs/`. Services are Linux-only and have opaque `run_id` values, owner process-group state under `services/`, and validated status and stop operations. Callers should explicitly stop services. Terminal events, disposal, and whole-job cleanup stop services owned by that lifecycle.
+
 ## Sandbox execution
 
 Linux sandbox execution requires usable [Bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`).
