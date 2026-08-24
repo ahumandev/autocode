@@ -519,9 +519,14 @@ describe("auto resume wiring", () => {
     test("createTools registers exact YouTube transcription tool name", () => {
         const tools = createTools(createMockClient())
         const youtubeToolNames = Object.keys(tools).filter((toolName) => toolName.includes("youtube"))
+        const youtubeTool = tools.autocode_youtube_transcribe as unknown as { args: Record<string, { safeParse(input: unknown): { success: boolean, data?: boolean } }> }
 
         expect(youtubeToolNames).toEqual(["autocode_youtube_transcribe"])
-        expect(Object.keys((tools.autocode_youtube_transcribe as unknown as { args: Record<string, unknown> }).args)).toEqual(["url"])
+        expect(Object.keys(youtubeTool.args)).toEqual(["url", "timestamps"])
+        expect(youtubeTool.args.timestamps?.safeParse(undefined)).toEqual({ success: true, data: false })
+        expect(youtubeTool.args.timestamps?.safeParse("false").success).toBe(false)
+        expect(youtubeTool.args.timestamps?.safeParse(false).success).toBe(true)
+        expect(youtubeTool.args.timestamps?.safeParse(true).success).toBe(true)
     })
 
     test("createTools omits every sandbox tool on Windows", () => {

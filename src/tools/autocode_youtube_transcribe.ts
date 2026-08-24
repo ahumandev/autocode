@@ -35,12 +35,18 @@ type SelectedCaptionTrack = {
 }
 
 type TranscriptCue = {
-    offsetMilliseconds: number
+    startMs: number
+    durationMs?: number
     text: string
-    index: number
+    sourceIndex: number
 }
 
-type PackageTranscriptCue = Pick<TranscriptResponse, "duration" | "offset" | "text"> & { index: number }
+type PackageTranscriptCue = Pick<TranscriptResponse, "offset" | "text"> & { duration?: number, sourceIndex: number }
+
+type TranscriptGroup = {
+    cue: TranscriptCue
+    lastCue: TranscriptCue
+}
 
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com", "mobile.youtube.com"])
@@ -211,11 +217,11 @@ function safeOffsetMilliseconds(value: unknown): number {
 }
 
 function formatTimestamp(offsetMilliseconds: number): string {
-    const hours = Math.floor(offsetMilliseconds / 3_600_000)
-    const minutes = Math.floor(offsetMilliseconds / 60_000) % 60
-    const seconds = Math.floor(offsetMilliseconds / 1_000) % 60
-    const milliseconds = offsetMilliseconds % 1_000
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(milliseconds).padStart(3, "0")}`
+    const totalSeconds = Math.floor(offsetMilliseconds / 1_000)
+    const hours = Math.floor(totalSeconds / 3_600)
+    const minutes = Math.floor(totalSeconds / 60) % 60
+    const seconds = totalSeconds % 60
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -258,22 +264,23 @@ function packageTranscriptCues(value: unknown): PackageTranscriptCue[] | null {
             return []
         }
 
+        const duration = finiteNumber(cue.duration)
         return [{
             text: normalizeCaptionText(text),
             offset,
-            duration: finiteNumber(cue.duration) ?? 0,
-            index,
+            ...(duration !== null && duration >= 0 ? { duration } : {}),
+            sourceIndex: index,
         }]
     })
 }
 
 function packageCueScale(cues: PackageTranscriptCue[], durationSeconds: number | null): number {
-    const maximumCueValue = Math.max(...cues.map((cue) => Math.max(cue.offset, cue.offset + cue.duration)))
+    const maximumCueValue = Math.max(...cues.map((cue) => Math.max(cue.offset, cue.offset + (cue.duration ?? 0))))
     if (durationSeconds !== null && durationSeconds > 0) {
         return maximumCueValue > durationSeconds * 2 ? 1 : 1_000
     }
 
-    if (cues.some((cue) => !Number.isInteger(cue.offset) || !Number.isInteger(cue.duration))) {
+    if (cues.some((cue) => !Number.isInteger(cue.offset) || (cue.duration !== undefined && !Number.isInteger(cue.duration)))) {
         return 1_000
     }
 
@@ -281,7 +288,7 @@ function packageCueScale(cues: PackageTranscriptCue[], durationSeconds: number |
     return maximumCueValue >= 10_000 ? 1 : 1_000
 }
 
-function formatTranscript(value: unknown, durationSeconds: number | null): string | null {
+function formatTranscript(value: unknown, durationSeconds: number | null, timestamps: boolean): string | null {
     const packageCues = packageTranscriptCues(value)
     if (packageCues === null || packageCues.length === 0) {
         return null
@@ -289,19 +296,153 @@ function formatTranscript(value: unknown, durationSeconds: number | null): strin
 
     const scale = packageCueScale(packageCues, durationSeconds)
     return formatTranscriptCues(packageCues.map((cue) => ({
-        offsetMilliseconds: safeOffsetMilliseconds(cue.offset * scale),
+        startMs: safeOffsetMilliseconds(cue.offset * scale),
+        ...(cue.duration === undefined ? {} : { durationMs: safeOffsetMilliseconds(cue.duration * scale) }),
         text: cue.text,
-        index: cue.index,
-    })))
+        sourceIndex: cue.sourceIndex,
+    })), timestamps)
 }
 
-function formatTranscriptCues(cues: TranscriptCue[]): string | null {
+function sourceLabel(text: string): string | null {
+    if (text === ">>" || text.startsWith(">> ")) {
+        return ">>"
+    }
+    if (text.startsWith("- ")) {
+        return "-"
+    }
+
+    const colonIndex = text.indexOf(":")
+    const prefix = text.slice(0, colonIndex)
+    const words = prefix.split(/\s+/)
+    if (colonIndex <= 0 || prefix.length > 32 || words.length > 4 || !/^\p{Lu}[\p{L}\p{M}'’.\-]*$/u.test(words[0] ?? "") || !words.slice(1).every((word) => /^(?:\p{Lu}[\p{L}\p{M}'’.\-]*|\d+)$/u.test(word))) {
+        return null
+    }
+    return `${prefix}:`
+}
+
+function isStandaloneNonSpeech(text: string): boolean {
+    return /^\[[\s\S]*\]$/u.test(text) || /^\([\s\S]*\)$/u.test(text) || /^[\s♪♫♬♩♭♯♮]+$/u.test(text)
+}
+
+function endsSentence(text: string): boolean {
+    return /[.?!…](?:["'”’\)\]\}»]+)?$/u.test(text)
+}
+
+function unicodeLength(text: string): number {
+    return Array.from(text).length
+}
+
+function overlappingIntervals(left: TranscriptCue, right: TranscriptCue): boolean {
+    return left.durationMs !== undefined && right.durationMs !== undefined
+        && left.startMs < right.startMs + right.durationMs
+        && right.startMs < left.startMs + left.durationMs
+}
+
+function suppressExactDuplicates(cues: TranscriptCue[]): TranscriptCue[] {
+    const earlierCues: TranscriptCue[] = []
+    return cues.filter((cue) => {
+        const duplicate = earlierCues.some((earlierCue) => earlierCue.text === cue.text
+            && (earlierCue.startMs === cue.startMs || overlappingIntervals(earlierCue, cue)))
+        earlierCues.push(cue)
+        return !duplicate
+    })
+}
+
+function normalizedWhitespaceTokens(text: string): string[] {
+    return text.normalize("NFC").toLowerCase().trim().split(/\s+/)
+}
+
+function hasKnownNonnegativeDuration(cue: TranscriptCue): cue is TranscriptCue & { durationMs: number } {
+    return cue.durationMs !== undefined && Number.isFinite(cue.durationMs) && cue.durationMs >= 0
+}
+
+function rollingOverlapTokenCount(group: TranscriptGroup, nextCue: TranscriptCue): number {
+    const lastCue = group.lastCue
+    if (!hasKnownNonnegativeDuration(lastCue) || !hasKnownNonnegativeDuration(nextCue) || nextCue.startMs >= lastCue.startMs + lastCue.durationMs) {
+        return 0
+    }
+
+    const groupTokens = normalizedWhitespaceTokens(group.cue.text)
+    const nextTokens = normalizedWhitespaceTokens(nextCue.text)
+    for (let length = Math.min(groupTokens.length, nextTokens.length); length >= 2; length -= 1) {
+        if (groupTokens.slice(-length).every((token, index) => token === nextTokens[index])) {
+            return length
+        }
+    }
+    return 0
+}
+
+function mergedText(group: TranscriptGroup, nextCue: TranscriptCue, overlapTokenCount = 0): string {
+    if (overlapTokenCount > 0) {
+        const nextText = nextCue.text.split(/\s+/).slice(overlapTokenCount).join(" ")
+        return nextText ? `${group.cue.text} ${nextText}` : group.cue.text
+    }
+
+    const groupLabel = sourceLabel(group.cue.text)
+    const nextLabel = sourceLabel(nextCue.text)
+    if (groupLabel !== null && groupLabel === nextLabel) {
+        const nextText = nextCue.text.slice(groupLabel.length).trimStart()
+        return nextText ? `${group.cue.text} ${nextText}` : group.cue.text
+    }
+    const nextText = nextCue.text
+    return nextText ? `${group.cue.text} ${nextText}` : group.cue.text
+}
+
+function canMergeCue(group: TranscriptGroup, nextCue: TranscriptCue): boolean {
+    if (isStandaloneNonSpeech(group.cue.text) || isStandaloneNonSpeech(nextCue.text) || endsSentence(group.cue.text)) {
+        return false
+    }
+
+    const groupLabel = sourceLabel(group.cue.text)
+    const nextLabel = sourceLabel(nextCue.text)
+    if (groupLabel !== null && nextLabel !== null && groupLabel !== nextLabel) {
+        return false
+    }
+
+    const previousEnd = group.lastCue.durationMs === undefined ? null : group.lastCue.startMs + group.lastCue.durationMs
+    if (previousEnd === null ? nextCue.startMs - group.lastCue.startMs > 2_500 : nextCue.startMs - previousEnd > 1_000) {
+        return false
+    }
+
+    const resultingDuration = nextCue.durationMs === undefined ? undefined : nextCue.startMs + nextCue.durationMs - group.cue.startMs
+    if (resultingDuration !== undefined && resultingDuration > 12_000) {
+        return false
+    }
+
+    const text = mergedText(group, nextCue)
+    return unicodeLength(text) <= 240 && text.split(/\s+/).length <= 40
+}
+
+function groupTranscriptCues(cues: TranscriptCue[]): TranscriptCue[] {
+    const groups: TranscriptGroup[] = []
+    for (const cue of suppressExactDuplicates(cues)) {
+        const group = groups[groups.length - 1]
+        if (!group || !canMergeCue(group, cue)) {
+            groups.push({ cue, lastCue: cue })
+            continue
+        }
+
+        const overlapTokenCount = rollingOverlapTokenCount(group, cue)
+        const durationMs = cue.durationMs === undefined ? undefined : cue.startMs + cue.durationMs - group.cue.startMs
+        group.cue = {
+            startMs: group.cue.startMs,
+            ...(durationMs === undefined ? {} : { durationMs }),
+            text: mergedText(group, cue, overlapTokenCount),
+            sourceIndex: group.cue.sourceIndex,
+        }
+        group.lastCue = cue
+    }
+    return groups.map((group) => group.cue)
+}
+
+function formatTranscriptCues(cues: TranscriptCue[], timestamps: boolean): string | null {
     if (cues.length === 0) {
         return null
     }
 
-    cues.sort((left, right) => left.offsetMilliseconds - right.offsetMilliseconds || left.index - right.index)
-    return cues.map((cue) => `[${formatTimestamp(cue.offsetMilliseconds)}] ${cue.text}`).join("\n")
+    cues.sort((left, right) => left.startMs - right.startMs || left.sourceIndex - right.sourceIndex)
+    const groups = groupTranscriptCues(cues)
+    return groups.map((cue, index) => timestamps ? `* ${formatTimestamp(cue.startMs)} ${cue.text}` : `${index + 1}. ${cue.text}`).join("\n")
 }
 
 function captionUrl(baseUrl: string): URL | null {
@@ -331,16 +472,22 @@ function json3TranscriptCues(value: unknown): TranscriptCue[] | null {
             return []
         }
 
-        const offset = finiteNumber(typeof event.tStartMs === "string" ? Number(event.tStartMs) : event.tStartMs)
-        if (offset === null) {
+        const startMs = finiteNumber(typeof event.tStartMs === "string" ? Number(event.tStartMs) : event.tStartMs)
+        if (startMs === null) {
             return []
         }
 
+        const durationMs = finiteNumber(event.dDurationMs)
         const text = event.segs
             .flatMap((segment): string[] => isRecord(segment) && typeof segment.utf8 === "string" ? [segment.utf8] : [])
             .join("")
         const normalizedText = normalizeCaptionText(text)
-        return normalizedText ? [{ offsetMilliseconds: safeOffsetMilliseconds(offset), text: normalizedText, index }] : []
+        return normalizedText ? [{
+            startMs: safeOffsetMilliseconds(startMs),
+            ...(durationMs !== null && durationMs >= 0 ? { durationMs: safeOffsetMilliseconds(durationMs) } : {}),
+            text: normalizedText,
+            sourceIndex: index,
+        }] : []
     })
 }
 
@@ -399,7 +546,7 @@ function videoMetadata(info: Awaited<ReturnType<Innertube["getBasicInfo"]>>, vid
     }
 }
 
-async function executeYoutubeTranscribe(url: string): Promise<string> {
+async function executeYoutubeTranscribe(url: string, timestamps: boolean): Promise<string> {
     const parsedUrl = parseVideoUrl(url)
     if ("error" in parsedUrl) {
         return createRetryResponse("autocode_youtube_transcribe", parsedUrl.error, "Provide a supported YouTube video URL with one 11-character video ID.")
@@ -430,7 +577,7 @@ async function executeYoutubeTranscribe(url: string): Promise<string> {
             if (!Array.isArray(transcript)) {
                 return createRetryResponse("autocode_youtube_transcribe", "YouTube returned malformed caption JSON.", "Retry the same YouTube video URL later.")
             }
-            formattedTranscript = formatTranscript(transcript, nullableFiniteNumber(info.basic_info.duration))
+            formattedTranscript = formatTranscript(transcript, nullableFiniteNumber(info.basic_info.duration), timestamps)
         }
         catch (error) {
             primaryError = error
@@ -438,7 +585,7 @@ async function executeYoutubeTranscribe(url: string): Promise<string> {
 
         if (!formattedTranscript) {
             try {
-                formattedTranscript = formatTranscriptCues(await fetchSelectedCaptionTranscript(selectedTrack.baseUrl))
+                formattedTranscript = formatTranscriptCues(await fetchSelectedCaptionTranscript(selectedTrack.baseUrl), timestamps)
             }
             catch (fallbackError) {
                 const fallbackMessage = captionFallbackError(fallbackError)
@@ -477,12 +624,13 @@ async function executeYoutubeTranscribe(url: string): Promise<string> {
 
 export function createAutocodeYoutubeTranscribeTool(): ReturnType<typeof tool> {
     return tool({
-        description: "Retrieve a YouTube video's captions as a timestamped transcript.",
+        description: "Transcribe YouTube video.",
         args: {
             url: tool.schema.string().describe("YouTube video URL."),
+            timestamps: tool.schema.boolean().default(false).describe("Include timestamps in transcript."),
         },
         async execute(args): Promise<string> {
-            return executeYoutubeTranscribe(args.url)
+            return executeYoutubeTranscribe(args.url, args.timestamps)
         },
     })
 }
