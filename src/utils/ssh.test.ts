@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import type { ConnectConfig, FileEntryWithStats, Stats } from "ssh2"
 import {
@@ -14,6 +14,7 @@ import {
     sftpMkdir,
     sftpReadFile,
     sftpReaddir,
+    sftpRename,
     sftpStat,
     sftpUnlink,
     sftpWriteFile,
@@ -23,6 +24,7 @@ import {
     type SshClientLike,
     type SshResolvedConfig,
 } from "./ssh"
+import { LocalSshServer, localSshCredentials } from "./ssh.test_helper"
 
 class FakeReadable extends EventEmitter {
     emitData(chunk: Buffer | string): void {
@@ -274,5 +276,54 @@ describe("ssh utils", () => {
         expect(abort.failedAction).toBe("execute")
         expect(abort.error).toBe("stopped")
         expect(abort.instruction).toContain("ABORT")
+    })
+})
+
+describe("ssh utils local protocol", () => {
+    const servers: LocalSshServer[] = []
+    const pools: SshConnectionPool[] = []
+
+    afterEach(async () => {
+        for (const pool of pools.splice(0)) pool.close()
+        await Promise.all(servers.splice(0).map((server) => server.close()))
+    })
+
+    async function connect(auth: Partial<SshResolvedConfig["auth"]>): Promise<{ client: SshClientLike; pool: SshConnectionPool; server: LocalSshServer }> {
+        const server = new LocalSshServer()
+        servers.push(server)
+        await server.start()
+        const config = await resolveSshConfig({ local: { host: "127.0.0.1", port: server.port, username: "local-user", ...auth } }, "local")
+        const pool = new SshConnectionPool()
+        pools.push(pool)
+        return { client: await pool.get(config), pool, server }
+    }
+
+    test("authenticates with Ed25519 private key", async () => {
+        const { client } = await connect({ method: "privateKey", privateKey: localSshCredentials.ed25519Key })
+        await expect(execSshCommand(client, "local-ssh-test")).resolves.toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
+    })
+
+    test("authenticates with RSA-3072 private key", async () => {
+        const { client, server } = await connect({ method: "privateKey", privateKey: localSshCredentials.rsaKey })
+        await expect(execSshCommand(client, "local-ssh-test")).resolves.toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
+        expect(server.authenticatedPublicKeyAlgorithms).toContain("sha256")
+    })
+
+    test("authenticates with encrypted OpenSSH private key", async () => {
+        const { client } = await connect({ method: "privateKey", privateKey: localSshCredentials.encryptedRsaKey, passphrase: localSshCredentials.passphrase })
+        await expect(execSshCommand(client, "local-ssh-test")).resolves.toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
+    })
+
+    test("authenticates with password and performs SFTP operations", async () => {
+        const { client } = await connect({ method: "password", password: localSshCredentials.password })
+        const sftp = await openSftp(client)
+
+        await sftpMkdir(sftp, "/workspace")
+        await sftpWriteFile(sftp, "/workspace/source.txt", "local sftp content")
+        await expect(sftpReadFile(sftp, "/workspace/source.txt", "utf8")).resolves.toBe("local sftp content")
+        await expect(sftpStat(sftp, "/workspace/source.txt")).resolves.toMatchObject({ size: 18 })
+        await expect(sftpReaddir(sftp, "/workspace")).resolves.toMatchObject([{ filename: "source.txt" }])
+        await sftpRename(sftp, "/workspace/source.txt", "/workspace/renamed.txt")
+        await sftpUnlink(sftp, "/workspace/renamed.txt")
     })
 })
