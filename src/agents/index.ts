@@ -762,7 +762,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
     execute_author: {
         color: colorWritableWorker,
-        description: "task execute_author to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
+        description: "task execute_author to create/edit/export/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
         mode: "subagent",
         permission: {
             "*": "deny",

@@ -461,8 +461,14 @@ describe("auto resume wiring", () => {
         const sandboxCopy = tools.autocode_sandbox_copy as unknown as { description: string, args: Record<string, unknown> }
         const skillLearn = tools.skill_learn as unknown as { description: string, args: Record<string, unknown> }
         const skill = tools.skill as unknown as { description: string, args: Record<string, unknown> }
+        const markdownDocx = tools.autocode_md_docx as unknown as { args: { file_path: { safeParse(input: unknown): { success: boolean } } } }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_create", "autocode_md_h1", "autocode_md_read", "autocode_md_remove", "autocode_md_update", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit", "autocode_config_remove", "autocode_md_create", "autocode_md_docx", "autocode_md_h1", "autocode_md_read", "autocode_md_remove", "autocode_md_update", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill_learn", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(tools.autocode_md_docx).toBeDefined()
+        expect(Object.keys(markdownDocx.args)).toEqual(["file_path"])
+        expect(markdownDocx.args.file_path.safeParse(undefined).success).toBe(false)
+        expect(markdownDocx.args.file_path.safeParse(1).success).toBe(false)
+        expect(markdownDocx.args.file_path.safeParse("guide.md").success).toBe(true)
         expect(tools.skill).toBeDefined()
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
@@ -1311,6 +1317,7 @@ describe("tool registrations", () => {
                     "autocode_config_edit",
                     "autocode_config_remove",
                     "autocode_md_create",
+                    "autocode_md_docx",
                     "autocode_md_h1",
                     "autocode_md_read",
                     "autocode_md_remove",
@@ -1387,6 +1394,7 @@ describe("tool registrations", () => {
                 expect(plugin.tool?.autocode_draft_job_read).toBeUndefined()
                 expect(plugin.tool?.autocode_job_list).toBeDefined()
                 expect(plugin.tool?.autocode_logo_find).toBeDefined()
+                expect(plugin.tool?.autocode_md_docx).toBeDefined()
                 expect(plugin.tool?.autocode_logo).toBeUndefined()
                 expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("List timestamped job workspaces.")
                 expect(plugin.tool?.autocode_act_prompt).toBeUndefined()

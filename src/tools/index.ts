@@ -13,6 +13,7 @@ import { createAutocodeConfigEditTool } from "./autocode_config_edit"
 import { createAutocodeConfigRemoveTool } from "./autocode_config_remove"
 import { createAutocodeMdReadTool } from "./autocode_md_read"
 import { createAutocodeMdCreateTool } from "./autocode_md_create"
+import { createAutocodeMdDocxTool } from "./autocode_markdown_docx"
 import { createAutocodeMdH1Tool } from "./autocode_md_h1"
 import { createAutocodeMdUpdateTool } from "./autocode_md_update"
 import { createAutocodeMdRemoveTool } from "./autocode_md_remove"
@@ -102,6 +103,7 @@ export function createTools(
         autocode_process_kill: createAutocodeProcessKillTool(),
         autocode_logo_find: createAutocodeLogoFindTool(),
         autocode_md_create: createAutocodeMdCreateTool(),
+        autocode_md_docx: createAutocodeMdDocxTool(),
         autocode_md_frontmatter_edit: createAutocodeMdFrontmatterEditTool(),
         autocode_md_frontmatter_read: createAutocodeMdFrontmatterReadTool(),
         autocode_md_h1: createAutocodeMdH1Tool(),
