@@ -383,7 +383,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("registers job-execute command for planned autonomous execution", async () => {
+    test("registers job-design command with design agent metadata", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -393,12 +393,8 @@ describe("auto resume wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["job-execute"]?.agent).toBe("design")
-                expect(cfg.command["job-execute"]?.template).toContain("autocode_job_execute")
-                expect(cfg.command["job-execute"]?.template).toContain("`agent` = `auto`")
-                expect(cfg.command["job-execute"]?.template).toContain("workspace_required")
-                expect(cfg.command["job-execute"]?.template).not.toContain("list_plans")
-                expect(cfg.command["job-execute"]?.template).not.toContain("result_type == \"workflow\"")
+                expect(cfg.command["job-design"]?.agent).toBe("design")
+                expect(cfg.command["job-design"]?.template).toContain("autocode_concept_list")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -409,7 +405,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("registers job-facilitate command for planned facilitated execution", async () => {
+    test("registers job-design command description for design agent", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -419,13 +415,8 @@ describe("auto resume wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["job-facilitate"]?.agent).toBe("design")
-                expect(cfg.command["job-facilitate"]?.description).toBe("Start assisted execution in a new session.")
-                expect(cfg.command["job-facilitate"]?.template).toContain("autocode_job_execute")
-                expect(cfg.command["job-facilitate"]?.template).toContain("`agent` = `assist`")
-                expect(cfg.command["job-facilitate"]?.template).toContain("workspace_required")
-                expect(cfg.command["job-facilitate"]?.template).not.toContain("list_plans")
-                expect(cfg.command["job-facilitate"]?.template).not.toContain("result_type == \"workflow\"")
+                expect(cfg.command["job-design"]?.agent).toBe("design")
+                expect(cfg.command["job-design"]?.description).toBe("📐 Design solution from existing concept or job.")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -436,7 +427,7 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("registers job-execute command as autonomous execution", async () => {
+    test("registers job-design command as non-subtask design work", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
@@ -446,10 +437,8 @@ describe("auto resume wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["job-execute"]?.agent).toBe("design")
-                expect(cfg.command["job-execute"]?.subtask).toBe(false)
-                expect(cfg.command["job-execute"]?.template).toContain("autocode_job_execute")
-                expect(cfg.command["job-execute"]?.template).toContain("`agent` = `auto`")
+                expect(cfg.command["job-design"]?.agent).toBe("design")
+                expect(cfg.command["job-design"]?.subtask).toBe(false)
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP

@@ -172,8 +172,6 @@ export function reconcileRootSessionTitle(currentTitle: string, heading: string)
         return `${currentTitle} (${compactHeading})`
     }
 
-    const existingHeading = parseCompactHeading(currentTitle.slice(suffixStart + 1, -1))
-    if (existingHeading === undefined) return `${currentTitle} (${compactHeading})`
     return `${currentTitle.slice(0, suffixStart - 1)} (${compactHeading})`
 }
 

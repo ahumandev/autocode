@@ -1,4 +1,4 @@
-export const documentCommandTemplate = `
+export const docsCommandTemplate = `
 1. Determine responsible subagents to document recent project changes: \`document_conventions\`, \`document_code\`, \`document_install\`, \`document_prd\`, \`document_ux\`
 2. Task responsible subagent with instruction to update their SKILL.md file with only relevant changes (include only related changes in prompt - must match subagent description).
 3. Collect subagent reports
