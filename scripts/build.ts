@@ -28,6 +28,8 @@ const distDirectory = join(repositoryRoot, "dist")
 const pluginEntry = join(repositoryRoot, "src", "plugin.ts")
 const declarationConfig = join(repositoryRoot, "tsconfig.build.json")
 const copySkillSourcesScript = join(repositoryRoot, "scripts", "copy-skill-sources.ts")
+// Alias cpu-features to project shim so Bun never loads its Node/NAN addon.
+const cpuFeaturesShim = join(repositoryRoot, "scripts", "shims", "cpu-features.js")
 const projectRequire = createRequire(join(repositoryRoot, "package.json"))
 
 function registerProcessSignalHandler(signal: NodeJS.Signals, handler: () => void): () => void {
@@ -49,7 +51,8 @@ export function resolveTypeScriptCli(): string {
 }
 
 export function createBundleArgs(watch: boolean): string[] {
-    const args = ["build", pluginEntry, "--outdir", distDirectory, "--target", "bun", "--external", "cpu-features"]
+    // External native SSH modules make ssh2 catch their absence and use JavaScript crypto fallback.
+    const args = ["build", pluginEntry, "--outdir", distDirectory, "--target", "bun", `--alias=cpu-features:${cpuFeaturesShim}`, "--external", "ssh2", "--external", "sshcrypto.node"]
     if (watch) args.push("--watch")
     return args
 }

@@ -110,8 +110,11 @@ test("creates exact portable bundle and declaration arguments", () => {
         join(repositoryRoot, "dist"),
         "--target",
         "bun",
+        `--alias=cpu-features:${join(repositoryRoot, "scripts", "shims", "cpu-features.js")}`,
         "--external",
-        "cpu-features",
+        "ssh2",
+        "--external",
+        "sshcrypto.node",
     ])
     expect(createBundleArgs(true)).toEqual([...createBundleArgs(false), "--watch"])
     expect(createDeclarationArgs(false)).toEqual([
