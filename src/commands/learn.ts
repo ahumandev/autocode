@@ -3,7 +3,7 @@ import type { Config } from "@opencode-ai/sdk/v2"
 type CommandMap = NonNullable<Config["command"]>
 
 export const learnCommand = {
-    description: "Learn from recent discussion (corrections, env, permissions, preferences).",
+    description: "🧠 Learn from recent discussion (corrections, env, permissions, preferences).",
     subtask: false,
     template: `
 1. If current session is insufficient to identify lessons, stop.

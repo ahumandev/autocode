@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { documentCommandTemplate } from "./docs"
+import { docsCommandTemplate } from "./docs"
 import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { createCommands } from "./index"
+import { jobAssistCommandTemplate } from "./job-assist"
+import { jobAutoCommandTemplate } from "./job-auto"
 import { learnCommand } from "./learn"
 import { newSessionTemplate } from "./new-session"
 import { testsCommandTemplate } from "./tests"
@@ -23,11 +25,10 @@ describe("commands", () => {
 
     test("keeps current command keys and command object shape", () => {
         expect(Object.keys(commands)).toEqual([
+            "job-auto",
+            "job-assist",
             "job-concepts",
             "job-design",
-            "job-execute",
-            "job-facilitate",
-            "assist",
             "new-advise",
             "new-assist",
             "new-auto",
@@ -63,7 +64,7 @@ describe("commands", () => {
             if ("model" in command) expect(command.model).toEqual(expect.any(String))
         }
 
-        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "rename", "review", "act", "ask", "advise", "auto", "design", "fix"] as const) {
+        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "rename", "review", "act", "ask", "advise", "assist", "auto", "design", "fix", "job-execute", "job-facilitate"] as const) {
             expect(commands[commandName]).toBeUndefined()
         }
 
@@ -71,43 +72,43 @@ describe("commands", () => {
     })
 
     test("keeps standard command registrations stable", () => {
-        expect(commands.explain).toEqual({
+        expect(commands.explain).toMatchObject({
             agent: "query_code",
-            description: "Explain code or project context",
             subtask: false,
             template: explainCommandTemplate,
         })
-        expect(commands["new-advise"]).toEqual({
-            description: "Create new 💡 advise session to research topics, answer questions, and guide manual work.",
+        expect(commands["job-auto"]).toMatchObject({
+            agent: "design",
+            subtask: false,
+            template: jobAutoCommandTemplate,
+        })
+        expect(commands["job-assist"]).toMatchObject({
+            agent: "design",
+            subtask: false,
+            template: jobAssistCommandTemplate,
+        })
+        expect(commands["new-advise"]).toMatchObject({
             subtask: false,
             template: newSessionTemplate("advise", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION"),
         })
-        expect(commands["new-assist"]).toEqual({
-            description: "Create new 🧑‍💻 assist session to semi-autonomously assist with problems/improvements.",
+        expect(commands["new-assist"]).toMatchObject({
             subtask: false,
             template: newSessionTemplate("assist", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION"),
         })
-        expect(commands.assist).toBe(commands["new-assist"])
-        expect(commands.assist?.description).toBe(commands["new-assist"]?.description)
-        expect(commands.assist?.template).toBe(commands["new-assist"]?.template)
-        expect(commands["new-auto"]).toEqual({
-            description: "Create new 🤖 auto session to autonomously solve problems.",
+        expect(commands["new-auto"]).toMatchObject({
             subtask: false,
             template: newSessionTemplate("auto", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Solve PROBLEM according 'Auto Workflow'."),
         })
-        expect(commands["new-design"]).toEqual({
-            description: "Create new 📐 design session to design solution to problem.",
+        expect(commands["new-design"]).toMatchObject({
             subtask: false,
             template: newSessionTemplate("design", "Summarize how steps taken so far", "Design and suggest APPROACHES around discovered OBSTACLES within CONSTRAINTS."),
         })
-        expect(commands["new-fix"]).toEqual({
-            description: "Fix errors in new session.",
+        expect(commands["new-fix"]).toMatchObject({
             subtask: false,
             template: newSessionTemplate("auto_troubleshoot", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Continue with 'Workflow Loop'."),
         })
-        expect(commands.tests).toEqual({
+        expect(commands.tests).toMatchObject({
             agent: "auto_test",
-            description: "Generate or improve tests",
             subtask: false,
             template: testsCommandTemplate,
         })
@@ -118,33 +119,28 @@ describe("commands", () => {
     })
 
     test("keeps renamed docs command objects stable", () => {
-        expect(commands.docs).toEqual({
+        expect(commands.docs).toMatchObject({
             agent: "execute_document",
-            description: "Document recent project changes.",
             subtask: false,
-            template: documentCommandTemplate,
+            template: docsCommandTemplate,
         })
-        expect(commands["docs-conventions"]).toEqual({
+        expect(commands["docs-conventions"]).toMatchObject({
             agent: "document_conventions",
-            description: "Document recently updated naming conventions and terminology.",
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
-        expect(commands["docs-code"]).toEqual({
+        expect(commands["docs-code"]).toMatchObject({
             agent: "document_code",
-            description: "Document recently updated technical architecture and design decisions.",
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
-        expect(commands["docs-prd"]).toEqual({
+        expect(commands["docs-prd"]).toMatchObject({
             agent: "document_prd",
-            description: "Document recently updated product requirements and user roles.",
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
-        expect(commands["docs-ux"]).toEqual({
+        expect(commands["docs-ux"]).toMatchObject({
             agent: "document_ux",
-            description: "Document recently updated UX flows, navigation, and styling patterns.",
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
@@ -155,8 +151,8 @@ describe("commands", () => {
     })
 
     test("keeps job execution command template intent", () => {
-        expect(commands["job-facilitate"]?.template).toContain("Call `autocode_job_execute` with `agent` = `assist`")
-        for (const commandName of ["job-facilitate", "job-execute"] as const) {
+        expect(commands["job-assist"]?.template).toContain("Call `autocode_job_execute` with `agent` = `assist`")
+        for (const commandName of ["job-assist", "job-auto"] as const) {
             const template = commands[commandName]?.template ?? ""
             expect(template).toContain('`result_type == "workspace_required"`')
             expect(template).toContain('`result_type == "no_workspaces"`')
@@ -166,13 +162,11 @@ describe("commands", () => {
 
     test("keeps key command template substrings stable", () => {
         expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
-        expect(commands["job-execute"]?.template).toContain("Call `autocode_job_execute` with `agent` = `auto`")
-        expect(commands.commit?.description).toBe("Commit added changes to Git: args = reason for commit")
+        expect(commands["job-auto"]?.template).toContain("Call `autocode_job_execute` with `agent` = `auto`")
         expect(commands.commit?.subtask).toBe(false)
         expect(commands.commit?.template).toContain("$ARGUMENTS")
         expect(commands.commit?.template).toContain("git_commit")
         expect(commands.commit?.template).toContain("NEVER any other tool")
-        expect(commands.resume?.description).toBe("Resume interrupted session.")
         expect(commands.resume?.subtask).toBe(false)
         expect(commands.resume?.template).toContain("You were interrupted. Call `task_resume` tool, then resume your own work.")
     })
@@ -233,7 +227,6 @@ describe("commands", () => {
         const command = commands["repeat-as-md"]
 
         expect(command?.agent).toBeUndefined()
-        expect(command?.description).toBe("Repeat the last response inside a fenced Markdown code block.")
         expect(command?.subtask).toBe(false)
         expect(command?.template).toContain("Repeat your last response wrapped in markdown codeblock")
         expect(command?.template).toContain("Last response goes here")

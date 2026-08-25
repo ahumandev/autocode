@@ -142,8 +142,8 @@ describe("reconcileRootSessionTitle", () => {
         expect(reconcileRootSessionTitle("Root session (🚀 Launch plan)", "🚀 Launch plan")).toBe("Root session (🚀 Launch plan)")
     })
 
-    test("preserves unrelated final parentheses", () => {
-        expect(reconcileRootSessionTitle("Root session (critical issue)", "🚀 Launch plan")).toBe("Root session (critical issue) (🚀 Launch plan)")
+    test("replaces final generic postfix", () => {
+        expect(reconcileRootSessionTitle("Root session (critical issue)", "🚀 Launch plan")).toBe("Root session (🚀 Launch plan)")
     })
 })
 

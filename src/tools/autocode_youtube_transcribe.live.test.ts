@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createAutocodeYoutubeTranscribeTool } from "./autocode_youtube_transcribe"
 
 type YoutubeTool = {
-    execute(args: { url: string }): Promise<string>
+    execute(args: { url: string, timestamps?: boolean }): Promise<string>
 }
 
 type LiveTranscriptResult = {
@@ -13,7 +13,7 @@ type LiveTranscriptResult = {
 
 describe("autocode_youtube_transcribe live", () => {
     if (process.env.AUTOCODE_LIVE_YOUTUBE_TEST === "1") {
-        test("retrieves timestamped captions for r7epWYqRqog", async () => {
+        test("retrieves numbered captions for r7epWYqRqog", async () => {
             const tool = createAutocodeYoutubeTranscribeTool() as unknown as YoutubeTool
             const response = JSON.parse(await tool.execute({
                 url: "https://www.youtube.com/watch?v=r7epWYqRqog",
@@ -34,10 +34,10 @@ describe("autocode_youtube_transcribe live", () => {
             const result = response as LiveTranscriptResult
 
             expect(result.captionsAvailable).toBe(true)
-            expect(result.transcript).toMatch(/^\[\d{2}:\d{2}:\d{2}\.\d{3}\] .+/m)
+            expect(result.transcript).toMatch(/^\d+\. .+/m)
         }, { timeout: 30_000 })
     }
     else {
-        test.skip("retrieves timestamped captions for r7epWYqRqog", () => {})
+        test.skip("retrieves numbered captions for r7epWYqRqog", () => {})
     }
 })

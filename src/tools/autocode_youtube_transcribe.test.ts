@@ -2,7 +2,8 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import { createAbortResponse, resetRetryCounts } from "@/utils/tools"
 
 type StringSchema = { safeParse(input: unknown): { success: boolean } }
-type YoutubeTool = { args: { url: StringSchema }, execute(args: { url: string }): Promise<string> }
+type BooleanSchema = { safeParse(input: unknown): { success: boolean, data?: boolean } }
+type YoutubeTool = { args: { url: StringSchema, timestamps: BooleanSchema }, execute(args: { url: string, timestamps?: boolean }): Promise<string> }
 type CaptionTrack = { base_url: string, name: { toString(): string }, vss_id: string, language_code: string, kind?: "asr" | "frc" }
 type YoutubeInfo = {
     basic_info: {
@@ -86,8 +87,8 @@ function retry(error: string): Record<string, unknown> {
     return { failedAction: "autocode_youtube_transcribe", error, instruction: "Retry the same YouTube video URL later." }
 }
 
-async function execute(url = `https://youtu.be/${VIDEO_ID}`): Promise<Record<string, unknown>> {
-    return parseResult(await createTool().execute({ url }))
+async function execute(url = `https://youtu.be/${VIDEO_ID}`, timestamps?: boolean): Promise<Record<string, unknown>> {
+    return parseResult(await createTool().execute({ url, ...(timestamps === undefined ? {} : { timestamps }) }))
 }
 
 describe("autocode_youtube_transcribe", () => {
@@ -97,6 +98,7 @@ describe("autocode_youtube_transcribe", () => {
         currentInfo = createInfo()
         currentTranscript = [transcriptCue(0, 1, "Caption")]
         getBasicInfo.mockClear()
+        getBasicInfo.mockImplementation(async (_videoId: string): Promise<YoutubeInfo> => currentInfo)
         innertubeCreate.mockClear()
         fetchTranscript.mockClear()
         captionFetch.mockClear()
@@ -109,12 +111,16 @@ describe("autocode_youtube_transcribe", () => {
         mock.restore()
     })
 
-    test("01 exposes url as sole required tool argument", () => {
+    test("01 exposes required url and optional timestamps tool arguments", () => {
         const tool = createTool()
-        expect(Object.keys(tool.args)).toEqual(["url"])
+        expect(Object.keys(tool.args)).toEqual(["url", "timestamps"])
         expect(tool.args.url.safeParse(undefined).success).toBe(false)
         expect(tool.args.url.safeParse(1).success).toBe(false)
         expect(tool.args.url.safeParse(`https://www.youtube.com/watch?v=${VIDEO_ID}`).success).toBe(true)
+        expect(tool.args.timestamps.safeParse(undefined)).toEqual({ success: true, data: false })
+        expect(tool.args.timestamps.safeParse("false").success).toBe(false)
+        expect(tool.args.timestamps.safeParse(false).success).toBe(true)
+        expect(tool.args.timestamps.safeParse(true).success).toBe(true)
     })
 
     test("02 accepts every supported YouTube video URL form", async () => {
@@ -248,25 +254,25 @@ describe("autocode_youtube_transcribe", () => {
     test("18 cleans package cue whitespace", async () => {
         setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
         currentTranscript = [transcriptCue(0, 1, " Hello\n world\t")]
-        expect((await execute()).transcript).toBe("[00:00:00.000] Hello world")
+        expect((await execute()).transcript).toBe("1. Hello world")
     })
 
-    test("19 sorts package cues by offset", async () => {
+    test("19 sorts explicit false package cues as numbered transcript", async () => {
         setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
         currentTranscript = [transcriptCue(1, 1, "Second"), transcriptCue(0, 1, "First")]
-        expect((await execute()).transcript).toBe("[00:00:00.000] First\n[00:00:01.000] Second")
+        expect((await execute(undefined, false)).transcript).toBe("1. First Second")
     })
 
-    test("20 formats hour rollover timestamps", async () => {
+    test("20 formats true timestamps with whole-second zero, fractional, and hour values", async () => {
         setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
-        currentTranscript = [transcriptCue(3_661_007, 500, "Hour")]
-        expect((await execute()).transcript).toBe("[01:01:01.007] Hour")
+        currentTranscript = [transcriptCue(3_661_007, 500, "Hour"), transcriptCue(1_999, 0, "Fractional"), transcriptCue(0, 0, "Zero")]
+        expect((await execute(undefined, true)).transcript).toBe("* 0:00:00 Zero\n* 0:00:01 Fractional\n* 1:01:01 Hour")
     })
 
     test("21 clamps negative package cue timestamps", async () => {
         setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
         currentTranscript = [transcriptCue(-5, 1, "Negative")]
-        expect((await execute()).transcript).toBe("[00:00:00.000] Negative")
+        expect((await execute()).transcript).toBe("1. Negative")
     })
 
     test("22 uses getBasicInfo for caption metadata", async () => {
@@ -290,27 +296,27 @@ describe("autocode_youtube_transcribe", () => {
     test("25 treats classic fractional offsets as seconds", async () => {
         setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
         currentTranscript = [transcriptCue(1.25, 0.5, "Classic")]
-        expect((await execute()).transcript).toBe("[00:00:01.250] Classic")
+        expect((await execute()).transcript).toBe("1. Classic")
     })
 
     test("26 treats srv3 millisecond offsets as milliseconds", async () => {
         setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
         currentTranscript = [transcriptCue(1_250, 500, "Srv3")]
-        expect((await execute()).transcript).toBe("[00:00:01.250] Srv3")
+        expect((await execute()).transcript).toBe("1. Srv3")
     })
 
     test("27 infers seconds from fractional cues without video duration", async () => {
         currentInfo.basic_info = { ...currentInfo.basic_info, duration: undefined }
         setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
         currentTranscript = [transcriptCue(1.5, 0, "Fractional")]
-        expect((await execute()).transcript).toBe("[00:00:01.500] Fractional")
+        expect((await execute()).transcript).toBe("1. Fractional")
     })
 
     test("28 uses deterministic magnitude fallback without video duration", async () => {
         currentInfo.basic_info = { ...currentInfo.basic_info, duration: undefined }
         setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
         currentTranscript = [transcriptCue(12_000, 0, "Magnitude")]
-        expect((await execute()).transcript).toBe("[00:00:12.000] Magnitude")
+        expect((await execute()).transcript).toBe("1. Magnitude")
     })
 
     test("29 falls back when package returns empty cues", async () => {
@@ -325,17 +331,30 @@ describe("autocode_youtube_transcribe", () => {
             adapterCalls.push("fallback")
             return new Response(JSON.stringify({ events: [{ tStartMs: 0, segs: [{ utf8: "Fallback" }] }] }))
         })
-        expect(await execute()).toMatchObject({ captionsAvailable: true, transcript: "[00:00:00.000] Fallback" })
+        expect(await execute()).toMatchObject({ captionsAvailable: true, transcript: "1. Fallback" })
         expect(adapterCalls).toEqual(["primary", "fallback"])
         expect(fetchTranscript).toHaveBeenCalledTimes(1)
         expect(captionFetch).toHaveBeenCalledTimes(1)
+    })
+
+    test("29a formats true timestamps from JSON3 fallback cues", async () => {
+        setTracks([createCaptionTrack({ baseUrl: `https://www.youtube.com/api/timedtext?v=${VIDEO_ID}`, languageCode: "en", languageName: "English" })])
+        currentTranscript = []
+        captionFetch.mockImplementation(async (): Promise<Response> => new Response(JSON.stringify({
+            events: [
+                { tStartMs: 3_661_007, segs: [{ utf8: "Hour" }] },
+                { tStartMs: 1_999, segs: [{ utf8: "Fractional" }] },
+                { tStartMs: 0, segs: [{ utf8: "Fallback" }] },
+            ],
+        })))
+        expect((await execute(undefined, true)).transcript).toBe("* 0:00:00 Fallback Fractional\n* 1:01:01 Hour")
     })
 
     test("30 falls back when package returns zero valid cues", async () => {
         setTracks([createCaptionTrack({ baseUrl: `https://www.youtube.com/api/timedtext?v=${VIDEO_ID}`, languageCode: "en", languageName: "English" })])
         currentTranscript = [{ offset: "bad", duration: 0, text: "Ignored" }, { offset: 0, duration: 0, text: "" }]
         captionFetch.mockImplementation(async (): Promise<Response> => new Response(JSON.stringify({ events: [{ tStartMs: 0, segs: [{ utf8: "Fallback" }] }] })))
-        expect(await execute()).toMatchObject({ captionsAvailable: true, transcript: "[00:00:00.000] Fallback" })
+        expect(await execute()).toMatchObject({ captionsAvailable: true, transcript: "1. Fallback" })
         expect(fetchTranscript).toHaveBeenCalledTimes(1)
         expect(captionFetch).toHaveBeenCalledTimes(1)
     })
@@ -364,7 +383,7 @@ describe("autocode_youtube_transcribe", () => {
                 { tStartMs: "0", segs: [{ utf8: "First &amp; foremost" }] },
             ],
         })))
-        expect((await execute()).transcript).toBe("[00:00:00.000] First & foremost\n[00:00:01.250] Hello world")
+        expect((await execute()).transcript).toBe("1. First & foremost Hello world")
         expect(String(captionFetch.mock.calls[0]?.[0])).toBe(`https://www.youtube.com/api/timedtext?v=${VIDEO_ID}&fmt=json3`)
     })
 
@@ -387,5 +406,83 @@ describe("autocode_youtube_transcribe", () => {
         const lookupError = new Error("metadata lookup failed")
         getBasicInfo.mockImplementation(async () => { throw lookupError })
         expect(await execute()).toEqual(parseResult(createAbortResponse("autocode_youtube_transcribe", lookupError)))
+    })
+
+    test("37 merges fragmented cues and uses first timestamp", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(2, 1, "Fragmented"), transcriptCue(3, 1, "sentence")]
+        expect((await execute(undefined, true)).transcript).toBe("* 0:00:02 Fragmented sentence")
+    })
+
+    test("38 keeps terminal punctuation and long gaps as separate items", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [
+            transcriptCue(0, 1, "Complete."),
+            transcriptCue(1, 1, "Next"),
+            transcriptCue(3.001, 1, "Later"),
+        ]
+        expect((await execute()).transcript).toBe("1. Complete.\n2. Next\n3. Later")
+    })
+
+    test("39 removes only exact overlapping duplicates", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(0, 2, "Echo"), transcriptCue(1, 2, "Echo")]
+        expect((await execute()).transcript).toBe("1. Echo")
+    })
+
+    test("40 preserves one-token overlaps between distinct cues", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(0, 1, "Go now"), transcriptCue(1, 1, "now please")]
+        expect((await execute()).transcript).toBe("1. Go now now please")
+    })
+
+    test("40a removes multi-token overlap from overlapping package cues", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(0, 2, "Welcome to the"), transcriptCue(1, 2, "to the show today.")]
+        expect((await execute(undefined, true)).transcript).toBe("* 0:00:00 Welcome to the show today.")
+    })
+
+    test("40b preserves one-token repetition from overlapping package cues", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(0, 2, "This is very"), transcriptCue(1, 2, "very good.")]
+        expect((await execute()).transcript).toBe("1. This is very very good.")
+    })
+
+    test("41 keeps standalone non-speech cues separate", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(0, 1, "First"), transcriptCue(1, 1, "[music]"), transcriptCue(2, 1, "Second")]
+        expect((await execute()).transcript).toBe("1. First\n2. [music]\n3. Second")
+    })
+
+    test("42 keeps explicit different speaker labels separate", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(0, 1, "Alice: Hello"), transcriptCue(1, 1, "Bob: Hi")]
+        expect((await execute()).transcript).toBe("1. Alice: Hello\n2. Bob: Hi")
+    })
+
+    test("43 merges matching speaker labels without repeating label", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(0, 1, "Alice: Hello"), transcriptCue(1, 1, "Alice: there")]
+        expect((await execute()).transcript).toBe("1. Alice: Hello there")
+    })
+
+    test("44 uses package cue durations for grouping", async () => {
+        setTracks([createCaptionTrack({ baseUrl: "track", languageCode: "en", languageName: "English" })])
+        currentTranscript = [transcriptCue(0, 2, "Opening"), transcriptCue(2.8, 0, "line")]
+        expect((await execute()).transcript).toBe("1. Opening line")
+    })
+
+    test("45 reads valid JSON3 durations and falls back for invalid durations", async () => {
+        setTracks([createCaptionTrack({ baseUrl: `https://www.youtube.com/api/timedtext?v=${VIDEO_ID}`, languageCode: "en", languageName: "English" })])
+        currentTranscript = []
+        captionFetch.mockImplementation(async (): Promise<Response> => new Response(JSON.stringify({
+            events: [
+                { tStartMs: 0, dDurationMs: 2_000, segs: [{ utf8: "Known" }] },
+                { tStartMs: 2_800, dDurationMs: 0, segs: [{ utf8: "duration" }] },
+                { tStartMs: 6_000, dDurationMs: -1, segs: [{ utf8: "Invalid" }] },
+                { tStartMs: 8_800, dDurationMs: 0, segs: [{ utf8: "fallback" }] },
+            ],
+        })))
+        expect((await execute()).transcript).toBe("1. Known duration\n2. Invalid\n3. fallback")
     })
 })

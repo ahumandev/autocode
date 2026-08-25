@@ -730,7 +730,7 @@ describe("autocode plugin config", () => {
 						},
 					},
 					command: {
-						"job-execute": {
+						"job-design": {
 							description: "user description",
 							template: "user template",
 							subtask: true,
@@ -758,23 +758,19 @@ describe("autocode plugin config", () => {
 				);
 				expect(cfg.agent?.title?.options?.reasoningEffort).toBeUndefined();
 				expect(cfg.agent?.compaction?.model).toBeUndefined();
-				expect(cfg.command?.["job-execute"]).toEqual(
+				expect(cfg.command?.["job-design"]).toEqual(
 					expect.objectContaining({
 						description: "user description",
 						template: "user template",
 						subtask: true,
 					}),
 				);
-				expect(cfg.command?.["job-execute"]?.agent).toBe("design");
-				expect(cfg.command?.["job-facilitate"]?.template).toContain(
-					"autocode_job_execute",
-				);
+				expect(cfg.command?.["job-design"]?.agent).toBe("design");
 				expect(Object.keys(cfg.command ?? {})).toEqual([
-					"job-execute",
-					"job-concepts",
 					"job-design",
-					"job-facilitate",
-					"assist",
+					"job-auto",
+					"job-assist",
+					"job-concepts",
 					"new-advise",
 					"new-assist",
 					"new-auto",
@@ -801,11 +797,11 @@ describe("autocode plugin config", () => {
 					"tests",
 				]);
 				for (const [name, commandDef] of Object.entries(commands)) {
-					if (name === "job-execute") continue;
+					if (name === "job-design") continue;
 					expect(cfg.command?.[name]).toEqual(commandDef);
 				}
-				expect(cfg.command?.["job-execute"]).toEqual({
-					...commands["job-execute"],
+				expect(cfg.command?.["job-design"]).toEqual({
+					...commands["job-design"],
 					description: "user description",
 					template: "user template",
 					subtask: true,
