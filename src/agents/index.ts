@@ -6,6 +6,7 @@ import { assistBrowserPrompt } from "./prompts/assist_browser";
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
 import { assistPrompt } from "./prompts/assist";
 import { autoDesignPrompt } from "./prompts/auto_design";
+import { autoAuthorPrompt } from "./prompts/auto_author";
 import { autoFeaturePrompt } from "./prompts/auto_feature";
 import { autoGeneralPrompt } from "./prompts/auto_general";
 import { autoPrompt } from "./prompts/auto"
@@ -331,6 +332,36 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         tier: "balanced",
     },
 
+    auto_author: {
+        color: colorAutonomousOrchestrator,
+        description: "task auto_author to author or review: articles, docs, excel reports or agentic skills or prompts; NOT for config or source code comments.",
+        hidden: true,
+        mode: "subagent",
+        permission: {
+            "*": "deny",
+            "autocode_md_*": "allow",
+            edit: "allow",
+            skill: {
+                "*": "deny",
+                "learned-preferences*": "allow",
+                "skill-write": "allow",
+            },
+            task: {
+                "*": "deny",
+                "document_*": "allow",
+                execute_author: "allow",
+                execute_document: "allow",
+                query_text: "allow",
+                query_web: "allow",
+                query_youtube: "allow",
+            },
+            task_resume: "allow",
+        },
+        prompt: autoAuthorPrompt,
+        temperature: 0.7,
+        tier: "smart",
+    },
+
     auto_design: {
         color: colorAutonomousOrchestrator,
         description: "task auto_design to redesign failed PROPOSALS when new unresolvable blocking CONSTRAINTS arise. Always try resolve OBSTACLES first with auto_troubleshoot. Only task auto_design as last resort when unresolvable root cause (new CONSTRAINT) is clear.",
@@ -438,7 +469,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             task: {
                 "*": "deny",
                 auto_troubleshoot: "allow",
-                
                 execute_code: "allow",
                 execute_script: "allow",
                 execute_os: "allow",
