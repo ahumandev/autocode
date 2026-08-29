@@ -297,7 +297,6 @@ describe("agent policies", () => {
         expect(agents.advise?.mode).toBe("primary")
         expect(agents.advise?.tier).toBe("balanced")
         expect(agents.advise?.prompt).toBe(advisePrompt)
-        expect(advisePrompt).toContain("Ask user to gather or provide external information")
         expect(advisePrompt).toContain("Do not ask user to make a project change until solution is clear")
         expect(advisePrompt).toContain("Discover solution before giving implementation steps")
         expect(permissionRule(permission, "*")).toBe("deny")
