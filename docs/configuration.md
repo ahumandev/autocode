@@ -16,13 +16,13 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 | ------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `autocode.learned.max`                | integer          | Limits how many learned skills are kept per category before oldest are pruned.                      | `10`                                             |
 | `autocode.skills.freeze`              | boolean          | Strictly skips first-run extraction and all generated-root mutation; stale generated skills remain. | `false`                                          |
-| `autocode.sandbox.sync_method`        | string           | Sandbox sync strategy. Valid values are `auto`, `overlayfs`, `reflink`, and `copy`.                 | Unset.                                           |
+| `autocode.sandbox.sync_method`        | string           | Sandbox sync strategy. Valid values are`auto`, `overlayfs`, `reflink`, and `copy`.                  | Unset.                                           |
 | `autocode.sandbox.distro.cache_path`  | string           | Optional sandbox distribution cache path.                                                           | Unset.                                           |
 | `autocode.sandbox.distro.expire`      | string or number | Optional sandbox distribution expiry value.                                                         | Unset.                                           |
-| `autocode.tier`                       | string           | Selects a named tier set from `autocode.tiers`.                                                     | No selected set.                                 |
+| `autocode.tier`                       | string           | Selects a named tier set from`autocode.tiers`.                                                      | No selected set.                                 |
 | `autocode.tiers.<set>.<tier>.model`   | string           | Optional model override for a tier in a tier set.                                                   | Uses the agent or OpenCode default when omitted. |
 | `autocode.tiers.<set>.<tier>.variant` | string           | Optional variant override for a tier in a tier set.                                                 | Uses the agent or OpenCode default when omitted. |
-| `permission.external_directory`       | object or string | Path-pattern permissions for external-directory access. Values are `allow`, `ask`, or `deny`.       | `{}`                                             |
+| `permission.external_directory`       | object or string | Path-pattern permissions for external-directory access. Values are`allow`, `ask`, or `deny`.        | `{}`                                             |
 
 OpenCode applies a last-matching-rule-wins model to external-directory permissions. Place broad defaults first and more specific overrides later.
 
@@ -106,7 +106,7 @@ Tier assignment requirements:
         "operator": { "model": "openai/gpt-5.6-terra", "variant": "low" },
         "context":  { "model": "openai/gpt-5.6-luna", "variant": "low" },
         "fast":     { "model": "openai/gpt-5.3-codex-spark", "variant": "low" },
-        "cheap":    { "model": "openai/gpt-5.4-mini", "variant": "none" }
+        "cheap":    { "model": "openai/gpt-5.6-luna", "variant": "none" }
       },
       "zai-coding-plan": {
         "smart":    { "model": "zai-coding-plan/glm-5.2", "variant": "high" },

@@ -3,7 +3,7 @@ export const toolQuestionRules = `
 
 ### Before Asking
 - ✅ ALWAYS present "User Report" BEFORE calling \`question\` tool.
-- ✅ ALWAYS match PROPOSAL REPORT headings and order with \`question\` tool option \`labels\` and order.
+- ✅ ALWAYS match PROPOSAL REPORT headings with \`question\` tool option \`labels\` and in same order.
 - ❌ NEVER ask for information user already provided.
 
 ### Question Design

@@ -50,7 +50,7 @@ ${implementationDefinitions}
 2. Load skill files related to ASSIGNMENT (if not yet loaded)
 3. Need more info / has uncertainties / multiple good resolutions exist: then repeatedly interview user with \`question\` tool by suggesting options until clear (what/why/scope).
 4. Identify MISSING info needed to complete ASSIGNMENT (files, paths, symbols, errors, requirements).
-    - Skip query/research tasks when facts already discovered, provided by user or trivial.
+    - Skip query/research tasks when facts already discovered, provided by user, available as skill, or trivial.
     - Only critical missing facts become research tasks:
         * 1 query per subagent
         * Include relevant links to sources (previously discovered) to improve research
@@ -69,7 +69,13 @@ ${implementationDefinitions}
     - Provide verification steps for likely failures.
 9. If user reply:
    - Failure or incomplete: Revise remaining steps Tutorial with alternative (recovery) steps.
-   - Success: Call \`question\` tool for Next Action according to "Next Action" section.
+   - Success: Then...
+        1. Reflect on completed ASSIGNMENT:
+            - Completed ASSIGNMENT reveal new discoveries? Then call \`learn_skill\` to avoid rediscovering same info in new session
+            - Known outdated project docs? Then \`task\` execute_document subagent to update docs
+        2. Follow "Next Action" workflow
+
+ALWAYS ask for Next Action according to "Next Action" rules when ASSIGNMENT is complete.
 
 ---
 
@@ -87,20 +93,18 @@ ${toolQuestionRules}
 
 ## Next Action
 
-* Call \`question\` tool with single choice options:
-    - first 3 options: describe 3 different ways to improve last ASSIGNMENT
-    - last option: describe next ACTION by: first identify position of previous ACTION, then choose next ACTION as option according to this sequence:
-        1. Analyze next ASSIGNMENT from \`todowrite\` to identify TASKS
-            - If ASSIGNMENT unclear/unfeasible: Brainstorm alternative APPROACHES with user to solve same PROBLEM
-        2. Add regression test (TDD)
-        3. Implement ASSIGNMENT (task delegation)
-        4. Verify implementation (using system like user with browser, CLI, curl, sandbox or inspect DB/file/SSH entries after using new feature)
-        5. Adjust from mistakes and repeat until todo spec is met
-        6. Learn from mistakes (if any using \`skill_learn\`)
-        7. Optimize implementation (maintainability, performance, reliability, security)
-        8. Document changes (add comments, update project docs/skills)
-        9. Commit changes to repo
-        10. Highest priority unblocked todowrite item as next ASSIGNMENT
+* Call \`question\` tool with only single choice options (ignore irrelvant options):
+    - describe adding unit test for last ASSIGNMENT (only if new code added and no test yet)
+    - describe how to verify (using automated browser, CLI, curl, sandbox or inspect DB/file/SSH entries) last ASSIGNMENT (only if new feature or bugfix) 
+    - describe security improvement (vulnerabilities, exploits, etc) for last ASSIGNMENT (only if known security issues)
+    - describe ux improvement (visuals, interaction, reduce text, etc) for last ASSIGNMENT (only if frontend or textual)
+    - describe optimization improvement (performance, reliability, share resources, etc) for last ASSIGNMENT (only if code change)
+    - describe refactor improvement (text/code organization, deduplicate text/code, etc) for last ASSIGNMENT (only if text/code change)
+    - describe maintainability improvement (debug cleanup, docs, logging, etc) for last ASSIGNMENT (if code change)
+    - commit changes to repo (only if known changes)
+    - if incomplete \`todowrite\`: 
+        * then describe next ASSIGNMENT according to highest priority unblocked \`todowrite\` item
+        * else recommend related enhancement of last ASSIGNMENT
 * Repeat "Assistant Workflow" with answer as new ASSIGNMENT
 
 ---

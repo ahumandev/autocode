@@ -116,13 +116,15 @@ function isEmojiToken(value: string): boolean {
     return EMOJI_TOKEN.test(value)
 }
 
+function parseEmojiTitle(emoji: string, title: string): string | undefined {
+    const trimmedTitle = title.trim()
+    return isEmojiToken(emoji) && trimmedTitle ? `${emoji} ${trimmedTitle}` : undefined
+}
+
 function parseCompactHeading(value: string): string | undefined {
     const match = COMPACT_HEADING.exec(value.trim())
     if (match === null) return undefined
-    const emoji = match[1]
-    const title = match[2].trim()
-    if (!isEmojiToken(emoji) || !title) return undefined
-    return `${emoji} ${title}`
+    return parseEmojiTitle(match[1], match[2])
 }
 
 export function parseRootSessionTitleHeading(text: string): string | undefined {
@@ -142,25 +144,37 @@ export function parseRootSessionTitleHeading(text: string): string | undefined {
 
         const match = HEADING_LINE.exec(line.trim())
         if (match === null) return undefined
-        const emoji = match[1]
-        const title = match[2].trim()
-        if (!isEmojiToken(emoji) || !title) return undefined
-        return `${emoji} ${title}`
+        return parseEmojiTitle(match[1], match[2])
     }
     return undefined
 }
 
 function findFinalParenthesizedSuffix(title: string): number | undefined {
     if (!title.endsWith(")")) return undefined
-    let depth = 0
-    for (let index = title.length - 1; index >= 0; index -= 1) {
-        const character = title[index]
-        if (character === ")") depth += 1
-        if (character !== "(") continue
-        depth -= 1
-        if (depth === 0) return index
+    let suffixEnd = title.length
+    let suffixStart: number | undefined
+    while (title[suffixEnd - 1] === ")") {
+        let depth = 0
+        let groupStart: number | undefined
+        for (let index = suffixEnd - 1; index >= 0; index -= 1) {
+            const character = title[index]
+            if (character === ")") depth += 1
+            if (character !== "(") continue
+            depth -= 1
+            if (depth === 0) {
+                groupStart = index
+                break
+            }
+        }
+
+        if (groupStart === undefined) return suffixStart
+        let separatorStart = groupStart
+        while (separatorStart > 0 && /\s/u.test(title[separatorStart - 1])) separatorStart -= 1
+        if (separatorStart === groupStart) return suffixStart
+        suffixStart = separatorStart
+        suffixEnd = separatorStart
     }
-    return undefined
+    return suffixStart
 }
 
 export function reconcileRootSessionTitle(currentTitle: string, heading: string): string {
@@ -168,11 +182,11 @@ export function reconcileRootSessionTitle(currentTitle: string, heading: string)
     if (compactHeading === undefined || !currentTitle.trim()) return currentTitle
 
     const suffixStart = findFinalParenthesizedSuffix(currentTitle)
-    if (suffixStart === undefined || suffixStart === 0 || currentTitle[suffixStart - 1] !== " ") {
+    if (suffixStart === undefined) {
         return `${currentTitle} (${compactHeading})`
     }
 
-    return `${currentTitle.slice(0, suffixStart - 1)} (${compactHeading})`
+    return `${currentTitle.slice(0, suffixStart)} (${compactHeading})`
 }
 
 function hasFetchedToolCallProgress(parts: unknown[]): boolean {

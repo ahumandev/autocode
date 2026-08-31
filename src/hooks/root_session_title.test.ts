@@ -142,8 +142,28 @@ describe("reconcileRootSessionTitle", () => {
         expect(reconcileRootSessionTitle("Root session (🚀 Launch plan)", "🚀 Launch plan")).toBe("Root session (🚀 Launch plan)")
     })
 
-    test("replaces final generic postfix", () => {
-        expect(reconcileRootSessionTitle("Root session (critical issue)", "🚀 Launch plan")).toBe("Root session (🚀 Launch plan)")
+    test("replaces prior generated status suffix", () => {
+        expect(reconcileRootSessionTitle("Session title (🚀 status 1)", "🚀 status 2")).toBe("Session title (🚀 status 2)")
+    })
+
+    test("replaces all trailing parenthesized suffixes", () => {
+        expect(reconcileRootSessionTitle("Title (status 1) (status 2) (status 3)", "🚀 status new")).toBe("Title (🚀 status new)")
+    })
+
+    test("replaces generated suffix after non-breaking space", () => {
+        expect(reconcileRootSessionTitle("Session\u00a0(🚀 old)", "🚀 new")).toBe("Session (🚀 new)")
+    })
+
+    test("replaces trailing fork suffixes", () => {
+        expect(reconcileRootSessionTitle("Session title (🚀 status 1) (fork #1)", "🚀 status 2")).toBe("Session title (🚀 status 2)")
+    })
+
+    test("replaces fork suffix before generated status", () => {
+        expect(reconcileRootSessionTitle("Session title (fork #1) (🚀 status 2)", "🚀 status 3")).toBe("Session title (🚀 status 3)")
+    })
+
+    test("replaces final non-generated parentheses", () => {
+        expect(reconcileRootSessionTitle("Session title (status 1)", "🚀 status 2")).toBe("Session title (🚀 status 2)")
     })
 })
 
