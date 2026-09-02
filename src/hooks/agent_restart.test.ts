@@ -688,7 +688,7 @@ describe("PendingAgentRestartCoordinator handoffs", () => {
         jest.useFakeTimers()
         jest.setSystemTime(new Date(2026, 0, 2, 3, 4))
         try {
-            coordinator.registerHandoff(handoff())
+            coordinator.registerHandoff(handoff(undefined, "Source session (old status) stale text"))
             await coordinator.handleEvent(liveHandoffTurnEndedEvent(DIRECTORY, SESSION_ID, "stale-message"))
 
             expect(sessionUpdateMock).not.toHaveBeenCalled()

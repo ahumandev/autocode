@@ -146,6 +146,10 @@ describe("reconcileRootSessionTitle", () => {
         expect(reconcileRootSessionTitle("Session title (🚀 status 1)", "🚀 status 2")).toBe("Session title (🚀 status 2)")
     })
 
+    test("removes text after prior status suffix", () => {
+        expect(reconcileRootSessionTitle("Session title (🚀 status 1) stale text", "🚀 status 2")).toBe("Session title (🚀 status 2)")
+    })
+
     test("replaces all trailing parenthesized suffixes", () => {
         expect(reconcileRootSessionTitle("Title (status 1) (status 2) (status 3)", "🚀 status new")).toBe("Title (🚀 status new)")
     })

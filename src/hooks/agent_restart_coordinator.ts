@@ -1,6 +1,6 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk"
 import { dispatchAutocodeAgentPrompt, type PrimaryAutocodeAgent, type ResolvedAgentModel } from "@/utils/agent_swap"
-import { cleanSessionTitleSuffix } from "@/utils/session_title"
+import { formatSessionTitleWithStatus } from "@/utils/session_title"
 import { flattenError } from "@/utils/tools"
 
 export const DEFAULT_AGENT_HANDOFF_TIMEOUT_MS = 5 * 60 * 1000
@@ -255,7 +255,7 @@ function padDateTimePart(value: number): string {
 export function formatHandoffSourceTitle(title: string): string {
     const now = new Date()
     const timestamp = `${now.getFullYear()}-${padDateTimePart(now.getMonth() + 1)}-${padDateTimePart(now.getDate())} ${padDateTimePart(now.getHours())}:${padDateTimePart(now.getMinutes())}`
-    return `${cleanSessionTitleSuffix(title)} (${timestamp})`
+    return formatSessionTitleWithStatus(title, timestamp)
 }
 
 function normalizeError(error: unknown): string {

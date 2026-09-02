@@ -1,6 +1,6 @@
 {
   "name": "@ahumandev/autocode",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "type": "module",
   "private": false,
   "main": "./dist/plugin.js",
