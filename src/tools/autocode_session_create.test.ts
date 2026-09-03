@@ -167,7 +167,7 @@ describe("autocode_session_create tool", () => {
 	test("archives source then dispatches exact destination prompt once after matching source turn", async () => {
 		const calls: string[] = [];
 		const client = createMockClient({
-			sourceTitle: "Research topic",
+			sourceTitle: "Research topic (old status) stale text",
 		});
 		const coordinator = createPendingAgentRestartCoordinator();
 		client.session.create.mockImplementation(async () => {

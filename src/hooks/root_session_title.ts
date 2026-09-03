@@ -1,4 +1,5 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk"
+import { formatSessionTitleWithStatus } from "@/utils/session_title"
 
 const ALLOWED_AGENTS = new Set<string>(["advise", "assist", "auto"])
 const FENCE_OPENING = /^\s*(`{3,}|~{3,})/
@@ -149,44 +150,10 @@ export function parseRootSessionTitleHeading(text: string): string | undefined {
     return undefined
 }
 
-function findFinalParenthesizedSuffix(title: string): number | undefined {
-    if (!title.endsWith(")")) return undefined
-    let suffixEnd = title.length
-    let suffixStart: number | undefined
-    while (title[suffixEnd - 1] === ")") {
-        let depth = 0
-        let groupStart: number | undefined
-        for (let index = suffixEnd - 1; index >= 0; index -= 1) {
-            const character = title[index]
-            if (character === ")") depth += 1
-            if (character !== "(") continue
-            depth -= 1
-            if (depth === 0) {
-                groupStart = index
-                break
-            }
-        }
-
-        if (groupStart === undefined) return suffixStart
-        let separatorStart = groupStart
-        while (separatorStart > 0 && /\s/u.test(title[separatorStart - 1])) separatorStart -= 1
-        if (separatorStart === groupStart) return suffixStart
-        suffixStart = separatorStart
-        suffixEnd = separatorStart
-    }
-    return suffixStart
-}
-
 export function reconcileRootSessionTitle(currentTitle: string, heading: string): string {
     const compactHeading = parseCompactHeading(heading)
     if (compactHeading === undefined || !currentTitle.trim()) return currentTitle
-
-    const suffixStart = findFinalParenthesizedSuffix(currentTitle)
-    if (suffixStart === undefined) {
-        return `${currentTitle} (${compactHeading})`
-    }
-
-    return `${currentTitle.slice(0, suffixStart)} (${compactHeading})`
+    return formatSessionTitleWithStatus(currentTitle, compactHeading)
 }
 
 function hasFetchedToolCallProgress(parts: unknown[]): boolean {
