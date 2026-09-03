@@ -7,26 +7,20 @@ description: Use `author-agent` to get OpenCode Agent Authoring when writing or 
 
 Use this guide when writing or reviewing OpenCode agent markdown.
 
----
-
 ## Locations
 
 * Project agent: `.opencode/agents/{name}.md`
 * Global agent: `~/.config/opencode/agents/{name}.md`
-* Prefer project agent
+* Prefer project agent.
 
----
-
-## File Template
+## Required File Format
 
 Agent file is raw markdown with YAML frontmatter.
-
-For example:
 
 ```markdown
 ---
 name: agent-name
-description: Task `agent-name` when writing code like .cs, .js, etc.; NEVER for .md files.
+description: Task `agent-name` when [fit]; NEVER for [non-fit].
 mode: subagent
 permissions:
   read: allow
@@ -34,45 +28,34 @@ permissions:
   edit: deny
   skill:
     "*": deny
-    "author-agent": allow
+    "relevant-skill": allow
   task:
     "*": deny
     sub_agent: allow
 tier: balanced
 ---
 
-SYSTEM PROMPT
+# Agent Title
+
+Agent system prompt.
 ```
 
-Frontmatter keys:
-* `name`: agent-name
-* `description`: Task `[name]` when [positive condition] like [examples]; NEVER for [negative conditions].
-* `mode`: By default `subagent` for workers, `primary` only if user want to interact directly with agent.
-* `permissions`: Restrict access to only needed tools/mcps; wildcards `*` allowed
-* `tier`: Non-creative worker -> `fast`, project changes -> `balanced`, complex designer or task orchestrator -> `smart`
+## Frontmatter Rules
 
-Body:
-- System prompt.
-- Agent instructions.
+* `name` required. Use lowercase kebab-case. Match filename without `.md` exactly.
+* `description` says trigger, fit, and non-fit.
+* `mode: subagent` by default for delegated workers.
+* Use `mode: primary` only when user must directly select or interact with agent.
+* `permissions` allow only needed tools. Deny risky tools and unused wildcards.
+* `tier`: `fast` for simple workers, `balanced` for project changes, `smart` for complex design or orchestration.
 
-### Naming
+## Naming
 
-* Use lowercase kebab-case.
-* Max few words.
-* Match file and `name`.
-* Description says trigger/fit.
+* Use few lowercase kebab-case words.
+* File and `name` must match: `.opencode/agents/test-agent.md` uses `name: test-agent`.
 * Prefer specific role over broad role.
 
-### Permissions
-
-* Use least privilege.
-* Enable only needed tools.
-* Set risky tools false unless required.
-* Do not store secrets.
-
----
-
-## SYSTEM PROMPT
+## System Prompt
 
 ```markdown
 # [TITLE]
