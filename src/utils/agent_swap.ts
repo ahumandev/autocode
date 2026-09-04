@@ -5,8 +5,8 @@ import { loadAutocodeConfig } from "@/config"
 import { flattenError } from "@/utils/tools"
 import { formatSessionTitleForAgent } from "./session_title"
 
-export const primaryAutocodeAgents = ["assist", "advise", "auto", "design"] as const
-export const allowedAutocodeSessionCreateAgents = ["assist", "advise", "auto", "design"] as const
+export const primaryAutocodeAgents = ["assist", "advise", "auto", "design", "spy"] as const
+export const allowedAutocodeSessionCreateAgents = ["assist", "advise", "auto", "design", "spy"] as const
 export const allowedAutocodeSessionCreateAgentsText = allowedAutocodeSessionCreateAgents.join(", ")
 
 export type AutocodeSessionCreateAgent = typeof allowedAutocodeSessionCreateAgents[number]

@@ -21,6 +21,7 @@ ${cavemanEnglish}
 * Text/code/value change? Include brief code block sample
 * Found answer in doc? Include quote block sample
 * Include lists when multiple items requested (numbered when order matter)
+* Call out assumptions explicitly to avoid confusion with facts
 
 ---
 

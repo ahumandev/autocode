@@ -1,5 +1,5 @@
 import type { AgentConfig } from "@opencode-ai/sdk/v2"
-import type { ExternalDirectoryRules, ModelTier, PermissionAction, SkillCategory } from "@/config"
+import type { ExternalDirectoryRules, ModelTier, PermissionAction, SkillCategory, TierConfig } from "@/config"
 import type { PlatformCapabilities } from "@/utils/platform"
 import type { ExternalSkill } from "../utils/external"
 import { assistBrowserPrompt } from "./prompts/assist_browser";
@@ -45,6 +45,7 @@ import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
 import { queryYoutubePrompt } from "./prompts/query_youtube";
 import { advisePrompt } from "./prompts/advise";
+import { spyPrompt } from "./prompts/spy";
 import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
@@ -88,1271 +89,1310 @@ const CATEGORY_AGENTS: Record<SkillCategory, string[]> = {
 function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
     return {
 
-    // Build-in opencode
+        // Build-in opencode
 
-    build: {
-        disable: true,
-    },
+        build: {
+            disable: true,
+        },
 
-    compaction: {
-        tier: "context",
-    },
+        compaction: {
+            tier: "context",
+        },
 
-    explore: {
-        disable: true,
-    },
+        explore: {
+            disable: true,
+        },
 
-    general: {
-        disable: true,
-    },
+        general: {
+            disable: true,
+        },
 
-    plan: {
-        disable: true,
-    },
+        plan: {
+            disable: true,
+        },
 
-    title: {
-        tier: "cheap",
-    },
+        title: {
+            tier: "cheap",
+        },
 
-    // Primary Orchestrators
+        // Primary Orchestrators
 
-    advise: {
-        color: colorReadOnlyInteractiveOrchestrator,
-        description: "💡 Advise how to manually fix problems.",
-        hidden: false,
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            autocode_config_read: "allow",
-            autocode_md_frontmatter_read: "allow",
-            autocode_md_read: "allow",
-            autocode_session_create: "allow",
-            doom_loop: "ask",
-            git_commit: "ask",
-            question: "allow",
-            skill: {
+        advise: {
+            color: colorReadOnlyInteractiveOrchestrator,
+            description: "💡 Advise how to manually fix problems.",
+            hidden: false,
+            mode: "primary",
+            permission: {
                 "*": "deny",
-                "assist-*": "allow",
+                autocode_config_read: "allow",
+                autocode_md_frontmatter_read: "allow",
+                autocode_md_read: "allow",
+                autocode_session_create: "allow",
+                doom_loop: "ask",
+                git_commit: "ask",
+                question: "allow",
+                skill: {
+                    "*": "deny",
+                    "assist-*": "allow",
+                    "author-*": "allow",
+                    "codebase-design": "allow", // From mattpocock/skills
+                    "git-commit": "allow",
+                    "learned-preferences*": "allow",
+                    "primary-manual*": "allow",
+                    "skill-write": "allow",
+                    "ui-craft": "allow",
+                },
+                skill_learn: "allow",
+                task: {
+                    "*": "deny",
+                    auto_research: "allow",
+                    "query*": "allow",
+                },
+                task_resume: "allow",
+                "todo*": "allow",
+            },
+            prompt: advisePrompt,
+            tier: "balanced",
+        },
+
+        assist: {
+            color: colorWritableInteractiveOrchestrator,
+            description: "🧑‍💻 Assist interactively with problems.",
+            hidden: false,
+            mode: "primary",
+            permission: {
+                "*": "deny",
+                "autocode_config_*": "allow",
+                "autocode_md_*": "allow",
+                autocode_sandbox_create: "ask",
+                autocode_sandbox_delete: "allow",
+                autocode_session_create: "allow",
+                doom_loop: "ask",
+                edit: "allow",
+                git_commit: "allow",
+                question: "allow",
+                skill: {
+                    "*": "deny",
+                    "assist-*": "allow",
+                    "author-*": "allow",
+                    "codebase-design": "allow", // From mattpocock/skills
+                    "git-commit": "allow",
+                    "learned-preferences*": "allow",
+                    "learned-permissions*": "allow",
+                    "primary-manual*": "allow",
+                    "skill-write": "allow",
+                    "ui-craft": "allow",
+                },
+                skill_edit: "allow",
+                skill_learn: "allow",
+                task: {
+                    "*": "allow",
+                    "auto*": "deny",
+                    auto_research: "allow",
+                    build: "deny",
+                    "document*": "deny",
+                    plan: "deny",
+                },
+                task_external: "ask",
+                task_resume: "allow",
+                "todo*": "allow"
+            },
+            prompt: assistPrompt,
+            tier: "balanced",
+        },
+
+        auto: {
+            color: colorAutonomousOrchestrator,
+            description: "🤖 Autonomously solve problems.",
+            hidden: false,
+            mode: "primary",
+            permission: {
+                "*": "deny",
+                autocode_session_create: "allow",
+                git_commit: "allow",
+                skill: {
+                    "*": "deny",
+                    "git-commit": "allow",
+                    "learned-permissions*": "allow",
+                    "learned-preferences*": "allow",
+                    "primary-manual": "allow"
+                },
+                skill_learn: "allow",
+                task: {
+                    "*": "deny",
+                    "auto_*": "allow",
+                    "query_*": "allow"
+                },
+                task_resume: "allow",
+                "todo*": "allow",
+            },
+            prompt: autoPrompt,
+            temperature: 0.4,
+            tier: "smart",
+        },
+
+        design: {
+            color: colorReadOnlyInteractiveOrchestrator,
+            description: "📐 Design and propose solutions.",
+            hidden: false,
+            mode: "primary",
+            permission: {
+                "*": "deny",
+                autocode_agent_execute: "allow",
+                autocode_concept_create: "allow",
+                autocode_concept_list: "allow",
+                autocode_concept_read: "allow",
+                autocode_job_execute: "allow",
+                autocode_job_list: "allow",
+                autocode_session_create: "allow",
+                doom_loop: "ask",
+                external_directory: "ask",
+                question: "allow",
+                skill: {
+                    "*": "deny",
+                    "codebase-design": "allow", // From mattpocock/skills
+                    "learned-preferences*": "allow",
+                    "skill-write": "allow",
+                },
+                skill_learn: "allow",
+                task: {
+                    "*": "deny",
+                    auto_research: "allow",
+                    "query*": "allow",
+                },
+                task_external: "ask",
+                task_resume: "allow",
+                "todo*": "allow",
+            },
+            prompt: designPrompt,
+            temperature: 0.7,
+            tier: "balanced",
+        },
+
+        spy: {
+            color: colorReadOnlyInteractiveOrchestrator,
+            description: "🕵️ Spy on private information.",
+            hidden: false,
+            mode: "primary",
+            permission: {
+                "*": "deny",
+                autocode_config_read: "allow",
+                autocode_db_table: "allow",
+                autocode_db_table_read: "allow",
+                autocode_db_tables: "allow",
+                autocode_md_frontmatter_read: "allow",
+                autocode_md_read: "allow",
+                autocode_session_create: "allow",
+                autocode_ssh_config_read: "allow",
+                autocode_ssh_glob: "allow",
+                autocode_ssh_grep_file: "allow",
+                autocode_ssh_list: "allow",
+                "autocode_ssh_read_*": "allow",
+                "excel_get*": "allow",
+                "excel_read*": "allow",
+                "excel_validate*": "allow",
+                glob: "allow",
+                grep: "allow",
+                question: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "learned-corrections*": "allow",
+                    "learned-env*": "allow",
+                    "learned-preferences*": "allow",
+                },
+                "todo*": "allow",
+            },
+            prompt: spyPrompt,
+            tier: "spy",
+        },
+
+        // Secondary Orchestrators
+
+        assist_browser: {
+            color: colorWritableInteractiveOrchestrator,
+            description: "task assist_browser with interactive browser automation tasks. It browser than can: access that can fill forms, submit, save, upload, pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so tab and login session are not re-discovered.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "chrome*": "allow",
+                doom_loop: "ask",
+                question: "allow",
+                skill: {
+                    "*": "deny",
+                    "execute-ux": "allow",
+                    "skill-write": "allow",
+                },
+                skill_learn: "allow",
+                "todo*": "allow",
+            },
+            prompt: assistBrowserPrompt,
+            temperature: 0.3,
+            tier: "operator",
+        },
+
+        assist_git_conflict: {
+            color: colorWritableInteractiveOrchestrator,
+            description: "task assist_git_conflict to resolve git merge conflicts.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                doom_loop: "ask",
+                edit: "allow",
+                git_add: "allow",
+                git_log: "allow",
+                git_status: "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                question: "allow",
+                read: "allow",
+                skill: {
+                    "*": "ask",
+                    "code*": "allow",
+                    "execute*": "allow",
+                },
+                task: {
+                    "*": "deny",
+                    execute_code: "allow",
+                    execute_os: "allow",
+                    query_architect: "allow",
+                    query_code: "allow",
+                    query_git: "allow",
+                    query_os: "allow",
+                    query_text: "allow"
+                },
+                task_resume: "allow",
+                "todowrite": "allow",
+            },
+            prompt: assistGitConflictPrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        auto_author: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_author to author or review: articles, docs, excel reports or agentic skills or prompts; NOT for config or source code comments.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_md_*": "allow",
+                edit: "allow",
+                skill: {
+                    "*": "deny",
+                    "learned-preferences*": "allow",
+                    "skill-write": "allow",
+                },
+                task: {
+                    "*": "deny",
+                    "document_*": "allow",
+                    execute_author: "allow",
+                    execute_document: "allow",
+                    query_text: "allow",
+                    query_web: "allow",
+                    query_youtube: "allow",
+                },
+                task_resume: "allow",
+            },
+            prompt: autoAuthorPrompt,
+            temperature: 0.7,
+            tier: "smart",
+        },
+
+        auto_design: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_design to redesign failed PROPOSALS when new unresolvable blocking CONSTRAINTS arise. Always try resolve OBSTACLES first with auto_troubleshoot. Only task auto_design as last resort when unresolvable root cause (new CONSTRAINT) is clear.",
+            hidden: false,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                external_directory: "deny",
+                read: "allow",
+                question: "allow",
+                task: {
+                    "*": "deny",
+                    "query*": "allow",
+                },
+                task_external: "allow",
+                task_resume: "allow",
+            },
+            prompt: autoDesignPrompt,
+            temperature: 0.7,
+            tier: "smart",
+        },
+
+        auto_feature: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_feature to create new project features: Implement new API's, classes, components, css styles, packages, scripts, templates, webpages",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_sandbox_copy: sandboxCopyTargetPermission,
+                autocode_sandbox_delete: "allow",
+                skill: {
+                    "*": "deny",
+                    "code*": "allow",
+                    "codebase-design": "allow", // From mattpocock/skills
+                    "execute*": "allow",
+                    "learned-preferences*": "allow",
+                    "vue-best-practices": "allow",
+                    "ui-craft": "allow",
+                },
+                task: {
+                    "*": "deny",
+                    auto_test: "allow",
+                    auto_troubleshoot: "allow",
+                    execute_code: "allow",
+                    execute_os: "allow",
+                    query_code: "allow",
+                    query_git: "allow",
+                    query_text: "allow"
+                },
+                task_resume: "allow",
+                "todo*": "allow",
+            },
+            prompt: autoFeaturePrompt,
+            temperature: 0.3,
+            tier: "smart",
+        },
+
+        auto_general: {
+            color: colorAutonomousOrchestrator,
+            description: "Only fallback to auto_general as last resort when no specialized subagent clearly fits task.",
+            hidden: true,
+            mode: "all",
+            permission: {
+                "*": "allow",
+                doom_loop: "deny",
+                external_directory: "deny",
+                skill: {
+                    "*": "allow",
+                    "assist-*": "deny",
+                    "primary-*": "deny",
+                },
+                task: {
+                    "*": "allow",
+                    "assist*": "deny",
+                    "auto*": "deny",
+                    build: "deny",
+                    design: "deny",
+                    plan: "deny",
+                    report: "deny",
+                    session: "deny",
+                    "temp*": "deny"
+                },
+            },
+            prompt: autoGeneralPrompt,
+            tier: "balanced",
+        },
+
+        auto_refactor: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_refactor to upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_sandbox_create: "allow",
+                autocode_sandbox_delete: "allow",
+                skill: {
+                    "*": "deny",
+                    "code*": "allow",
+                    "codebase-design": "allow", // From mattpocock/skills
+                    "execute*": "allow",
+                    "learned-preferences*": "allow"
+                },
+                task: {
+                    "*": "deny",
+                    auto_troubleshoot: "allow",
+                    execute_code: "allow",
+                    execute_script: "allow",
+                    execute_os: "allow",
+                    query_code: "allow",
+                    query_git: "allow",
+                },
+                task_resume: "allow",
+            },
+            prompt: buildRefactorPrompt,
+            temperature: 0.3,
+            tier: "smart",
+        },
+
+        auto_research: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_research to answer complex questions like research topics, architectural overview, code flow across multiple files, consolidating data from multiple sources, compare specs with implementation",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                task: {
+                    "*": "deny",
+                    "query*": "allow",
+                },
+                task_resume: "allow",
+            },
+            prompt: buildResearchPrompt,
+            temperature: 0.7,
+            tier: "smart",
+        },
+
+        auto_review_api: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_review_api to review API changes: check endpoints, run tests, fix failures, and confirm API requirements are met",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_sandbox_create: "allow",
+                autocode_sandbox_delete: "allow",
+                task: {
+                    "*": "deny",
+                    execute_code: "allow",
+                    execute_sandbox: "allow",
+                    execute_script: "allow",
+                    execute_os: "allow",
+                    execute_rest: "allow",
+                    query_architect: "allow",
+                    query_code: "allow",
+                    query_git: "allow",
+                    query_text: "allow",
+                },
+                task_resume: "allow",
+            },
+            prompt: buildReviewApiPrompt,
+            temperature: 0.3,
+            tier: "smart",
+        },
+
+        auto_review_ui: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_review_ui to review UI changes: run application, inspect UI, run tests, and confirm UI requirements are met",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_sandbox_create: "allow",
+                autocode_sandbox_delete: "allow",
+                task: {
+                    "*": "deny",
+                    execute_code: "allow",
+                    execute_sandbox: "allow",
+                    execute_script: "allow",
+                    execute_os: "allow",
+                    query_architect: "allow",
+                    query_browser: "allow",
+                    query_code: "allow",
+                    query_git: "allow",
+                    query_text: "allow",
+                },
+                task_resume: "allow",
+            },
+            prompt: buildReviewUiPrompt,
+            temperature: 0.3,
+            tier: "smart",
+        },
+
+        auto_test: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_test to write, run or fix tests.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                edit: "allow",
+                skill: {
+                    "*": "deny",
+                    "test*": "allow",
+                    "learned-corrections*": "allow",
+                },
+                task: {
+                    "*": "deny",
+                    execute_code: "allow",
+                    execute_config: "allow",
+                    execute_script: "allow",
+                    execute_os: "allow",
+                    query_code: "allow",
+                    query_config: "allow",
+                    query_git: "allow",
+                },
+                task_resume: "allow",
+            },
+            prompt: buildTestPrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        auto_troubleshoot: {
+            color: colorAutonomousOrchestrator,
+            description: "task auto_troubleshoot to troubleshoot obstacles, bugs and issues.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_sandbox_create: "allow",
+                autocode_sandbox_delete: "allow",
+                "context7*": "allow",
+                skill: {
+                    "*": "deny",
+                    "learned-corrections*": "allow",
+                    "learned-env*": "allow",
+                    "skill-write": "allow",
+                },
+                skill_learn: "allow",
+                task: {
+                    "*": "deny",
+                    execute_code: "allow",
+                    execute_config: "allow",
+                    execute_debug: "allow",
+                    execute_rest: "allow",
+                    execute_sandbox: "allow",
+                    execute_script: "allow",
+                    execute_os: "allow",
+                    execute_ssh: "allow",
+                    "query*": "allow",
+                },
+                task_resume: "allow",
+                "todo*": "allow",
+            },
+            prompt: buildTroubleshootPrompt,
+            temperature: 0.5,
+            tier: "smart",
+        },
+
+        // Document Workers
+
+        document_agents: {
+            color: colorDocumentWorker,
+            description: "task document_agents to convert latest `README.md` to `AGENTS.md`.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_md_create": "allow",
+                "autocode_md_h1": "allow",
+                "autocode_md_read": "allow",
+                "autocode_md_update": "allow",
+                skill: {
+                    "*": "deny",
+                    "author-rules": "allow"
+                }
+            },
+            prompt: documentAgentsPrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        document_conventions: {
+            color: colorDocumentWorker,
+            description: "task document_agents to document naming conventions and project terminology.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_read": "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "skill-write": "allow"
+                },
+                skill_edit: "allow",
+            },
+            prompt: documentConventionsPrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        document_code: {
+            color: colorDocumentWorker,
+            description: "task document_agents to document technical architecture and design decisions or source code/config locations.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_read": "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "skill-write": "allow"
+                },
+                skill_edit: "allow",
+            },
+            prompt: documentCodePrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        document_env: {
+            color: colorDocumentWorker,
+            description: "task document_agents to document related project to current project.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_read": "allow",
+                grep: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "learned-env*": "allow",
+                    "skill-write": "allow",
+                },
+                skill_edit: "allow",
+                skill_learn: "allow",
+                task: {
+                    "*": "deny",
+                    query_os: "allow",
+                    query_ssh: "allow"
+                }
+            },
+            prompt: documentEnvPrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        document_install: {
+            color: colorDocumentWorker,
+            description: "task document_agents to document project installation and usage guide.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_md_*": "allow",
+                glob: "allow",
+                grep: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "skill-write": "allow"
+                },
+                skill_edit: "allow",
+            },
+            prompt: documentInstallPrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        document_prd: {
+            color: colorDocumentWorker,
+            description: "task document_agents to document product requirements and user roles.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_read": "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "skill-write": "allow"
+                },
+                skill_edit: "allow",
+            },
+            prompt: String(documentPrdPrompt),
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        document_ux: {
+            color: colorDocumentWorker,
+            description: "task document_agents to document UX flows, navigation, and styling patterns",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_read": "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "skill-write": "allow"
+                },
+                skill_edit: "allow",
+            },
+            prompt: documentUxPrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        // Execute workers
+
+        execute_author: {
+            color: colorWritableWorker,
+            description: "task execute_author to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_md_*": "allow",
+                skill: {
+                    "*": "deny",
+                    "author*": "allow",
+                },
+            },
+            prompt: executeAuthorPrompt,
+            temperature: 0.5,
+            tier: "balanced",
+        },
+
+        execute_code: {
+            color: colorWritableWorker,
+            description: "task execute_code to update the codebase with code, permanent project scripts, config, and templates; NEVER write md files; NEVER run bash/tsc/tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "context7*": "allow",
+                doom_loop: "deny",
+                edit: "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "angular-developer": "allow",
+                    "code*": "allow",
+                    "design*": "allow",
+                    "java-junit": "allow",
+                    "javascript-typescript-jest": "allow",
+                    "nitro": "allow",
+                    "nuxt": "allow",
+                    "learned-preferences*": "allow",
+                    "tailwindcss": "allow",
+                    "vitest": "allow"
+                },
+            },
+            prompt: executeCodePrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        execute_config: {
+            color: colorWritableWorker,
+            description: "task execute_config to create or update configs or data files: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; It NEVER edit source code.",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_*": "allow",
+            },
+            prompt: executeConfigPrompt,
+            temperature: 0.1,
+            tier: "operator",
+        },
+
+        execute_debug: {
+            color: colorWritableWorker,
+            description: "task execute_debug to debug code flow leading to symptoms of reproducible bug as evidence of cause; Prompt must include bug symptoms and bug reproduction steps.",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_*": "allow",
+                autocode_process_kill: "allow",
+                bash: "allow",
+                doom_loop: "deny",
+                edit: "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                "pty*": "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "learned-corrections*": "allow",
+                    "learned-env*": "allow",
+                    "learned-permissions*": "allow",
+                    "skill-write": "allow"
+                },
+                skill_learn: "allow",
+            },
+            prompt: executeDebugPrompt,
+            temperature: 0.6,
+            tier: "balanced",
+        },
+
+        execute_document: {
+            color: colorDocumentWorker,
+            description: "task execute_document to update `AGENTS.md`, `README.md`, skills, remember architectural/design decisions or specs.",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_logo_find: "allow",
+                "autocode_md_*": "allow",
+                skill: {
+                    "*": "deny",
+                    "author-readme": "allow",
+                },
+                task: {
+                    "*": "deny",
+                    "document_*": "allow"
+                },
+                task_resume: "allow"
+            },
+            prompt: executeDocumentPrompt,
+            temperature: 0.1,
+            tier: "balanced",
+        },
+
+        execute_excel: {
+            color: colorWritableWorker,
+            description: "task execute_excel with excel related tasks like workbook manipulations and data validation.",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                edit: "allow",
+                "excel_*": "allow",
+                read: "allow",
+                task: {
+                    "*": "deny",
+                    query_excel: "allow",
+                    query_text: "allow"
+                },
+                task_resume: "allow",
+                "todo*": "allow",
+            },
+            prompt: executeExcelPrompt,
+            temperature: 0.3,
+            tier: "operator",
+        },
+
+        execute_opencode: {
+            color: colorWritableWorker,
+            description: "task execute_opencode to create or update OpenCode agent, command, skill and AGENTS.md files only.",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_*": "allow",
+                "autocode_md_*": "allow",
+                skill: {
+                    "*": "deny",
+                    "skill-write": "allow",
+                    "author-agent": "allow",
+                    "author-command": "allow",
+                    "author-rules": "allow",
+                    "customize-opencode": "allow" // Build-in to OpenCode
+                },
+                skill_edit: "allow",
+            },
+            prompt: executeOpencodePrompt,
+            temperature: 0.3,
+            tier: "operator",
+        },
+
+        execute_os: {
+            color: colorWritableWorker,
+            description: "task execute_os to copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests. NOT for source code editing!",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_*": "allow",
+                autocode_dependencies: "allow",
+                autocode_process_kill: "allow",
+                edit: "allow",
+                bash: "allow",
+                external_directory: "allow",
+                "filesystem*": "allow",
+                glob: "allow",
+                grep: "allow",
+                "pty*": "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "angular-new-app": "allow",
+                    "execute-install": "allow",
+                    "execute-sandbox": "allow",
+                    "learned-corrections*": "allow",
+                    "learned-env*": "allow",
+                    "learned-permissions*": "allow",
+                    "skill-write": "allow"
+                },
+                skill_learn: "allow",
+            },
+            prompt: buildExecuteOsPrompt(capabilities),
+            temperature: 0.1,
+            tier: "balanced",
+        },
+
+        execute_rest: {
+            color: colorReadOnlyWorker,
+            description: "task execute_rest to make REST/API requests on HTTP/HTTPS endpoints. Useful to reproduce API-related issues.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_config_read: "allow",
+                autocode_rest: "allow",
+                grep: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "learned-corrections*": "allow",
+                    "learned-env*": "allow",
+                    "skill-write": "allow"
+                },
+                skill_learn: "allow",
+            },
+            prompt: executeRestPrompt,
+            temperature: 0.1,
+            tier: "operator",
+        },
+
+        execute_sandbox: {
+            color: colorWritableWorker,
+            description: "task execute_sandbox to execute CLI commands in sandbox environment; First create sandbox with `autocode_sandbox_create`, then you run multiple `execute_sandbox` tasks but you MUST include same `sandbox_name` in every `task` prompt",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_sandbox_cli: "allow",
+                autocode_sandbox_copy: sandboxCopyTargetPermission,
+                autocode_sandbox_edit: "allow",
+                autocode_sandbox_glob: "allow",
+                autocode_sandbox_grep: "allow",
+                autocode_sandbox_read: "allow",
+                autocode_sandbox_config_edit: "allow",
+                autocode_sandbox_config_read: "allow",
+                autocode_sandbox_config_remove: "allow",
+                skill: {
+                    "*": "deny",
+                    "execute-install": "allow",
+                    "execute-sandbox": "allow",
+                    "learned-corrections*": "allow",
+                    "learned-env*": "allow",
+                    "skill-write": "allow"
+                },
+                skill_learn: "allow",
+                "todo*": "allow",
+            },
+            prompt: buildExecuteOsPrompt(sandboxLinuxCapabilities),
+            temperature: 0.1,
+            tier: "operator",
+        },
+
+        execute_script: {
+            color: colorWritableWorker,
+            description: "task execute_script to execute repetitive actions, data/document/media conversions, generate/render content, or control external apps via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_script_install: "allow",
+                autocode_script_project: "allow",
+                autocode_script_run: "allow",
+                autocode_script_service: "allow",
+                edit: "allow",
+                glob: "allow",
+                grep: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "execute-install": "allow",
+                    "learned-corrections*": "allow",
+                    "learned-env*": "allow",
+                    "learned-permissions*": "allow",
+                    "skill-write": "allow"
+                },
+                skill_learn: "allow",
+                write: "allow",
+            },
+            prompt: executeScriptPrompt,
+            temperature: 0.3,
+            tier: "balanced",
+        },
+
+        execute_ssh: {
+            color: colorWritableWorker,
+            description: "task execute_ssh to access remote SSH/SFTP servers to execute remote commands or search/read/write remote files.",
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_ssh*": "allow",
+                skill: {
+                    "*": "deny",
+                    "execute-install": "allow",
+                    "learned-corrections*": "allow",
+                    "learned-env-*": "allow",
+                    "learned-permissions*": "allow",
+                    "skill-write": "allow"
+                },
+                skill_learn: "allow",
+                "todo*": "allow",
+            },
+            prompt: executeSshPrompt,
+            temperature: 0.1,
+            tier: "balanced",
+        },
+
+        // Query workers
+
+        query_autocode: {
+            color: colorReadOnlyWorker,
+            description: "task query_autocode for OpenCode or AutoCode documentation or configuration related queries or advise.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_read": "allow",
+                "autocode_md_read": "allow",
+                "autocode_md_frontmatter_read": "allow",
+                skill: {
+                    "*": "deny",
+                    "author-agent": "allow",
+                    "author-command": "allow",
+                    "skill-write": "allow",
+                },
+                webfetch: "allow",
+                "websearch*": "allow",
+            },
+            prompt: queryAutocodePrompt,
+            temperature: 0.1,
+            tier: "fast",
+        },
+
+        query_browser: {
+            color: colorReadOnlyWorker,
+            description: "task query_browser to inspect or investigate UI of YOUR RUNNING APPLICATION in real browser (first start app before tasking query_browser) or to pair with user (you drive, user manual login and solve captchas) to access restricted online sources. Ask query_browser to debug, find DOM elements, summarize console logs, analyze network requests, interact with UI elements, monitor performance, test frontend functionality like human. NOT for internet searches.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                '*': "deny",
+                "chrome*": "allow",
+                skill: {
+                    "*": "deny",
+                    "execute-ux": "allow",
+                },
+            },
+            prompt: queryBrowserPrompt,
+            tier: "fast",
+        },
+
+        query_code: {
+            color: colorReadOnlyWorker,
+            description: "task query_code to find, summarize, understand: source code, scripts or codebase; NEVER query md, template, styling, config, data files; NEVER to return full file content",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "context7*": "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "execute*": "allow",
+                },
+            },
+            prompt: queryCodePrompt,
+            temperature: 0.3,
+            tier: "context",
+        },
+
+        query_config: {
+            color: colorReadOnlyWorker,
+            description: "task query_config to read config or data file values or outlines: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; No other file types supported.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_*": "allow",
+            },
+            prompt: executeConfigPrompt,
+            temperature: 0.1,
+            tier: "fast",
+        },
+
+        query_db: {
+            color: colorReadOnlyWorker,
+            description: "task query_db to inspect environment-configured databases in read-only mode using Autocode DB tools",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                autocode_db_table: "allow",
+                autocode_db_table_read: "allow",
+                autocode_db_tables: "allow",
+            },
+            prompt: queryDbPrompt,
+            temperature: 0.1,
+            tier: "context",
+        },
+
+        query_excel: {
+            color: colorReadOnlyWorker,
+            description: "task query_excel to read excel files.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "excel_get*": "allow",
+                "excel_read*": "allow",
+                "excel_validate*": "allow",
+                glob: "allow",
+            },
+            prompt: queryExcelPrompt,
+            temperature: 0.1,
+            tier: "context",
+        },
+
+        query_git: {
+            color: colorReadOnlyWorker,
+            description: "task query_git to inspect Git repos (status, diff, log, show), recent project file changes, file history.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                external_directory: "allow",
+                "git_diff*": "allow",
+                git_log: "allow",
+                git_show: "allow",
+                git_status: "allow",
+                glob: "allow",
+                grep: "allow",
+                read: "allow",
+            },
+            prompt: queryGitPrompt,
+            temperature: 0.1,
+            tier: "fast",
+        },
+
+        query_os: {
+            color: colorReadOnlyWorker,
+            description: "task query_os to find OS provided info like: local host hardware, software, system, network, service, process, versions, help-command info, status.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_config_read": "allow",
+                "autocode_md_frontmatter_read": "allow",
+                bash: "allow",
+                doom_loop: "deny",
+                external_directory: "allow",
+                glob: "allow",
+                grep: "allow",
+                lsp: "allow",
+                read: "allow",
+                skill: {
+                    "*": "deny",
+                    "learned-env*": "allow",
+                    "learned-permissions*": "allow",
+                    "skill-write": "allow",
+                },
+                skill_learn: "allow",
+            },
+            prompt: buildQueryOsPrompt(capabilities),
+            temperature: 0.1,
+            tier: "fast",
+        },
+
+        query_skills: {
+            color: colorReadOnlyWorker,
+            description: "task query_skills to ask questions about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                '*': "deny",
+                skill: {
+                    "*": "deny",
+                    "customize-opencode": "allow", // Build-in to OpenCode
+                    "design*": "allow",
+                    "execute*": "allow",
+                    "learned-*": "allow",
+                    "vue-best-practices": "allow",
+                    "ui-craft": "allow",
+                },
+                "todo*": "allow"
+            },
+            prompt: querySkillsPrompt,
+            tier: "fast",
+        },
+
+        query_ssh: {
+            color: colorReadOnlyWorker,
+            description: "task query_ssh to find on remote SSH/SFTP servers: files, configuration, process status, etc.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_ssh_config_read": "allow",
+                autocode_ssh_command: "allow",
+                autocode_ssh_glob: "allow",
+                autocode_ssh_grep_file: "allow",
+                autocode_ssh_list: "allow",
+                "autocode_ssh_read_*": "allow",
+                doom_loop: "deny",
+                skill: {
+                    "*": "deny",
+                    "learned-env*": "allow",
+                    "learned-permissions*": "allow",
+                    "skill-write": "allow",
+                },
+                skill_learn: "allow",
+            },
+            prompt: querySshPrompt,
+            temperature: 0.1,
+            tier: "fast",
+        },
+
+        query_text: {
+            color: colorReadOnlyWorker,
+            description: "task query_text to answer questions (presence?, contains?, outline?, fallacies?, debatable claims?, arguments?) or to evaluate/criticize textual content: md content, md front-matter, articles/document sections, styling, templates, assets, resources; NEVER to return full file content.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
                 "author-*": "allow",
-                "codebase-design": "allow", // From mattpocock/skills
-                "git-commit": "allow",
-                "learned-preferences*": "allow",
-                "learned-permissions*": "allow",
-                "primary-manual*": "allow",
-                "skill-write": "allow",
-                "ui-craft": "allow",
+                "autocode_config_read": "allow",
+                "autocode_md_frontmatter_read": "allow",
+                "autocode_md_read": "allow",
+                glob: "allow",
+                grep: "allow",
+                read: "allow"
             },
-            skill_learn: "allow",
-            task: {
-                "*": "deny",
-                auto_research: "allow",
-                "query*": "allow",
-            },
-            task_resume: "allow",
-            "todo*": "allow",
+            prompt: queryTextPrompt,
+            temperature: 0.1,
+            tier: "context",
         },
-        prompt: advisePrompt,
-        tier: "balanced",
-    },
 
-    assist: {
-        color: colorWritableInteractiveOrchestrator,
-        description: "🧑‍💻 Assist interactively with problems.",
-        hidden: false,
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            "autocode_config_*": "allow",
-            "autocode_md_*": "allow",
-            autocode_sandbox_create: "ask",
-            autocode_sandbox_delete: "allow",
-            autocode_session_create: "allow",
-            doom_loop: "ask",
-            edit: "allow",
-            git_commit: "allow",
-            question: "allow",
-            skill: {
+        query_web: {
+            color: colorReadOnlyWorker,
+            description: "task query_web to search and read public ONLINE web sources: documentation, articles, forums, GitHub, news, framework API/SDKs, public repo examples; Allow ONLY 1 query per subagent session.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
                 "*": "deny",
-                "assist-*": "allow",
-                "author-*": "allow",
-                "codebase-design": "allow", // From mattpocock/skills
-                "git-commit": "allow",
-                "learned-preferences*": "allow",
-                "learned-permissions*": "allow",
-                "primary-manual*": "allow",
-                "skill-write": "allow",
-                "ui-craft": "allow",
+                "context7*": "allow",
+                "todo*": "allow",
+                webfetch: "allow",
+                "websearch*": "allow",
             },
-            skill_edit: "allow",
-            skill_learn: "allow",
-            task: {
-                "*": "allow",
-                "auto*": "deny",
-                auto_research: "allow",
-                build: "deny",
-                "document*": "deny",
-                plan: "deny",
-            },
-            task_external: "ask",
-            task_resume: "allow",
-            "todo*": "allow"
+            prompt: queryWebPrompt,
+            temperature: 0.5,
+            tier: "context",
         },
-        prompt: assistPrompt,
-        tier: "balanced",
-    },
 
-    auto: {
-        color: colorAutonomousOrchestrator,
-        description: "🤖 Autonomously solve problems.",
-        hidden: false,
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            autocode_session_create: "allow",
-            git_commit: "allow",
-            skill: {
+        query_youtube: {
+            color: colorReadOnlyWorker,
+            description: "task query_youtube to transcribe YouTube videos.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
                 "*": "deny",
-                "git-commit": "allow",
-                "learned-permissions*": "allow",
-                "primary-manual": "allow"
+                autocode_youtube_transcribe: "allow",
             },
-            skill_learn: "allow",
-            task: {
-                "*": "deny",
-                "auto_*": "allow",
-                "query_*": "allow"
-            },
-            task_resume: "allow",
-            "todo*": "allow",
+            prompt: queryYoutubePrompt,
+            temperature: 0.1,
+            tier: "context",
         },
-        prompt: autoPrompt,
-        temperature: 0.4,
-        tier: "smart",
-    },
-
-    design: {
-        color: colorReadOnlyInteractiveOrchestrator,
-        description: "📐 Design and propose solutions.",
-        hidden: false,
-        mode: "primary",
-        permission: {
-            "*": "deny",
-            autocode_agent_execute: "allow",
-            autocode_concept_create: "allow",
-            autocode_concept_list: "allow",
-            autocode_concept_read: "allow",
-            autocode_job_execute: "allow",
-            autocode_job_list: "allow",
-            autocode_session_create: "allow",
-            doom_loop: "ask",
-            external_directory: "ask",
-            question: "allow",
-            skill: {
-                "*": "deny",
-                "codebase-design": "allow", // From mattpocock/skills
-                "skill-write": "allow",
-            },
-            skill_learn: "allow",
-            task: {
-                "*": "deny",
-                auto_research: "allow",
-                "query*": "allow",
-            },
-            task_external: "ask",
-            task_resume: "allow",
-            "todo*": "allow",
-        },
-        prompt: designPrompt,
-        temperature: 0.7,
-        tier: "balanced",
-    },
-
-    // Secondary Orchestrators
-
-    assist_browser: {
-        color: colorWritableInteractiveOrchestrator,
-        description: "task assist_browser with interactive browser automation tasks. It browser than can: access that can fill forms, submit, save, upload, pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so tab and login session are not re-discovered.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "chrome*": "allow",
-            doom_loop: "ask",
-            question: "allow",
-            skill: {
-                "*": "deny",
-                "execute-ux": "allow",
-                "skill-write": "allow",
-            },
-            skill_learn: "allow",
-            "todo*": "allow",
-        },
-        prompt: assistBrowserPrompt,
-        temperature: 0.3,
-        tier: "operator",
-    },
-
-    assist_git_conflict: {
-        color: colorWritableInteractiveOrchestrator,
-        description: "task assist_git_conflict to resolve git merge conflicts.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            doom_loop: "ask",
-            edit: "allow",
-            git_add: "allow",
-            git_log: "allow",
-            git_status: "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            question: "allow",
-            read: "allow",
-            skill: {
-                "*": "ask",
-                "code*": "allow",
-                "execute*": "allow",
-            },
-            task: {
-                "*": "deny",
-                execute_code: "allow",
-                execute_os: "allow",
-                query_architect: "allow",
-                query_code: "allow",
-                query_git: "allow",
-                query_os: "allow",
-                query_text: "allow"
-            },
-            task_resume: "allow",
-            "todowrite": "allow",
-        },
-        prompt: assistGitConflictPrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    auto_author: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_author to author or review: articles, docs, excel reports or agentic skills or prompts; NOT for config or source code comments.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_md_*": "allow",
-            edit: "allow",
-            skill: {
-                "*": "deny",
-                "learned-preferences*": "allow",
-                "skill-write": "allow",
-            },
-            task: {
-                "*": "deny",
-                "document_*": "allow",
-                execute_author: "allow",
-                execute_document: "allow",
-                query_text: "allow",
-                query_web: "allow",
-                query_youtube: "allow",
-            },
-            task_resume: "allow",
-        },
-        prompt: autoAuthorPrompt,
-        temperature: 0.7,
-        tier: "smart",
-    },
-
-    auto_design: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_design to redesign failed PROPOSALS when new unresolvable blocking CONSTRAINTS arise. Always try resolve OBSTACLES first with auto_troubleshoot. Only task auto_design as last resort when unresolvable root cause (new CONSTRAINT) is clear.",
-        hidden: false,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            external_directory: "deny",
-            read: "allow",
-            question: "allow",
-            task: {
-                "*": "deny",
-                "query*": "allow",
-            },
-            task_external: "allow",
-            task_resume: "allow",
-        },
-        prompt: autoDesignPrompt,
-        temperature: 0.7,
-        tier: "smart",
-    },
-
-    auto_feature: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_feature to create new project features: Implement new API's, classes, components, css styles, packages, scripts, templates, webpages",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_sandbox_copy: sandboxCopyTargetPermission,
-            autocode_sandbox_delete: "allow",
-            skill: {
-                "*": "deny",
-                "code*": "allow",
-                "codebase-design": "allow", // From mattpocock/skills
-                "execute*": "allow",
-                "learned-preferences*": "allow",
-                "vue-best-practices": "allow",
-                "ui-craft": "allow",
-            },
-            task: {
-                "*": "deny",
-                auto_test: "allow",
-                auto_troubleshoot: "allow",
-                execute_code: "allow",
-                execute_os: "allow",
-                query_code: "allow",
-                query_git: "allow",
-                query_text: "allow"
-            },
-            task_resume: "allow",
-            "todo*": "allow",
-        },
-        prompt: autoFeaturePrompt,
-        temperature: 0.3,
-        tier: "smart",
-    },
-
-    auto_general: {
-        color: colorAutonomousOrchestrator,
-        description: "Only fallback to auto_general as last resort when no specialized subagent clearly fits task.",
-        hidden: true,
-        mode: "all",
-        permission: {
-            "*": "allow",
-            doom_loop: "deny",
-            external_directory: "deny",
-            skill: {
-                "*": "allow",
-                "assist-*": "deny",
-                "primary-*": "deny",
-            },
-            task: {
-                "*": "allow",
-                "assist*": "deny",
-                "auto*": "deny",
-                build: "deny",
-                design: "deny",
-                plan: "deny",
-                report: "deny",
-                session: "deny",
-                "temp*": "deny"
-            },
-        },
-        prompt: autoGeneralPrompt,
-        tier: "balanced",
-    },
-
-    auto_refactor: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_refactor to upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_sandbox_create: "allow",
-            autocode_sandbox_delete: "allow",
-            skill: {
-                "*": "deny",
-                "code*": "allow",
-                "codebase-design": "allow", // From mattpocock/skills
-                "execute*": "allow",
-                "learned-preferences*": "allow"
-            },
-            task: {
-                "*": "deny",
-                auto_troubleshoot: "allow",
-                execute_code: "allow",
-                execute_script: "allow",
-                execute_os: "allow",
-                query_code: "allow",
-                query_git: "allow",
-            },
-            task_resume: "allow",
-        },
-        prompt: buildRefactorPrompt,
-        temperature: 0.3,
-        tier: "smart",
-    },
-
-    auto_research: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_research to answer complex questions like research topics, architectural overview, code flow across multiple files, consolidating data from multiple sources, compare specs with implementation",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            task: {
-                "*": "deny",
-                "query*": "allow",
-            },
-            task_resume: "allow",
-        },
-        prompt: buildResearchPrompt,
-        temperature: 0.7,
-        tier: "smart",
-    },
-
-    auto_review_api: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_review_api to review API changes: check endpoints, run tests, fix failures, and confirm API requirements are met",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_sandbox_create: "allow",
-            autocode_sandbox_delete: "allow",
-            task: {
-                "*": "deny",
-                execute_code: "allow",
-                execute_sandbox: "allow",
-                execute_script: "allow",
-                execute_os: "allow",
-                execute_rest: "allow",
-                query_architect: "allow",
-                query_code: "allow",
-                query_git: "allow",
-                query_text: "allow",
-            },
-            task_resume: "allow",
-        },
-        prompt: buildReviewApiPrompt,
-        temperature: 0.3,
-        tier: "smart",
-    },
-
-    auto_review_ui: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_review_ui to review UI changes: run application, inspect UI, run tests, and confirm UI requirements are met",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_sandbox_create: "allow",
-            autocode_sandbox_delete: "allow",
-            task: {
-                "*": "deny",
-                execute_code: "allow",
-                execute_sandbox: "allow",
-                execute_script: "allow",
-                execute_os: "allow",
-                query_architect: "allow",
-                query_browser: "allow",
-                query_code: "allow",
-                query_git: "allow",
-                query_text: "allow",
-            },
-            task_resume: "allow",
-        },
-        prompt: buildReviewUiPrompt,
-        temperature: 0.3,
-        tier: "smart",
-    },
-
-    auto_test: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_test to write, run or fix tests.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            edit: "allow",
-            skill: {
-                "*": "deny",
-                "test*": "allow",
-                "learned-corrections*": "allow",
-            },
-            task: {
-                "*": "deny",
-                execute_code: "allow",
-                execute_config: "allow",
-                execute_script: "allow",
-                execute_os: "allow",
-                query_code: "allow",
-                query_config: "allow",
-                query_git: "allow",
-            },
-            task_resume: "allow",
-        },
-        prompt: buildTestPrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    auto_troubleshoot: {
-        color: colorAutonomousOrchestrator,
-        description: "task auto_troubleshoot to troubleshoot obstacles, bugs and issues.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_sandbox_create: "allow",
-            autocode_sandbox_delete: "allow",
-            "context7*": "allow",
-            skill: {
-                "*": "deny",
-                "learned-corrections*": "allow",
-                "learned-env*": "allow",
-                "skill-write": "allow",
-            },
-            skill_learn: "allow",
-            task: {
-                "*": "deny",
-                execute_code: "allow",
-                execute_config: "allow",
-                execute_debug: "allow",
-                execute_rest: "allow",
-                execute_sandbox: "allow",
-                execute_script: "allow",
-                execute_os: "allow",
-                execute_ssh: "allow",
-                "query*": "allow",
-            },
-            task_resume: "allow",
-            "todo*": "allow",
-        },
-        prompt: buildTroubleshootPrompt,
-        temperature: 0.5,
-        tier: "smart",
-    },
-
-    // Document Workers
-
-    document_agents: {
-        color: colorDocumentWorker,
-        description: "task document_agents to convert latest `README.md` to `AGENTS.md`.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_md_create": "allow",
-            "autocode_md_h1": "allow",
-            "autocode_md_read": "allow",
-            "autocode_md_update": "allow",
-            skill: {
-                "*": "deny",
-                "author-rules": "allow"
-            }
-        },
-        prompt: documentAgentsPrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    document_conventions: {
-        color: colorDocumentWorker,
-        description: "task document_agents to document naming conventions and project terminology.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_read": "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "skill-write": "allow"
-            },
-            skill_edit: "allow",
-        },
-        prompt: documentConventionsPrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    document_code: {
-        color: colorDocumentWorker,
-        description: "task document_agents to document technical architecture and design decisions or source code/config locations.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_read": "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "skill-write": "allow"
-            },
-            skill_edit: "allow",
-        },
-        prompt: documentCodePrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    document_env: {
-        color: colorDocumentWorker,
-        description: "task document_agents to document related project to current project.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_read": "allow",
-            grep: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "learned-env*": "allow",
-                "skill-write": "allow",
-            },
-            skill_edit: "allow",
-            skill_learn: "allow",
-            task: {
-                "*": "deny",
-                query_os: "allow",
-                query_ssh: "allow"
-            }
-        },
-        prompt: documentEnvPrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    document_install: {
-        color: colorDocumentWorker,
-        description: "task document_agents to document project installation and usage guide.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_md_*": "allow",
-            glob: "allow",
-            grep: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "skill-write": "allow"
-            },
-            skill_edit: "allow",
-        },
-        prompt: documentInstallPrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    document_prd: {
-        color: colorDocumentWorker,
-        description: "task document_agents to document product requirements and user roles.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_read": "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "skill-write": "allow"
-            },
-            skill_edit: "allow",
-        },
-        prompt: String(documentPrdPrompt),
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    document_ux: {
-        color: colorDocumentWorker,
-        description: "task document_agents to document UX flows, navigation, and styling patterns",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_read": "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "skill-write": "allow"
-            },
-            skill_edit: "allow",
-        },
-        prompt: documentUxPrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    // Execute workers
-
-    execute_author: {
-        color: colorWritableWorker,
-        description: "task execute_author to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_md_*": "allow",
-            skill: {
-                "*": "deny",
-                "author*": "allow",
-            },
-        },
-        prompt: executeAuthorPrompt,
-        temperature: 0.5,
-        tier: "balanced",
-    },
-
-    execute_code: {
-        color: colorWritableWorker,
-        description: "task execute_code to update the codebase with code, permanent project scripts, config, and templates; NEVER write md files; NEVER run bash/tsc/tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "context7*": "allow",
-            doom_loop: "deny",
-            edit: "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "angular-developer": "allow",
-                "code*": "allow",
-                "design*": "allow",
-                "java-junit": "allow",
-                "javascript-typescript-jest": "allow",
-                "nitro": "allow",
-                "nuxt": "allow",
-                "learned-preferences*": "allow",
-                "tailwindcss": "allow",
-                "vitest": "allow"
-            },
-        },
-        prompt: executeCodePrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    execute_config: {
-        color: colorWritableWorker,
-        description: "task execute_config to create or update configs or data files: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; It NEVER edit source code.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_*": "allow",
-        },
-        prompt: executeConfigPrompt,
-        temperature: 0.1,
-        tier: "operator",
-    },
-
-    execute_debug: {
-        color: colorWritableWorker,
-        description: "task execute_debug to debug code flow leading to symptoms of reproducible bug as evidence of cause; Prompt must include bug symptoms and bug reproduction steps.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_*": "allow",
-            autocode_process_kill: "allow",
-            bash: "allow",
-            doom_loop: "deny",
-            edit: "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            "pty*": "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "learned-corrections*": "allow",
-                "learned-env*": "allow",
-                "learned-permissions*": "allow",
-                "skill-write": "allow"
-            },
-            skill_learn: "allow",
-        },
-        prompt: executeDebugPrompt,
-        temperature: 0.6,
-        tier: "balanced",
-    },
-
-    execute_document: {
-        color: colorDocumentWorker,
-        description: "task execute_document to update `AGENTS.md`, `README.md`, skills, remember architectural/design decisions or specs.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_logo_find: "allow",
-            "autocode_md_*": "allow",
-            skill: {
-                "*": "deny",
-                "author-readme": "allow",
-            },
-            task: {
-                "*": "deny",
-                "document_*": "allow"
-            },
-            task_resume: "allow"
-        },
-        prompt: executeDocumentPrompt,
-        temperature: 0.1,
-        tier: "balanced",
-    },
-
-    execute_excel: {
-        color: colorWritableWorker,
-        description: "task execute_excel with excel related tasks like workbook manipulations and data validation.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            edit: "allow",
-            "excel_*": "allow",
-            read: "allow",
-            task: {
-                "*": "deny",
-                query_excel: "allow",
-                query_text: "allow"
-            },
-            task_resume: "allow",
-            "todo*": "allow",
-        },
-        prompt: executeExcelPrompt,
-        temperature: 0.3,
-        tier: "operator",
-    },
-
-    execute_opencode: {
-        color: colorWritableWorker,
-        description: "task execute_opencode to create or update OpenCode agent, command, skill and AGENTS.md files only.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_*": "allow",
-            "autocode_md_*": "allow",
-            skill: {
-                "*": "deny",
-                "skill-write": "allow",
-                "author-agent": "allow",
-                "author-command": "allow",
-                "author-rules": "allow",
-                "customize-opencode": "allow" // Build-in to OpenCode
-            },
-            skill_edit: "allow",
-        },
-        prompt: executeOpencodePrompt,
-        temperature: 0.3,
-        tier: "operator",
-    },
-
-    execute_os: {
-        color: colorWritableWorker,
-        description: "task execute_os to copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests. NOT for source code editing!",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_*": "allow",
-            autocode_dependencies: "allow",
-            autocode_process_kill: "allow",
-            edit: "allow",
-            bash: "allow",
-            external_directory: "allow",
-            "filesystem*": "allow",
-            glob: "allow",
-            grep: "allow",
-            "pty*": "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "angular-new-app": "allow",
-                "execute-install": "allow",
-                "execute-sandbox": "allow",
-                "learned-corrections*": "allow",
-                "learned-env*": "allow",
-                "learned-permissions*": "allow",
-                "skill-write": "allow"
-            },
-            skill_learn: "allow",
-        },
-        prompt: buildExecuteOsPrompt(capabilities),
-        temperature: 0.1,
-        tier: "balanced",
-    },
-
-    execute_rest: {
-        color: colorReadOnlyWorker,
-        description: "task execute_rest to make REST/API requests on HTTP/HTTPS endpoints. Useful to reproduce API-related issues.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_config_read: "allow",
-            autocode_rest: "allow",
-            grep: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "learned-corrections*": "allow",
-                "learned-env*": "allow",
-                "skill-write": "allow"
-            },
-            skill_learn: "allow",
-        },
-        prompt: executeRestPrompt,
-        temperature: 0.1,
-        tier: "operator",
-    },
-
-    execute_sandbox: {
-        color: colorWritableWorker,
-        description: "task execute_sandbox to execute CLI commands in sandbox environment; First create sandbox with `autocode_sandbox_create`, then you run multiple `execute_sandbox` tasks but you MUST include same `sandbox_name` in every `task` prompt",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_sandbox_cli: "allow",
-            autocode_sandbox_copy: sandboxCopyTargetPermission,
-            autocode_sandbox_edit: "allow",
-            autocode_sandbox_glob: "allow",
-            autocode_sandbox_grep: "allow",
-            autocode_sandbox_read: "allow",
-            autocode_sandbox_config_edit: "allow",
-            autocode_sandbox_config_read: "allow",
-            autocode_sandbox_config_remove: "allow",
-            skill: {
-                "*": "deny",
-                "execute-install": "allow",
-                "execute-sandbox": "allow",
-                "learned-corrections*": "allow",
-                "learned-env*": "allow",
-                "skill-write": "allow"
-            },
-            skill_learn: "allow",
-            "todo*": "allow",
-        },
-        prompt: buildExecuteOsPrompt(sandboxLinuxCapabilities),
-        temperature: 0.1,
-        tier: "operator",
-    },
-
-    execute_script: {
-        color: colorWritableWorker,
-        description: "task execute_script to execute repetitive actions, data/document/media conversions, generate/render content, or control external apps via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_script_install: "allow",
-            autocode_script_project: "allow",
-            autocode_script_run: "allow",
-            autocode_script_service: "allow",
-            edit: "allow",
-            glob: "allow",
-            grep: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "execute-install": "allow",
-                "learned-corrections*": "allow",
-                "learned-env*": "allow",
-                "learned-permissions*": "allow",
-                "skill-write": "allow"
-            },
-            skill_learn: "allow",
-            write: "allow",
-        },
-        prompt: executeScriptPrompt,
-        temperature: 0.3,
-        tier: "balanced",
-    },
-
-    execute_ssh: {
-        color: colorWritableWorker,
-        description: "task execute_ssh to access remote SSH/SFTP servers to execute remote commands or search/read/write remote files.",
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_ssh*": "allow",
-            skill: {
-                "*": "deny",
-                "execute-install": "allow",
-                "learned-corrections*": "allow",
-                "learned-env-*": "allow",
-                "learned-permissions*": "allow",
-                "skill-write": "allow"
-            },
-            skill_learn: "allow",
-            "todo*": "allow",
-        },
-        prompt: executeSshPrompt,
-        temperature: 0.1,
-        tier: "balanced",
-    },
-
-    // Query workers
-
-    query_autocode: {
-        color: colorReadOnlyWorker,
-        description: "task query_autocode for OpenCode or AutoCode documentation or configuration related queries or advise.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_read": "allow",
-            "autocode_md_read": "allow",
-            "autocode_md_frontmatter_read": "allow",
-            skill: {
-                "*": "deny",
-                "author-agent": "allow",
-                "author-command": "allow",
-                "skill-write": "allow",
-            },
-            webfetch: "allow",
-            "websearch*": "allow",
-        },
-        prompt: queryAutocodePrompt,
-        temperature: 0.1,
-        tier: "fast",
-    },
-
-    query_browser: {
-        color: colorReadOnlyWorker,
-        description: "task query_browser to inspect or investigate UI of YOUR RUNNING APPLICATION in real browser (first start app before tasking query_browser) or to pair with user (you drive, user manual login and solve captchas) to access restricted online sources. Ask query_browser to debug, find DOM elements, summarize console logs, analyze network requests, interact with UI elements, monitor performance, test frontend functionality like human. NOT for internet searches.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            '*': "deny",
-            "chrome*": "allow",
-            skill: {
-                "*": "deny",
-                "execute-ux": "allow",
-            },
-        },
-        prompt: queryBrowserPrompt,
-        tier: "fast",
-    },
-
-    query_code: {
-        color: colorReadOnlyWorker,
-        description: "task query_code to find, summarize, understand: source code, scripts or codebase; NEVER query md, template, styling, config, data files; NEVER to return full file content",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "context7*": "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "execute*": "allow",
-            },
-        },
-        prompt: queryCodePrompt,
-        temperature: 0.3,
-        tier: "context",
-    },
-
-    query_config: {
-        color: colorReadOnlyWorker,
-        description: "task query_config to read config or data file values or outlines: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; No other file types supported.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_*": "allow",
-        },
-        prompt: executeConfigPrompt,
-        temperature: 0.1,
-        tier: "fast",
-    },
-
-    query_db: {
-        color: colorReadOnlyWorker,
-        description: "task query_db to inspect environment-configured databases in read-only mode using Autocode DB tools",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_db_table: "allow",
-            autocode_db_table_read: "allow",
-            autocode_db_tables: "allow",
-        },
-        prompt: queryDbPrompt,
-        temperature: 0.1,
-        tier: "context",
-    },
-
-    query_excel: {
-        color: colorReadOnlyWorker,
-        description: "task query_excel to read excel files.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "excel_get*": "allow",
-            "excel_read*": "allow",
-            "excel_validate*": "allow",
-            glob: "allow",
-        },
-        prompt: queryExcelPrompt,
-        temperature: 0.1,
-        tier: "context",
-    },
-
-    query_git: {
-        color: colorReadOnlyWorker,
-        description: "task query_git to inspect Git repos (status, diff, log, show), recent project file changes, file history.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            external_directory: "allow",
-            "git_diff*": "allow",
-            git_log: "allow",
-            git_show: "allow",
-            git_status: "allow",
-            glob: "allow",
-            grep: "allow",
-            read: "allow",
-        },
-        prompt: queryGitPrompt,
-        temperature: 0.1,
-        tier: "fast",
-    },
-
-    query_os: {
-        color: colorReadOnlyWorker,
-        description: "task query_os to find OS provided info like: local host hardware, software, system, network, service, process, versions, help-command info, status.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_config_read": "allow",
-            "autocode_md_frontmatter_read": "allow",
-            bash: "allow",
-            doom_loop: "deny",
-            external_directory: "allow",
-            glob: "allow",
-            grep: "allow",
-            lsp: "allow",
-            read: "allow",
-            skill: {
-                "*": "deny",
-                "learned-env*": "allow",
-                "learned-permissions*": "allow",
-                "skill-write": "allow",
-            },
-            skill_learn: "allow",
-        },
-        prompt: buildQueryOsPrompt(capabilities),
-        temperature: 0.1,
-        tier: "fast",
-    },
-
-    query_skills: {
-        color: colorReadOnlyWorker,
-        description: "task query_skills to ask questions about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            '*': "deny",
-            skill: {
-                "*": "deny",
-                "customize-opencode": "allow", // Build-in to OpenCode
-                "design*": "allow",
-                "execute*": "allow",
-                "learned-*": "allow",
-                "vue-best-practices": "allow",
-                "ui-craft": "allow",
-            },
-            "todo*": "allow"
-        },
-        prompt: querySkillsPrompt,
-        tier: "fast",
-    },
-
-    query_ssh: {
-        color: colorReadOnlyWorker,
-        description: "task query_ssh to find on remote SSH/SFTP servers: files, configuration, process status, etc.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "autocode_ssh_config_read": "allow",
-            autocode_ssh_command: "allow",
-            autocode_ssh_glob: "allow",
-            autocode_ssh_grep_file: "allow",
-            autocode_ssh_list: "allow",
-            "autocode_ssh_read_*": "allow",
-            doom_loop: "deny",
-            skill: {
-                "*": "deny",
-                "learned-env*": "allow",
-                "learned-permissions*": "allow",
-                "skill-write": "allow",
-            },
-            skill_learn: "allow",
-        },
-        prompt: querySshPrompt,
-        temperature: 0.1,
-        tier: "fast",
-    },
-
-    query_text: {
-        color: colorReadOnlyWorker,
-        description: "task query_text to answer questions (presence?, contains?, outline?, fallacies?, debatable claims?, arguments?) or to evaluate/criticize textual content: md content, md front-matter, articles/document sections, styling, templates, assets, resources; NEVER to return full file content.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "author-*": "allow",
-            "autocode_config_read": "allow",
-            "autocode_md_frontmatter_read": "allow",
-            "autocode_md_read": "allow",
-            glob: "allow",
-            grep: "allow",
-            read: "allow"
-        },
-        prompt: queryTextPrompt,
-        temperature: 0.1,
-        tier: "context",
-    },
-
-    query_web: {
-        color: colorReadOnlyWorker,
-        description: "task query_web to search and read public ONLINE web sources: documentation, articles, forums, GitHub, news, framework API/SDKs, public repo examples; Allow ONLY 1 query per subagent session.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            "context7*": "allow",
-            "todo*": "allow",
-            webfetch: "allow",
-            "websearch*": "allow",
-        },
-        prompt: queryWebPrompt,
-        temperature: 0.5,
-        tier: "context",
-    },
-
-    query_youtube: {
-        color: colorReadOnlyWorker,
-        description: "task query_youtube to transcribe YouTube videos.",
-        hidden: true,
-        mode: "subagent",
-        permission: {
-            "*": "deny",
-            autocode_youtube_transcribe: "allow",
-        },
-        prompt: queryYoutubePrompt,
-        temperature: 0.1,
-        tier: "context",
-    },
 
     }
 }
@@ -1562,6 +1602,17 @@ function applyBundledAgentPolicy(
     )
 }
 
+function applyManagedAgentTierRegistration(
+    agents: AgentMap,
+    tiers: Partial<Record<ModelTier, TierConfig>>,
+): AgentMap {
+    return Object.fromEntries(Object.entries(agents).filter(([agentName]) => {
+        if (agentName === "spy") return tiers.spy !== undefined
+        if (agentName === "auto") return tiers.smart !== undefined
+        return true
+    }))
+}
+
 export function injectExternalSkillPermissions(agents: AgentMap, externalSkills: ExternalSkill[]): void {
     const granted = new Set<string>()
     for (const { category, skillName } of externalSkills) {
@@ -1597,8 +1648,12 @@ export function buildAgents(
     externalDirectories: ExternalDirectoryRules = {},
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
     externalSkills: ExternalSkill[] = [],
+    tiers: Partial<Record<ModelTier, TierConfig>> = {},
 ): AgentMap {
-    const agents = applyBundledAgentPolicy(createBaseAgents(capabilities), externalDirectories, sandboxSupportOverride)
+    const agents = applyManagedAgentTierRegistration(
+        applyBundledAgentPolicy(createBaseAgents(capabilities), externalDirectories, sandboxSupportOverride),
+        tiers,
+    )
     injectExternalSkillPermissions(agents, externalSkills)
     return applyWindowsSandboxPolicy(agents, capabilities)
 }

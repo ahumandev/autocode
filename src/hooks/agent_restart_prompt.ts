@@ -20,6 +20,7 @@ const restartPromptByTarget: Record<PrimaryAutocodeAgent, string> = {
     advise: RESTART_ADVISE_PROMPT,
     auto: RESTART_AUTO_PROMPT,
     design: RESTART_DESIGN_PROMPT,
+    spy: "Gather evidence to answer user question.",
 }
 
 export function createAgentRestartPrompt(input: AgentRestartPromptInput): string {

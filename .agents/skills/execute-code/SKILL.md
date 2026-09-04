@@ -4,83 +4,52 @@ description: Use `execute-code` to get "Technical Design" when you must design t
 ---
 
 ## Architectural Overview
-
-OpenCode plugin injects agents, commands, tools, generated skills, bundled GitHub skill snapshots, and config. Runtime merges repo and user config, applies policy, sets subagent depth minimum 4, and keeps durable design workspaces under `.agents/jobs/`.
+TypeScript OpenCode plugin. Plugin registers agents, commands, skills, config, and runtime tools. Text files keep concept and design workspace state.
 
 ## Technology Choices
-
-- **TypeScript**: Type SDK hooks, tools, config, and policies.
-- **@opencode-ai SDK/plugin**: Native agent, command, tool, and session hooks.
-- **JSONC config**: User/project overrides keep comments.
-- **Markdown skills**: Managed skills generated; reviewed GitHub snapshots bundled at build time.
+- **TypeScript**: Plugin source and Bun build target.
+- **OpenCode**: Hosts plugin agents, commands, config, and tools.
+- **JSONC**: Layered user and project config.
 
 ## Key Data Models
-
-- **AgentConfig** (`src/agents/index.ts`): Agent prompt, permissions, tier, sandbox policy.
-- **Autocode config** (`src/config.ts`): Tiers, external paths, sandbox, skill URLs, learned limit.
-- **Concept** (`src/tools/autocode_concept_*.ts`): Markdown item under `.agents/concepts/`.
-- **Job workspace** (`src/utils/jobs.ts`): `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md`; timestamp UTC, title-derived directory, persistent path.
-- **Session-owned sandbox** (`src/tools/autocode_sandbox_*`, `src/utils/sandbox.ts`): Canonical path exactly `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`; resolve current job from linked session first, otherwise deterministic newest timestamped workspace matching current session-title slug. No owner returns an error; each resolved job scopes access, list, create, copy, and delete, so same `{sandbox_name}` may exist independently in multiple jobs. Never access, fall back to, migrate, scan, delete, or write legacy `.agents/sandboxes`; legacy data remains untouched and inaccessible.
-- **ManagedSkillDefinition** (`src/skills/index.ts`): Bundled skill frontmatter and body.
-- **ExternalSkill** (`src/utils/external.ts`): GitHub skill name, owner, project, category.
+- **Concept** (`.agents/concepts/`): Saved concept input for design work.
+- **Design workspace** (`.agents/jobs/`): Timestamped `design.md` work plan and script artifacts.
+- **Tier set** (`autocode.jsonc`): Named model and variant overrides by agent tier.
 
 ## Key API Endpoints
-
-- `/job-concepts` (`src/commands/index.ts`): Save concept Markdown.
-- `/job-design` (`src/commands/index.ts`): Design solution from concept or context.
-- `/job-facilitate` (`src/commands/index.ts`): Select assisted execution.
-- `/job-execute` (`src/commands/index.ts`): Select autonomous execution.
-- `autocode_session_create` (`src/tools/autocode_session_create.ts`): Blank prompt loads newest current-title design; explicit nonblank prompt bypasses lookup.
-- `/learn` (`src/commands/learn.ts`): Store categorized learned skill.
+- `/job-concepts` (`src/commands/`): Save concepts.
+- `/job-design` (`src/commands/`): Make design workspace.
+- `/job-facilitate` (`src/commands/`): Select `assist` execution.
+- `/job-execute` (`src/commands/`): Select `auto` execution.
 
 ## Error Handling
-
-- **Tool error JSON** (`src/utils/tools.ts`): Normalize `failedAction`, `error`, `instruction`.
-- **Retry/abort escalation** (`src/utils/tools.ts`): Retry same failure up to 5, then abort.
-- **Config parse errors** (`src/config.ts`): Invalid JSONC throws file-path error.
-- **Bundled GitHub skills** (`src/plugin.ts`): Startup uses snapshots only; no clone, symlink, or network bootstrap.
-- **Learned cleanup** (`src/skills/index.ts`): Log per-category cleanup errors; retain uninspectable dirs.
-- **Root title hook** (`src/hooks/root_session_title.ts`): Accept `advise`, `assist`, `auto` heading contract; title failures advisory.
+- **Tool errors** (`src/utils/tools.ts`): Shared tool error rules.
+- **Agent errors** (`src/agents/prompts/error.ts`): Managed agent error rules.
 
 ## Security Design
-
-OpenCode owns auth/session context. Agents default-deny then allow named tools, tasks, and skills. External-directory and sandbox policies remove unsafe access. Sandbox ownership returns an error before filesystem mutation or process spawn when no current job resolves. External skills only parse supported GitHub URLs, then receive category-agent skill permission. No repo secrets; use `${ENV_VAR}`.
+External-directory rules use last matching rule. Database tools read only. REST and SSH credentials come from environment variables. Sandbox tools deny when host lacks supported isolation.
 
 ## External Integrations
-
-- **OpenCode client/session APIs** (`src/tools`, `src/utils/jobs.ts`): Session and workspace orchestration — SDK
-- **Filesystem** (`src/config.ts`, `src/utils/jobs.ts`, `src/skills/index.ts`): Config, concepts, workspaces, generated, learned skills — Node fs
-- **Sandbox runtime** (`src/tools/autocode_sandbox_*`, `src/agents/index.ts`): Session-owned local sandbox lifecycle — local process
-- **GitHub** (`scripts/sync-skills.ts`): Sync reviewed skill snapshots before build — Git
+- **GitHub** (`src/skills/github.jsonc`): Sync tracked skill snapshots — GitHub.
+- **REST services** (`src/tools/`): Request and cached response tools — HTTP.
+- **Databases** (`src/tools/`): Discover and read one configured table — DB connection.
+- **SSH targets** (`src/tools/`): Remote command and file tools — SSH.
 
 ## Directory Structure
-
-- **Agents** (`src/agents/`): Prompts, policies, agent definitions.
-- **Commands** (`src/commands/`): Programmatic slash-command templates.
-- **Tools** (`src/tools/`): OpenCode tool implementations and tests.
-- **Utils** (`src/utils/`): Shared config, jobs, sandbox, error, external-skill helpers.
-- **Skills sources** (`src/skills/`): Bundled managed-skill Markdown.
-- **Concept storage** (`.agents/concepts/`): Early concept Markdown.
-- **Job storage** (`.agents/jobs/`): Durable timestamped design workspaces; no status transitions.
-- **Sandbox storage** (`.agents/jobs/*/sandboxes/`): Per-job sandbox trees at canonical paths; legacy `.agents/sandboxes` remains untouched and inaccessible.
-- **Learned skills** (`.agents/skills/`): Per-item corrections, environment, permissions, preferences.
+- **Agents** (`src/agents/`): Managed agents and prompts.
+- **Commands** (`src/commands/`): Slash-command registration.
+- **Tools** (`src/tools/`): Runtime tool implementations.
+- **Skills** (`src/skills/`): Bundled guidance and GitHub snapshots.
 
 ## Special Files
-
-- `src/skills/index.ts`: Generates managed skills; prunes learned skills by newest max.
-- `src/config.ts`: Loads `.opencode/autocode.jsonc` and validates skills/learned settings.
-- `src/plugin.ts`: Merges plugin config; loads bundled skills; enforces subagent depth 4.
-- `src/utils/external.ts`: Parses supported GitHub skill definitions for offline snapshots.
+- `scripts/copy-skill-sources.ts`: Copy bundled skills into `dist/skills`.
+- `.opencode/plugin/autocode.ts`: Local shim re-exports built plugin.
 
 ## Known Risks & Anti-Patterns
-
-- **Overlapping policy sources**: User config and plugin defaults both shape permissions.
-- **GitHub snapshot review**: Sync output needs manual Git review before commit.
-- **Dynamic job paths**: Layout assumptions can break cross-worktree flow.
-- **Frozen generated skills**: `autocode.skills.freeze` leaves stale generated skills in place.
-- **Platform-gated sandbox**: Unsupported hosts disable sandbox paths.
-- **Sandbox cleanup and kill scan**: Remove only empty workspace `sandboxes` directories; exclude valid canonical sandbox trees from kill scans while scanning other workspace files.
+- **Tier config**: Missing override uses agent or OpenCode default.
+- **GitHub snapshots**: Sync accepts redistribution risk; grants no rights.
+- **Sandbox support**: Unsupported hosts deny all sandbox tools.
 
 ---
 
-**IMPORTANT**: Update `.agents/skills/execute-code/SKILL.md` whenever architecture, APIs, data models, security, or integrations change.
+**IMPORTANT**: Edit this `execute-code` skill whenever architecture, APIs, data models, security, or integrations change.

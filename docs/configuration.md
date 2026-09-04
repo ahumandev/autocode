@@ -80,12 +80,17 @@ Tier assignment requirements:
 
 | Tier       | Intelligence | Reasoning | Context | Usage                                                        |
 | ---------- | ------------ | --------- | ------- | ------------------------------------------------------------ |
-| `smart`    | Frontier     | high      | large   | Autonomous planning, orchestration and troubleshooting       |
+| `smart`    | Frontier     | high       | large   | Autonomous planning, orchestration and troubleshooting       |
 | `balanced` | Strong       | medium    | large   | Interact with users and agents (capable, faster, affordable) |
 | `operator` | Strong       | low       | large   | Complex high risk tool calls (operate systems)               |
 | `context`  | Basic        | low       | large   | Gather and summarize large volumes of data                   |
 | `fast`     | Fast         | none      | small   | Frequent low risk tool calls                                 |
 | `cheap`    | Cheap        | none      | small   | Formatting text (session titles)                             |
+| `spy`      | Configured   | Configured | Configured | Primary, visible, read-only safety review and guidance       |
+
+`spy` agent is available only when selected tier set explicitly configures a `spy` tier. No default spy model exists, and `balanced` does not enable `spy`. `auto` agents requires an explicitly configured `smart` tier.
+
+`spy` gives read-only safety review and guidance. Use it directly: it is visible as a primary agent and cannot receive session handoff.
 
 #### Complete Configuration Example
 
@@ -106,7 +111,8 @@ Tier assignment requirements:
         "operator": { "model": "openai/gpt-5.6-terra", "variant": "low" },
         "context":  { "model": "openai/gpt-5.6-luna", "variant": "low" },
         "fast":     { "model": "openai/gpt-5.3-codex-spark", "variant": "low" },
-        "cheap":    { "model": "openai/gpt-5.6-luna", "variant": "none" }
+        "cheap":    { "model": "openai/gpt-5.6-luna", "variant": "none" },
+        "spy":      { "model": "ollama/llama-3.1-8B", "variant": "none" }
       },
       "zai-coding-plan": {
         "smart":    { "model": "zai-coding-plan/glm-5.2", "variant": "high" },

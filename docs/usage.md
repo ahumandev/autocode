@@ -4,12 +4,13 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 
 ### Primary Agents
 
-| Agent | Purpose |
+| Agent      | Purpose                                                   |
 | ---------- | --------------------------------------------------------- |
 | 💡 `advise` | Research topics, answer questions, and guide manual work. |
-| 📐 `design` | Design and propose solutions. |
-| 🤖 `auto` | **Autonomously** solve problems. |
-| 🧑‍💻 `assist` | Assist **interactively** to solve problems. |
+| 📐 `design` | Design and propose solutions.                             |
+| 🤖 `auto`   | **Autonomously** solve problems.                          |
+| 🧑‍💻 `assist` | Assist **interactively** to solve problems.               |
+| 🕵️ `spy`    | Primary, visible, read-only safety review and guidance.   |
 
 ### Concept, Design, and Execution Workflow
 
@@ -23,13 +24,15 @@ flowchart TD
   Design -- 🤖 auto --> Auto([autonomous execution])
 ```
 
+`spy` cannot receive session handoff; use it directly.
+
 ### Behavioural Differences
 
-| Agent         | Investigations | Next Action     | Apply Changes |
-| ------------- | -------------- | --------------- | ------------- |
-| 💡 advise     | Autonomous     | Interactive     | Human         |
-| 🧑‍💻 assist     | Autonomous     | Interactive     | AI*           |
-| 🤖 auto       | Autonomous     | Autonomous      | AI*           |
+| Agent    | Investigations | Next Action | Apply Changes |
+| -------- | -------------- | ----------- | ------------- |
+| 💡 advise | Autonomous     | Interactive | Human         |
+| 🧑‍💻 assist | Autonomous     | Interactive | AI*           |
+| 🤖 auto   | Autonomous     | Autonomous  | AI*           |
 
 *Except dangerous tasks.
 
@@ -41,30 +44,31 @@ For example you may start in `assist` mode and then later when you get busy, swi
 
 ### Commands
 
-| Command              | Purpose                                                                                   |
-| -------------------- | ----------------------------------------------------------------------------------------- |
-| `/autocode-install`  | Start AutoCode installation checks and remediation.                                       |
-| `/assist`            | Same assist session as `/new-assist`.                                                     |
-| `/new-advise`        | Create new 💡 advise session to research topics, answer questions, and guide manual work. |
-| `/new-design`        | Create new 📐 design session to design solution to problem.                               |
-| `/new-auto`          | Create new 🤖 auto session to autonomously solve problems.                                |
-| `/new-assist`        | Create new 🧑‍💻 assist session to semi-autonomously assist with problems/improvements.      |
-| `/new-fix`           | Create new session to fix errors or requested issues.                                     |
-| `/job-concepts`      | Save concepts under `.agents/concepts/`.                                                  |
-| `/job-design`        | Design a solution from a concept or current context.                                     |
-| `/job-execute`       | Select `auto` execution for current design workspace.                                    |
-| `/job-facilitate`    | Select `assist` execution for current design workspace.                                  |
+| Command             | Purpose                                                                                  |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| `/autocode-install` | Start AutoCode installation checks and remediation.                                      |
+| `/assist`           | Same assist session as `/new-assist`.                                                    |
+| `/new-advise`       | Create new 💡 advise session to research topics, answer questions, and guide manual work. |
+| `/new-design`       | Create new 📐 design session to design solution to problem.                               |
+| `/new-auto`         | Create new 🤖 auto session to autonomously solve problems.                                |
+| `/new-assist`       | Create new 🧑‍💻 assist session to semi-autonomously assist with problems/improvements.      |
+| `/new-spy`          | Create new 🕵️ spy session from current context for read-only safety review and guidance.   |
+| `/new-fix`          | Create new session to fix errors or requested issues.                                    |
+| `/job-concepts`     | Save concepts under `.agents/concepts/`.                                                 |
+| `/job-design`       | Design a solution from a concept or current context.                                     |
+| `/job-execute`      | Select `auto` execution for current design workspace.                                    |
+| `/job-facilitate`   | Select `assist` execution for current design workspace.                                  |
 
 ### Concepts and Design Workspaces
 
 Concepts are early Markdown descriptions saved in `.agents/concepts/`. `/job-concepts` remains available for creating them.
 
-| Path | Purpose |
-| ---- | ------- |
-| `.agents/concepts/{label}.md` | Early concept selected by `/job-design`. |
-| `.agents/jobs/{name}/design.md` | Solution design with problems, impact, expectations, requirements, constraints, and proposal. |
-| `.agents/jobs/{name}/session.yml` | Optional linked OpenCode session ID. |
-| `.agents/jobs/{name}/sandboxes/{sandbox_name}` | Canonical per-job sandbox storage. |
+| Path                                           | Purpose                                                                                       |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `.agents/concepts/{label}.md`                  | Early concept selected by `/job-design`.                                                      |
+| `.agents/jobs/{name}/design.md`                | Solution design with problems, impact, expectations, requirements, constraints, and proposal. |
+| `.agents/jobs/{name}/session.yml`              | Optional linked OpenCode session ID.                                                          |
+| `.agents/jobs/{name}/sandboxes/{sandbox_name}` | Canonical per-job sandbox storage.                                                            |
 
 `autocode_session_create` uses a nonblank `prompt` directly. With a blank `prompt`, it derives the current-title slug and uses the newest matching `design.md`; no match returns a retriable error instructing the caller to provide a nonblank `prompt`.
 

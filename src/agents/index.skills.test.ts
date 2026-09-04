@@ -64,7 +64,7 @@ describe("buildAgents with external skills", () => {
     test("design category → assist, auto, and design all get the rule (design gains permission.skill)", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "design", skillName: "my-design-skill", owner: "o", project: "p" },
-        ])
+        ], { balanced: {}, smart: {} })
 
         expect(getSkillRule(agents.assist, "my-design-skill")).toBe("allow")
         expect(getSkillRule(agents.auto, "my-design-skill")).toBe("allow")

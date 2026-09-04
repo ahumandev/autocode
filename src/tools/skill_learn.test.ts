@@ -194,7 +194,7 @@ describe("skill_learn tool validation", () => {
             for (const result of [missingDescription, blankDescription]) {
                 expect(result).toMatchObject({
                     error: "description required for new skill",
-                    instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+                    instruction: "Retry with trigger description on one line describing when to use this skill.",
                 })
             }
             expect(existsSync(join(root, ".agents"))).toBe(false)
@@ -211,7 +211,7 @@ describe("skill_learn tool validation", () => {
 
             expect(multilineDescription).toMatchObject({
                 error: "Invalid description. Description must be non-empty and contain no newline or control characters.",
-                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+                instruction: "Retry with trigger description on one line describing when to use this skill.",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
@@ -533,7 +533,7 @@ describe("skill_learn optional description when skill exists", () => {
             expect(result).toMatchObject({
                 failedAction: "learn skill",
                 error: "description required for new skill",
-                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+                instruction: "Retry with trigger description on one line describing when to use this skill.",
             })
             expect(existsSync(join(root, ".agents"))).toBe(false)
         })
@@ -592,7 +592,7 @@ describe("skill_learn optional description when skill exists", () => {
             expect(result).toMatchObject({
                 failedAction: "learn skill",
                 error: "Existing skill has no description in frontmatter.",
-                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+                instruction: "Retry with trigger description on one line describing when to use this skill.",
             })
         })
     })

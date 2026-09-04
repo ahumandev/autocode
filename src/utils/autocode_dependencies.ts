@@ -855,6 +855,15 @@ const optionalMcpDefinitions: readonly OptionalDependencyDefinition[] = [
         guidance: "Run `npx --yes @negokaz/excel-mcp-server@0.12.0` for Excel MCP. Requires Node.js 20+.",
         notes: "Requires Node.js 20+.",
     },
+    {
+        key: "websearch_mcp",
+        packageName: "open-websearch",
+        bins: ["open-websearch"],
+        aliases: ["open-websearch", "websearch"],
+        installCommand: "npm install -g open-websearch@latest",
+        docsUrl: "https://www.npmjs.com/package/open-websearch",
+        guidance: "Run `npm install -g open-websearch@latest` for Websearch MCP.",
+    },
 ]
 
 async function inspectGitCli(deps: SandboxDependencies, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<DependencyReport> {
@@ -892,10 +901,11 @@ async function inspectGitCli(deps: SandboxDependencies, emitDebug: DebugEmitter,
 }
 
 async function inspectOptionalDependencies(deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<Record<string, DependencyReport>> {
-    const [chromeDevtoolsMcp, context7Mcp, excelMcp, gitCli, browser] = await Promise.all([
+    const [chromeDevtoolsMcp, context7Mcp, excelMcp, websearchMcp, gitCli, browser] = await Promise.all([
         safeInspectOptional("chrome-devtools MCP", "chrome_devtools_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[0], deps, context, emitDebug, capabilities), emitDebug),
         safeInspectOptional("Context7 MCP", "context7_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[1], deps, context, emitDebug, capabilities), emitDebug),
         safeInspectOptional("Excel MCP", "excel_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[2], deps, context, emitDebug, capabilities), emitDebug),
+        safeInspectOptional("Websearch MCP", "websearch_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[3], deps, context, emitDebug, capabilities), emitDebug),
         safeInspectOptional("system git CLI", "git_cli", () => inspectGitCli(deps, emitDebug, capabilities), emitDebug),
         safeInspectOptional("browser availability", "browser", () => inspectBrowserAvailability(deps, emitDebug, capabilities), emitDebug),
     ])
@@ -904,6 +914,7 @@ async function inspectOptionalDependencies(deps: SandboxDependencies, context: D
         chrome_devtools_mcp: chromeDevtoolsMcp,
         context7_mcp: context7Mcp,
         excel_mcp: excelMcp,
+        websearch_mcp: websearchMcp,
         git_cli: gitCli,
         browser,
     }

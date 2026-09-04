@@ -118,6 +118,16 @@ describe("commands", () => {
         }
     })
 
+    test("registers new-spy only when spy is available", () => {
+        const commandsWithSpy = createCommands(createPlatformCapabilities("linux"), true)
+
+        expect(commands["new-spy"]).toBeUndefined()
+        expect(commandsWithSpy["new-spy"]).toMatchObject({
+            subtask: false,
+            template: newSessionTemplate("spy", "Proposed current APPROACH to collect EVIDENCE and answer QUESTION", "Gather evidence with permitted read-only tools, then report facts and answer QUESTION."),
+        })
+    })
+
     test("keeps renamed docs command objects stable", () => {
         expect(commands.docs).toMatchObject({
             agent: "execute_document",

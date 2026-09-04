@@ -639,7 +639,7 @@ describe("sandbox config", () => {
 
 describe("agent workflow wiring", () => {
     test("keeps canonical auto and assist agents without removed workflow variants", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"))
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [], { balanced: {}, smart: {} })
 
         expect(agents.auto).toBeDefined()
         expect(agents.assist).toBeDefined()
@@ -647,7 +647,7 @@ describe("agent workflow wiring", () => {
     })
 
     test("keeps current canonical permissions on primary workflow agents", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"))
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [], { balanced: {}, smart: {} })
 
         expect(getTaskPermissionRule(agents.assist?.permission, "auto*")).toBe("deny")
         expect(getTaskPermissionRule(agents.auto?.permission, "auto_*")).toBe("allow")
@@ -721,7 +721,43 @@ describe("learned config", () => {
     })
 })
 
-describe("context tier config", () => {
+describe("model tier config", () => {
+    test("loadAutocodeConfig accepts directly configured spy tier", async () => {
+        const result = await loadAutocodeConfig("/wt", "/wt", makeFs({
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: { tiers: { spy: { model: "openai/gpt-spy", variant: "strict" } } },
+            }),
+        }))
+
+        expect(result.tiers.spy).toEqual({ model: "openai/gpt-spy", variant: "strict" })
+    })
+
+    test("loadAutocodeConfig selects spy tier from configured provider", async () => {
+        const result = await loadAutocodeConfig("/wt", "/wt", makeFs({
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: {
+                    tier: "openai",
+                    tiers: { openai: { spy: { model: "openai/gpt-spy" } } },
+                },
+            }),
+        }))
+
+        expect(result.tiers.spy).toEqual({ model: "openai/gpt-spy" })
+    })
+
+    test("loadAutocodeConfig accepts legacy spy model and variant aliases", async () => {
+        const result = await loadAutocodeConfig("/wt", "/wt", makeFs({
+            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                autocode: {
+                    model: { spy: "openai/gpt-spy" },
+                    variant: { spy: "strict" },
+                },
+            }),
+        }))
+
+        expect(result.tiers.spy).toEqual({ model: "openai/gpt-spy", variant: "strict" })
+    })
+
     test("loadAutocodeConfig reapplies selected provider tiers after direct merges", async () => {
         const fs = makeFs({
             [globalAutocodeConfigPath()]: JSON.stringify({

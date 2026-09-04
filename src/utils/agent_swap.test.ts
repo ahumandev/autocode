@@ -98,7 +98,7 @@ describe("agent swap utilities", () => {
         })
     })
 
-    test("validates session creation with primary agents including advise", () => {
+    test("validates session creation with primary agents including advise and spy", () => {
         expect(validateAutocodeSessionCreateInput("  Continue the task.  ", " auto ")).toEqual({
             prompt: "Continue the task.",
             agent: "auto",
@@ -106,16 +106,21 @@ describe("agent swap utilities", () => {
         })
         expect(validateAutocodeSessionCreateInput("Continue the task.", "hidden_worker")).toEqual({
             error: "Invalid agent: hidden_worker",
-            instruction: "Provide agent as one of: assist, advise, auto, design.",
+            instruction: "Provide agent as one of: assist, advise, auto, design, spy.",
         })
         expect(validateAutocodeSessionCreateInput("Continue the task.", "invalid-agent")).toEqual({
             error: "Invalid agent: invalid-agent",
-            instruction: "Provide agent as one of: assist, advise, auto, design.",
+            instruction: "Provide agent as one of: assist, advise, auto, design, spy.",
         })
         expect(validateAutocodeSessionCreateInput("  Advise manual debugging.  ", " advise ")).toEqual({
             prompt: "Advise manual debugging.",
             agent: "advise",
             title: "Advise manual debugging.",
+        })
+        expect(validateAutocodeSessionCreateInput("  Inspect private configuration.  ", " spy ")).toEqual({
+            prompt: "Inspect private configuration.",
+            agent: "spy",
+            title: "Inspect private configuration.",
         })
     })
 

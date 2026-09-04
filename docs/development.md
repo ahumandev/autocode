@@ -14,6 +14,8 @@ flowchart LR
 
 The managed agent catalogue lives in [`src/agents/index.ts`](../src/agents/index.ts), and prompt templates live under [`src/agents/prompts/`](../src/agents/prompts/). Commands are registered in [`src/commands/index.ts`](../src/commands/index.ts), so the published package does not need separate command Markdown files. Generated skills are bundled from source during builds, and [`scripts/copy-skill-sources.ts`](../scripts/copy-skill-sources.ts) copies them into `dist/skills`.
 
+`spy` is registered only with an explicitly configured `spy` tier; `balanced` does not enable it, and `auto` requires an explicitly configured `smart` tier. `spy` is a primary, visible, read-only safety review and guidance agent for direct use only; it cannot receive session handoff.
+
 Runtime tools live in [`src/tools/`](../src/tools/). They cover concepts, design workspace read/write, execution handoff, criteria tracking, read-only database discovery and table reads, REST requests and cached response lookup, sandbox operations, cross-project task execution, and session resume support. Shared tool error handling should stay aligned with [`src/utils/tools.ts`](../src/utils/tools.ts) and the agent error rules.
 
 ## Concept and Design Workspace Architecture

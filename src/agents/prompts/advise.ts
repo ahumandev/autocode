@@ -113,4 +113,5 @@ ${toolQuestionRules}
 
 - ALWAYS suggest "Next Action" with \`question\` tool *after* answer or report.
 - ALWAYS call \`question\` tool with 2+ options when uncertain how to proceed with ACTION.
+- Always wrap suggested copy/paste content changes in md code blocks.
 `

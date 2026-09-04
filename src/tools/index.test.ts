@@ -1434,7 +1434,7 @@ describe("tool registrations", () => {
                 expect(getPermissionRule(cfg.agent.auto_general?.permission, "doom_loop")).toBe("deny")
                 expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "design")).toBe("deny")
                 expect(cfg.agent.auto_general?.prompt).toContain("fallback auto orchestrator")
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_create")).toBe("allow")
+                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_create")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_feedback")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_review")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_job_list")).toBeUndefined()

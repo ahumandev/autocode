@@ -25,11 +25,12 @@ type CreateTestClient = OpencodeClient & {
 	_client?: { getConfig(): { baseUrl?: unknown } };
 };
 
-const primaryAgents: Array<"assist" | "advise" | "auto" | "design"> = [
+const primaryAgents: Array<"assist" | "advise" | "auto" | "design" | "spy"> = [
 	"assist",
 	"advise",
 	"auto",
 	"design",
+	"spy",
 ];
 
 describe("autocode_session_create tool", () => {

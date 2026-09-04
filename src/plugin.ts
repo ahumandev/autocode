@@ -89,7 +89,12 @@ async function mergeConfig(
     cfg.subagent_depth = Math.max(cfg.subagent_depth ?? 0, 4)
 
     cfg.agent = cfg.agent ?? {}
-    const agents = buildAgents(capabilities, agentExternalDirectories, input.sandboxSupportOverride, generatedSkills.externalSkills)
+    const agents = buildAgents(capabilities, agentExternalDirectories, input.sandboxSupportOverride, generatedSkills.externalSkills, tiers)
+    for (const agentName of ["spy", "auto"] as const) {
+        if (agents[agentName] === undefined) {
+            delete (cfg.agent as Record<string, unknown>)[agentName]
+        }
+    }
     const mergedAgents: Record<string, PluginAgentConfig> = {}
     for (const [name, agentDef] of Object.entries(agents)) {
         const userOverride = cfg.agent[name]
@@ -137,7 +142,6 @@ async function createPluginHooks(
     const restartCoordinator = createPendingAgentRestartCoordinator()
     const managedScriptLifecycle = createManagedScriptLifecycle({ client: input.client })
     const rootSessionTitleHook = createRootSessionTitleHook(input.client, input.directory)
-    const commandDefinitions = createCommands(capabilities)
     const path = capabilities.isWindows ? win32 : posix
     const home = input.homeOverride ?? homedir()
     const bunRoot = path.join(home, ".bun")
@@ -147,6 +151,7 @@ async function createPluginHooks(
     process.env.PATH = originalPath ? `${bunBin}${path.delimiter}${originalPath}` : bunBin
 
     const autocodeConfig = await loadAutocodeConfig(input.worktree, input.directory)
+    const commandDefinitions = createCommands(capabilities, autocodeConfig.tiers.spy !== undefined)
     const generatedSkills = await reconcileGeneratedSkills({ home, skipExtraction: autocodeConfig.skills?.freeze === true })
     registerSkills?.(generatedSkills.root)
     if (autocodeConfig.skills?.freeze !== true) {

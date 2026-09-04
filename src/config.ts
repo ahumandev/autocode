@@ -5,7 +5,7 @@ import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json"
 import { resolveOpenCodePaths } from "./utils/paths"
 import { createJsoncDocumentEditor } from "./tools/config/json"
 
-const MODEL_TIERS = ["cheap", "fast", "operator", "context", "balanced", "smart"] as const
+const MODEL_TIERS = ["cheap", "fast", "operator", "context", "balanced", "smart", "spy"] as const
 const PERMISSION_ACTIONS = ["ask", "allow", "deny"] as const
 const SANDBOX_SYNC_METHODS = ["auto", "overlayfs", "reflink", "copy"] as const
 const SKILL_CATEGORIES: readonly SkillCategory[] = ["bash", "code", "design", "test"]

@@ -227,6 +227,8 @@ type ValidateSkillLearnOptions = {
 
 type DescriptionResolution = { ok: true, value: string } | { ok: false, error: string, instruction: string }
 
+const instruction = "Retry with trigger description on one line describing when to use this skill.";
+
 function resolveDescription(
     args: SkillLearnArgs,
     options: ValidateSkillLearnOptions | undefined,
@@ -242,7 +244,7 @@ function resolveDescription(
             return {
                 ok: false,
                 error: "Invalid description. Description must be non-empty and contain no newline or control characters.",
-                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+                instruction,
             }
         }
         const { skillFilePath } = computeLearnedSkillPaths(options.context, subject, trimmedName, key)
@@ -251,14 +253,14 @@ function resolveDescription(
             return {
                 ok: false,
                 error: "description required for new skill",
-                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+                instruction,
             }
         }
         if (existing === null) {
             return {
                 ok: false,
                 error: "Existing skill has no description in frontmatter.",
-                instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+                instruction,
             }
         }
         return { ok: true, value: existing }
@@ -268,7 +270,7 @@ function resolveDescription(
         return {
             ok: false,
             error: "Invalid description. Description must be non-empty and contain no newline or control characters.",
-            instruction: "Retry with a trigger description on one line that describes when to use this skill.",
+            instruction,
         }
     }
     return { ok: true, value: trimmedDescription }
@@ -359,7 +361,7 @@ export function createSkillLearnTool(fileSystem: FileSystem = defaultFileSystem)
 - "corrections": self corrected mistakes: summarize mistake + correction steps or lessons learned
 - "env": unusual capability / limitation found in dev/remote environment: non-obvious details about developer environment like os/platform/hardware limitations, nonstandard scripts/aliases/cli commands in os, dev network details, access restrictions, etc.
 - "permissions": user says manual task was safe / warn about unsafe task / insist task must be manual: which actions are safe and which are dangerous, including safe passwords.
-- "preferences": user corrected you after wrong action (words like "Always", "Never", "Remember", SHOUTS with "!!!"): complaint / preference / permanent rule like programming patterns, file organization, naming conventions, editing style, etc.
+- "preferences": user corrected you after wrong action (words like "Remember", "Always", "Never", user upset with SHOUTS or exclamation marks): complaint / preference / permanent rule like programming patterns, file organization, naming conventions, editing style, etc.
         `,
         args,
         async execute(args, context) {

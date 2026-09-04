@@ -61,6 +61,8 @@ Follow these instructions before reviewing/writing professional articles/reports
 - Separate verses from different books with `;`: `Genesis 1; Exodus 1:1; Leviticus 1`.
 - Separate same-book, different-chapter verses with `, `, for example: `Genesis 1:1, 2:1, 3:1`.
 - Separate same-book, same-chapter verses with `,` and no spaces: `Genesis 1:1-3,5-7,11,13`. Number without `:` means verse in prior chapter. Example: `Genesis 1:1,3` means Genesis 1:1 and Genesis 1:3.
+- Provide full bible book names, not abbreviated (e.g., `Genesis` instead of `Gen`).
+- NEVER md link bible verse references to online sources.
 
 ## Markdown Rules
 
@@ -105,9 +107,9 @@ keywords: [Keywords]
 [Conclusion Content]
 ```
 
-- Conclusion summarizes solution to introduction problem. Do not repeat problem.
-- Conclusion MUST link to article anchors with detailed solution, like natural-language TOC.
-- Group instructions with examples. Reader should not jump around.
+- Conclusion summarize solution to introduction problem. Do not repeat problem.
+- Conclusion summarize every article section in 1 sentence.
+- Conclusion inline md links to article anchors with details.
 
 ## Frontmatter Rules
 

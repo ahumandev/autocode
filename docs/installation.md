@@ -23,6 +23,14 @@ Goal: install AutoCode plugin for OpenCode.
 1. Detect host OS before running commands.
 2. Use native CMD commands on Windows and Bash commands on Linux.
 
+### Choose Platform Route
+
+Select route before running installation commands:
+
+- **Native Windows:** Use CMD for all installation checks and commands. Continue with [Step 2](#step-2-check-if-opencode-already-exists), then configure Chrome in [Chrome DevTools MCP](#chrome-devtools-mcp).
+- **Native Linux:** Use Bash for all installation checks and commands. Continue with [Step 2](#step-2-check-if-opencode-already-exists), then configure Chrome in [Chrome DevTools MCP](#chrome-devtools-mcp).
+- **WSL:** Use Bash for all installation checks and commands. Continue with [Step 2](#step-2-check-if-opencode-already-exists). Use Linux Chrome in WSL when possible. Otherwise, use [Windows Chrome remote debugging](#wsl).
+
 ### Step 2: Check if OpenCode already exists
 
 Run commands for host OS.
@@ -41,9 +49,9 @@ opencode --version
 command -v opencode
 ```
 
-If version prints, continue with Step 3.
+If version prints, continue with Step 4.
 
-### Step 2: Install OpenCode
+### Step 3: Install OpenCode
 
 1. Install OpenCode according to [OpenCode Installation Docs](https://opencode.ai).
 2. Use official OpenCode install command or package-manager option for that OS.
@@ -51,7 +59,7 @@ If version prints, continue with Step 3.
 
 After installation, rerun Step 2.
 
-### Step 3: Check npm and registry
+### Step 4: Check npm and Registry
 
 Run commands for host OS.
 
@@ -73,7 +81,7 @@ command -v npm
 
 Continue only when command path and version print and npm registry access works. If npm or registry is unavailable, report blocked dependency or network access; do not guess a package-manager command.
 
-### Step 4: Install AutoCode plugin
+### Step 5: Install AutoCode Plugin
 
 Run this in native CMD or Bash:
 
@@ -83,7 +91,7 @@ opencode plugin @ahumandev/autocode@latest -g -f
 
 `-g` installs plugin in global OpenCode configuration. Default config directory is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` applies when `OPENCODE_CONFIG_DIR` is unset.
 
-### Step 5: Start `/autocode-install`
+### Step 6: Start AutoCode Install
 
 Run:
 
@@ -125,9 +133,7 @@ Use real directory from official OpenCode install output. Persist PATH with OS s
 
 Use this if OpenCode says config is invalid.
 
-Use the blocked config parse error report from If blocked.
-
-Check these things:
+Check parse error details, then check these things:
 
 - `.json` file has no comments.
 - `.json` file has no trailing commas.
@@ -177,7 +183,7 @@ Use only for local repository development with a shim. Build and install scripts
 
 Remove stale current shim, then run shim install from AutoCode repository root.
 
-**With Bash (Linux)**
+**With CMD (Windows)**
 
 ```cmd
 del /f /q "%USERPROFILE%\.config\opencode\plugins\autocode.js"
@@ -207,6 +213,98 @@ Success checks:
 - Generated skills, when created, are in `<home>/.agents/skills`.
 
 Do not claim a native Windows runtime test.
+
+## Chrome DevTools MCP
+
+Set up Chrome DevTools MCP after AutoCode plugin install.
+
+Prerequisites: Node.js LTS with npm and current stable Chrome. Global npm install is not required.
+
+Merge this entry into existing global OpenCode config at `<home>/.config/opencode/opencode.json`; never overwrite unrelated settings. If `mcp` already exists, add `chrome-devtools` inside it. Config-directory overrides remain as documented in [Step 5](#step-5-install-autocode-plugin).
+
+```json
+{
+  "mcp": { "chrome-devtools": { "type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"] } }
+}
+```
+
+Read [Chrome DevTools MCP README](https://github.com/ChromeDevTools/chrome-devtools-mcp), [OpenCode configuration](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/client-configurations.md#opencode), and [troubleshooting](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md).
+
+Verify setup:
+
+1. Run `npx -y chrome-devtools-mcp@latest --help`.
+2. Restart OpenCode.
+3. Prompt OpenCode: `Check the performance of https://developers.chrome.com`.
+
+### WSL
+
+Preferred: use Linux Chrome in WSL. Alternative: use Windows Chrome remote debugging with mirrored networking enabled:
+
+```cmd
+chrome.exe --remote-debugging-port=9222 --user-data-dir=C:\\path\\to\\dir
+```
+
+Connect MCP to Windows Chrome:
+
+```text
+npx -y chrome-devtools-mcp@latest --browser-url http://127.0.0.1:9222
+```
+
+**Caution:** Remote-debugging browser profile data can expose local browsing data. Use separate `--user-data-dir`.
+
+## Open Websearch MCP
+
+Set up Open Websearch MCP after AutoCode plugin install.
+
+Install package:
+
+```bash
+npm install -g open-websearch@latest
+```
+
+Merge this entry into existing global OpenCode config at `<home>/.config/opencode/opencode.json`; never overwrite unrelated settings. If `mcp` already exists, add `open-websearch` inside it. Config-directory overrides remain as documented in [Step 5](#step-5-install-autocode-plugin).
+
+Default config:
+
+```json
+{
+  "mcp": {
+    "open-websearch": {
+      "type": "local",
+      "command": ["open-websearch"],
+      "environment": { "MODE": "stdio" }
+    }
+  }
+}
+```
+
+### Optional custom local proxy
+
+Ask user for proxy URL before adding proxy settings. Do not guess that local proxy exists. `http://127.0.0.1:1234` applies only to current environment.
+
+Merge proxy settings into `environment` only when user confirms custom local proxy URL:
+
+```json
+{
+  "mcp": {
+    "open-websearch": {
+      "type": "local",
+      "command": ["open-websearch"],
+      "environment": {
+        "MODE": "stdio",
+        "USE_PROXY": "true",
+        "PROXY_URL": "http://127.0.0.1:1234"
+      }
+    }
+  }
+}
+```
+
+Verify setup:
+
+1. Run `open-websearch --help`.
+2. Restart OpenCode.
+3. Ask OpenCode to run a web search.
 
 ## Uninstall AutoCode
 

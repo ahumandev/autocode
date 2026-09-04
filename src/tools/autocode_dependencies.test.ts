@@ -191,8 +191,8 @@ describe("autocode_dependencies", () => {
         const result = parseResult(await createAutocodeDependenciesTool(deps, { isWindows: true }).execute({}, createToolContext()) as string)
         const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
 
-        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"])
-        expect(Object.keys(result.optional_dependencies ?? {})).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"])
+        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"])
+        expect(Object.keys(result.optional_dependencies ?? {})).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"])
         expect(result.bwrap).toBeUndefined()
         expect(result.dependencies?.bwrap).toBeUndefined()
         expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
@@ -215,7 +215,7 @@ describe("autocode_dependencies", () => {
         const result = parseResult(await createAutocodeDependenciesTool(deps).execute({}, createToolContext()) as string)
         const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
 
-        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "bwrap", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"])
+        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "bwrap", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"])
         expect(result.dependencies?.bwrap).toEqual(result.bwrap)
         expect(calls).toContainEqual(["sh", ["-c", "command -v git"], expect.anything()])
         expect(calls).toContainEqual(["git", ["--version"], expect.anything()])
@@ -310,8 +310,8 @@ describe("autocode_dependencies", () => {
         const result = parseResult(await createAutocodeDependenciesTool(createDeps()).execute({}, createToolContext()) as string)
         const optionalDependencies = result.optional_dependencies ?? {}
 
-        expect(Object.keys(optionalDependencies)).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"])
-        for (const key of ["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "git_cli", "browser"]) {
+        expect(Object.keys(optionalDependencies)).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"])
+        for (const key of ["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"]) {
             expect(result.dependencies?.[key]).toEqual(optionalDependencies[key])
         }
         expect(result.required_ok).toBe(true)
@@ -320,6 +320,7 @@ describe("autocode_dependencies", () => {
         expect(result.next_actions).toContain("Run `npx -y chrome-devtools-mcp@latest` for Chrome DevTools MCP.")
         expect(result.next_actions).toContain("Run `npx -y @upstash/context7-mcp@latest` for Context7 MCP.")
         expect(result.next_actions).toContain("Run `npx --yes @negokaz/excel-mcp-server@0.12.0` for Excel MCP. Requires Node.js 20+.")
+        expect(result.next_actions).toContain("Run `npm install -g open-websearch@latest` for Websearch MCP.")
         expect(result.next_actions).toContain("Install system git CLI for built-in Git tools.")
         expect(result.next_actions).toContain("Install Google Chrome / Chrome for Testing for official Chrome DevTools MCP support. Chromium may work but is not guaranteed.")
         expect(JSON.stringify(result)).not.toContain("mcp-server-git")
@@ -335,6 +336,11 @@ describe("autocode_dependencies", () => {
         expect(optionalDependencies.excel_mcp.install_command).toBe("npx --yes @negokaz/excel-mcp-server@0.12.0")
         expect(optionalDependencies.excel_mcp.docs_url).toBe("https://www.npmjs.com/package/@negokaz/excel-mcp-server")
         expect(optionalDependencies.excel_mcp.notes).toContain("Node.js 20+")
+        expect(optionalDependencies.websearch_mcp.status).toBe("missing")
+        expect(optionalDependencies.websearch_mcp.package).toBe("open-websearch")
+        expect(optionalDependencies.websearch_mcp.bin).toBe("open-websearch")
+        expect(optionalDependencies.websearch_mcp.install_command).toBe("npm install -g open-websearch@latest")
+        expect(optionalDependencies.websearch_mcp.docs_url).toBe("https://www.npmjs.com/package/open-websearch")
         expect(optionalDependencies.git_cli.package).toBe("git")
         expect(optionalDependencies.git_cli.install_command).toBe("Install git using your system package manager.")
         expect(optionalDependencies.git_cli.guidance).toBe("Install system git CLI for built-in Git tools.")
@@ -379,6 +385,32 @@ describe("autocode_dependencies", () => {
         expect(result.optional_dependencies?.excel_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.excel_mcp?.detection_source).toBe("config_entry")
         expect(result.optional_dependencies?.excel_mcp?.config_path).toBe(worktreeConfig)
+    })
+
+    test("detects Websearch MCP from PATH and OpenCode config", async () => {
+        const pathResult = parseResult(await createAutocodeDependenciesTool(createDeps({
+            commandMap: { "open-websearch": true },
+        })).execute({}, createToolContext()) as string)
+        const configResult = parseResult(await createAutocodeDependenciesTool(createDeps({
+            env: { XDG_CONFIG_HOME: "/xdg" },
+            fileMap: {
+                "/xdg/opencode/opencode.json": JSON.stringify({
+                    mcp: {
+                        servers: {
+                            websearch: { command: "npx", args: ["-y", "open-websearch@latest"] },
+                        },
+                    },
+                }),
+            },
+        })).execute({}, createToolContext()) as string)
+
+        expect(pathResult.optional_dependencies?.websearch_mcp?.status).toBe("ok")
+        expect(pathResult.optional_dependencies?.websearch_mcp?.detection_source).toBe("path")
+        expect(pathResult.optional_dependencies?.websearch_mcp?.package).toBe("open-websearch")
+        expect(pathResult.optional_dependencies?.websearch_mcp?.bin).toBe("open-websearch")
+        expect(configResult.optional_dependencies?.websearch_mcp?.status).toBe("ok")
+        expect(configResult.optional_dependencies?.websearch_mcp?.detection_source).toBe("launcher_command")
+        expect(configResult.optional_dependencies?.websearch_mcp?.configured_command).toBe("npx -y open-websearch@latest")
     })
 
     test("detects MCP launcher config and system git independently", async () => {

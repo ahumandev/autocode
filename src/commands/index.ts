@@ -21,7 +21,7 @@ import { testsCommandTemplate } from "./tests"
 
 type CommandMap = NonNullable<Config["command"]>
 
-export function createCommands(capabilities: PlatformCapabilities): CommandMap {
+export function createCommands(capabilities: PlatformCapabilities, spyAvailable = false): CommandMap {
     return {
 
         // Job workspace commands
@@ -38,6 +38,9 @@ export function createCommands(capabilities: PlatformCapabilities): CommandMap {
         "new-auto":   { description: "Create new 🤖 auto session to autonomously solve problems.", subtask: false, template: newSessionTemplate("auto", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Solve PROBLEM according 'Auto Workflow'.") },
         "new-design": { description: "Create new 📐 design session to design solution to problem.", subtask: false, template: newSessionTemplate("design", "Summarize how steps taken so far", "Design and suggest APPROACHES around discovered OBSTACLES within CONSTRAINTS.") },
         "new-fix":    { description: "Create new 🛠️ troubleshooting session to address obstacle, while keeping current session clean.", subtask: false, template: newSessionTemplate("auto_troubleshoot", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Continue with 'Workflow Loop'.") },
+        ...(spyAvailable ? {
+            "new-spy": { description: "Create new 🕵️ spy session to inspect private information.", subtask: false, template: newSessionTemplate("spy", "Proposed current APPROACH to collect EVIDENCE and answer QUESTION", "Gather evidence with permitted read-only tools, then report facts and answer QUESTION.") },
+        } : {}),
 
         // Ad-hoc commands
 
