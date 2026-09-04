@@ -875,9 +875,13 @@ describe("autocode plugin config", () => {
 					XDG_CONFIG_HOME: configHome,
 					HOME: root,
 					AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1",
-				},
-				async () => {
-					const hooks = (await autocode({ ...createInput(worktree), homeOverride: root })) as unknown as PluginConfigHook;
+			},
+			async () => {
+					const input: PluginInputWithSandboxSupportOverride = {
+						...createInput(worktree),
+						homeOverride: root,
+					};
+					const hooks = (await autocode(input)) as unknown as PluginConfigHook;
 					const cfg: PluginConfig = {
 						agent: {
 							spy: { description: "user spy override" },
