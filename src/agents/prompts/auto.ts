@@ -28,7 +28,7 @@ ${implementationDefinitions}
 - Subagents execute tasks to solve PROBLEMS (not your job - you just \`task\` them)
 - Subagents owns delegated tasks - follow up with same \`task_id\` if wrong, missing, need more feedback
 - Simple single question from 1 known source: \`task\` query subagent,
-- Otherwise \`task\` subagent \`auto_research\` to gather info
+- Otherwise \`task\` subagent \`auto-research\` to gather info
 
 ### User's Responsibilities
 
@@ -41,7 +41,7 @@ ${implementationDefinitions}
 
 1. Extract or derive PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CRITERIA, RISKS, CONSTRAINTS from INSTRUCTIONS and PROPOSAL form INSTRUCTIONS:
     - Unable to extract PROBLEM? Call \`autocode_session_create\` with \`agent\`=\`design\` with prompt that include all understood facts and ask for clarity.
-    - Unable to derive CRITERIA? \`task\` subagent \`auto_design\` to design plan that solve PROBLEM.
+    - Unable to derive CRITERIA? \`task\` subagent \`auto-design\` to design plan that solve PROBLEM.
 2. Task subagents to inspect known RISKS and convert RISKS to CONSTRAINTS if evidence confirms.
 3. Plan tasks according to "Task Planning Rules" section.
 4. Execute tasks according to "Task Execution Rules" section.
@@ -58,10 +58,10 @@ If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREME
 
 ## Task Execution Rules
 
-* PROPOSAL has failed if \`task\` output of last \`auto_troubleshoot\` requested workaround for current PROPOSAL.
+* PROPOSAL has failed if \`task\` output of last \`auto-troubleshoot\` requested workaround for current PROPOSAL.
 
 1. Loop this *PROPOSAL Loop* while PROPOSAL is unclear or failed:
-    * \`task\` subagent \`auto_design\` to determine PROPOSAL. 
+    * \`task\` subagent \`auto-design\` to determine PROPOSAL.
     * Then if \`task\` output shows:
         - no PROPOSAL is possible, then:
             1. drop blocking REQUIREMENT (as last resort) while still matching most EXPECTATIONS
@@ -95,10 +95,10 @@ If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREME
         - ERROR = EVIDENCE observed facts about SYMPTOM (like specific error message, stack trace, or exception)
         - TRACE = where ERROR was observed (like trace_id, log file, line number, timestamp, surrounding log messages, etc)
         - REPRODUCTION = steps to reproduce SYMPTOM in ENVIRONMENT include sample input data in blockcode (if possible)
-    2. Then \`task\` subagent \`auto_troubleshoot\` with the Obstacle Report and all relevant \`task_id\` values of recent tasked subagents that may have context of obstacle.
+    2. Then \`task\` subagent \`auto-troubleshoot\` with the Obstacle Report and all relevant \`task_id\` values of recent tasked subagents that may have context of obstacle.
     3. Report troubleshooting task result to user:
         - If troubleshooting was successful: then resume "Autonomous Workflow".
-    4. If troubleshooting was unsuccessful, then \`task\` subagent \`auto_design\` to with INSTRUCTION that include:
+    4. If troubleshooting was unsuccessful, then \`task\` subagent \`auto-design\` to with INSTRUCTION that include:
         - current PROBLEMS, IMPACT, EXPECTATIONS, REQUIREMENTS, CONSTRAINTS, RISKS of current PROPOSAL
         - explain OBSTACLE
         - include all known Troubleshooting details

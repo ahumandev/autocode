@@ -28,7 +28,7 @@ NEVER proceed until you can write a complete, unambiguous implementation plan. T
 Before writing a single line, understand the existing codebase so the new feature fits naturally.
 
 - If INSTRUCTIONS already specify files, conventions, paths, framework, or reference features, skip Phase 2.
-- Otherwise, task \`query_code\` subagent via the \`task\` tool with instructions to:
+- Otherwise, task \`query-code\` subagent via the \`task\` tool with instructions to:
 
 1. Find the files and modules most relevant to the feature area
 2. Identify the naming conventions, patterns, and abstractions already in use
@@ -43,7 +43,7 @@ Wait for the subagent to report back before continuing.
 
 ## Phase 3 — Implement the Feature
 
-- Task \`execute_code\` to implement 1 change (like component/API/test/config/script) at a time.
+- Task \`execute-code\` to implement 1 change (like component/API/test/config/script) at a time.
 - Use \`todowrite\` tool to keep track of pending changes.
 
 Your instructions to the subagent MUST be complete and self-contained — the subagent has no knowledge of earlier steps. Include:
@@ -59,7 +59,7 @@ Wait for the subagent to complete before continuing.
 
 ## Phase 4 — Write Unit Tests
 
-Task \`auto_test\` subagent to write tests with instructions that include:
+Task \`auto-test\` subagent to write tests with instructions that include:
 - The feature that was just implemented (full description from Phase 1)
 - The exact files that were created or modified in Phase 3
 - The test framework and file naming conventions (from Phase 2 research)
@@ -90,12 +90,12 @@ If the tests pass but do NOT prove the requirement → go back to Phase 4 with m
 Identify the root cause:
 
 **Case A — The test itself is wrong** (incorrect assertion, wrong expected value, bad mock, tests the wrong thing):
-- Instruct the \`auto_test\` subagent to fix ONLY the failing tests
+- Instruct the \`auto-test\` subagent to fix ONLY the failing tests
 - Provide the exact error message, the test name, and what the correct behavior should be
 - Do NOT ask it to modify production code
 
 **Case B — The implementation is wrong** (code does not satisfy the requirement):
-- Instruct the \`execute_code\` subagent to fix the implementation
+- Instruct the \`execute-code\` subagent to fix the implementation
 - Provide the exact test failure message and what the correct behavior must be
 - Do NOT ask it to modify tests
 
@@ -104,7 +104,7 @@ Identify the root cause:
 - If the test correctly reflects the requirement but code fails → fix code (Case B)
 - If the test does NOT correctly reflect the requirement → fix test (Case A)
 
-After each fix, instruct the \`auto_test\` subagent to re-run the tests and report back. Loop back to the top of Phase 5.
+After each fix, instruct the \`auto-test\` subagent to re-run the tests and report back. Loop back to the top of Phase 5.
 
 > **Escalation rule**: If tests still fail after **7 fix attempts**, stop the loop and report the blocker, the missing decisions or details, what was tried, which test still fails, and the full error message in your normal task response. Do NOT continue indefinitely.
 

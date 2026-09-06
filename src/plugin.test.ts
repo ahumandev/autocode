@@ -89,7 +89,7 @@ type PluginAgentConfig = NonNullable<
 >;
 type SandboxPermission = NonNullable<PluginAgentConfig["permission"]> & {
 	autocode_sandbox_cli?: "ask" | "allow" | "deny";
-	task?: { execute_sandbox?: "ask" | "allow" | "deny" };
+	task?: { "execute-sandbox"?: "ask" | "allow" | "deny" };
 };
 type PluginConfigWithSandboxPermissions = Omit<PluginHookConfig, "agent"> & {
 	agent?: Record<
@@ -728,6 +728,8 @@ describe("autocode plugin config", () => {
 								task_external: "ask",
 							},
 						},
+						"execute-code": { model: "user-worker-model" },
+						"auto-test": { variant: "user-test-variant" },
 					},
 					command: {
 						"job-design": {
@@ -808,6 +810,9 @@ describe("autocode plugin config", () => {
 				});
 				expect(cfg.agent?.assist?.model).toBe("user-model");
 				expect(cfg.agent?.assist?.variant).toBe("balanced-variant");
+				expect(cfg.agent?.["execute-code"]?.model).toBe("user-worker-model");
+				expect(cfg.agent?.["execute-code"]?.variant).toBe("balanced-variant");
+				expect(cfg.agent?.["auto-test"]?.variant).toBe("user-test-variant");
 				const assist = cfg.agent?.assist;
 				const design = cfg.agent?.design;
 				const assistPermission = assist?.permission;
@@ -907,7 +912,7 @@ describe("autocode plugin config", () => {
 		await withEnv({ PSModulePath: undefined }, async () => {
 			const cfg: PluginConfigWithSandboxPermissions = {
 				agent: {
-					execute_sandbox: {
+					"execute-sandbox": {
 						prompt: "sandbox guidance",
 						permission: { autocode_sandbox_cli: "allow" },
 					},
@@ -915,7 +920,7 @@ describe("autocode plugin config", () => {
 						prompt: "use sandbox guidance",
 						permission: {
 							autocode_sandbox_cli: "allow",
-							task: { execute_sandbox: "allow" },
+							task: { "execute-sandbox": "allow" },
 						},
 					},
 				},
@@ -928,7 +933,7 @@ describe("autocode plugin config", () => {
 
 			await hooks.config?.(cfg as PluginHookConfig);
 
-			expect(cfg.agent?.execute_sandbox).toBeUndefined();
+			expect(cfg.agent?.["execute-sandbox"]).toBeUndefined();
 			for (const toolName of [
 				"autocode_sandbox_create",
 				"autocode_sandbox_cli",
@@ -973,12 +978,12 @@ describe("autocode plugin config", () => {
 					task && typeof task === "object"
 						? (task as Record<string, unknown>)
 						: undefined;
-				expect(taskRules?.execute_sandbox).toBeUndefined();
+				expect(taskRules?.["execute-sandbox"]).toBeUndefined();
 				expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toMatch(
 					/sandbox/i,
 				);
 			}
-			for (const agentName of ["execute_os", "query_os"] as const) {
+			for (const agentName of ["execute-os", "query-os"] as const) {
 				expect(cfg.agent?.[agentName]?.prompt).toMatch(/cmd commands/i);
 				expect(cfg.agent?.[agentName]?.prompt).toMatch(/never use bash/i);
 			}
@@ -994,7 +999,7 @@ describe("autocode plugin config", () => {
 
 		await hooks.config?.(cfg as unknown as PluginHookConfig);
 
-		expect(cfg.agent?.execute_sandbox).toBeDefined();
+		expect(cfg.agent?.["execute-sandbox"]).toBeDefined();
 		for (const toolName of [
 			"autocode_sandbox_create",
 			"autocode_sandbox_cli",
@@ -1010,10 +1015,10 @@ describe("autocode plugin config", () => {
 		]) {
 			expect(hooks.tool).toHaveProperty(toolName);
 		}
-		expect(cfg.agent?.execute_os?.prompt).toMatch(
+		expect(cfg.agent?.["execute-os"]?.prompt).toMatch(
 			/always use the `bash` tool/i,
 		);
-		expect(cfg.agent?.query_os?.prompt).toMatch(
+		expect(cfg.agent?.["query-os"]?.prompt).toMatch(
 			/prefer other tools over `bash` tool/i,
 		);
 		expect(cfg.command?.['autocode-install']?.template).toContain(
@@ -1034,7 +1039,7 @@ describe("autocode plugin config", () => {
 			const cfg: PluginConfig = {};
 			await hooks.config?.(cfg as unknown as PluginHookConfig);
 
-			for (const agentName of ["execute_os", "query_os"] as const) {
+			for (const agentName of ["execute-os", "query-os"] as const) {
 				expect(cfg.agent?.[agentName]?.prompt).toMatch(/windows powershell/i);
 				expect(cfg.agent?.[agentName]?.prompt).not.toMatch(/cmd commands/i);
 			}
@@ -1209,7 +1214,7 @@ describe("autocode plugin config", () => {
 				await hooks.config?.(cfg);
 
 				expect(
-					skillPermissions(cfg, "execute_os")?.["legacy-startup-url"],
+					skillPermissions(cfg, "execute-os")?.["legacy-startup-url"],
 				).toBeUndefined();
 				expect(await registerGeneratedSkills(input)).toContainEqual({
 					type: "directory",
@@ -1250,13 +1255,13 @@ describe("autocode plugin config", () => {
 			const cfg: PluginConfig = {};
 			await hooks.config?.(cfg);
 
-			expect(skillPermissions(cfg, "execute_code")?.["angular-developer"]).toBe(
+			expect(skillPermissions(cfg, "execute-code")?.["angular-developer"]).toBe(
 				"allow",
 			);
 			expect(
-				skillPermissions(cfg, "execute_os")?.["angular-developer"],
+				skillPermissions(cfg, "execute-os")?.["angular-developer"],
 			).toBeUndefined();
-			expect(skillPermissions(cfg, "auto_test")?.vitest).toBe("allow");
+			expect(skillPermissions(cfg, "auto-test")?.vitest).toBe("allow");
 			expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBe(
 				"allow",
 			);
@@ -1264,7 +1269,7 @@ describe("autocode plugin config", () => {
 			expect(skillPermissions(cfg, "design")?.["codebase-design"]).toBe(
 				"allow",
 			);
-			const grants = Object.keys(skillPermissions(cfg, "execute_code") ?? {});
+			const grants = Object.keys(skillPermissions(cfg, "execute-code") ?? {});
 			expect(new Set(grants).size).toBe(grants.length);
 		});
 	});

@@ -18,16 +18,16 @@ const MAX_LINES = 500
 
 // Maps calling agent to the only skill it may edit; overrides args.name for those agents
 export const AGENT_SKILL_MAP: Record<string, string> = {
-    "document_conventions": "design-conventions",
-    "document_code": "execute-code",
-    "document_install": "execute-install",
-    "document_prd": "design-prd",
-    "document_ux": "execute-ux",
+    "document-conventions": "design-conventions",
+    "document-code": "execute-code",
+    "document-install": "execute-install",
+    "document-prd": "design-prd",
+    "document-ux": "execute-ux",
 }
 
 export function createAutocodeSkillEditTool(fileSystem: FileSystem = defaultFileSystem) {
     return tool({
-        description: "Edit main skill file (SKILL.md) body that agent loads via skill tool. Overwrites existing. NOT for reference files. Skill name auto-resolved from calling agent for mapped agents (document_*).",
+        description: "Edit main skill file (SKILL.md) body that agent loads via skill tool. Overwrites existing. NOT for reference files. Skill name auto-resolved from calling agent for mapped agents (document-*).",
         args: {
             name: tool.schema.string().describe("Skill name: 4 words max, alpha-numeric and hyphens only."),
             description: tool.schema.string().describe("Trigger description of: situations, symptoms, task that should make agent recall this skill. Use `skill-write` skill to see correct format."),

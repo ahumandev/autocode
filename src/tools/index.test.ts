@@ -328,7 +328,7 @@ describe("auto resume wiring", () => {
 
                 await configurePlugin(plugin, cfg)
 
-                expect(getPermissionRule(cfg.agent.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent["execute-document"]?.permission, "autocode_dependencies")).toBeUndefined()
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -361,7 +361,7 @@ describe("auto resume wiring", () => {
                     "*": "ask",
                     "/home/me/CarData/*": "allow",
                 }))
-                expect(getPermissionRule(cfg.agent.execute_os?.permission, "external_directory")).toEqual(expect.objectContaining({
+                expect(getPermissionRule(cfg.agent["execute-os"]?.permission, "external_directory")).toEqual(expect.objectContaining({
                     "*": "allow",
                     "/home/me/CarData/*": "allow",
                 }))
@@ -369,7 +369,7 @@ describe("auto resume wiring", () => {
                     "*": "ask",
                     "/home/me/CarData/*": "allow",
                 }))
-                expect(getPermissionRule(cfg.agent.query_code?.permission, "external_directory")).toEqual(expect.objectContaining({
+                expect(getPermissionRule(cfg.agent["query-code"]?.permission, "external_directory")).toEqual(expect.objectContaining({
                     "*": "deny",
                     "/home/me/CarData/*": "allow",
                 }))
@@ -553,35 +553,35 @@ describe("auto resume wiring", () => {
         expect(Object.keys((tools.autocode_ssh_write_file as unknown as { args: Record<string, unknown> }).args)).toEqual(["ssh_key", "path", "content", "create_dirs"])
     })
 
-    test("unsupported sandbox policy disables execute_sandbox and denies explicit sandbox permissions", () => {
+    test("unsupported sandbox policy disables execute-sandbox and denies explicit sandbox permissions", () => {
         const agents = applySandboxPlatformPolicy({
             auto: { permission: { "*": "allow", autocode_sandbox_create: "allow", autocode_sandbox_cli: "ask", autocode_sandbox_delete: "allow", autocode_sandbox_read: "allow" } },
-            execute_sandbox: { disable: false, permission: { "*": "deny", autocode_sandbox_cli: "allow", autocode_sandbox_edit: "allow" } },
+            "execute-sandbox": { disable: false, permission: { "*": "deny", autocode_sandbox_cli: "allow", autocode_sandbox_edit: "allow" } },
         }, "darwin")
 
         for (const toolName of ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy"]) {
             expect(getPermissionRule(agents.auto?.permission as RuntimePermission, toolName)).toBe("deny")
         }
-        expect(agents.execute_sandbox?.disable).toBe(true)
-        expect(getPermissionRule(agents.execute_sandbox?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
-        expect(getPermissionRule(agents.execute_sandbox?.permission as RuntimePermission, "autocode_sandbox_edit")).toBe("deny")
+        expect(agents["execute-sandbox"]?.disable).toBe(true)
+        expect(getPermissionRule(agents["execute-sandbox"]?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
+        expect(getPermissionRule(agents["execute-sandbox"]?.permission as RuntimePermission, "autocode_sandbox_edit")).toBe("deny")
     })
 
     test("unsupported sandbox policy covers non-linux, android, linux without bwrap, and Termux signals", () => {
         for (const platform of ["win32", "android", "freebsd"] as NodeJS.Platform[]) {
-            const agents = applySandboxPlatformPolicy({ execute_sandbox: { disable: false, permission: { autocode_sandbox_cli: "allow" } } }, { platform, bwrapUsable: true })
+            const agents = applySandboxPlatformPolicy({ "execute-sandbox": { disable: false, permission: { autocode_sandbox_cli: "allow" } } }, { platform, bwrapUsable: true })
 
-            expect(agents.execute_sandbox?.disable).toBe(true)
-            expect(getPermissionRule(agents.execute_sandbox?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
+            expect(agents["execute-sandbox"]?.disable).toBe(true)
+            expect(getPermissionRule(agents["execute-sandbox"]?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
         }
 
-        const missingBwrap = applySandboxPlatformPolicy({ execute_sandbox: { disable: false, permission: { autocode_sandbox_cli: "allow" } } }, { platform: "linux", bwrapUsable: false })
-        const termux = applySandboxPlatformPolicy({ execute_sandbox: { disable: false, permission: { autocode_sandbox_cli: "allow" } } }, { platform: "linux", env: { TERMUX_VERSION: "1" }, bwrapUsable: true })
+        const missingBwrap = applySandboxPlatformPolicy({ "execute-sandbox": { disable: false, permission: { autocode_sandbox_cli: "allow" } } }, { platform: "linux", bwrapUsable: false })
+        const termux = applySandboxPlatformPolicy({ "execute-sandbox": { disable: false, permission: { autocode_sandbox_cli: "allow" } } }, { platform: "linux", env: { TERMUX_VERSION: "1" }, bwrapUsable: true })
 
-        expect(missingBwrap.execute_sandbox?.disable).toBe(true)
-        expect(getPermissionRule(missingBwrap.execute_sandbox?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
-        expect(termux.execute_sandbox?.disable).toBe(true)
-        expect(getPermissionRule(termux.execute_sandbox?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
+        expect(missingBwrap["execute-sandbox"]?.disable).toBe(true)
+        expect(getPermissionRule(missingBwrap["execute-sandbox"]?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
+        expect(termux["execute-sandbox"]?.disable).toBe(true)
+        expect(getPermissionRule(termux["execute-sandbox"]?.permission as RuntimePermission, "autocode_sandbox_cli")).toBe("deny")
     })
 
     test("unsupported sandbox policy denies wildcard and top-level string sandbox access without narrowing wildcards", () => {
@@ -671,7 +671,7 @@ describe("auto resume wiring", () => {
             "*": "deny",
             task: {
                 "*": "deny",
-                execute_code: "allow",
+                "execute-code": "allow",
             },
         })
         const client: OpencodeClient = {
@@ -710,7 +710,7 @@ describe("auto resume wiring", () => {
             "*": "deny",
             task: {
                 "*": "deny",
-                execute_code: "allow",
+                "execute-code": "allow",
             },
             task_resume: "allow",
         })
@@ -750,7 +750,7 @@ describe("auto resume wiring", () => {
             "*": "deny",
             task: {
                 "*": "deny",
-                execute_code: "allow",
+                "execute-code": "allow",
             },
             task_resume: "allow",
         })
@@ -790,7 +790,7 @@ describe("auto resume wiring", () => {
             "*": "deny",
             task: {
                 "*": "deny",
-                execute_code: "allow",
+                "execute-code": "allow",
             },
             task_resume: "allow",
         })
@@ -829,7 +829,7 @@ describe("auto resume wiring", () => {
         const child = createSession("session-2", "/workspace", {
             task: {
                 "*": "deny",
-                execute_code: "allow",
+                "execute-code": "allow",
             },
             task_resume: "allow",
         })
@@ -888,7 +888,7 @@ describe("auto resume wiring", () => {
         const child = createSession("session-2", "/workspace", {
             task: {
                 "*": "deny",
-                execute_code: "allow",
+                "execute-code": "allow",
             },
             task_resume: "allow",
         })
@@ -972,7 +972,7 @@ describe("autocode_concept_list tool", () => {
 
                 expect(plugin.tool?.autocode_concept_list).toBeDefined()
                 expect(cfg.agent.autocode).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto_general?.permission, "*")).toBe("allow")
+                expect(getPermissionRule(cfg.agent["auto-general"]?.permission, "*")).toBe("allow")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -1426,14 +1426,14 @@ describe("tool registrations", () => {
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo_find")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.execute_author?.permission, "autocode_logo")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent["execute-author"]?.permission, "autocode_logo_find")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent["execute-author"]?.permission, "autocode_logo")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_dependencies")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto_general?.permission, "*")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.auto_general?.permission, "doom_loop")).toBe("deny")
-                expect(getTaskPermissionRule(cfg.agent.auto_general?.permission, "design")).toBe("deny")
-                expect(cfg.agent.auto_general?.prompt).toContain("fallback auto orchestrator")
+                expect(getPermissionRule(cfg.agent["execute-document"]?.permission, "autocode_dependencies")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent["auto-general"]?.permission, "*")).toBe("allow")
+                expect(getPermissionRule(cfg.agent["auto-general"]?.permission, "doom_loop")).toBe("deny")
+                expect(getTaskPermissionRule(cfg.agent["auto-general"]?.permission, "design")).toBe("deny")
+                expect(cfg.agent["auto-general"]?.prompt).toContain("fallback auto orchestrator")
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_create")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_feedback")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_review")).toBeUndefined()
@@ -1442,12 +1442,17 @@ describe("tool registrations", () => {
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_create")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_list")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_auto_start")).toBeUndefined()
-                expect(Object.keys(cfg.agent).filter((name) => name.startsWith("auto-") || name.startsWith("assist-"))).toEqual([])
+                for (const legacyAgentId of [
+                    "assist_browser", "auto_author", "auto_design", "auto_feature", "auto_general", "auto_refactor", "auto_research", "auto_test", "auto_troubleshoot",
+                    "document_agents", "document_conventions", "document_code", "document_env", "document_install", "document_prd", "document_ux",
+                    "execute_author", "execute_code", "execute_config", "execute_debug", "execute_document", "execute_excel", "execute_opencode", "execute_os", "execute_rest", "execute_sandbox", "execute_script", "execute_ssh",
+                    "query_autocode", "query_browser", "query_code", "query_config", "query_db", "query_excel", "query_git", "query_os", "query_skills", "query_ssh", "query_text", "query_web", "query_youtube",
+                ]) expect(cfg.agent[legacyAgentId]).toBeUndefined()
                 expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
                 expect(cfg.agent.design?.prompt).toContain("autocode_job_execute")
                 expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
                 expect(cfg.agent.advise?.prompt).toContain("`task` query subagents")
-                const queryDbAgent = (cfg.agent as Record<string, Record<string, unknown>>).query_db
+                const queryDbAgent = (cfg.agent as Record<string, Record<string, unknown>>)["query-db"]
                 expect(queryDbAgent.mode).toBe("subagent")
                 expect(queryDbAgent.hidden).toBe(true)
                 expect(String(queryDbAgent.prompt)).toContain("Use only `autocode_db_tables`, `autocode_db_table`, and `autocode_db_table_read`")
@@ -1459,11 +1464,11 @@ describe("tool registrations", () => {
                     autocode_db_tables: "allow",
                     external_directory: expect.objectContaining({ "*": "deny" }),
                 }))
-                const executeRestAgent = (cfg.agent as Record<string, Record<string, unknown>>).execute_rest
-                expect(getAgentField(cfg, "execute_rest", "mode")).toBe("subagent")
-                expect(getAgentField(cfg, "execute_rest", "hidden")).toBe(true)
+                const executeRestAgent = (cfg.agent as Record<string, Record<string, unknown>>)["execute-rest"]
+                expect(getAgentField(cfg, "execute-rest", "mode")).toBe("subagent")
+                expect(getAgentField(cfg, "execute-rest", "hidden")).toBe(true)
                 expect(executeRestAgent.tier).toBeUndefined()
-                expect(getAgentField(cfg, "execute_rest", "temperature")).toBe(0.1)
+                expect(getAgentField(cfg, "execute-rest", "temperature")).toBe(0.1)
                 expect(String(executeRestAgent.prompt)).toContain("autocode_rest")
                 expect(String(executeRestAgent.prompt)).toContain("GET, POST, PUT, PATCH, DELETE")
                 expect(String(executeRestAgent.prompt)).toContain("Never dump full raw REST result unless user specifically asks")
@@ -1477,10 +1482,10 @@ describe("tool registrations", () => {
                     autocode_rest: "allow",
                     external_directory: expect.objectContaining({ "*": "deny" }),
                 }))
-                expect(getPermissionRule(cfg.agent.execute_rest?.permission, "session")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.execute_rest?.permission, "agent")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.execute_rest?.permission, "previous_session")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.execute_rest?.permission, "previous_agent")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent["execute-rest"]?.permission, "session")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent["execute-rest"]?.permission, "agent")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent["execute-rest"]?.permission, "previous_session")).toBeUndefined()
+                expect(getPermissionRule(cfg.agent["execute-rest"]?.permission, "previous_agent")).toBeUndefined()
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -2088,10 +2093,18 @@ describe("plugin.config tier wiring", () => {
                 }))
 
                 const plugin = await autocode(createPluginInput(createTierClient(), worktree))
-                const cfg: ConfigWithRuntimeSections = { agent: { assist: { model: "user/custom-model" } }, command: {} }
+                const cfg: ConfigWithRuntimeSections = {
+                    agent: {
+                        assist: { model: "user/custom-model" },
+                        "execute-code": { model: "user/worker-model", variant: "custom" },
+                    },
+                    command: {},
+                }
                 await configurePlugin(plugin, cfg)
 
                 expect(getAgentField(cfg, "assist", "model")).toBe("user/custom-model")
+                expect(getAgentField(cfg, "execute-code", "model")).toBe("user/worker-model")
+                expect(getAgentField(cfg, "execute-code", "variant")).toBe("custom")
             } finally {
                 rmSync(worktree, { recursive: true, force: true })
             }
@@ -2118,20 +2131,20 @@ describe("plugin.config tier wiring", () => {
                 await configurePlugin(plugin, cfg)
 
                 expect(cfg.small_model).toBe("openai/gpt-5-nano")
-                expect(getAgentField(cfg, "auto_general", "model")).toBe("anthropic/claude-sonnet-4-5")
-                expect(getAgentField(cfg, "auto_general", "variant")).toBe("standard")
+                expect(getAgentField(cfg, "auto-general", "model")).toBe("anthropic/claude-sonnet-4-5")
+                expect(getAgentField(cfg, "auto-general", "variant")).toBe("standard")
                 expect(getAgentField(cfg, "compaction", "model")).toBe("openai/gpt-5-context")
                 expect(getAgentField(cfg, "compaction", "variant")).toBe("high")
                 expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "design", "variant")).toBe("standard")
                 expect(getAgentField(cfg, "auto", "model")).toBe("anthropic/claude-opus-4-5")
                 expect(getAgentField(cfg, "advise", "model")).toBe("anthropic/claude-sonnet-4-5")
-                expect(getAgentField(cfg, "execute_code", "model")).toBe("anthropic/claude-sonnet-4-5")
-                expect(getAgentField(cfg, "execute_code", "variant")).toBe("standard")
-                expect(getAgentField(cfg, "query_git", "model")).toBe("anthropic/claude-haiku-4-5")
-                expect(getAgentField(cfg, "query_git", "variant")).toBe("quick")
-                expect(getAgentField(cfg, "query_code", "model")).toBe("openai/gpt-5-context")
-                expect(getAgentField(cfg, "query_code", "variant")).toBe("high")
+                expect(getAgentField(cfg, "execute-code", "model")).toBe("anthropic/claude-sonnet-4-5")
+                expect(getAgentField(cfg, "execute-code", "variant")).toBe("standard")
+                expect(getAgentField(cfg, "query-git", "model")).toBe("anthropic/claude-haiku-4-5")
+                expect(getAgentField(cfg, "query-git", "variant")).toBe("quick")
+                expect(getAgentField(cfg, "query-code", "model")).toBe("openai/gpt-5-context")
+                expect(getAgentField(cfg, "query-code", "variant")).toBe("high")
                 expect(getAgentField(cfg, "general", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "compaction", "prompt")).toBeUndefined()
@@ -2144,8 +2157,8 @@ describe("plugin.config tier wiring", () => {
                 expect(getAgentField(cfg, "design", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "advise", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "auto", "tier")).toBeUndefined()
-                expect(getAgentField(cfg, "execute_code", "tier")).toBeUndefined()
-                expect(getAgentField(cfg, "query_git", "tier")).toBeUndefined()
+                expect(getAgentField(cfg, "execute-code", "tier")).toBeUndefined()
+                expect(getAgentField(cfg, "query-git", "tier")).toBeUndefined()
                 expect(getAgentField(cfg, "title", "model")).toBe("openai/gpt-5-nano")
                 expect(getAgentField(cfg, "title", "variant")).toBe("economy")
                 expect(getAgentField(cfg, "title", "tier")).toBeUndefined()
@@ -2183,8 +2196,8 @@ describe("plugin.config tier wiring", () => {
                 expect(getAgentField(cfg, "design", "model")).toBe("anthropic/claude-sonnet-4-5")
                 expect(getAgentField(cfg, "auto", "model")).toBe("anthropic/claude-opus-4-5")
                 expect(getAgentField(cfg, "advise", "model")).toBe("anthropic/claude-sonnet-4-5")
-                expect(getAgentField(cfg, "execute_code", "model")).toBe("anthropic/claude-sonnet-4-5")
-                expect(getAgentField(cfg, "query_git", "model")).toBe("anthropic/claude-haiku-4-5")
+                expect(getAgentField(cfg, "execute-code", "model")).toBe("anthropic/claude-sonnet-4-5")
+                expect(getAgentField(cfg, "query-git", "model")).toBe("anthropic/claude-haiku-4-5")
             } finally {
                 rmSync(worktree, { recursive: true, force: true })
             }

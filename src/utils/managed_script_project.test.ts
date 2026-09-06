@@ -285,7 +285,7 @@ describe("managed script project", () => {
         }
     })
 
-    test("lazily creates and reuses current execute_script session workspace", async () => {
+    test("lazily creates and reuses current execute-script session workspace", async () => {
         const storageRoot = await mkdtemp(join(tmpdir(), "managed-script-fresh-session-"))
         const spawn = mock(async (_command: string, _args: readonly string[], options?: { cwd?: string }) => {
             if (options?.cwd) await writeNpmArtifacts(options.cwd)
@@ -293,7 +293,7 @@ describe("managed script project", () => {
         })
         try {
             const project = createManagedScriptProject({
-                context: { sessionID: "child-session", directory: storageRoot, worktree: storageRoot, agent: "execute_script" },
+                context: { sessionID: "child-session", directory: storageRoot, worktree: storageRoot, agent: "execute-script" },
                 client: { session: { get: async () => ({ data: { title: "Fresh script task" } }) } } as never,
                 fileSystem: createFileSystem(),
                 spawn,
@@ -319,7 +319,7 @@ describe("managed script project", () => {
         }
     })
 
-    test("keeps non-execute_script sessions blocked without creating a workspace", async () => {
+    test("keeps non-execute-script sessions blocked without creating a workspace", async () => {
         const storageRoot = await mkdtemp(join(tmpdir(), "managed-script-foreign-session-"))
         try {
             const result = await createManagedScriptProject({
@@ -336,7 +336,7 @@ describe("managed script project", () => {
         }
     })
 
-    test("removes newly created workspace when execute_script creation fails", async () => {
+    test("removes newly created workspace when execute-script creation fails", async () => {
         const storageRoot = await mkdtemp(join(tmpdir(), "managed-script-create-failure-"))
         const fileSystem = createFileSystem()
         const write = fileSystem.writeFile
@@ -346,7 +346,7 @@ describe("managed script project", () => {
         }
         try {
             const result = await createManagedScriptProject({
-                context: { sessionID: "session-1", directory: storageRoot, worktree: storageRoot, agent: "execute_script" },
+                context: { sessionID: "session-1", directory: storageRoot, worktree: storageRoot, agent: "execute-script" },
                 client: { session: { get: async () => ({ data: { title: "Creation failure" } }) } } as never,
                 fileSystem,
             }).setup()
@@ -359,12 +359,12 @@ describe("managed script project", () => {
         }
     })
 
-    test("rejects blank or invalid execute_script titles before creating a workspace", async () => {
+    test("rejects blank or invalid execute-script titles before creating a workspace", async () => {
         const storageRoot = await mkdtemp(join(tmpdir(), "managed-script-blank-title-"))
         try {
             for (const title of ["   ", "***"]) {
                 const result = await createManagedScriptProject({
-                    context: { sessionID: "session-1", directory: storageRoot, worktree: storageRoot, agent: "execute_script" },
+                    context: { sessionID: "session-1", directory: storageRoot, worktree: storageRoot, agent: "execute-script" },
                     client: { session: { get: async () => ({ data: { title } }) } } as never,
                     fileSystem: createFileSystem(),
                 }).setup()

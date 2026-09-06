@@ -143,7 +143,7 @@ function createInternetValidationFailureResponse(validationDiagnostics: Record<s
 
 export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies, sandboxConfig: SandboxConfig = {}) {
     return tool({
-        description: "Create sandbox environment in current resolved job when you need to test deployments, isolate dependency problem, or run experimental scripts. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before creation. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Always run `autocode_sandbox_create` before tasking `execute_sandbox` agents.",
+        description: "Create sandbox environment in current resolved job when you need to test deployments, isolate dependency problem, or run experimental scripts. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before creation. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Always run `autocode_sandbox_create` before tasking `execute-sandbox` agents.",
         args: {
             sandbox_name: tool.schema.string().describe("Lowercase name inside current resolved job, using letters, numbers, and underscores only. Same names in other jobs are independent."),
             distro: tool.schema.string().optional().describe("Omit `distro` for fast startup using read-only host OS filesystem mounts. Use `alpine` for isolated OS/installation testing and experimentation. Use `debian` when Alpine is incompatible with project dependencies or glibc expectations."),

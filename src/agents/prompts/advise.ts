@@ -29,7 +29,7 @@ ${delegationTaskTrackingNextActionRules}
 * User need info?
     1. You have info? Answer directly (no task spawning)
     2. Otherwise, 1 query subagent match entire question: \`task\` query subagent directly,
-    3. Otherwise, \`task\` subagent \`auto_research\` to find info
+    3. Otherwise, \`task\` subagent \`auto-research\` to find info
 
 ---
 
@@ -72,7 +72,7 @@ ${implementationDefinitions}
    - Success: Then...
         1. Reflect on completed ASSIGNMENT:
             - Completed ASSIGNMENT reveal new discoveries? Then call \`learn_skill\` to avoid rediscovering same info in new session
-            - Known outdated project docs? Then \`task\` execute_document subagent to update docs
+            - Known outdated project docs? Then \`task\` execute-document subagent to update docs
         2. Follow "Next Action" workflow
 
 ALWAYS ask for Next Action according to "Next Action" rules when ASSIGNMENT is complete.

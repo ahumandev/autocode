@@ -26,7 +26,7 @@ describe("buildAgents with external skills", () => {
     test("no external skills → no new permission.skill entries beyond the static rules", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"))
 
-        const executeOsSkill = getSkillObject(agents.execute_os)
+        const executeOsSkill = getSkillObject(agents["execute-os"])
         expect(executeOsSkill).toEqual({
             "*": "deny",
             "angular-new-app": "allow",
@@ -39,25 +39,25 @@ describe("buildAgents with external skills", () => {
         })
     })
 
-    test("bash category → execute_os and execute_script get the rule, other agents do not", () => {
+    test("bash category → execute-os and execute-script get the rule, other agents do not", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "bash", skillName: "my-bash-skill", owner: "o", project: "p" },
         ])
 
-        expect(getSkillRule(agents.execute_os, "my-bash-skill")).toBe("allow")
-        expect(getSkillRule(agents.execute_script, "my-bash-skill")).toBe("allow")
-        expect(getSkillRule(agents.execute_code, "my-bash-skill")).toBeUndefined()
+        expect(getSkillRule(agents["execute-os"], "my-bash-skill")).toBe("allow")
+        expect(getSkillRule(agents["execute-script"], "my-bash-skill")).toBe("allow")
+        expect(getSkillRule(agents["execute-code"], "my-bash-skill")).toBeUndefined()
         expect(getSkillRule(agents.assist, "my-bash-skill")).toBeUndefined()
     })
 
-    test("code category → only execute_code gets the rule", () => {
+    test("code category → only execute-code gets the rule", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "code", skillName: "my-code-skill", owner: "o", project: "p" },
         ])
 
-        expect(getSkillRule(agents.execute_code, "my-code-skill")).toBe("allow")
-        expect(getSkillRule(agents.execute_os, "my-code-skill")).toBeUndefined()
-        expect(getSkillRule(agents.execute_script, "my-code-skill")).toBeUndefined()
+        expect(getSkillRule(agents["execute-code"], "my-code-skill")).toBe("allow")
+        expect(getSkillRule(agents["execute-os"], "my-code-skill")).toBeUndefined()
+        expect(getSkillRule(agents["execute-script"], "my-code-skill")).toBeUndefined()
         expect(getSkillRule(agents.assist, "my-code-skill")).toBeUndefined()
     })
 
@@ -78,14 +78,14 @@ describe("buildAgents with external skills", () => {
         expect(designSkill["my-design-skill"]).toBe("allow")
     })
 
-    test("test category → only auto_test gets the rule", () => {
+    test("test category → only auto-test gets the rule", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "test", skillName: "my-test-skill", owner: "o", project: "p" },
         ])
 
-        expect(getSkillRule(agents.auto_test, "my-test-skill")).toBe("allow")
-        expect(getSkillRule(agents.execute_code, "my-test-skill")).toBeUndefined()
-        expect(getSkillRule(agents.execute_os, "my-test-skill")).toBeUndefined()
+        expect(getSkillRule(agents["auto-test"], "my-test-skill")).toBe("allow")
+        expect(getSkillRule(agents["execute-code"], "my-test-skill")).toBeUndefined()
+        expect(getSkillRule(agents["execute-os"], "my-test-skill")).toBeUndefined()
         expect(getSkillRule(agents.assist, "my-test-skill")).toBeUndefined()
     })
 
@@ -106,17 +106,17 @@ describe("buildAgents with external skills", () => {
         }
     })
 
-    test("static rules are preserved after injection (execute_code keeps 'code*' = allow)", () => {
+    test("static rules are preserved after injection (execute-code keeps 'code*' = allow)", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [
             { category: "code", skillName: "injected-code-skill", owner: "o", project: "p" },
         ])
 
         // The static "code*" wildcard must still be present and set to "allow".
-        expect(getSkillRule(agents.execute_code, "code*")).toBe("allow")
+        expect(getSkillRule(agents["execute-code"], "code*")).toBe("allow")
         // And the freshly-injected rule should also be there.
-        expect(getSkillRule(agents.execute_code, "injected-code-skill")).toBe("allow")
+        expect(getSkillRule(agents["execute-code"], "injected-code-skill")).toBe("allow")
         // Sanity: unrelated static entries on a different agent are untouched
         // (modulo any additions from earlier tests in this file).
-        expect(permissionRule(agents.execute_code?.permission, "edit")).toBe("allow")
+        expect(permissionRule(agents["execute-code"]?.permission, "edit")).toBe("allow")
     })
 })

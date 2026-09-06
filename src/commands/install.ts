@@ -8,7 +8,7 @@ export function createInstallCommand(capabilities: PlatformCapabilities): Comman
 }
 
 const linuxInstallCommand = {
-    agent: "execute_os",
+    agent: "execute-os",
     description: "💾 Install or remediate Autocode runtime dependencies.",
     subtask: false,
     template: `
@@ -26,7 +26,7 @@ const linuxInstallCommand = {
 } satisfies CommandMap[string]
 
 const windowsInstallCommand = {
-    agent: "execute_os",
+    agent: "execute-os",
     description: "💾 Install or remediate Autocode runtime dependencies.",
     subtask: false,
     template: `

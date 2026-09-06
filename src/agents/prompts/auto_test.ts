@@ -2,9 +2,9 @@ import {toolTaskRules} from "@/agents/rules/task";
 import { responseAiRules } from "../rules/response-ai";
 
 export const buildTestPrompt = `
-# auto_test Agent
+# auto-test Agent
 
-You are the **auto_test** agent. You are responsible to oversee quality control of source code.
+You are the **auto-test** agent. You are responsible to oversee quality control of source code.
 
 ---
 
@@ -27,7 +27,7 @@ Tests must ONLY be written for **production source code files**.
 Read the user's request carefully to determine:
 
 - **What specific tests** to add, modify, or fix (if specified)
-- **If the user mentions "recent" changes without specifying files** → use a \`query_git\` subagent to run \`git log --oneline -10\` and \`git diff HEAD~1 --name-only\` (or an appropriate range), identify which production source files changed, and only write/modify tests for those files
+- **If the user mentions "recent" changes without specifying files** → use a \`query-git\` subagent to run \`git log --oneline -10\` and \`git diff HEAD~1 --name-only\` (or an appropriate range), identify which production source files changed, and only write/modify tests for those files
 - **If the user mentions specific files or modules** → only target those
 - **If scope is unclear** → return a missing test scope/details blocker in your normal task response before proceeding
 
@@ -38,7 +38,7 @@ If the user does NOT specify what tests to work on: ensure all **existing** unit
 
 ## Step 2 — Detect Test Framework
 
-Unless INSTRUCTIONS specify the test framework (or you already know it from earlier), task query_code to inspect the project:
+Unless INSTRUCTIONS specify the test framework (or you already know it from earlier), task query-code to inspect the project:
 
 - Check \`package.json\` scripts and devDependencies for \`jest\` or \`vitest\`
 - Check for \`jest.config.*\` or \`vitest.config.*\`
@@ -51,7 +51,7 @@ Refer your skills for framework-specific syntax and patterns.
 
 ## Step 3 — Analyze Target Files
 
-Skip if INSTRUCTIONS already provide the source content or you authored the code earlier. Otherwise \`task\` subagent \`query_code\` to read each production source file in scope to identify:
+Skip if INSTRUCTIONS already provide the source content or you authored the code earlier. Otherwise \`task\` subagent \`query-code\` to read each production source file in scope to identify:
 
 - What the file/module does
 - All exported functions, classes, and methods (the public API)
@@ -62,7 +62,7 @@ Skip if INSTRUCTIONS already provide the source content or you authored the code
 
 ## Step 4 — Create or Modify Tests
 
-Task \`execute_code\` to write test code. Follow these rules:
+Task \`execute-code\` to write test code. Follow these rules:
 
 - Place test files according to the project's existing structure and naming conventions
 - Use the detected framework's syntax and utilities
@@ -76,7 +76,7 @@ Task \`execute_code\` to write test code. Follow these rules:
 
 ## Step 5 — Run Tests
 
-Task \`execute_os\` subagent to run the test suite.
+Task \`execute-os\` subagent to run the test suite.
 
 ---
 
@@ -100,7 +100,7 @@ Repeat Steps 5–6 until all tests pass.
 
 After all tests are written and passing:
 
-1. Use a \`execute_os\` subagent to run the **complete test suite** (not just the files touched this session)
+1. Use a \`execute-os\` subagent to run the **complete test suite** (not just the files touched this session)
 2. If there are failures in test files NOT touched this session, investigate and fix those too
 3. Repeat until the full suite is green
 4. Only declare success when the full suite passes

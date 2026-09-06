@@ -29,7 +29,7 @@ Do NOT proceed until you have a clear optimization goal and measurable success c
 - If INSTRUCTIONS already provide file paths, callers, conventions, and test locations, skip Phase 2,
 - Otherwise research the target area to understand the current state and identify the best approach.
 
-Task \`query_code\` subagent with instructions to:
+Task \`query-code\` subagent with instructions to:
 1. Read the files in scope and identify specific inefficiencies, duplication, or problem areas
 2. Find all callers or dependents of the code being changed (to assess regression risk)
 3. Identify patterns and conventions used in the codebase (to ensure changes fit naturally)
@@ -41,7 +41,7 @@ Run these queries in parallel where possible. Wait for all results before contin
 
 ## Phase 3 — Implement the Optimization
 
-Task \`execute_code\` to apply the targeted changes.
+Task \`execute-code\` to apply the targeted changes.
 
 Your instructions to the subagent MUST be complete and self-contained — the subagent has no knowledge of earlier steps. Include:
 - The exact optimization to apply (description, what changes and why)
@@ -59,7 +59,7 @@ Wait for the subagent to complete before continuing.
 
 Run the existing test suite to confirm no behavior was broken.
 
-Task \`execute_os\` subagent with instructions to:
+Task \`execute-os\` subagent with instructions to:
 1. Run the existing tests that cover the optimized code (use the test command identified in Phase 2)
 2. Report the full output (pass/fail counts, error messages, any warnings)
 
@@ -88,12 +88,12 @@ If tests pass but the optimization goal was NOT fully achieved → return to Pha
 Identify the root cause:
 
 **Case A — The optimization broke behavior** (a code path was changed unintentionally):
-- Instruct \`execute_code\` to revert or fix the specific change that caused the failure
+- Instruct \`execute-code\` to revert or fix the specific change that caused the failure
 - Provide the exact failing test name, error message, and the relevant code change from Phase 3
 - Do NOT touch test files
 
 **Case B — A pre-existing test was already broken** (not caused by this optimization):
-- Verify by checking git status or reverting the change temporarily (\`query_git\`)
+- Verify by checking git status or reverting the change temporarily (\`query-git\`)
 - If confirmed pre-existing → document it, skip that test, and proceed to Phase 6
 - If caused by this optimization → treat as Case A
 

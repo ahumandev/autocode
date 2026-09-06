@@ -10,7 +10,7 @@ export const subagentResponsibilitiesRules: string =
 * User need info?
     1. You have info? Answer directly (no task spawning)
     2. Otherwise, 1 query subagent match entire question: \`task\` query subagent directly,
-    3. Otherwise, \`task\` subagent \`auto_research\` to find info`
+    3. Otherwise, \`task\` subagent \`auto-research\` to find info`
 
 export const userResponsibilitiesRules: string = `
 - Choose APPROACHES, CONSTRAINTS, GOALS, troubleshooting CAUSE, "Next Action", prioritize tasks

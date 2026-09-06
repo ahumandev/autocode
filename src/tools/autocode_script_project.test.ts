@@ -77,7 +77,7 @@ describe("autocode_script_project tool", () => {
     test("omits script_file and forwards only dependencies to setup", async () => {
         const { factory, project } = createFactory(successfulResult())
         const tool = createAutocodeScriptProjectTool(undefined, {}, factory) as unknown as { args: Record<string, unknown>, execute: (args: never, context: ReturnType<typeof createToolContext>) => Promise<string | { output: string }> }
-        const response = parse(await tool.execute({ dependencies: { lodash: "^4.17.0" }, script_file: "/caller/controlled-source.mjs" } as never, createToolContext({ agent: "execute_script" })))
+        const response = parse(await tool.execute({ dependencies: { lodash: "^4.17.0" }, script_file: "/caller/controlled-source.mjs" } as never, createToolContext({ agent: "execute-script" })))
 
         expect(response).toMatchObject({
             ok: true,
@@ -95,7 +95,7 @@ describe("autocode_script_project tool", () => {
         expectPublicPathKeys(response)
         expect(tool.args).not.toHaveProperty("script_file")
         expect(project.setup).toHaveBeenCalledWith({ dependencies: { lodash: "^4.17.0" } })
-        expect(factory).toHaveBeenCalledWith(expect.objectContaining({ context: expect.objectContaining({ agent: "execute_script" }) }))
+        expect(factory).toHaveBeenCalledWith(expect.objectContaining({ context: expect.objectContaining({ agent: "execute-script" }) }))
     })
 
     test("maps core blockers and failures to retry JSON", async () => {

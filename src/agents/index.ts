@@ -80,10 +80,10 @@ const colorReadOnlyWorker = "#00AAAA"
 const colorDocumentWorker = "#AA00AA"
 
 const CATEGORY_AGENTS: Record<SkillCategory, string[]> = {
-    bash: ["execute_os", "execute_script"],
-    code: ["execute_code"],
+    bash: ["execute-os", "execute-script"],
+    code: ["execute-code"],
     design: ["assist", "auto", "design"],
-    test: ["auto_test"],
+    test: ["auto-test"],
 }
 
 function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
@@ -145,7 +145,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill_learn: "allow",
                 task: {
                     "*": "deny",
-                    auto_research: "allow",
+                    "auto-research": "allow",
                     "query*": "allow",
                 },
                 task_resume: "allow",
@@ -188,7 +188,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 task: {
                     "*": "allow",
                     "auto*": "deny",
-                    auto_research: "allow",
+                    "auto-research": "allow",
                     build: "deny",
                     "document*": "deny",
                     plan: "deny",
@@ -220,8 +220,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill_learn: "allow",
                 task: {
                     "*": "deny",
-                    "auto_*": "allow",
-                    "query_*": "allow"
+                    "auto-*": "allow",
+                    "query-*": "allow"
                 },
                 task_resume: "allow",
                 "todo*": "allow",
@@ -257,7 +257,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill_learn: "allow",
                 task: {
                     "*": "deny",
-                    auto_research: "allow",
+                    "auto-research": "allow",
                     "query*": "allow",
                 },
                 task_external: "ask",
@@ -309,9 +309,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
         // Secondary Orchestrators
 
-        assist_browser: {
+        "assist-browser": {
             color: colorWritableInteractiveOrchestrator,
-            description: "task assist_browser with interactive browser automation tasks. It browser than can: access that can fill forms, submit, save, upload, pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so tab and login session are not re-discovered.",
+            description: "task assist-browser with interactive browser automation tasks. It browser than can: access that can fill forms, submit, save, upload, pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so tab and login session are not re-discovered.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -356,13 +356,13 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 },
                 task: {
                     "*": "deny",
-                    execute_code: "allow",
-                    execute_os: "allow",
+                    "execute-code": "allow",
+                    "execute-os": "allow",
                     query_architect: "allow",
-                    query_code: "allow",
-                    query_git: "allow",
-                    query_os: "allow",
-                    query_text: "allow"
+                    "query-code": "allow",
+                    "query-git": "allow",
+                    "query-os": "allow",
+                    "query-text": "allow"
                 },
                 task_resume: "allow",
                 "todowrite": "allow",
@@ -372,9 +372,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        auto_author: {
+        "auto-author": {
             color: colorAutonomousOrchestrator,
-            description: "task auto_author to author or review: articles, docs, excel reports or agentic skills or prompts; NOT for config or source code comments.",
+            description: "task auto-author to author or review: articles, docs, excel reports or agentic skills or prompts; NOT for config or source code comments.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -388,12 +388,12 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 },
                 task: {
                     "*": "deny",
-                    "document_*": "allow",
-                    execute_author: "allow",
-                    execute_document: "allow",
-                    query_text: "allow",
-                    query_web: "allow",
-                    query_youtube: "allow",
+                    "document-*": "allow",
+                    "execute-author": "allow",
+                    "execute-document": "allow",
+                    "query-text": "allow",
+                    "query-web": "allow",
+                    "query-youtube": "allow",
                 },
                 task_resume: "allow",
             },
@@ -402,9 +402,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "smart",
         },
 
-        auto_design: {
+        "auto-design": {
             color: colorAutonomousOrchestrator,
-            description: "task auto_design to redesign failed PROPOSALS when new unresolvable blocking CONSTRAINTS arise. Always try resolve OBSTACLES first with auto_troubleshoot. Only task auto_design as last resort when unresolvable root cause (new CONSTRAINT) is clear.",
+            description: "task auto-design to redesign failed PROPOSALS when new unresolvable blocking CONSTRAINTS arise. Always try resolve OBSTACLES first with auto-troubleshoot. Only task auto-design as last resort when unresolvable root cause (new CONSTRAINT) is clear.",
             hidden: false,
             mode: "subagent",
             permission: {
@@ -424,9 +424,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "smart",
         },
 
-        auto_feature: {
+        "auto-feature": {
             color: colorAutonomousOrchestrator,
-            description: "task auto_feature to create new project features: Implement new API's, classes, components, css styles, packages, scripts, templates, webpages",
+            description: "task auto-feature to create new project features: Implement new API's, classes, components, css styles, packages, scripts, templates, webpages",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -444,13 +444,13 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 },
                 task: {
                     "*": "deny",
-                    auto_test: "allow",
-                    auto_troubleshoot: "allow",
-                    execute_code: "allow",
-                    execute_os: "allow",
-                    query_code: "allow",
-                    query_git: "allow",
-                    query_text: "allow"
+                    "auto-test": "allow",
+                    "auto-troubleshoot": "allow",
+                    "execute-code": "allow",
+                    "execute-os": "allow",
+                    "query-code": "allow",
+                    "query-git": "allow",
+                    "query-text": "allow"
                 },
                 task_resume: "allow",
                 "todo*": "allow",
@@ -460,9 +460,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "smart",
         },
 
-        auto_general: {
+        "auto-general": {
             color: colorAutonomousOrchestrator,
-            description: "Only fallback to auto_general as last resort when no specialized subagent clearly fits task.",
+            description: "Only fallback to auto-general as last resort when no specialized subagent clearly fits task.",
             hidden: true,
             mode: "all",
             permission: {
@@ -490,9 +490,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        auto_refactor: {
+        "auto-refactor": {
             color: colorAutonomousOrchestrator,
-            description: "task auto_refactor to upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability.",
+            description: "task auto-refactor to upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -508,12 +508,12 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 },
                 task: {
                     "*": "deny",
-                    auto_troubleshoot: "allow",
-                    execute_code: "allow",
-                    execute_script: "allow",
-                    execute_os: "allow",
-                    query_code: "allow",
-                    query_git: "allow",
+                    "auto-troubleshoot": "allow",
+                    "execute-code": "allow",
+                    "execute-script": "allow",
+                    "execute-os": "allow",
+                    "query-code": "allow",
+                    "query-git": "allow",
                 },
                 task_resume: "allow",
             },
@@ -522,9 +522,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "smart",
         },
 
-        auto_research: {
+        "auto-research": {
             color: colorAutonomousOrchestrator,
-            description: "task auto_research to answer complex questions like research topics, architectural overview, code flow across multiple files, consolidating data from multiple sources, compare specs with implementation",
+            description: "task auto-research to answer complex questions like research topics, architectural overview, code flow across multiple files, consolidating data from multiple sources, compare specs with implementation",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -551,15 +551,15 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_sandbox_delete: "allow",
                 task: {
                     "*": "deny",
-                    execute_code: "allow",
-                    execute_sandbox: "allow",
-                    execute_script: "allow",
-                    execute_os: "allow",
-                    execute_rest: "allow",
+                    "execute-code": "allow",
+                    "execute-sandbox": "allow",
+                    "execute-script": "allow",
+                    "execute-os": "allow",
+                    "execute-rest": "allow",
                     query_architect: "allow",
-                    query_code: "allow",
-                    query_git: "allow",
-                    query_text: "allow",
+                    "query-code": "allow",
+                    "query-git": "allow",
+                    "query-text": "allow",
                 },
                 task_resume: "allow",
             },
@@ -579,15 +579,15 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_sandbox_delete: "allow",
                 task: {
                     "*": "deny",
-                    execute_code: "allow",
-                    execute_sandbox: "allow",
-                    execute_script: "allow",
-                    execute_os: "allow",
+                    "execute-code": "allow",
+                    "execute-sandbox": "allow",
+                    "execute-script": "allow",
+                    "execute-os": "allow",
                     query_architect: "allow",
-                    query_browser: "allow",
-                    query_code: "allow",
-                    query_git: "allow",
-                    query_text: "allow",
+                    "query-browser": "allow",
+                    "query-code": "allow",
+                    "query-git": "allow",
+                    "query-text": "allow",
                 },
                 task_resume: "allow",
             },
@@ -596,9 +596,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "smart",
         },
 
-        auto_test: {
+        "auto-test": {
             color: colorAutonomousOrchestrator,
-            description: "task auto_test to write, run or fix tests.",
+            description: "task auto-test to write, run or fix tests.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -611,13 +611,13 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 },
                 task: {
                     "*": "deny",
-                    execute_code: "allow",
-                    execute_config: "allow",
-                    execute_script: "allow",
-                    execute_os: "allow",
-                    query_code: "allow",
-                    query_config: "allow",
-                    query_git: "allow",
+                    "execute-code": "allow",
+                    "execute-config": "allow",
+                    "execute-script": "allow",
+                    "execute-os": "allow",
+                    "query-code": "allow",
+                    "query-config": "allow",
+                    "query-git": "allow",
                 },
                 task_resume: "allow",
             },
@@ -626,9 +626,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        auto_troubleshoot: {
+        "auto-troubleshoot": {
             color: colorAutonomousOrchestrator,
-            description: "task auto_troubleshoot to troubleshoot obstacles, bugs and issues.",
+            description: "task auto-troubleshoot to troubleshoot obstacles, bugs and issues.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -645,14 +645,14 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill_learn: "allow",
                 task: {
                     "*": "deny",
-                    execute_code: "allow",
-                    execute_config: "allow",
-                    execute_debug: "allow",
-                    execute_rest: "allow",
-                    execute_sandbox: "allow",
-                    execute_script: "allow",
-                    execute_os: "allow",
-                    execute_ssh: "allow",
+                    "execute-code": "allow",
+                    "execute-config": "allow",
+                    "execute-debug": "allow",
+                    "execute-rest": "allow",
+                    "execute-sandbox": "allow",
+                    "execute-script": "allow",
+                    "execute-os": "allow",
+                    "execute-ssh": "allow",
                     "query*": "allow",
                 },
                 task_resume: "allow",
@@ -665,9 +665,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
         // Document Workers
 
-        document_agents: {
+        "document-agents": {
             color: colorDocumentWorker,
-            description: "task document_agents to convert latest `README.md` to `AGENTS.md`.",
+            description: "task document-agents to convert latest `README.md` to `AGENTS.md`.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -686,9 +686,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        document_conventions: {
+        "document-conventions": {
             color: colorDocumentWorker,
-            description: "task document_agents to document naming conventions and project terminology.",
+            description: "task document-conventions to document naming conventions and project terminology.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -709,9 +709,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        document_code: {
+        "document-code": {
             color: colorDocumentWorker,
-            description: "task document_agents to document technical architecture and design decisions or source code/config locations.",
+            description: "task document-code to document technical architecture and design decisions or source code/config locations.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -732,9 +732,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        document_env: {
+        "document-env": {
             color: colorDocumentWorker,
-            description: "task document_agents to document related project to current project.",
+            description: "task document-env to document related project to current project.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -751,8 +751,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill_learn: "allow",
                 task: {
                     "*": "deny",
-                    query_os: "allow",
-                    query_ssh: "allow"
+                    "query-os": "allow",
+                    "query-ssh": "allow"
                 }
             },
             prompt: documentEnvPrompt,
@@ -760,9 +760,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        document_install: {
+        "document-install": {
             color: colorDocumentWorker,
-            description: "task document_agents to document project installation and usage guide.",
+            description: "task document-install to document project installation and usage guide.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -782,9 +782,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        document_prd: {
+        "document-prd": {
             color: colorDocumentWorker,
-            description: "task document_agents to document product requirements and user roles.",
+            description: "task document-prd to document product requirements and user roles.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -805,9 +805,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        document_ux: {
+        "document-ux": {
             color: colorDocumentWorker,
-            description: "task document_agents to document UX flows, navigation, and styling patterns",
+            description: "task document-ux to document UX flows, navigation, and styling patterns",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -830,9 +830,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
         // Execute workers
 
-        execute_author: {
+        "execute-author": {
             color: colorWritableWorker,
-            description: "task execute_author to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
+            description: "task execute-author to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -847,9 +847,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        execute_code: {
+        "execute-code": {
             color: colorWritableWorker,
-            description: "task execute_code to update the codebase with code, permanent project scripts, config, and templates; NEVER write md files; NEVER run bash/tsc/tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
+            description: "task execute-code to update the codebase with code, permanent project scripts, config, and templates; NEVER write md files; NEVER run bash/tsc/tests/code/scripts; Include pseudocode/algorithms, scope, identifiers, parameters, types, styling, content, error handling, parameter validation details in prompt.",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -879,9 +879,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        execute_config: {
+        "execute-config": {
             color: colorWritableWorker,
-            description: "task execute_config to create or update configs or data files: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; It NEVER edit source code.",
+            description: "task execute-config to create or update configs or data files: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; It NEVER edit source code.",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -892,9 +892,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "operator",
         },
 
-        execute_debug: {
+        "execute-debug": {
             color: colorWritableWorker,
-            description: "task execute_debug to debug code flow leading to symptoms of reproducible bug as evidence of cause; Prompt must include bug symptoms and bug reproduction steps.",
+            description: "task execute-debug to debug code flow leading to symptoms of reproducible bug as evidence of cause; Prompt must include bug symptoms and bug reproduction steps.",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -922,9 +922,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        execute_document: {
+        "execute-document": {
             color: colorDocumentWorker,
-            description: "task execute_document to update `AGENTS.md`, `README.md`, skills, remember architectural/design decisions or specs.",
+            description: "task execute-document to update `AGENTS.md`, `README.md`, skills, remember architectural/design decisions or specs.",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -936,7 +936,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 },
                 task: {
                     "*": "deny",
-                    "document_*": "allow"
+                    "document-*": "allow"
                 },
                 task_resume: "allow"
             },
@@ -945,9 +945,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        execute_excel: {
+        "execute-excel": {
             color: colorWritableWorker,
-            description: "task execute_excel with excel related tasks like workbook manipulations and data validation.",
+            description: "task execute-excel with excel related tasks like workbook manipulations and data validation.",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -956,8 +956,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 read: "allow",
                 task: {
                     "*": "deny",
-                    query_excel: "allow",
-                    query_text: "allow"
+                    "query-excel": "allow",
+                    "query-text": "allow"
                 },
                 task_resume: "allow",
                 "todo*": "allow",
@@ -967,9 +967,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "operator",
         },
 
-        execute_opencode: {
+        "execute-opencode": {
             color: colorWritableWorker,
-            description: "task execute_opencode to create or update OpenCode agent, command, skill and AGENTS.md files only.",
+            description: "task execute-opencode to create or update OpenCode agent, command, skill and AGENTS.md files only.",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -990,9 +990,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "operator",
         },
 
-        execute_os: {
+        "execute-os": {
             color: colorWritableWorker,
-            description: "task execute_os to copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests. NOT for source code editing!",
+            description: "task execute-os to copy/move/delete/permission files, start/stop apps/services, run scripts/commands/tests. NOT for source code editing!",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -1024,9 +1024,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        execute_rest: {
+        "execute-rest": {
             color: colorReadOnlyWorker,
-            description: "task execute_rest to make REST/API requests on HTTP/HTTPS endpoints. Useful to reproduce API-related issues.",
+            description: "task execute-rest to make REST/API requests on HTTP/HTTPS endpoints. Useful to reproduce API-related issues.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1048,9 +1048,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "operator",
         },
 
-        execute_sandbox: {
+        "execute-sandbox": {
             color: colorWritableWorker,
-            description: "task execute_sandbox to execute CLI commands in sandbox environment; First create sandbox with `autocode_sandbox_create`, then you run multiple `execute_sandbox` tasks but you MUST include same `sandbox_name` in every `task` prompt",
+            description: "task execute-sandbox to execute CLI commands in sandbox environment; First create sandbox with `autocode_sandbox_create`, then you run multiple `execute-sandbox` tasks but you MUST include same `sandbox_name` in every `task` prompt",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -1079,9 +1079,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "operator",
         },
 
-        execute_script: {
+        "execute-script": {
             color: colorWritableWorker,
-            description: "task execute_script to execute repetitive actions, data/document/media conversions, generate/render content, or control external apps via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
+            description: "task execute-script to execute repetitive actions, data/document/media conversions, generate/render content, or control external apps via *temporary* scripts like 'for each X file in Y do Z' or 'convert all A files to B' or 'generate X with Z' or 'use app A's output to invoke app B'; NOT for *permanent* project scripts",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -1109,9 +1109,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "balanced",
         },
 
-        execute_ssh: {
+        "execute-ssh": {
             color: colorWritableWorker,
-            description: "task execute_ssh to access remote SSH/SFTP servers to execute remote commands or search/read/write remote files.",
+            description: "task execute-ssh to access remote SSH/SFTP servers to execute remote commands or search/read/write remote files.",
             mode: "subagent",
             permission: {
                 "*": "deny",
@@ -1134,9 +1134,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
         // Query workers
 
-        query_autocode: {
+        "query-autocode": {
             color: colorReadOnlyWorker,
-            description: "task query_autocode for OpenCode or AutoCode documentation or configuration related queries or advise.",
+            description: "task query-autocode for OpenCode or AutoCode documentation or configuration related queries or advise.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1158,9 +1158,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "fast",
         },
 
-        query_browser: {
+        "query-browser": {
             color: colorReadOnlyWorker,
-            description: "task query_browser to inspect or investigate UI of YOUR RUNNING APPLICATION in real browser (first start app before tasking query_browser) or to pair with user (you drive, user manual login and solve captchas) to access restricted online sources. Ask query_browser to debug, find DOM elements, summarize console logs, analyze network requests, interact with UI elements, monitor performance, test frontend functionality like human. NOT for internet searches.",
+            description: "task query-browser to inspect or investigate UI of YOUR RUNNING APPLICATION in real browser (first start app before tasking query-browser) or to pair with user (you drive, user manual login and solve captchas) to access restricted online sources. Ask query-browser to debug, find DOM elements, summarize console logs, analyze network requests, interact with UI elements, monitor performance, test frontend functionality like human. NOT for internet searches.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1175,9 +1175,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "fast",
         },
 
-        query_code: {
+        "query-code": {
             color: colorReadOnlyWorker,
-            description: "task query_code to find, summarize, understand: source code, scripts or codebase; NEVER query md, template, styling, config, data files; NEVER to return full file content",
+            description: "task query-code to find, summarize, understand: source code, scripts or codebase; NEVER query md, template, styling, config, data files; NEVER to return full file content",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1197,9 +1197,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "context",
         },
 
-        query_config: {
+        "query-config": {
             color: colorReadOnlyWorker,
-            description: "task query_config to read config or data file values or outlines: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; No other file types supported.",
+            description: "task query-config to read config or data file values or outlines: Support only .conf, .ini, .properties, .json, .jsonc, yaml, yml; No other file types supported.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1211,9 +1211,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "fast",
         },
 
-        query_db: {
+        "query-db": {
             color: colorReadOnlyWorker,
-            description: "task query_db to inspect environment-configured databases in read-only mode using Autocode DB tools",
+            description: "task query-db to inspect environment-configured databases in read-only mode using Autocode DB tools",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1227,9 +1227,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "context",
         },
 
-        query_excel: {
+        "query-excel": {
             color: colorReadOnlyWorker,
-            description: "task query_excel to read excel files.",
+            description: "task query-excel to read excel files.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1244,9 +1244,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "context",
         },
 
-        query_git: {
+        "query-git": {
             color: colorReadOnlyWorker,
-            description: "task query_git to inspect Git repos (status, diff, log, show), recent project file changes, file history.",
+            description: "task query-git to inspect Git repos (status, diff, log, show), recent project file changes, file history.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1265,9 +1265,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "fast",
         },
 
-        query_os: {
+        "query-os": {
             color: colorReadOnlyWorker,
-            description: "task query_os to find OS provided info like: local host hardware, software, system, network, service, process, versions, help-command info, status.",
+            description: "task query-os to find OS provided info like: local host hardware, software, system, network, service, process, versions, help-command info, status.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1294,9 +1294,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "fast",
         },
 
-        query_skills: {
+        "query-skills": {
             color: colorReadOnlyWorker,
-            description: "task query_skills to ask questions about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
+            description: "task query-skills to ask questions about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1316,9 +1316,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "fast",
         },
 
-        query_ssh: {
+        "query-ssh": {
             color: colorReadOnlyWorker,
-            description: "task query_ssh to find on remote SSH/SFTP servers: files, configuration, process status, etc.",
+            description: "task query-ssh to find on remote SSH/SFTP servers: files, configuration, process status, etc.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1343,9 +1343,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "fast",
         },
 
-        query_text: {
+        "query-text": {
             color: colorReadOnlyWorker,
-            description: "task query_text to answer questions (presence?, contains?, outline?, fallacies?, debatable claims?, arguments?) or to evaluate/criticize textual content: md content, md front-matter, articles/document sections, styling, templates, assets, resources; NEVER to return full file content.",
+            description: "task query-text to answer questions (presence?, contains?, outline?, fallacies?, debatable claims?, arguments?) or to evaluate/criticize textual content: md content, md front-matter, articles/document sections, styling, templates, assets, resources; NEVER to return full file content.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1363,9 +1363,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "context",
         },
 
-        query_web: {
+        "query-web": {
             color: colorReadOnlyWorker,
-            description: "task query_web to search and read public ONLINE web sources: documentation, articles, forums, GitHub, news, framework API/SDKs, public repo examples; Allow ONLY 1 query per subagent session.",
+            description: "task query-web to search and read public ONLINE web sources: documentation, articles, forums, GitHub, news, framework API/SDKs, public repo examples; Allow ONLY 1 query per subagent session.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1380,9 +1380,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "context",
         },
 
-        query_youtube: {
+        "query-youtube": {
             color: colorReadOnlyWorker,
-            description: "task query_youtube to transcribe YouTube videos.",
+            description: "task query-youtube to transcribe YouTube videos.",
             hidden: true,
             mode: "subagent",
             permission: {
@@ -1512,7 +1512,7 @@ export function applySandboxPlatformPolicy(agents: AgentMap, options: SandboxPla
     if (isSandboxPlatformSupported(normalizeSandboxPlatformPolicyOptions(options))) return agents
 
     return Object.fromEntries(Object.entries(agents).map(([agentName, agent]) => {
-        const agentWithDisable = agentName === "execute_sandbox" ? { ...agent, disable: true } : agent
+        const agentWithDisable = agentName === "execute-sandbox" ? { ...agent, disable: true } : agent
         if (!agentWithDisable.permission) {
             return [agentName, agentWithDisable]
         }
@@ -1534,7 +1534,7 @@ export function applyWindowsSandboxPolicy(agents: AgentMap, capabilities: Platfo
     if (!capabilities.isWindows) return agents
 
     return Object.fromEntries(Object.entries(agents)
-        .filter(([agentName]) => agentName !== "execute_sandbox")
+        .filter(([agentName]) => agentName !== "execute-sandbox")
         .map(([agentName, agent]) => [agentName, removeWindowsSandboxReferences(agent)]))
 }
 

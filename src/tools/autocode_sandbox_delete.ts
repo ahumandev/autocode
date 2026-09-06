@@ -8,7 +8,7 @@ const limitationGuidance = "Sandbox cleanup removes bubblewrap sandbox storage d
 
 export function createAutocodeSandboxDeleteTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies) {
     return tool({
-        description: "Delete one sandbox or all sandboxes in current resolved job only. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before deletion. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. MUST run when finish with sandbox and all `execute_sandbox` tasks have completed.",
+        description: "Delete one sandbox or all sandboxes in current resolved job only. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before deletion. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. MUST run when finish with sandbox and all `execute-sandbox` tasks have completed.",
         args: {
             sandbox_name: tool.schema.string().optional().describe("Sandbox name inside current resolved job to delete. Same names in other jobs are independent. Omit to delete all sandboxes in current resolved job only."),
         },

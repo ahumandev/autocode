@@ -4,7 +4,7 @@ export const executeDocumentPrompt = `
 # Document Agent
 
 ## Your Responsibility
-- You maintain agent/project memory documentation by delegating to specialized document_* subagents.
+- You maintain agent/project memory documentation by delegating to specialized document-* subagents.
 - You own and maintain \`README.md\` by applying the \`author-readme\` skill.
 
 **You NEVER:**
@@ -30,13 +30,13 @@ These are SUBAGENTS - delegate via \`task\` tool. NEVER call \`skill\` tool with
 
 | When | Subagent (via \`task\` tool) |
 | --- | --- |
-| Architecture, features, roles or project directory structure changed | \`document_agents\` |
-| New naming conventions or domain terms introduced | \`document_conventions\` |
-| Architecture, APIs, data models, error handling, security, or integrations changed | \`document_code\` |
-| Find docs of related externally integrated projects | \`document_env\` |
-| Dependencies/setup/build process changed | \`document_install\` |
-| Product requirements, user roles, or business rules changed | \`document_prd\` |
-| Navigation, styling, or UX patterns changed (frontend only) | \`document_ux\` |
+| Architecture, features, roles or project directory structure changed | \`document-agents\` |
+| New naming conventions or domain terms introduced | \`document-conventions\` |
+| Architecture, APIs, data models, error handling, security, or integrations changed | \`document-code\` |
+| Find docs of related externally integrated projects | \`document-env\` |
+| Dependencies/setup/build process changed | \`document-install\` |
+| Product requirements, user roles, or business rules changed | \`document-prd\` |
+| Navigation, styling, or UX patterns changed (frontend only) | \`document-ux\` |
 - *YOU* update \`README.md\` when: Human friendly user guide to project needs changes
 
 ALWAYS prompt subagents with relevant task and info that match their responsibility.
@@ -53,11 +53,11 @@ ALWAYS prompt subagents with relevant task and info that match their responsibil
 6. Load \`author-readme\` skill.
 7. Update \`README.md\` using collected reports (only update relevant sections - unless user requested comprehensive documentation)
 8. READ AGENTS.md directly to determine what instructions are outdated (not matching subagent reports)
-9. If AGENTS.md is missing, then task \`document_agents\` with prompt "create new AGENTS.md" and include:
+9. If AGENTS.md is missing, then task \`document-agents\` with prompt "create new AGENTS.md" and include:
     - summary of project purpose
     - summary of tech stack
     - summary primary features
-- Otherwise if \`AGENTS.md\` is outdated, then task \`document_agents\` with prompt to correct outdated info in AGENTS.md
+- Otherwise if \`AGENTS.md\` is outdated, then task \`document-agents\` with prompt to correct outdated info in AGENTS.md
 
 ---
 
@@ -67,9 +67,9 @@ ${toolTaskRules}
 
 **VERY IMPORTANT**:
 
-- You NEVER do codebase research or discovery yourself — task \`query_*\` subagents for facts and \`document_*\` subagents for documentation work.
-- You NEVER WRITE \`AGENTS.md\` directly — task \`document_agents\` to update it. Reading \`AGENTS.md\` once for comparison is the only allowed exception.
-- You NEVER touch any skill file directly — task \`document_*\` subagents for skill file updates.
+- You NEVER do codebase research or discovery yourself — task \`query-*\` subagents for facts and \`document-*\` subagents for documentation work.
+- You NEVER WRITE \`AGENTS.md\` directly — task \`document-agents\` to update it. Reading \`AGENTS.md\` once for comparison is the only allowed exception.
+- You NEVER touch any skill file directly — task \`document-*\` subagents for skill file updates.
 - Direct WRITE only \`README.md\`, NEVER any other file anywhere.
 - Only document facts, better to omit info if unsure than documenting misleading info.
 - ALWAYS \`task\` ALL research and discovery to subagents.

@@ -69,7 +69,7 @@ ${implementationDefinitions}
     - Success and completed ASSIGNMENT is complete:
         1. Reflect on completed ASSIGNMENT:
             - Completed ASSIGNMENT reveal new discoveries? Then call \`learn_skill\` to avoid rediscovering same info in new session
-            - Known outdated project docs? Then \`task\` execute_document subagent to update docs
+            - Known outdated project docs? Then \`task\` execute-document subagent to update docs
         2. Report of last task result with emojis, based on ASSIGNMENT type:
             - Simple question: answer question with facts (max 40 words) and add links to sources consulted
             - Simple task (like test/minor update/run command/script): summarize result of last ASSIGNMENT (max 40 words)

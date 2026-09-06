@@ -8,6 +8,7 @@ import { jobAutoCommandTemplate } from "./job-auto"
 import { learnCommand } from "./learn"
 import { newSessionTemplate } from "./new-session"
 import { testsCommandTemplate } from "./tests"
+import { buildAgents } from "../agents"
 import { createPlatformCapabilities } from "../utils/platform"
 
 const commands = createCommands(createPlatformCapabilities("linux"))
@@ -73,7 +74,7 @@ describe("commands", () => {
 
     test("keeps standard command registrations stable", () => {
         expect(commands.explain).toMatchObject({
-            agent: "query_code",
+            agent: "query-code",
             subtask: false,
             template: explainCommandTemplate,
         })
@@ -105,16 +106,45 @@ describe("commands", () => {
         })
         expect(commands["new-fix"]).toMatchObject({
             subtask: false,
-            template: newSessionTemplate("auto_troubleshoot", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Continue with 'Workflow Loop'."),
+            template: newSessionTemplate("auto-troubleshoot", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Continue with 'Workflow Loop'."),
         })
         expect(commands.tests).toMatchObject({
-            agent: "auto_test",
+            agent: "auto-test",
             subtask: false,
             template: testsCommandTemplate,
         })
 
         for (const commandName of ["context", "explain", "tests"] as const) {
             expect(commands[commandName]?.description).not.toBe("")
+        }
+    })
+
+    test("every explicit command target resolves in the current agent registry", () => {
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], { balanced: {}, smart: {}, spy: {} })
+        const targets = Object.entries(commands)
+            .flatMap(([commandName, command]) => "agent" in command && typeof command.agent === "string" ? [[commandName, command.agent] as const] : [])
+
+        expect(targets).toHaveLength(16)
+        expect(Object.fromEntries(targets)).toEqual({
+            "job-auto": "design",
+            "job-assist": "design",
+            "job-concepts": "design",
+            "job-design": "design",
+            "autocode-install": "execute-os",
+            author: "execute-author",
+            docs: "execute-document",
+            "docs-conventions": "document-conventions",
+            "docs-code": "document-code",
+            "docs-env": "document-env",
+            "docs-prd": "document-prd",
+            "docs-ux": "document-ux",
+            explain: "query-code",
+            "git-conflict": "assist_git_conflict",
+            init: "execute-document",
+            tests: "auto-test",
+        })
+        for (const [commandName, agentId] of targets) {
+            expect(agents[agentId], `${commandName} targets registered agent ${agentId}`).toBeDefined()
         }
     })
 
@@ -130,27 +160,27 @@ describe("commands", () => {
 
     test("keeps renamed docs command objects stable", () => {
         expect(commands.docs).toMatchObject({
-            agent: "execute_document",
+            agent: "execute-document",
             subtask: false,
             template: docsCommandTemplate,
         })
         expect(commands["docs-conventions"]).toMatchObject({
-            agent: "document_conventions",
+            agent: "document-conventions",
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
         expect(commands["docs-code"]).toMatchObject({
-            agent: "document_code",
+            agent: "document-code",
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
         expect(commands["docs-prd"]).toMatchObject({
-            agent: "document_prd",
+            agent: "document-prd",
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
         expect(commands["docs-ux"]).toMatchObject({
-            agent: "document_ux",
+            agent: "document-ux",
             subtask: false,
             template: docsSubagentCommandTemplate,
         })
@@ -184,8 +214,8 @@ describe("commands", () => {
     test("keeps init documentation-only", () => {
         const template = commands.init?.template ?? ""
 
-        expect(commands.init?.agent).toBe("execute_document")
-        expect(template).toContain("Only task `document_agents` *AFTER*")
+        expect(commands.init?.agent).toBe("execute-document")
+        expect(template).toContain("Only task `document-agents` *AFTER*")
         expect(template).not.toContain("autocode_dependencies")
         expect(template).not.toContain("preflight")
         expect(template).not.toContain("bwrap")
@@ -225,11 +255,11 @@ describe("commands", () => {
         expect(template).toContain("dangerous-operation/manual confirmation rules")
         expect(template).toContain("rerun `autocode_dependencies` and report remaining issues")
         expect(template).toContain("After summary report, perform no next action, just stop.")
-        expect(template).not.toContain("document_conventions")
-        expect(template).not.toContain("document_code")
-        expect(template).not.toContain("document_install")
-        expect(template).not.toContain("document_prd")
-        expect(template).not.toContain("document_ux")
+        expect(template).not.toContain("document-conventions")
+        expect(template).not.toContain("document-code")
+        expect(template).not.toContain("document-install")
+        expect(template).not.toContain("document-prd")
+        expect(template).not.toContain("document-ux")
         expect(template).not.toContain("README")
     })
 

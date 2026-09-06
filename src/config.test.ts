@@ -449,7 +449,7 @@ describe("external directory config", () => {
             "/review/*": "ask",
             "/blocked/*": "deny",
         })
-        expect(getPermissionRule(agents.execute_os?.permission, "external_directory")).toEqual({
+        expect(getPermissionRule(agents["execute-os"]?.permission, "external_directory")).toEqual({
             "*": "allow",
             "/allowed/*": "allow",
             "/review/*": "deny",
@@ -461,7 +461,7 @@ describe("external directory config", () => {
             "/review/*": "ask",
             "/blocked/*": "deny",
         })
-        expect(getPermissionRule(agents.query_code?.permission, "external_directory")).toEqual({
+        expect(getPermissionRule(agents["query-code"]?.permission, "external_directory")).toEqual({
             "*": "deny",
             "/allowed/*": "allow",
             "/review/*": "deny",
@@ -638,19 +638,26 @@ describe("sandbox config", () => {
 })
 
 describe("agent workflow wiring", () => {
+    const legacyAgentIds = [
+        "assist_browser", "auto_author", "auto_design", "auto_feature", "auto_general", "auto_refactor", "auto_research", "auto_test", "auto_troubleshoot",
+        "document_agents", "document_conventions", "document_code", "document_env", "document_install", "document_prd", "document_ux",
+        "execute_author", "execute_code", "execute_config", "execute_debug", "execute_document", "execute_excel", "execute_opencode", "execute_os", "execute_rest", "execute_sandbox", "execute_script", "execute_ssh",
+        "query_autocode", "query_browser", "query_code", "query_config", "query_db", "query_excel", "query_git", "query_os", "query_skills", "query_ssh", "query_text", "query_web", "query_youtube",
+    ] as const
+
     test("keeps canonical auto and assist agents without removed workflow variants", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [], { balanced: {}, smart: {} })
 
         expect(agents.auto).toBeDefined()
         expect(agents.assist).toBeDefined()
-        expect(Object.keys(agents).filter((name) => name.startsWith("auto-") || name.startsWith("assist-"))).toEqual([])
+        for (const agentId of legacyAgentIds) expect(agents[agentId]).toBeUndefined()
     })
 
     test("keeps current canonical permissions on primary workflow agents", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [], { balanced: {}, smart: {} })
 
         expect(getTaskPermissionRule(agents.assist?.permission, "auto*")).toBe("deny")
-        expect(getTaskPermissionRule(agents.auto?.permission, "auto_*")).toBe("allow")
+        expect(getTaskPermissionRule(agents.auto?.permission, "auto-*")).toBe("allow")
         expect(getPermissionRule(agents.assist?.permission, "question")).toBe("allow")
         expect(getPermissionRule(agents.auto?.permission, "question")).toBeUndefined()
     })

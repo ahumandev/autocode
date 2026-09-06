@@ -206,7 +206,7 @@ export async function resolveManagedScriptProjectOwner(dependencies: Pick<Manage
         if (identity.resolution === "found" && identity.workspace && identity.job_name) {
             return { ok: true, owner: { jobName: identity.job_name, workspacePath: identity.workspace.absolute_path } }
         }
-        if (dependencies.context.agent !== "execute_script") {
+        if (dependencies.context.agent !== "execute-script") {
             return { ok: false, reason: "No timestamped job workspace was found for the current session.", jobName: identity.job_name }
         }
         const workspace = await createSessionJobWorkspace(fileSystem, dependencies.client, dependencies.context)

@@ -266,7 +266,7 @@ describe("skill tool", () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
             writeLearnedSkill(worktree, "learned-corrections", "os", "Learned os correction guidance.")
 
-            const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-os" }, "execute_os")
+            const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-os" }, "execute-os")
 
             expectLoadedResultShape(result, "learned-corrections-os")
             expect(result.output).toContain("Learned os correction guidance.")

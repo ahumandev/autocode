@@ -205,24 +205,24 @@ describe("skill_edit", () => {
         // Lock the expected agent -> skill mapping. Updating this map without
         // updating these assertions should fail the regression suite.
         const expectedMappings: Record<string, string> = {
-            "document_conventions": "design-conventions",
-            "document_code": "execute-code",
-            "document_install": "execute-install",
-            "document_prd": "design-prd",
-            "document_ux": "execute-ux",
+            "document-conventions": "design-conventions",
+            "document-code": "execute-code",
+            "document-install": "execute-install",
+            "document-prd": "design-prd",
+            "document-ux": "execute-ux",
         }
 
         test("AGENT_SKILL_MAP exports the expected agent -> skill mapping", () => {
             expect(AGENT_SKILL_MAP).toEqual(expectedMappings)
         })
 
-        test("document_code overrides any args.name to execute-code", async () => {
+        test("document-code overrides any args.name to execute-code", async () => {
             const fs = createFakeFileSystem()
             const skillTool = createAutocodeSkillEditTool(fs)
 
             const result = await skillTool.execute(
                 { name: "anything", description: "trigger", content: "body" } as never,
-                createToolContext({ agent: "document_code", directory: "/workspace", worktree: "/workspace" }),
+                createToolContext({ agent: "document-code", directory: "/workspace", worktree: "/workspace" }),
             )
 
             expect(result).toBe(".agents/skills/execute-code/SKILL.md")

@@ -12,7 +12,7 @@ Document related project to current project.
 1. **Analyze** codebase to find integrations to external projects
 2. **Compare** \`skill\` named \`learned-env\` to compare new findings with documented
 3. **List** unknown externally integrated projects
-4. **Task** subagent \`query_os\` with prompt to ONLY scan unknown externally integrated projects as follows:
+4. **Task** subagent \`query-os\` with prompt to ONLY scan unknown externally integrated projects as follows:
     * Typically external project dir are:
         - ../{sibling project}/
         - ./{git submodule}/

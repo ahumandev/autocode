@@ -221,7 +221,7 @@ describe("agent swap utilities", () => {
     })
 
     test("keeps query agents classified in the context tier", () => {
-        for (const agent of ["query_code", "query_db", "query_excel", "query_text", "query_web"]) {
+        for (const agent of ["query-code", "query-db", "query-excel", "query-text", "query-web"]) {
             expect(getAgentTier(agent)).toBe("context")
         }
     })
@@ -242,7 +242,7 @@ describe("agent swap utilities", () => {
                 },
             }))
 
-            expect(await resolveAutocodeAgentSessionSettings("query_code", worktree, worktree)).toEqual({
+            expect(await resolveAutocodeAgentSessionSettings("query-code", worktree, worktree)).toEqual({
                 resolvedModel: {
                     model: { providerID: "anthropic", modelID: "claude-opus-4-5" },
                     variant: "thinking",
@@ -269,7 +269,7 @@ describe("agent swap utilities", () => {
                 },
             }))
 
-            expect(await resolveAutocodeAgentSessionSettings("query_code", worktree, worktree)).toEqual({
+            expect(await resolveAutocodeAgentSessionSettings("query-code", worktree, worktree)).toEqual({
                 resolvedModel: {
                     model: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
                     variant: "thinking",
@@ -296,15 +296,15 @@ describe("agent swap utilities", () => {
             }))
             const cfg: PluginConfig = {
                 agent: {
-                    query_code: { model: "openai/gpt-5.5", variant: "high" },
+                    "query-code": { model: "openai/gpt-5.5", variant: "high" },
                 },
             }
             const hooks = await autocode({ worktree, directory: worktree, client: {} } as Parameters<typeof autocode>[0]) as unknown as PluginConfigHook
 
             await hooks.config?.(cfg)
 
-            expect(cfg.agent?.query_code?.model).toBe("openai/gpt-5.5")
-            expect(cfg.agent?.query_code?.variant).toBe("high")
+            expect(cfg.agent?.["query-code"]?.model).toBe("openai/gpt-5.5")
+            expect(cfg.agent?.["query-code"]?.variant).toBe("high")
         } finally {
             rmSync(worktree, { recursive: true, force: true })
         }

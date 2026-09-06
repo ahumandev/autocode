@@ -38,50 +38,60 @@ const managedAgentTiers = {
     spy: "spy",
     auto: "smart",
     design: "balanced",
-    assist_browser: "operator",
+    "assist-browser": "operator",
     assist_git_conflict: "balanced",
-    auto_design: "smart",
-    auto_feature: "smart",
-    auto_general: "balanced",
-    auto_refactor: "smart",
-    auto_research: "smart",
+    "auto-author": "smart",
+    "auto-design": "smart",
+    "auto-feature": "smart",
+    "auto-general": "balanced",
+    "auto-refactor": "smart",
+    "auto-research": "smart",
     auto_review_api: "smart",
     auto_review_ui: "smart",
-    auto_test: "balanced",
-    auto_troubleshoot: "smart",
-    document_agents: "balanced",
-    document_conventions: "balanced",
-    document_code: "balanced",
-    document_env: "balanced",
-    document_install: "balanced",
-    document_prd: "balanced",
-    document_ux: "balanced",
-    execute_author: "balanced",
-    execute_code: "balanced",
-    execute_debug: "balanced",
-    execute_document: "balanced",
-    execute_os: "balanced",
-    execute_script: "balanced",
-    execute_ssh: "balanced",
-    execute_config: "operator",
-    execute_excel: "operator",
-    execute_opencode: "operator",
-    execute_rest: "operator",
-    execute_sandbox: "operator",
-    query_autocode: "fast",
-    query_browser: "fast",
-    query_config: "fast",
-    query_git: "fast",
-    query_os: "fast",
-    query_skills: "fast",
-    query_ssh: "fast",
-    query_code: "context",
-    query_db: "context",
-    query_excel: "context",
-    query_text: "context",
-    query_web: "context",
-    query_youtube: "context",
+    "auto-test": "balanced",
+    "auto-troubleshoot": "smart",
+    "document-agents": "balanced",
+    "document-conventions": "balanced",
+    "document-code": "balanced",
+    "document-env": "balanced",
+    "document-install": "balanced",
+    "document-prd": "balanced",
+    "document-ux": "balanced",
+    "execute-author": "balanced",
+    "execute-code": "balanced",
+    "execute-debug": "balanced",
+    "execute-document": "balanced",
+    "execute-os": "balanced",
+    "execute-script": "balanced",
+    "execute-ssh": "balanced",
+    "execute-config": "operator",
+    "execute-excel": "operator",
+    "execute-opencode": "operator",
+    "execute-rest": "operator",
+    "execute-sandbox": "operator",
+    "query-autocode": "fast",
+    "query-browser": "fast",
+    "query-config": "fast",
+    "query-git": "fast",
+    "query-os": "fast",
+    "query-skills": "fast",
+    "query-ssh": "fast",
+    "query-code": "context",
+    "query-db": "context",
+    "query-excel": "context",
+    "query-text": "context",
+    "query-web": "context",
+    "query-youtube": "context",
 } as const
+
+const legacyAgentIds = [
+    "assist_browser", "auto_author", "auto_design", "auto_feature", "auto_general", "auto_refactor", "auto_research", "auto_test", "auto_troubleshoot",
+    "document_agents", "document_conventions", "document_code", "document_env", "document_install", "document_prd", "document_ux",
+    "execute_author", "execute_code", "execute_config", "execute_debug", "execute_document", "execute_excel", "execute_opencode", "execute_os", "execute_rest", "execute_sandbox", "execute_script", "execute_ssh",
+    "query_autocode", "query_browser", "query_code", "query_config", "query_db", "query_excel", "query_git", "query_os", "query_skills", "query_ssh", "query_text", "query_web", "query_youtube",
+] as const
+
+const unaffectedAgentIds = ["build", "compaction", "explore", "general", "plan", "title", "advise", "assist", "auto", "design", "spy", "assist_git_conflict", "auto_review_api", "auto_review_ui"] as const
 
 const configuredManagedAgentTiers = { balanced: {}, smart: {}, spy: {} }
 
@@ -129,7 +139,7 @@ describe("agent policies", () => {
 
     test("denies sandbox tools on unsupported sandbox platforms", () => {
         const agents = applySandboxPlatformPolicy({
-            execute_sandbox: {
+            "execute-sandbox": {
                 permission: {
                     autocode_sandbox_cli: "allow",
                 },
@@ -149,9 +159,9 @@ describe("agent policies", () => {
             },
         }, "darwin")
 
-        expect(agents.execute_sandbox?.disable).toBe(true)
+        expect(agents["execute-sandbox"]?.disable).toBe(true)
         for (const toolName of sandboxToolNames) {
-            expect(permissionRule(agents.execute_sandbox?.permission, toolName)).toBe("deny")
+            expect(permissionRule(agents["execute-sandbox"]?.permission, toolName)).toBe("deny")
         }
         expect(permissionRule(agents.wildcard_sandbox?.permission, "autocode_sandbox_cli")).toBe("deny")
         expect(permissionRule(agents.string_permission?.permission, "autocode_sandbox_create")).toBe("deny")
@@ -160,7 +170,7 @@ describe("agent policies", () => {
 
     test("keeps sandbox permissions unchanged on supported sandbox platforms", () => {
         const agents = applySandboxPlatformPolicy({
-            execute_sandbox: {
+            "execute-sandbox": {
                 permission: {
                     autocode_sandbox_cli: "allow",
                 },
@@ -172,18 +182,18 @@ describe("agent policies", () => {
             },
         }, { platform: "linux", env: {}, bwrapUsable: true })
 
-        expect(agents.execute_sandbox?.disable).toBeUndefined()
-        expect(permissionRule(agents.execute_sandbox?.permission, "autocode_sandbox_cli")).toBe("allow")
+        expect(agents["execute-sandbox"]?.disable).toBeUndefined()
+        expect(permissionRule(agents["execute-sandbox"]?.permission, "autocode_sandbox_cli")).toBe("allow")
         expect(permissionRule(agents.wildcard_sandbox?.permission, "autocode_sandbox_*")).toBe("allow")
     })
 
-    test("execute_sandbox allows native sandbox file tools", () => {
+    test("execute-sandbox allows native sandbox file tools", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
         for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
-            expect(permissionRule(agents.execute_sandbox?.permission, toolName)).toBe("allow")
+            expect(permissionRule(agents["execute-sandbox"]?.permission, toolName)).toBe("allow")
         }
-        expect(permissionRule(agents.execute_sandbox?.permission, "autocode_sandbox_copy")).toEqual({ sandbox_target: "allow", local_target: "allow" })
+        expect(permissionRule(agents["execute-sandbox"]?.permission, "autocode_sandbox_copy")).toEqual({ sandbox_target: "allow", local_target: "allow" })
     })
 
     test("buildAgents returns policy-applied definitions with current internal tier metadata", () => {
@@ -193,7 +203,7 @@ describe("agent policies", () => {
 
         expect(agents.assist?.mode).toBe("primary")
         expect(agents.auto?.mode).toBe("primary")
-        expect(agents.execute_sandbox?.mode).toBe("subagent")
+        expect(agents["execute-sandbox"]?.mode).toBe("subagent")
         expect(permissionRule(agents.design?.permission, "external_directory")).toEqual(expect.objectContaining({
             "*": "ask",
             "/configured/*": "allow",
@@ -204,12 +214,27 @@ describe("agent policies", () => {
         }))
         expect(agents.auto?.tier).toBe("smart")
         expect(agents.assist?.tier).toBe("balanced")
-        expect(permissionRule(agents.execute_document?.permission, "autocode_dependencies")).toBeUndefined()
+        expect(permissionRule(agents["execute-document"]?.permission, "autocode_dependencies")).toBeUndefined()
     })
 
-    test("document_env allows skill_edit without broader permission grants", () => {
+    test("buildAgents registers the exact current agent ID contract", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
-        const permission = agents.document_env?.permission
+        const expectedAgentIds = [
+            ...unaffectedAgentIds,
+            "assist-browser", "auto-author", "auto-design", "auto-feature", "auto-general", "auto-refactor", "auto-research", "auto-test", "auto-troubleshoot",
+            "document-agents", "document-conventions", "document-code", "document-env", "document-install", "document-prd", "document-ux",
+            "execute-author", "execute-code", "execute-config", "execute-debug", "execute-document", "execute-excel", "execute-opencode", "execute-os", "execute-rest", "execute-sandbox", "execute-script", "execute-ssh",
+            "query-autocode", "query-browser", "query-code", "query-config", "query-db", "query-excel", "query-git", "query-os", "query-skills", "query-ssh", "query-text", "query-web", "query-youtube",
+        ]
+
+        expect(Object.keys(agents).sort()).toEqual(expectedAgentIds.sort())
+        for (const agentId of legacyAgentIds) expect(agents[agentId]).toBeUndefined()
+        for (const agentId of unaffectedAgentIds) expect(agents[agentId]).toBeDefined()
+    })
+
+    test("document-env allows skill_edit without broader permission grants", () => {
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        const permission = agents["document-env"]?.permission
 
         expect(permissionRule(permission, "skill_edit")).toBe("allow")
         expect(permissionRule(permission, "external_directory")).toEqual({ "*": "deny" })
@@ -223,27 +248,27 @@ describe("agent policies", () => {
         ] as const) {
             const agents = buildAgents(capabilities)
 
-            expect(agents.execute_os?.prompt).toBe(buildExecuteOsPrompt(capabilities))
-            expect(agents.query_os?.prompt).toBe(queryOsPrompt(capabilities))
-            expect(agents.execute_os?.prompt).toBeTruthy()
-            expect(agents.query_os?.prompt).toBeTruthy()
-            expect(agents.execute_os?.prompt).not.toMatch(wrongShellGuidance)
-            expect(agents.query_os?.prompt).not.toMatch(wrongShellGuidance)
+            expect(agents["execute-os"]?.prompt).toBe(buildExecuteOsPrompt(capabilities))
+            expect(agents["query-os"]?.prompt).toBe(queryOsPrompt(capabilities))
+            expect(agents["execute-os"]?.prompt).toBeTruthy()
+            expect(agents["query-os"]?.prompt).toBeTruthy()
+            expect(agents["execute-os"]?.prompt).not.toMatch(wrongShellGuidance)
+            expect(agents["query-os"]?.prompt).not.toMatch(wrongShellGuidance)
 
             if (capabilities.isWindows) {
-                expect(agents.execute_sandbox).toBeUndefined()
+                expect(agents["execute-sandbox"]).toBeUndefined()
             }
         }
 
         const sandboxAgents = buildAgents(createPlatformCapabilities("linux"))
-        expect(sandboxAgents.execute_sandbox?.prompt).toBe(buildExecuteOsPrompt({ isWindows: false, commandEnvironment: "linux" }))
-        expect(sandboxAgents.execute_sandbox?.prompt).not.toMatch(/running on windows|cmd\.exe|powershell/i)
+        expect(sandboxAgents["execute-sandbox"]?.prompt).toBe(buildExecuteOsPrompt({ isWindows: false, commandEnvironment: "linux" }))
+        expect(sandboxAgents["execute-sandbox"]?.prompt).not.toMatch(/running on windows|cmd\.exe|powershell/i)
     })
 
     test("buildAgents removes sandbox agents, permissions, tasks, and guidance on Windows", () => {
         const agents = buildAgents(createPlatformCapabilities("win32"))
 
-        expect(agents.execute_sandbox).toBeUndefined()
+        expect(agents["execute-sandbox"]).toBeUndefined()
         for (const agent of Object.values(agents)) {
             for (const toolName of sandboxToolNames) {
                 expect(permissionRule(agent.permission, toolName)).toBeUndefined()
@@ -251,31 +276,31 @@ describe("agent policies", () => {
 
             const taskPermission = permissionRule(agent.permission, "task")
             const taskRules = typeof taskPermission === "object" && taskPermission !== null ? taskPermission as Record<string, unknown> : undefined
-            expect(taskRules?.execute_sandbox).toBeUndefined()
-            expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toContain("execute_sandbox")
+            expect(taskRules?.["execute-sandbox"]).toBeUndefined()
+            expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toContain("execute-sandbox")
             expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toContain("autocode_sandbox")
         }
 
-        for (const agentName of ["auto_review_api", "auto_review_ui", "auto_troubleshoot", "execute_script", "assist"] as const) {
+        for (const agentName of ["auto_review_api", "auto_review_ui", "auto-troubleshoot", "execute-script", "assist"] as const) {
             expect(agents[agentName]).toBeDefined()
-            expect(permissionRule(agents[agentName]?.permission, "task")).not.toEqual(expect.objectContaining({ execute_sandbox: "allow" }))
+            expect(permissionRule(agents[agentName]?.permission, "task")).not.toEqual(expect.objectContaining({ "execute-sandbox": "allow" }))
         }
     })
 
     test("buildAgents keeps sandbox registrations and guidance on Linux", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
 
-        expect(agents.execute_sandbox).toBeDefined()
+        expect(agents["execute-sandbox"]).toBeDefined()
         for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
-            expect(permissionRule(agents.execute_sandbox?.permission, toolName)).toBe("allow")
+            expect(permissionRule(agents["execute-sandbox"]?.permission, toolName)).toBe("allow")
         }
-        expect(permissionRule(agents.execute_sandbox?.permission, "autocode_sandbox_copy")).toEqual({ sandbox_target: "allow", local_target: "allow" })
-        for (const agentName of ["auto_review_api", "auto_review_ui", "auto_troubleshoot"] as const) {
-            expect(permissionRule(agents[agentName]?.permission, "task")).toEqual(expect.objectContaining({ execute_sandbox: "allow" }))
+        expect(permissionRule(agents["execute-sandbox"]?.permission, "autocode_sandbox_copy")).toEqual({ sandbox_target: "allow", local_target: "allow" })
+        for (const agentName of ["auto_review_api", "auto_review_ui", "auto-troubleshoot"] as const) {
+            expect(permissionRule(agents[agentName]?.permission, "task")).toEqual(expect.objectContaining({ "execute-sandbox": "allow" }))
         }
-        expect(agents.execute_sandbox?.description).toContain("execute_sandbox")
+        expect(agents["execute-sandbox"]?.description).toContain("execute-sandbox")
         expect(agents.assist?.prompt).toContain("sandbox")
-        expect(agents.auto_troubleshoot?.prompt).toContain("sandbox")
+        expect(agents["auto-troubleshoot"]?.prompt).toContain("sandbox")
     })
 
     test("allows only primary agents to create sessions", () => {
@@ -307,12 +332,12 @@ describe("agent policies", () => {
         expect(taskPermission).toEqual({
             "*": "deny",
             "query*": "allow",
-            auto_research: "allow",
+            "auto-research": "allow",
         })
-        for (const agentName of ["query_code", "query_autocode", "auto_research"]) {
+        for (const agentName of ["query-code", "query-autocode", "auto-research"]) {
             expect(resolvePermissionRule(taskPermission, agentName)).toBe("allow")
         }
-        for (const agentName of ["inquiry_code", "auto_researcher", "execute_code", "execute_*"]) {
+        for (const agentName of ["inquiry-code", "auto-researcher", "execute-code", "execute-*"]) {
             expect(resolvePermissionRule(taskPermission, agentName)).toBe("deny")
         }
         for (const toolName of [
@@ -369,8 +394,8 @@ describe("agent policies", () => {
         for (const toolName of ["autocode_job_execute", "autocode_agent_execute", "write", "edit", "bash", "apply_patch"]) {
             expect(resolvePermissionRule(advisePermission as Record<string, unknown>, toolName)).toBe("deny")
         }
-        expect(resolvePermissionRule(assistTaskPermission, "assist_browser")).toBe("allow")
-        expect(resolvePermissionRule(autoTaskPermission, "auto_feature")).toBe("allow")
+        expect(resolvePermissionRule(assistTaskPermission, "assist-browser")).toBe("allow")
+        expect(resolvePermissionRule(autoTaskPermission, "auto-feature")).toBe("allow")
         for (const [agentName, agent] of Object.entries(agents)) {
             if (agentName === "assist" || agentName === "auto") continue
             if (agent.permission === undefined) continue
@@ -379,37 +404,37 @@ describe("agent policies", () => {
                 ? taskPermission as Record<string, unknown>
                 : { "*": "deny" }
 
-            expect(resolvePermissionRule(taskRules, "assist_browser")).toBe("deny")
-            expect(resolvePermissionRule(taskRules, "auto_feature")).toBe("deny")
+            expect(resolvePermissionRule(taskRules, "assist-browser")).toBe("deny")
+            expect(resolvePermissionRule(taskRules, "auto-feature")).toBe("deny")
         }
     })
 
-    test("buildAgents exposes execute_rest as REST-only worker and allows supported orchestration tasks to call it", () => {
+    test("buildAgents exposes execute-rest as REST-only worker and allows supported orchestration tasks to call it", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
 
-        expect(agents.execute_rest?.mode).toBe("subagent")
-        expect(agents.execute_rest?.hidden).toBe(true)
-        expect(agents.execute_rest?.tier).toBe("operator")
-        expect(agents.execute_rest?.temperature).toBe(0.1)
-        expect(permissionRule(agents.execute_rest?.permission, "*")).toBe("deny")
+        expect(agents["execute-rest"]?.mode).toBe("subagent")
+        expect(agents["execute-rest"]?.hidden).toBe(true)
+        expect(agents["execute-rest"]?.tier).toBe("operator")
+        expect(agents["execute-rest"]?.temperature).toBe(0.1)
+        expect(permissionRule(agents["execute-rest"]?.permission, "*")).toBe("deny")
         for (const toolName of executeRestToolNames) {
-            expect(permissionRule(agents.execute_rest?.permission, toolName)).toBe("allow")
+            expect(permissionRule(agents["execute-rest"]?.permission, toolName)).toBe("allow")
         }
-        expect(permissionRule(agents.execute_rest?.permission, "doom_loop")).toBeUndefined()
-        expect(agents.execute_rest?.prompt).toContain("autocode_rest")
-        expect(agents.execute_rest?.prompt).toContain("GET, POST, PUT, PATCH, DELETE")
-        expect(agents.execute_rest?.prompt).toContain("response_id")
-        expect(agents.execute_rest?.prompt).toContain("Never dump full raw REST result unless user specifically asks")
-        expect(agents.execute_rest?.prompt).toContain("Caveman English")
-        expect(agents.execute_rest?.prompt).toContain("ask user confirmation")
-        expect(agents.execute_rest?.prompt).toContain("Do not leak sensitive headers or body unless user explicitly requested")
+        expect(permissionRule(agents["execute-rest"]?.permission, "doom_loop")).toBeUndefined()
+        expect(agents["execute-rest"]?.prompt).toContain("autocode_rest")
+        expect(agents["execute-rest"]?.prompt).toContain("GET, POST, PUT, PATCH, DELETE")
+        expect(agents["execute-rest"]?.prompt).toContain("response_id")
+        expect(agents["execute-rest"]?.prompt).toContain("Never dump full raw REST result unless user specifically asks")
+        expect(agents["execute-rest"]?.prompt).toContain("Caveman English")
+        expect(agents["execute-rest"]?.prompt).toContain("ask user confirmation")
+        expect(agents["execute-rest"]?.prompt).toContain("Do not leak sensitive headers or body unless user explicitly requested")
         expect(permissionRule(agents.auto_review_api?.permission, "task")).toEqual(expect.objectContaining({
-            execute_rest: "allow",
+            "execute-rest": "allow",
         }))
     })
 
-    test("execute_script permits only managed script workflow tools", () => {
-        const permission = getAgentPermission("execute_script", createPlatformCapabilities("linux"))
+    test("execute-script permits only managed script workflow tools", () => {
+        const permission = getAgentPermission("execute-script", createPlatformCapabilities("linux"))
         const rules = permission as Record<string, unknown>
 
         expect(permissionRule(permission, "*")).toBe("deny")
@@ -472,14 +497,14 @@ describe("agent policies", () => {
         }
     })
 
-    test("buildAgents exposes query_autocode as read-only query worker", () => {
+    test("buildAgents exposes query-autocode as read-only query worker", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const permission = agents.query_autocode?.permission
+        const permission = agents["query-autocode"]?.permission
         const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
 
-        expect(agents.query_autocode?.hidden).toBe(true)
-        expect(agents.query_autocode?.mode).toBe("subagent")
-        expect(agents.query_autocode?.prompt).toBe(queryAutocodePrompt)
+        expect(agents["query-autocode"]?.hidden).toBe(true)
+        expect(agents["query-autocode"]?.mode).toBe("subagent")
+        expect(agents["query-autocode"]?.prompt).toBe(queryAutocodePrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
         expect(permissionRule(permission, "doom_loop")).toBeUndefined()
         for (const key of queryAutocodeAllowedPermissionKeys) {
@@ -496,14 +521,14 @@ describe("agent policies", () => {
             .sort()).toEqual([...queryAutocodeAllowedSkillNames].sort())
     })
 
-    test("buildAgents exposes query_youtube as hidden caption-only worker with timestamp citations", () => {
+    test("buildAgents exposes query-youtube as hidden caption-only worker with timestamp citations", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const permission = agents.query_youtube?.permission
+        const permission = agents["query-youtube"]?.permission
         const rules = permission as Record<string, unknown>
 
-        expect(agents.query_youtube?.hidden).toBe(true)
-        expect(agents.query_youtube?.mode).toBe("subagent")
-        expect(agents.query_youtube?.prompt).toBe(queryYoutubePrompt)
+        expect(agents["query-youtube"]?.hidden).toBe(true)
+        expect(agents["query-youtube"]?.mode).toBe("subagent")
+        expect(agents["query-youtube"]?.prompt).toBe(queryYoutubePrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
         expect(Object.keys(rules).sort()).toEqual(["*", "autocode_youtube_transcribe", "external_directory"])
         expect(Object.entries(rules).filter(([, action]) => action === "allow").map(([key]) => key)).toEqual(["autocode_youtube_transcribe"])
@@ -538,15 +563,15 @@ describe("agent policies", () => {
         }
     })
 
-    test("buildAgents exposes execute_opencode as scoped OpenCode authoring worker", () => {
+    test("buildAgents exposes execute-opencode as scoped OpenCode authoring worker", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const permission = agents.execute_opencode?.permission
+        const permission = agents["execute-opencode"]?.permission
         const skillPermission = permissionRule(permission, "skill") as Record<string, unknown>
 
-        expect(Object.keys(agents)).toContain("execute_opencode")
-        expect(agents.execute_opencode).toBeDefined()
-        expect(agents.execute_opencode?.mode).toBe("subagent")
-        expect(agents.execute_opencode?.prompt).toBe(executeOpencodePrompt)
+        expect(Object.keys(agents)).toContain("execute-opencode")
+        expect(agents["execute-opencode"]).toBeDefined()
+        expect(agents["execute-opencode"]?.mode).toBe("subagent")
+        expect(agents["execute-opencode"]?.prompt).toBe(executeOpencodePrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
         for (const key of executeOpencodeAllowedPermissionKeys) {
             expect(permissionRule(permission, key)).toBe("allow")
@@ -561,9 +586,9 @@ describe("agent policies", () => {
             .sort()).toEqual([...executeOpencodeAllowedSkillNames].sort())
     })
 
-    test("execute_opencode prompt stays scoped to OpenCode Markdown artifacts", () => {
+    test("execute-opencode prompt stays scoped to OpenCode Markdown artifacts", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const prompt = String(agents.execute_opencode?.prompt ?? "")
+        const prompt = String(agents["execute-opencode"]?.prompt ?? "")
 
         for (const path of [
             "~/.config/opencode/agents/{name}.md",
@@ -592,7 +617,7 @@ describe("agent policies", () => {
 
     test("buildAgents registers spy and auto only for their configured tiers", () => {
         const capabilities = createPlatformCapabilities("linux")
-        const build = (tiers: { balanced?: {}; spy?: {}; smart?: {} }) => buildAgents(capabilities, {}, undefined, [], tiers)
+        const build = (tiers: Parameters<typeof buildAgents>[4]) => buildAgents(capabilities, {}, undefined, [], tiers)
 
         const noTiers = build({})
         expect(noTiers.spy).toBeUndefined()
@@ -616,18 +641,18 @@ describe("agent policies", () => {
         expect(bothTiers.auto).toBeDefined()
     })
 
-    test("execute_rest prompt covers main tool and follow-up saved-response tools", () => {
+    test("execute-rest prompt covers main tool and follow-up saved-response tools", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const prompt = String(agents.execute_rest?.prompt ?? "")
+        const prompt = String(agents["execute-rest"]?.prompt ?? "")
 
         expect(prompt).toContain("Use `autocode_rest` for GET, POST, PUT, PATCH, DELETE")
         expect(prompt).not.toContain("`query`")
         expect(prompt).not.toContain("rest_key")
     })
 
-    test("execute_author and query_skills prompt learned skill loading guidance is current", () => {
+    test("execute-author and query-skills prompt learned skill loading guidance is current", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const prompts = [String(agents.execute_author?.prompt ?? ""), String(agents.query_skills?.prompt ?? "")]
+        const prompts = [String(agents["execute-author"]?.prompt ?? ""), String(agents["query-skills"]?.prompt ?? "")]
 
         for (const prompt of prompts) {
             expect(prompt).toContain("skill")
