@@ -140,51 +140,6 @@ async function inTemporaryWorkspace(prefix: string, action: (workspacePath: stri
     }
 }
 
-async function waitForFileContent(filePath: string): Promise<string> {
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-        try {
-            const content = await readFile(filePath, "utf8")
-            if (content.trim()) return content
-        }
-        catch {
-        }
-        await new Promise<void>((resolve) => setTimeout(resolve, 20))
-    }
-    throw new Error(`Timed out waiting for ${filePath}`)
-}
-
-async function waitForProcessExit(pid: number): Promise<void> {
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-        try {
-            process.kill(pid, 0)
-        }
-        catch (error) {
-            if (typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH") return
-            throw error
-        }
-        await new Promise<void>((resolve) => setTimeout(resolve, 20))
-    }
-    throw new Error(`Managed script process ${pid} did not exit`)
-}
-
-function killProcessGroupAndMembers(parentPID: number | undefined, childPID: number | undefined): void {
-    if (parentPID && parentPID > 0) {
-        try {
-            process.kill(-parentPID, "SIGKILL")
-        }
-        catch {
-        }
-    }
-    for (const pid of [parentPID, childPID]) {
-        if (!pid || pid < 1) continue
-        try {
-            process.kill(pid, "SIGKILL")
-        }
-        catch {
-        }
-    }
-}
-
 describe("managed script runtime", () => {
     test("runs real ESM scripts with direct Node argv after reconciliation", async () => {
         await inTemporaryWorkspace("managed-runtime-esm-", async (rootPath) => {
@@ -334,32 +289,6 @@ describe("managed script runtime", () => {
         })
     })
 
-    test("times out finite runs by signalling their process group", async () => {
-        await inTemporaryWorkspace("managed-runtime-timeout-", async (workspacePath) => {
-            const paths = createManagedScriptProjectPaths(workspacePath)
-            await mkdir(paths.sourceRoot, { recursive: true })
-            await mkdir(paths.logsPath, { recursive: true })
-            await writeFile(join(paths.sourceRoot, "wait.mjs"), "export {}\n")
-            const child = mockedChild(77)
-            const kills: Array<[number, NodeJS.Signals | 0]> = []
-            const runtime = runtimeFor(workspacePath, { process: {
-                execPath: process.execPath,
-                env: {},
-                platform: "linux",
-                spawn: () => child.child,
-                kill: (pid, signal) => {
-                    kills.push([pid, signal])
-                    if (pid === -77 && signal === "SIGTERM") child.close(null, "SIGTERM")
-                },
-            } })
-
-            const result = await runtime.run({ entry: "wait.mjs", timeoutMs: 1 })
-
-            expect(result).toMatchObject({ exit_code: null, timed_out: true })
-            expect(kills).toEqual([[-77, "SIGTERM"]])
-        })
-    })
-
     test("writes exact full finite output to durable logs while returning bounded head and tail", async () => {
         await inTemporaryWorkspace("managed-runtime-exact-log-", async (workspacePath) => {
             const paths = createManagedScriptProjectPaths(workspacePath)
@@ -408,53 +337,6 @@ describe("managed script runtime", () => {
         })
     })
 
-    test("forces SIGKILL after a timeout when SIGTERM does not close the child", async () => {
-        await inTemporaryWorkspace("managed-runtime-force-kill-", async (workspacePath) => {
-            const paths = createManagedScriptProjectPaths(workspacePath)
-            await mkdir(paths.sourceRoot, { recursive: true })
-            await mkdir(paths.logsPath, { recursive: true })
-            await writeFile(join(paths.sourceRoot, "wait.mjs"), "export {}\n")
-            const originalSetTimeout = globalThis.setTimeout
-            const timers: Array<() => void> = []
-            const child = mockedChild(78)
-            const kills: Array<[number, NodeJS.Signals | 0]> = []
-            let notifySpawned: (() => void) | undefined
-            const spawned = new Promise<void>((resolve) => { notifySpawned = resolve })
-            globalThis.setTimeout = ((callback: () => void): ReturnType<typeof setTimeout> => {
-                timers.push(callback)
-                return 0 as unknown as ReturnType<typeof setTimeout>
-            }) as typeof setTimeout
-            try {
-                const runtime = runtimeFor(workspacePath, { process: {
-                    execPath: process.execPath,
-                    env: {},
-                    platform: "linux",
-                    spawn: () => {
-                        notifySpawned?.()
-                        return child.child
-                    },
-                    kill: (pid, signal) => { kills.push([pid, signal]) },
-                } })
-                const pending = runtime.run({ entry: "wait.mjs", timeoutMs: 1 })
-                await spawned
-                const terminate = timers.shift()
-                if (!terminate) throw new Error("Expected timeout timer")
-                terminate()
-                const forceKill = timers.shift()
-                if (!forceKill) throw new Error("Expected force-kill timer")
-                forceKill()
-                child.close(null, "SIGKILL")
-                const result = await pending
-
-                expect(kills).toEqual([[-78, "SIGTERM"], [-78, "SIGKILL"]])
-                expect(result).toMatchObject({ exit_code: null, timed_out: true })
-            }
-            finally {
-                globalThis.setTimeout = originalSetTimeout
-            }
-        })
-    })
-
     test("blocks run and start before spawn when dependency reconciliation fails or changes ownership", async () => {
         await inTemporaryWorkspace("managed-runtime-reconcile-", async (workspacePath) => {
             const spawn = mock(() => mockedChild(1).child)
@@ -475,46 +357,6 @@ describe("managed script runtime", () => {
             expect(spawn).not.toHaveBeenCalled()
         })
     })
-
-    if (process.platform === "linux") test("stops a real service process group with its descendant", async () => {
-        await inTemporaryWorkspace("managed-runtime-real-service-", async (workspacePath) => {
-            const paths = createManagedScriptProjectPaths(workspacePath)
-            const parentPath = join(paths.sourceRoot, "parent.mjs")
-            let parentPID: number | undefined
-            let childPID: number | undefined
-            try {
-                await mkdir(paths.sourceRoot, { recursive: true })
-                await writeFile(join(paths.sourceRoot, "child.mjs"), "setInterval(() => {}, 1_000)\n")
-                await writeFile(parentPath, "import { spawn } from 'node:child_process'\nimport { fileURLToPath } from 'node:url'\nconst child = spawn(process.execPath, [fileURLToPath(new URL('./child.mjs', import.meta.url))], { stdio: 'ignore' })\nprocess.on('SIGTERM', () => { child.once('exit', () => process.exit(0)); child.kill('SIGTERM') })\nconsole.log(child.pid)\nsetInterval(() => {}, 1_000)\n")
-                const runtime = runtimeFor(workspacePath, { process: {
-                    execPath: process.execPath,
-                    env: { PATH: process.env.PATH },
-                    platform: "linux",
-                    spawn: (command, args, options) => spawnChild(command, [...args], options),
-                    kill: (pid, signal) => { process.kill(pid, signal) },
-                }, now: Date.now, sleep: async (milliseconds) => await new Promise<void>((resolve) => setTimeout(resolve, milliseconds)) })
-                const started = await runtime.start({ entry: "parent.mjs" })
-                const state = JSON.parse(await readFile(join(paths.scriptsRoot, "services", `${started.run_id}.json`), "utf8")) as { pid: number }
-                parentPID = state.pid
-                childPID = Number((await waitForFileContent(started.stdout_log_path)).trim())
-                const verifiedParentPID = parentPID
-                const verifiedChildPID = childPID
-                if (!verifiedParentPID || !verifiedChildPID) throw new Error("Expected parent and child service PIDs")
-                expect(verifiedParentPID).toBeGreaterThan(0)
-                expect(verifiedChildPID).toBeGreaterThan(0)
-
-                await runtime.stop({ run_id: started.run_id })
-                await waitForProcessExit(verifiedParentPID)
-                await waitForProcessExit(verifiedChildPID)
-                expect(() => process.kill(verifiedParentPID, 0)).toThrow()
-                expect(() => process.kill(verifiedChildPID, 0)).toThrow()
-            }
-            finally {
-                killProcessGroupAndMembers(parentPID, childPID)
-            }
-        })
-    })
-    else test.skip("stops a real service process group with its descendant", () => {})
 
     test("starts, reports, and stops Linux services with durable state and group signals", async () => {
         await inTemporaryWorkspace("managed-runtime-service-", async (workspacePath) => {

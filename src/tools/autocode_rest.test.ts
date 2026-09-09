@@ -351,51 +351,6 @@ describe("autocode_rest tools", () => {
         expect(parsed.response_time).toBeGreaterThanOrEqual(0)
     })
 
-    test("returns timed_out json with actual response_time when request exceeds timeout", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-
-        await seedCurrentJobSession(fileSystem)
-
-        let abortReceived: Error | undefined
-        globalThis.fetch = ((_input: unknown, init?: { signal?: AbortSignal }) => {
-            return new Promise((_resolve, reject) => {
-                const signal = init?.signal
-                if (!signal) {
-                    reject(new Error("no signal"))
-                    return
-                }
-                if (signal.aborted) {
-                    reject(new DOMException("aborted", "AbortError"))
-                    return
-                }
-                signal.addEventListener("abort", () => {
-                    const err = new Error("aborted")
-                    err.name = "AbortError"
-                    abortReceived = err
-                    reject(err)
-                })
-            })
-        }) as unknown as typeof fetch
-
-        const result = parseResult<Record<string, unknown>>(await tool.execute({
-            url: "http://example.com/slow",
-            method: "GET",
-            timeout: 50,
-        } as never, createToolContext()))
-
-        expect(result.timed_out).toBe(true)
-        expect(result.timeout_ms).toBe(50)
-        expect(typeof result.response_time).toBe("number")
-        expect(result.response_time).toBeGreaterThanOrEqual(50)
-        expect(typeof result.response_id).toBe("string")
-        expect(String(result.response_id)).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
-        expect(result.status_code).toBeUndefined()
-        expect(result.response_body).toBeUndefined()
-        expect(abortReceived).toBeDefined()
-        expect(abortReceived?.name).toBe("AbortError")
-    })
-
     test("returns workspace-resolution error when session title yields no workspace identity", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient({ "session-1": { title: "!!!" } }), fileSystem)

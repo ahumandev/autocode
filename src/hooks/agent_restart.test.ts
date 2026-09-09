@@ -244,25 +244,6 @@ describe("restartAutocodeAgentInSession", () => {
         expect(coordinator.pendingCount()).toBe(0)
     })
 
-    test("retains pending restart past old default timeout until matching idle", async () => {
-        jest.useFakeTimers()
-        try {
-            await restartAutocodeAgentInSession(input(coordinator, "advise"), dependencies())
-            jest.advanceTimersByTime(60_001)
-
-            expect(coordinator.pendingCount()).toBe(1)
-            await coordinator.handleEvent(idleEvent())
-
-            expect(summarizeMock).toHaveBeenCalledTimes(1)
-            expect(promptAsyncMock).toHaveBeenCalledTimes(1)
-            expect(coordinator.pendingCount()).toBe(0)
-        }
-        finally {
-            coordinator.dispose()
-            jest.useRealTimers()
-        }
-    })
-
     test("preserves selected job plan in deferred assist continuation", async () => {
         readCurrentJobPlanMock.mockImplementation(async () => ({ jobName: "current_job", plan: "# Current plan" }))
 

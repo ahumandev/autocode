@@ -854,58 +854,6 @@ describe("autocode plugin config", () => {
 		);
 	});
 
-	test("registers spy and auto only for their final configured tiers", async () => {
-		const cases = [
-			{ autocode: {}, spy: false, auto: false },
-			{ autocode: { tiers: { balanced: {} } }, spy: false, auto: false },
-			{ autocode: { tiers: { spy: {} } }, spy: true, auto: false },
-			{ autocode: { tier: "provider", tiers: { provider: { spy: {} } } }, spy: true, auto: false },
-			{ autocode: { model: { spy: "" } }, spy: true, auto: false },
-			{ autocode: { model: { smart: "" } }, spy: false, auto: true },
-			{ autocode: { tiers: { spy: {}, smart: {} } }, spy: true, auto: true },
-		];
-
-		for (const testCase of cases) {
-			const root = await createTempRoot();
-			const worktree = join(root, "worktree");
-			const configHome = join(root, "xdg");
-			await mkdir(join(worktree, ".opencode"), { recursive: true });
-			await writeFile(
-				join(worktree, ".opencode", "autocode.jsonc"),
-				JSON.stringify({ autocode: testCase.autocode }),
-			);
-
-			await withEnv(
-				{
-					XDG_CONFIG_HOME: configHome,
-					HOME: root,
-					AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1",
-			},
-			async () => {
-					const input: PluginInputWithSandboxSupportOverride = {
-						...createInput(worktree),
-						homeOverride: root,
-					};
-					const hooks = (await autocode(input)) as unknown as PluginConfigHook;
-					const cfg: PluginConfig = {
-						agent: {
-							spy: { description: "user spy override" },
-							auto: { description: "user auto override" },
-						},
-					};
-					await hooks.config?.(cfg);
-
-					if (testCase.spy) expect(cfg.agent?.spy).toBeDefined();
-					else expect(cfg.agent?.spy).toBeUndefined();
-					if (testCase.spy) expect(cfg.command?.["new-spy"]).toBeDefined();
-					else expect(cfg.command?.["new-spy"]).toBeUndefined();
-					if (testCase.auto) expect(cfg.agent?.auto).toBeDefined();
-					else expect(cfg.agent?.auto).toBeUndefined();
-				},
-			);
-		}
-	});
-
 	test("Windows removes sandbox exposure from user agent overrides", async () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");

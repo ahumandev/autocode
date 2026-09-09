@@ -146,9 +146,6 @@ async function createPluginHooks(
     const home = input.homeOverride ?? homedir()
     const bunRoot = path.join(home, ".bun")
     const bunBin = path.join(bunRoot, "bin")
-    const originalPath = process.env.PATH
-    process.env.BUN_INSTALL = bunRoot
-    process.env.PATH = originalPath ? `${bunBin}${path.delimiter}${originalPath}` : bunBin
 
     const autocodeConfig = await loadAutocodeConfig(input.worktree, input.directory)
     const commandDefinitions = createCommands(capabilities, autocodeConfig.tiers.spy !== undefined)
@@ -185,6 +182,9 @@ async function createPluginHooks(
             }
         },
         async config(cfg: ConfigWithSubagentDepth) {
+            const originalPath = process.env.PATH
+            process.env.BUN_INSTALL = bunRoot
+            process.env.PATH = originalPath ? `${bunBin}${path.delimiter}${originalPath}` : bunBin
             await mergeConfig(cfg, input, autocodeConfig, generatedSkills, capabilities, commandDefinitions)
         },
         tool: createTools(input.client, autocodeConfig.sandbox, {

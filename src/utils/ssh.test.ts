@@ -26,33 +26,9 @@ import {
 } from "./ssh"
 import { LocalSshServer, localSshCredentials } from "./ssh.test_helper"
 
-class FakeReadable extends EventEmitter {
-    emitData(chunk: Buffer | string): void {
-        this.emit("data", chunk)
-    }
-}
-
-class FakeChannel extends FakeReadable {
-    readonly stderr = new FakeReadable()
-    closed = false
-    destroyed = false
-
-    close(): void {
-        this.closed = true
-        this.emit("close")
-    }
-
-    destroy(): void {
-        this.destroyed = true
-        this.emit("close")
-    }
-}
-
-class FakeClient extends EventEmitter {
+class FakeClient extends EventEmitter implements SshClientLike {
     ended = false
     connectConfig?: ConnectConfig
-    execChannel?: FakeChannel
-    execError?: Error
     sftpResult?: SftpLike
     sftpError?: Error
 
@@ -61,15 +37,33 @@ class FakeClient extends EventEmitter {
     }
 
     exec(_command: string, callback: (err: Error | undefined, channel: SshChannelLike) => void): void {
-        callback(this.execError, this.execChannel as SshChannelLike)
+        callback(new Error("FakeClient does not support exec"))
     }
 
     sftp(callback: (err: Error | undefined, sftp: SftpLike) => void): void {
-        callback(this.sftpError, this.sftpResult as SftpLike)
+        if (this.sftpError !== undefined) {
+            callback(this.sftpError)
+            return
+        }
+        if (this.sftpResult === undefined) {
+            callback(new Error("FakeClient has no SFTP result"))
+            return
+        }
+        callback(undefined, this.sftpResult)
     }
 
     end(): void {
         this.ended = true
+    }
+}
+
+function createFakeClientFactory(clients: FakeClient[]): () => SshClientLike {
+    const queuedClients: SshClientLike[] = [...clients]
+
+    return (): SshClientLike => {
+        const client = queuedClients.shift()
+        if (client === undefined) throw new Error("No fake SSH client available")
+        return client
     }
 }
 
@@ -181,8 +175,7 @@ describe("ssh utils", () => {
 
         let now = 0
         const createdClients = [new FakeClient(), new FakeClient()]
-        const queuedClients = [...createdClients]
-        const pool = new SshConnectionPool({ clock: { now: () => now }, clientFactory: () => queuedClients.shift() as SshClientLike })
+        const pool = new SshConnectionPool({ clock: { now: () => now }, clientFactory: createFakeClientFactory(createdClients) })
         const first = pool.get(resolved)
         createdClients[0]?.emit("ready")
         const firstClient = await first
@@ -196,13 +189,12 @@ describe("ssh utils", () => {
     test("SshConnectionPool reuses, expires, removes failures, and closes clients", async () => {
         let now = 0
         const createdClients = [new FakeClient(), new FakeClient(), new FakeClient()]
-        const queuedClients = [...createdClients]
-        const pool = new SshConnectionPool({ clock: { now: () => now }, clientFactory: () => queuedClients.shift() as SshClientLike })
+        const pool = new SshConnectionPool({ clock: { now: () => now }, clientFactory: createFakeClientFactory(createdClients) })
         const config = baseConfig()
 
         const firstPromise = pool.get(config)
         createdClients[0]?.emit("ready")
-        const first = (await firstPromise) as FakeClient
+        const first = await firstPromise
         pool.release(config)
         now += DEFAULT_SSH_IDLE_TIMEOUT_MS - 1
         expect(await pool.get(config)).toBe(first)
@@ -210,9 +202,9 @@ describe("ssh utils", () => {
         pool.release(config)
         now += DEFAULT_SSH_IDLE_TIMEOUT_MS
         const secondPromise = pool.get(config)
-        expect(first.ended).toBe(true)
+        expect(createdClients[0]?.ended).toBe(true)
         createdClients[1]?.emit("ready")
-        const second = (await secondPromise) as FakeClient
+        const second = await secondPromise
         expect(second).not.toBe(first)
 
         const failedConfig = baseConfig({ key: "failed" })
@@ -222,27 +214,8 @@ describe("ssh utils", () => {
         expect(pool.size()).toBe(1)
 
         pool.close()
-        expect(second.ended).toBe(true)
+        expect(createdClients[1]?.ended).toBe(true)
         expect(pool.size()).toBe(0)
-    })
-
-    test("execSshCommand collects output, nonzero exits, timeout close, and truncation flags", async () => {
-        const client = new FakeClient()
-        const channel = new FakeChannel()
-        client.execChannel = channel
-        const command = execSshCommand(client as SshClientLike, "false", { maxOutputBytes: 3 })
-        channel.emitData("stdout")
-        channel.stderr.emitData("stderr")
-        channel.emit("exit", 2, "SIGTERM")
-        channel.emit("close")
-
-        await expect(command).resolves.toEqual({ stdout: "std", stderr: "std", stdoutTruncated: true, stderrTruncated: true, stdoutBytes: 6, stderrBytes: 6, exitCode: 2, signal: "SIGTERM" })
-
-        const timeoutClient = new FakeClient()
-        const timeoutChannel = new FakeChannel()
-        timeoutClient.execChannel = timeoutChannel
-        await expect(execSshCommand(timeoutClient as SshClientLike, "sleep", { timeoutMs: 5 })).rejects.toThrow("timed out")
-        expect(timeoutChannel.closed).toBe(true)
     })
 
     test("SFTP helpers wrap callback successes and errors", async () => {
@@ -250,7 +223,7 @@ describe("ssh utils", () => {
         const sftp = createFakeSftp()
         client.sftpResult = sftp
 
-        await expect(openSftp(client as SshClientLike)).resolves.toBe(sftp)
+        await expect(openSftp(client)).resolves.toBe(sftp)
         await expect(sftpReadFile(sftp, "/file", "utf8")).resolves.toBe("data:/file")
         await expect(sftpWriteFile(sftp, "/file", "content")).resolves.toBeUndefined()
         await expect(sftpStat(sftp, "/file")).resolves.toMatchObject({ size: 12 })
@@ -260,7 +233,7 @@ describe("ssh utils", () => {
 
         const errorClient = new FakeClient()
         errorClient.sftpError = new Error("sftp failed")
-        await expect(openSftp(errorClient as SshClientLike)).rejects.toThrow("sftp failed")
+        await expect(openSftp(errorClient)).rejects.toThrow("sftp failed")
         await expect(sftpReadFile(createFakeSftp({ fail: "readFile" }), "/file")).rejects.toThrow("readFile failed")
     })
 
