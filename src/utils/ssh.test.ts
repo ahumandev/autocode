@@ -26,6 +26,10 @@ import {
 } from "./ssh"
 import { LocalSshServer, localSshCredentials } from "./ssh.test_helper"
 
+class FakeChannel extends EventEmitter implements SshChannelLike {
+    stderr = new EventEmitter()
+}
+
 class FakeClient extends EventEmitter implements SshClientLike {
     ended = false
     connectConfig?: ConnectConfig
@@ -37,16 +41,16 @@ class FakeClient extends EventEmitter implements SshClientLike {
     }
 
     exec(_command: string, callback: (err: Error | undefined, channel: SshChannelLike) => void): void {
-        callback(new Error("FakeClient does not support exec"))
+        callback(new Error("FakeClient does not support exec"), new FakeChannel())
     }
 
     sftp(callback: (err: Error | undefined, sftp: SftpLike) => void): void {
         if (this.sftpError !== undefined) {
-            callback(this.sftpError)
+            callback(this.sftpError, this.sftpResult ?? createFakeSftp())
             return
         }
         if (this.sftpResult === undefined) {
-            callback(new Error("FakeClient has no SFTP result"))
+            callback(new Error("FakeClient has no SFTP result"), createFakeSftp())
             return
         }
         callback(undefined, this.sftpResult)
