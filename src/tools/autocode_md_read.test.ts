@@ -8,21 +8,30 @@ import { createToolContext } from "./test_context"
 
 describe("autocode_md_read", () => {
     let dir: string
+    let externalDir: string
     let oldCwd: string
     const tool = createAutocodeMdReadTool()
     beforeEach(() => {
         oldCwd = process.cwd()
         dir = mkdtempSync(join(tmpdir(), "md-read-"))
+        externalDir = mkdtempSync(join(tmpdir(), "md-read-external-"))
         process.chdir(dir)
     })
     afterEach(() => {
         process.chdir(oldCwd)
         rmSync(dir, { recursive: true, force: true })
+        rmSync(externalDir, { recursive: true, force: true })
         resetRetryCounts()
     })
 
     const write = (name: string, lines: string | string[]): string => {
         const p = join(dir, name)
+        const body = Array.isArray(lines) ? lines.join("\n") : lines
+        writeFileSync(p, body)
+        return p
+    }
+    const writeExternal = (name: string, lines: string | string[]): string => {
+        const p = join(externalDir, name)
         const body = Array.isArray(lines) ? lines.join("\n") : lines
         writeFileSync(p, body)
         return p
@@ -125,6 +134,50 @@ describe("autocode_md_read", () => {
         expect(out.file_paths).toBeUndefined()
         expect(out.failedAction).toBe("Read md section")
         expect(typeof out.error).toBe("string")
+    })
+
+    test("absolute heading file returns outline", async () => {
+        const path = writeExternal("absolute-heading.md", ["# Heading"])
+        const out = await read(path, { max_content_chars: 0, max_anchors: 100 })
+        expect(out.file_paths[path]).toEqual([{ anchor: "heading", line_of_heading: 1, line_count: 1, index: 0 }])
+    })
+
+    test("absolute headingless file returns empty outline", async () => {
+        const path = writeExternal("absolute-headingless.md", "plain text")
+        const out = await read(path, { max_content_chars: 0, max_anchors: 100 })
+        expect(out.file_paths[path]).toEqual([])
+    })
+
+    test("absolute glob retains heading and headingless files in outline", async () => {
+        const headingPath = writeExternal("absolute-mixed-heading.md", ["# Heading"])
+        const headinglessPath = writeExternal("absolute-mixed-headingless.md", "plain text")
+        const out = await read(join(externalDir, "absolute-mixed-*.md"), { max_content_chars: 0, max_anchors: 100 })
+        expect(out.file_paths[headingPath]).toEqual([{ anchor: "heading", line_of_heading: 1, line_count: 1, index: 0 }])
+        expect(out.file_paths[headinglessPath]).toEqual([])
+    })
+
+    test("missing absolute path returns retry error", async () => {
+        const path = join(externalDir, "missing.md")
+        const out = await read(path, { max_content_chars: 0, max_anchors: 100 })
+        expect(out.failedAction).toBe("Read md section")
+        expect(out.error).toBe(`no files matched glob: ${path}`)
+        expect(out.file_paths).toBeUndefined()
+    })
+
+    test("headingless absolute file with anchor_regex returns retry error", async () => {
+        const path = writeExternal("absolute-headingless-anchor.md", "plain text")
+        const out = await read(path, { anchor_regex: "text", max_content_chars: 0, max_anchors: 100 })
+        expect(out.failedAction).toBe("Read md section")
+        expect(out.error).toBe(`no readable md files/sections for glob: ${path}`)
+        expect(out.file_paths).toBeUndefined()
+    })
+
+    test("headingless absolute file with content_regex returns retry error", async () => {
+        const path = writeExternal("absolute-headingless-content.md", "plain text")
+        const out = await read(path, { content_regex: "text", max_content_chars: 0, max_anchors: 100 })
+        expect(out.failedAction).toBe("Read md section")
+        expect(out.error).toBe(`no readable md files/sections for glob: ${path}`)
+        expect(out.file_paths).toBeUndefined()
     })
 
     test("line_start > line_end returns retry error", async () => {

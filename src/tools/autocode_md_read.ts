@@ -89,6 +89,7 @@ Example:
             }
 
             const maxKeys = args.max_anchors ?? DEFAULT_MAX_ANCHORS
+            const maxContentChars = args.max_content_chars ?? DEFAULT_MAX_CONTENT_CHARS
             const selected = matches
 
             type Collected = { key: string; model: ReturnType<typeof parseMarkdown>; filtered: ReturnType<typeof parseMarkdown>["headings"] }
@@ -124,11 +125,13 @@ Example:
                 }
                 filtered = filtered.filter((h) => h.start <= effectiveEnd && h.spanEnd >= lineStart)
 
-                if (filtered.length === 0) continue
+                const isHeadinglessOutline = maxContentChars <= 0
+                    && anchorPattern === null
+                    && contentPattern === null
+                    && model.headings.length === 0
+                if (filtered.length === 0 && !isHeadinglessOutline) continue
                 collected.push({ key, model, filtered })
             }
-
-            const maxContentChars = args.max_content_chars ?? DEFAULT_MAX_CONTENT_CHARS
 
             const file_paths: Record<string, { anchor: string; line_of_heading: number; line_count: number; index: number; content?: string }[]> = {}
             if (maxContentChars <= 0) {
