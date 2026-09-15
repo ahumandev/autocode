@@ -854,6 +854,48 @@ describe("autocode plugin config", () => {
 		);
 	});
 
+	test("registers generated root and existing learned category roots at startup", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		const learnedSkillsRoot = join(worktree, ".agents", "skills");
+		const categories = [
+			"learned-corrections",
+			"learned-env",
+			"learned-permissions",
+			"learned-preferences",
+		];
+		for (const category of categories) {
+			const skillDir = join(learnedSkillsRoot, category, "example");
+			await mkdir(skillDir, { recursive: true });
+			await writeFile(join(skillDir, "SKILL.md"), "learned skill");
+		}
+		const unrelatedSkillDir = join(learnedSkillsRoot, "unrelated", "example");
+		await mkdir(unrelatedSkillDir, { recursive: true });
+		await writeFile(join(unrelatedSkillDir, "SKILL.md"), "unrelated skill");
+
+		await withEnv(
+			{ AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1" },
+			async () => {
+				const input = { ...createInput(worktree), homeOverride: root };
+				const sources = await registerGeneratedSkills(input);
+
+				expect(sources).toEqual(
+					expect.arrayContaining([
+						{ type: "directory", path: join(root, ".agents", "skills", "autocode") },
+						...categories.map((category) => ({
+							type: "directory" as const,
+							path: join(learnedSkillsRoot, category),
+						})),
+					]),
+				);
+				expect(sources).not.toContainEqual({
+					type: "directory",
+					path: join(learnedSkillsRoot, "unrelated"),
+				});
+			},
+		);
+	});
+
 	test("Windows removes sandbox exposure from user agent overrides", async () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");

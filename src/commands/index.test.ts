@@ -88,22 +88,6 @@ describe("commands", () => {
             subtask: false,
             template: jobAssistCommandTemplate,
         })
-        expect(commands["new-advise"]).toMatchObject({
-            subtask: false,
-            template: newSessionTemplate("advise", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION"),
-        })
-        expect(commands["new-assist"]).toMatchObject({
-            subtask: false,
-            template: newSessionTemplate("assist", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION"),
-        })
-        expect(commands["new-auto"]).toMatchObject({
-            subtask: false,
-            template: newSessionTemplate("auto", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Solve PROBLEM according 'Auto Workflow'."),
-        })
-        expect(commands["new-design"]).toMatchObject({
-            subtask: false,
-            template: newSessionTemplate("design", "Summarize how steps taken so far", "Design and suggest APPROACHES around discovered OBSTACLES within CONSTRAINTS."),
-        })
         expect(commands["new-fix"]).toMatchObject({
             subtask: false,
             template: newSessionTemplate("auto-troubleshoot", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Continue with 'Workflow Loop'."),

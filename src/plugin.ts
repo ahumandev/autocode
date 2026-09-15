@@ -1,6 +1,7 @@
 import { define } from "@opencode-ai/plugin/v2/promise"
+import { readdir } from "node:fs/promises"
 import { homedir } from "node:os"
-import { posix, win32 } from "node:path"
+import { join, posix, win32 } from "node:path"
 import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin"
 import type { AgentConfig, Config } from "@opencode-ai/sdk/v2"
 import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, applyWindowsSandboxPolicy, buildAgents, injectExternalSkillPermissions, type AutocodeAgentConfig } from "./agents"
@@ -13,7 +14,7 @@ import { createPlatformCapabilities, type PlatformCapabilities } from "./utils/p
 import { createPendingAgentRestartCoordinator } from "./hooks/agent_restart_coordinator"
 import { createManagedScriptLifecycle } from "./hooks/managed_script_lifecycle"
 import { createRootSessionTitleHook } from "./hooks/root_session_title"
-import { resolveAgentsStorageRoot } from "@/utils/jobs"
+import { isMissingFile, resolveAgentsStorageRoot } from "@/utils/jobs"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 
 type PluginAgentConfig = AutocodeAgentConfig
@@ -27,6 +28,37 @@ type PluginInputWithSandboxSupportOverride = {
     platformOverride?: NodeJS.Platform
     homeOverride?: string
     serverUrl?: URL
+}
+
+const LEARNED_SKILL_CATEGORIES = ["learned-corrections", "learned-env", "learned-permissions", "learned-preferences"] as const
+
+function isLearnedSkillCategory(directoryName: string): boolean {
+    return LEARNED_SKILL_CATEGORIES.some((category) => category === directoryName)
+}
+
+async function registerLearnedSkillCategories(
+    input: PluginInputWithSandboxSupportOverride,
+    registerSkills?: (path: string) => void,
+): Promise<void> {
+    if (registerSkills === undefined) return
+
+    const skillsRoot = join(
+        resolveAgentsStorageRoot({ worktree: input.worktree, directory: input.directory }),
+        ".agents",
+        "skills",
+    )
+    try {
+        const entries = await readdir(skillsRoot, { withFileTypes: true })
+        for (const entry of entries) {
+            if (entry.isDirectory() && isLearnedSkillCategory(entry.name)) {
+                registerSkills(join(skillsRoot, entry.name))
+            }
+        }
+    } catch (err) {
+        if (!isMissingFile(err)) {
+            console.warn(`autocode: register learned skills failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
+    }
 }
 
 function mergePluginAgentConfig(
@@ -155,6 +187,7 @@ async function createPluginHooks(
     )
     const generatedSkills = await reconcileGeneratedSkills({ home, skipExtraction: autocodeConfig.skills?.freeze === true })
     registerSkills?.(generatedSkills.root)
+    await registerLearnedSkillCategories(input, registerSkills)
     if (autocodeConfig.skills?.freeze !== true) {
         try {
             const agentsRoot = resolveAgentsStorageRoot({ worktree: input.worktree, directory: input.directory })
