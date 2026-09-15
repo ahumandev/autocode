@@ -861,11 +861,11 @@ export async function resolveSandboxOwner(
         directory: context.directory,
         worktree: context.worktree,
     })
-    if (identity.resolution !== "found" || !identity.workspace || !identity.job_name) {
+    if (identity.resolution !== "found") {
         return {
             ok: false,
             reason: "No timestamped job workspace was found for the current session.",
-            jobName: identity.job_name,
+            jobName: identity.title_derived_candidate,
         }
     }
 

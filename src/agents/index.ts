@@ -282,7 +282,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_db_tables: "allow",
                 autocode_md_frontmatter_read: "allow",
                 autocode_md_read: "allow",
-                autocode_session_create: "allow",
                 autocode_ssh_config_read: "allow",
                 autocode_ssh_glob: "allow",
                 autocode_ssh_grep_file: "allow",
@@ -293,15 +292,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "excel_validate*": "allow",
                 glob: "allow",
                 grep: "allow",
-                question: "allow",
-                read: "allow",
-                skill: {
-                    "*": "deny",
-                    "learned-corrections*": "allow",
-                    "learned-env*": "allow",
-                    "learned-preferences*": "allow",
-                },
-                "todo*": "allow",
+                read: "allow"
             },
             prompt: spyPrompt,
             tier: "spy",
@@ -492,7 +483,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
         "auto-refactor": {
             color: colorAutonomousOrchestrator,
-            description: "task auto-refactor to upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability.",
+            description: "task auto-refactor to upgrade, migrate, or optimize code: improve security, performance, readability, efficiency, maintainability; NOT for tests",
             hidden: true,
             mode: "subagent",
             permission: {

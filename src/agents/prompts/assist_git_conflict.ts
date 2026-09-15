@@ -110,12 +110,6 @@ Repeat this step until no issues are detected or identified as existing issues (
 
 ---
 
-# STEP 4: Commit
-
-Task \`git_commit\` with prompt that include every merge conflict resolution.
-
----
-
 ## Merge Rules
 
 These rules apply when you merge two code snippets into one:

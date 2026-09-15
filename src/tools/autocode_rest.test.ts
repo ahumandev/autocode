@@ -52,9 +52,15 @@ function createSessionClient(sessions: Record<string, SessionRecord> = { "sessio
     } as unknown as OpencodeClient
 }
 
-function createMemoryRestFileSystem() {
+function createMemoryRestFileSystem(options: { includeCurrentWorkspace?: boolean } = {}) {
     const files = new Map<string, string>()
-    const directories = new Set<string>(["/", "/workspace", "/workspace/.agents", "/workspace/.agents/jobs", "/workspace/.agents/jobs/2026-08-20_10-30-00_my_job"])
+    const directories = new Set<string>([
+        "/",
+        "/workspace",
+        "/workspace/.agents",
+        "/workspace/.agents/jobs",
+        ...(options.includeCurrentWorkspace === false ? [] : ["/workspace/.agents/jobs/2026-08-20_10-30-00_my_job"]),
+    ])
 
     function normalize(targetPath: string): string {
         return path.resolve(targetPath)
@@ -104,6 +110,22 @@ function createMemoryRestFileSystem() {
         return undefined
     }
 
+    async function rename(oldPath: string, newPath: string): Promise<void> {
+        const content = await readFile(oldPath, "utf8")
+        files.delete(normalize(oldPath))
+        await writeFile(newPath, content)
+    }
+
+    async function rm(targetPath: string): Promise<void> {
+        const normalizedPath = normalize(targetPath)
+        for (const filePath of files.keys()) {
+            if (filePath === normalizedPath || filePath.startsWith(`${normalizedPath}/`)) files.delete(filePath)
+        }
+        for (const directoryPath of directories) {
+            if (directoryPath === normalizedPath || directoryPath.startsWith(`${normalizedPath}/`)) directories.delete(directoryPath)
+        }
+    }
+
     async function readdir(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("fs").Dirent[]> {
         const normalizedPath = normalize(dirPath)
         if (!directories.has(normalizedPath)) {
@@ -146,6 +168,8 @@ function createMemoryRestFileSystem() {
         mkdir,
         readFile,
         readdir,
+        rename,
+        rm,
         stat,
         writeFile,
         seedFile,
@@ -351,7 +375,52 @@ describe("autocode_rest tools", () => {
         expect(parsed.response_time).toBeGreaterThanOrEqual(0)
     })
 
-    test("returns workspace-resolution error when session title yields no workspace identity", async () => {
+    test("returns timed_out json with actual response_time when request exceeds timeout", async () => {
+        const fileSystem = createMemoryRestFileSystem()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
+
+        await seedCurrentJobSession(fileSystem)
+
+        let abortReceived: Error | undefined
+        globalThis.fetch = ((_input: unknown, init?: { signal?: AbortSignal }) => {
+            return new Promise((_resolve, reject) => {
+                const signal = init?.signal
+                if (!signal) {
+                    reject(new Error("no signal"))
+                    return
+                }
+                if (signal.aborted) {
+                    reject(new DOMException("aborted", "AbortError"))
+                    return
+                }
+                signal.addEventListener("abort", () => {
+                    const err = new Error("aborted")
+                    err.name = "AbortError"
+                    abortReceived = err
+                    reject(err)
+                })
+            })
+        }) as unknown as typeof fetch
+
+        const result = parseResult<Record<string, unknown>>(await tool.execute({
+            url: "http://example.com/slow",
+            method: "GET",
+            timeout: 50,
+        } as never, createToolContext()))
+
+        expect(result.timed_out).toBe(true)
+        expect(result.timeout_ms).toBe(50)
+        expect(typeof result.response_time).toBe("number")
+        expect(result.response_time).toBeGreaterThanOrEqual(50)
+        expect(typeof result.response_id).toBe("string")
+        expect(String(result.response_id)).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
+        expect(result.status_code).toBeUndefined()
+        expect(result.response_body).toBeUndefined()
+        expect(abortReceived).toBeDefined()
+        expect(abortReceived?.name).toBe("AbortError")
+    })
+
+    test("returns job-name error when session title has no usable candidate", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient({ "session-1": { title: "!!!" } }), fileSystem)
 
@@ -361,7 +430,7 @@ describe("autocode_rest tools", () => {
         } as never, createToolContext()))
 
         expect(errored.failedAction).toBe("autocode_rest")
-        expect(errored.error).toContain("No job workspace was found for current session.")
+        expect(errored.error).toContain("Current session has no usable job name.")
     })
 
     test("writes REST artifacts in the resolved timestamped workspace", async () => {
@@ -382,6 +451,51 @@ describe("autocode_rest tools", () => {
         const allFiles = fileSystem.listFiles()
         expect(allFiles).toContain("/workspace/.agents/jobs/2026-08-20_10-30-00_my_job/session.yml")
         expect(allFiles.some((filePath) => filePath.includes("/2026-08-20_10-30-00_my_job/rest/"))).toBe(true)
+    })
+
+    test("creates root session workspace before writing REST artifact", async () => {
+        const fileSystem = createMemoryRestFileSystem({ includeCurrentWorkspace: false })
+        const tool = createAutocodeRestTool(createSessionClient({
+            "session-1": { parentID: "middle-session", title: "Child Job" },
+            "middle-session": { parentID: "root-session", title: "Middle Job" },
+            "root-session": { title: "Root Job" },
+        }), fileSystem)
+        globalThis.fetch = (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch
+
+        const parsed = parseResult<{ status_code: number }>(await tool.execute({
+            url: "http://example.com/api",
+            method: "GET",
+        } as never, createToolContext()))
+
+        expect(parsed.status_code).toBe(200)
+        const allFiles = fileSystem.listFiles()
+        expect(allFiles.some((filePath) => filePath.includes("_root_job/session.yml"))).toBe(true)
+        expect(allFiles.some((filePath) => filePath.includes("_root_job/rest/"))).toBe(true)
+    })
+
+    test("creates current title workspace when root lookup is unavailable", async () => {
+        const fileSystem = createMemoryRestFileSystem({ includeCurrentWorkspace: false })
+        let lookups = 0
+        const client = {
+            session: {
+                get: async () => {
+                    lookups += 1
+                    return lookups === 1 ? { data: { title: "My Job" } } : { error: "unavailable" }
+                },
+            },
+        } as unknown as OpencodeClient
+        const tool = createAutocodeRestTool(client, fileSystem)
+        globalThis.fetch = (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch
+
+        const parsed = parseResult<{ status_code: number }>(await tool.execute({
+            url: "http://example.com/api",
+            method: "GET",
+        } as never, createToolContext()))
+
+        expect(parsed.status_code).toBe(200)
+        const allFiles = fileSystem.listFiles()
+        expect(allFiles.some((filePath) => filePath.includes("_my_job/session.yml"))).toBe(true)
+        expect(allFiles.some((filePath) => filePath.includes("_my_job/rest/"))).toBe(true)
     })
 
     test("uses raw Authorization environment value", async () => {

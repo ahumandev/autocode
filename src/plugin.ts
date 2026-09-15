@@ -148,7 +148,11 @@ async function createPluginHooks(
     const bunBin = path.join(bunRoot, "bin")
 
     const autocodeConfig = await loadAutocodeConfig(input.worktree, input.directory)
-    const commandDefinitions = createCommands(capabilities, autocodeConfig.tiers.spy !== undefined)
+    const commandDefinitions = createCommands(
+        capabilities,
+        autocodeConfig.tiers.spy !== undefined,
+        autocodeConfig.tiers.smart !== undefined,
+    )
     const generatedSkills = await reconcileGeneratedSkills({ home, skipExtraction: autocodeConfig.skills?.freeze === true })
     registerSkills?.(generatedSkills.root)
     if (autocodeConfig.skills?.freeze !== true) {

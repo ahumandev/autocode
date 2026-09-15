@@ -158,6 +158,17 @@ describe("commands", () => {
         })
     })
 
+    test("omits optional-agent commands without hiding generic commands", () => {
+        const commandsWithoutOptionalAgents = createCommands(createPlatformCapabilities("linux"), false, false)
+
+        expect(commandsWithoutOptionalAgents["job-auto"]).toBeUndefined()
+        expect(commandsWithoutOptionalAgents["new-auto"]).toBeUndefined()
+        expect(commandsWithoutOptionalAgents["new-spy"]).toBeUndefined()
+        expect(commandsWithoutOptionalAgents["job-assist"]).toBeDefined()
+        expect(commandsWithoutOptionalAgents["new-assist"]).toBeDefined()
+        expect(commandsWithoutOptionalAgents.docs).toBeDefined()
+    })
+
     test("keeps renamed docs command objects stable", () => {
         expect(commands.docs).toMatchObject({
             agent: "execute-document",

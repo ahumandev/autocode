@@ -58,4 +58,46 @@ describe("job workspace utilities", () => {
 
         expect(result).toEqual({ resolution: "missing" })
     })
+
+    test("resolves a child session from multi-level root job name", async () => {
+        const workspace = "2026-08-20_10-30-00_root_job"
+        const result = await resolveJobWorkspaceIdentity(
+            createIdentityFileSystem([workspace], {
+                [`/workspace/.agents/jobs/${workspace}/session.yml`]: "session_id: root-session\n",
+            }),
+            {
+                session: {
+                    get: async ({ path }: { path: { id: string } }) => ({
+                        data: {
+                            "session-1": { id: "session-1", parentID: "middle-session", title: "Child Job" },
+                            "middle-session": { id: "middle-session", parentID: "root-session", title: "Middle Job" },
+                            "root-session": { id: "root-session", title: "Renamed Root Job" },
+                        }[path.id],
+                    }),
+                },
+            } as never,
+            { sessionID: "session-1", directory: "/workspace", worktree: "/workspace" },
+        )
+
+        expect(result).toEqual(expect.objectContaining({ resolution: "found", job_name: "root_job", workspace_session_id: "root-session" }))
+    })
+
+    test("reports root title candidate without a resolved job name when workspace is absent", async () => {
+        const result = await resolveJobWorkspaceIdentity(
+            createIdentityFileSystem([], {}),
+            {
+                session: {
+                    get: async ({ path }: { path: { id: string } }) => ({
+                        data: {
+                            "session-1": { id: "session-1", parentID: "root-session", title: "Child Job" },
+                            "root-session": { id: "root-session", title: "Other Feature" },
+                        }[path.id],
+                    }),
+                },
+            } as never,
+            { sessionID: "session-1", directory: "/workspace", worktree: "/workspace" },
+        )
+
+        expect(result).toEqual({ resolution: "missing", workspace_session_id: "root-session", session_title: "Other Feature", title_derived_candidate: "other_feature" })
+    })
 })

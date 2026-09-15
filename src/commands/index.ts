@@ -21,12 +21,14 @@ import { testsCommandTemplate } from "./tests"
 
 type CommandMap = NonNullable<Config["command"]>
 
-export function createCommands(capabilities: PlatformCapabilities, spyAvailable = false): CommandMap {
+export function createCommands(capabilities: PlatformCapabilities, spyAvailable = false, autoAvailable = true): CommandMap {
     return {
 
         // Job workspace commands
 
-        "job-auto": { agent: "design", description: "🚀 Start autonomous execution in a new session.", subtask: false, template: jobAutoCommandTemplate },
+        ...(autoAvailable ? {
+            "job-auto": { agent: "design", description: "🚀 Start autonomous execution in a new session.", subtask: false, template: jobAutoCommandTemplate },
+        } : {}),
         "job-assist": { agent: "design", description: "🧑‍💻 Start assisted execution in a new session.", subtask: false, template: jobAssistCommandTemplate },
         "job-concepts": { agent: "design", description: "💭 Save concepts in .agents/concepts/.", template: jobConceptsCommandTemplate },
         "job-design": { agent: "design", description: "📐 Design solution from existing concept or job.", subtask: false, template: jobDesignCommandTemplate },
@@ -35,7 +37,9 @@ export function createCommands(capabilities: PlatformCapabilities, spyAvailable 
 
         "new-advise": { description: "Create new 💡 advise session to research topics, answer questions, and guide manual work.", subtask: false, template: newSessionTemplate("advise", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION") },
         "new-assist": { description: "Create new 🧑‍💻 assist session to semi-autonomously assist with problems/improvements.", subtask: false, template: newSessionTemplate("assist", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Use `todowrite` tool to create ASSIGNMENTS that will complete proposed SOLUTION") },
-        "new-auto":   { description: "Create new 🤖 auto session to autonomously solve problems.", subtask: false, template: newSessionTemplate("auto", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Solve PROBLEM according 'Auto Workflow'.") },
+        ...(autoAvailable ? {
+            "new-auto": { description: "Create new 🤖 auto session to autonomously solve problems.", subtask: false, template: newSessionTemplate("auto", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Solve PROBLEM according 'Auto Workflow'.") },
+        } : {}),
         "new-design": { description: "Create new 📐 design session to design solution to problem.", subtask: false, template: newSessionTemplate("design", "Summarize how steps taken so far", "Design and suggest APPROACHES around discovered OBSTACLES within CONSTRAINTS.") },
         "new-fix":    { description: "Create new 🛠️ troubleshooting session to address obstacle, while keeping current session clean.", subtask: false, template: newSessionTemplate("auto-troubleshoot", "Proposed current APPROACH to SOLUTION (list GOALS and STEPS to achieve SOLUTION)", "Continue with 'Workflow Loop'.") },
         ...(spyAvailable ? {

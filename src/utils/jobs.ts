@@ -49,9 +49,18 @@ export type ResolveJobWorkspaceResult =
     | { type: "missing" }
 
 export type JobWorkspaceIdentityResolution = {
-    resolution: "found" | "missing"
-    job_name?: string
-    workspace?: JobWorkspaceEntry
+    resolution: "found"
+    job_name: string
+    workspace: JobWorkspaceEntry
+    workspace_session_id?: string
+    session_title?: string
+    title_derived_candidate?: string
+    warning?: string
+} | {
+    resolution: "missing"
+    job_name?: never
+    workspace?: never
+    workspace_session_id?: string
     session_title?: string
     title_derived_candidate?: string
     warning?: string
@@ -65,7 +74,10 @@ export type ResolveJobWorkspaceIdentityOptions = {
 
 type SessionTitleClient = Pick<OpencodeClient, "session"> & {
     session: {
-        get?: (args: { path: { id: string }, query: { directory: string } }) => Promise<{ data?: { title?: string | null }, error?: string }>
+        get?: (args: { path: { id: string }, query: { directory: string } }) => Promise<{
+            data?: { id?: string | null, parentID?: string | null, title?: string | null }
+            error?: string
+        }>
     }
 }
 
@@ -295,6 +307,7 @@ export async function resolveJobWorkspaceIdentity(
             resolution: "found",
             job_name: workspace.job_name,
             workspace,
+            workspace_session_id: context.sessionID,
         }
     }
 
@@ -310,35 +323,76 @@ export async function resolveJobWorkspaceIdentity(
             resolution: "found",
             job_name: persistedWorkspace.job_name,
             workspace: persistedWorkspace,
+            workspace_session_id: context.sessionID,
             session_title: sessionTitle,
             title_derived_candidate: titleDerivedCandidate,
             warning: currentSession.warning,
         }
     }
 
-    if (!titleDerivedCandidate) {
+    if (titleDerivedCandidate) {
+        const resolved = await resolveJobWorkspace(fileSystem, storageRoot, titleDerivedCandidate)
+        if (resolved.type === "found") {
+            return {
+                resolution: "found",
+                job_name: resolved.workspace.job_name,
+                workspace: resolved.workspace,
+                workspace_session_id: context.sessionID,
+                session_title: sessionTitle,
+                title_derived_candidate: titleDerivedCandidate,
+                warning: currentSession.warning,
+            }
+        }
+    }
+
+    const rootSession = await getRootSession(client, context)
+    if (!rootSession) {
         return {
             resolution: "missing",
             session_title: sessionTitle,
+            title_derived_candidate: titleDerivedCandidate,
             warning: currentSession.warning,
         }
     }
 
-    const resolved = await resolveJobWorkspace(fileSystem, storageRoot, titleDerivedCandidate)
+    const rootWorkspace = await resolveJobWorkspaceBySessionID(fileSystem, storageRoot, rootSession.sessionID)
+    if (rootWorkspace !== undefined) {
+        return {
+            resolution: "found",
+            job_name: rootWorkspace.job_name,
+            workspace: rootWorkspace,
+            workspace_session_id: rootSession.sessionID,
+            session_title: rootSession.title,
+            warning: currentSession.warning,
+        }
+    }
+
+    const rootJobName = deriveJobNameFromTitle(cleanSessionTitleSuffix(rootSession.title))
+    if (!rootJobName) {
+        return {
+            resolution: "missing",
+            workspace_session_id: rootSession.sessionID,
+            session_title: rootSession.title,
+            warning: currentSession.warning,
+        }
+    }
+
+    const resolved = await resolveJobWorkspace(fileSystem, storageRoot, rootJobName)
     return resolved.type === "found"
         ? {
             resolution: "found",
             job_name: resolved.workspace.job_name,
             workspace: resolved.workspace,
-            session_title: sessionTitle,
-            title_derived_candidate: titleDerivedCandidate,
+            workspace_session_id: rootSession.sessionID,
+            session_title: rootSession.title,
+            title_derived_candidate: rootJobName,
             warning: currentSession.warning,
         }
         : {
             resolution: "missing",
-            job_name: titleDerivedCandidate,
-            session_title: sessionTitle,
-            title_derived_candidate: titleDerivedCandidate,
+            workspace_session_id: rootSession.sessionID,
+            session_title: rootSession.title,
+            title_derived_candidate: rootJobName,
             warning: currentSession.warning,
         }
 }
@@ -397,6 +451,39 @@ export async function getCurrentSessionTitle(
     }
 }
 
+async function getRootSession(
+    client: OpencodeClient | undefined,
+    context: Pick<SessionJobContext, "sessionID" | "directory">,
+): Promise<{ sessionID: string, title: string } | undefined> {
+    const sessionClient = client as SessionTitleClient | undefined
+    if (!sessionClient?.session.get) return undefined
+
+    const visited = new Set<string>()
+    let sessionID = context.sessionID
+    while (!visited.has(sessionID)) {
+        visited.add(sessionID)
+        try {
+            const response = await sessionClient.session.get({
+                path: { id: sessionID },
+                query: { directory: context.directory },
+            })
+            const id = response.data?.id?.trim()
+            const title = response.data?.title?.trim()
+            if (response.error || id !== sessionID || !title) return undefined
+
+            const parentID = response.data?.parentID
+            if (parentID === undefined || parentID === null) return { sessionID, title }
+            if (!parentID.trim()) return undefined
+            sessionID = parentID
+        }
+        catch {
+            return undefined
+        }
+    }
+
+    return undefined
+}
+
 function createJobWorkspaceTimestamp(): string {
     return new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-")
 }
@@ -432,14 +519,24 @@ async function createSessionJobWorkspaceUnlocked(
     storageRoot: string,
     sessionID: string,
 ): Promise<JobWorkspaceEntry> {
-    const existing = await resolveUniqueJobWorkspaceBySessionID(fileSystem, storageRoot, sessionID)
-    if (existing !== undefined) return existing
     if (!client) throw new Error("Current session client is unavailable.")
 
     const currentSession = await getCurrentSessionTitle(client, { sessionID, directory: context.directory })
     if (!currentSession.title) throw new Error(currentSession.warning ?? "Current session title is required.")
     const jobName = deriveJobNameFromTitle(cleanSessionTitleSuffix(currentSession.title))
     if (!jobName) throw new Error("Current session title must contain letters or numbers.")
+
+    return createJobWorkspaceForSessionUnlocked(fileSystem, storageRoot, sessionID, jobName)
+}
+
+async function createJobWorkspaceForSessionUnlocked(
+    fileSystem: Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "rename" | "rm" | "writeFile">,
+    storageRoot: string,
+    sessionID: string,
+    jobName: string,
+): Promise<JobWorkspaceEntry> {
+    const existing = await resolveUniqueJobWorkspaceBySessionID(fileSystem, storageRoot, sessionID)
+    if (existing !== undefined) return existing
 
     const jobsRoot = path.join(storageRoot, jobWorkspacesDirectory)
     await fileSystem.mkdir(jobsRoot, { recursive: true })
@@ -469,6 +566,32 @@ async function createSessionJobWorkspaceUnlocked(
         }
     }
     throw new Error("Unable to create unique timestamped job workspace; retry setup.")
+}
+
+export async function resolveOrCreateJobWorkspaceIdentity(
+    fileSystem: Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "rename" | "rm" | "writeFile">,
+    client: OpencodeClient | undefined,
+    context: Pick<SessionJobContext, "sessionID" | "directory"> & Partial<Pick<SessionJobContext, "worktree">>,
+): Promise<JobWorkspaceIdentityResolution> {
+    const identity = await resolveJobWorkspaceIdentity(fileSystem, client, context)
+    if (identity.resolution === "found" || !identity.title_derived_candidate) return identity
+
+    const storageRoot = resolveAgentsStorageRoot({
+        directory: context.directory,
+        worktree: context.worktree ?? context.directory,
+    })
+    const workspace = await createJobWorkspaceForSessionUnlocked(
+        fileSystem,
+        storageRoot,
+        identity.workspace_session_id ?? context.sessionID,
+        identity.title_derived_candidate,
+    )
+    return {
+        ...identity,
+        resolution: "found",
+        job_name: workspace.job_name,
+        workspace,
+    }
 }
 
 export async function createSessionJobWorkspace(

@@ -1,12 +1,12 @@
 import path from "node:path"
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
-import { createDirectoryFileSystem, isMissingFile, resolveJobWorkspaceIdentity, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
+import { createDirectoryFileSystem, isMissingFile, resolveOrCreateJobWorkspaceIdentity, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
 import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
-type RestToolFileSystem = Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "stat"> & {
+type RestToolFileSystem = Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "rename" | "rm" | "stat"> & {
     writeFile: (file: string, data: string | Buffer | Uint8Array) => Promise<void>
 }
 
@@ -24,6 +24,8 @@ const defaultFileSystem: RestToolFileSystem = {
     mkdir,
     readFile,
     readdir: readDirectory,
+    rename,
+    rm,
     stat,
     writeFile,
 }
@@ -261,18 +263,19 @@ async function fileExists(fileSystem: RestToolFileSystem, filePath: string): Pro
 }
 
 async function resolveCurrentJobRestDirectory(action: string, fileSystem: RestToolFileSystem, client: OpencodeClient | undefined, context: SessionJobContext): Promise<{ jobName: string, restDir: string } | { error: string }> {
-    const directoryFileSystem = createDirectoryFileSystem({
-        ...fileSystem,
-        rename: undefined,
-        rm: undefined,
-    })
-    const identity = await resolveJobWorkspaceIdentity(directoryFileSystem, client, context)
-    if (!identity.job_name || !identity.workspace) {
+    let identity
+    try {
+        identity = await resolveOrCreateJobWorkspaceIdentity(createDirectoryFileSystem(fileSystem), client, context)
+    }
+    catch (error) {
+        return { error: createAbortResponse(action, error) }
+    }
+    if (identity.resolution !== "found") {
         return {
             error: createRetryResponse(
                 action,
-                "No job workspace was found for current session.",
-                `Switch to a timestamped job workspace session under .agents/jobs/, then retry ${action}.`,
+                "Current session has no usable job name.",
+                `Set a session title containing letters or numbers, then retry ${action}.`,
             ),
         }
     }

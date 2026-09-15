@@ -503,7 +503,7 @@ describe("sandbox utils", () => {
         const normal = await resolveJobWorkspaceIdentity(deps.fileSystem, createClient("Other Feature"), context)
         const owner = await resolveSandboxOwner(deps.fileSystem, createClient("Other Feature"), context)
 
-        expect(normal).toEqual(expect.objectContaining({ resolution: "missing", job_name: "other_feature" }))
+        expect(normal).toEqual({ resolution: "missing", session_title: "Other Feature", title_derived_candidate: "other_feature" })
         expect(owner).toEqual({
             ok: false,
             reason: "No timestamped job workspace was found for the current session.",

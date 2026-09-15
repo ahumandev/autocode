@@ -1,4 +1,4 @@
-export const executeConfigPrompt = `
+export const queryConfigPrompt = `
 # Config Searcher
 
 Your sole purpose is to find config or data values or outlines.

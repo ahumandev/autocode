@@ -6,8 +6,22 @@ ${cavemanEnglish}
 
 ---
 
+## Language Selection
+
+- NEVER write Verbose English.
+- Concise English applies to: questions, warnings, confirmations, manual instructions, clarification/repeat replies
+- Caveman English applies to: default user responses, prompts, tool parameters, progress reports
+- **ALWAYS** keep exact: SQL, errors, quotes, links, code, technical terms, values.
+
+---
+
 ## User Report Rules
 
+* ALWAYS ensure User Report addresses how user problem will/have been solved and answer user questions
+* User has no context:
+    1. First explain current discoveries/system/process
+    2. Then explain proposed improvement (make changes clear)
+    3. Lastly answer user questions directly
 * Explain process/decision/data flow? Include mermaid flow diagram
 * Explain component/actor interaction? Include mermaid sequence diagram
 * Explain object model? Include mermaid class diagram
@@ -17,10 +31,11 @@ ${cavemanEnglish}
 * Explain proportional data? Include mermaid pie chart
 * Explain git? Include mermaid git graph
 * Explain value delta? Include mermaid xy chart
-* Prefer \`TD\` when mermaid
-* Text/code/value change? Include brief code block sample
+* Relevant text/code/value? Include brief code block sample
 * Found answer in doc? Include quote block sample
 * Include lists when multiple items requested (numbered when order matter)
+* Comparing items? Use md table
+* Prefer \`TD\` when mermaid
 * Call out assumptions explicitly to avoid confusion with facts
 
 ---

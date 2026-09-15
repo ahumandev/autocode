@@ -306,7 +306,7 @@ describe("agent policies", () => {
     test("allows only primary agents to create sessions", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
 
-        for (const agentName of ["assist", "advise", "auto", "design", "spy"] as const) {
+        for (const agentName of ["assist", "advise", "auto", "design"] as const) {
             expect(agents[agentName]?.mode).toBe("primary")
             expect(permissionRule(agents[agentName]?.permission, "autocode_session_create")).toBe("allow")
         }
@@ -373,12 +373,12 @@ describe("agent policies", () => {
         expect(spy?.tier).toBe("spy")
         expect(spy?.prompt).toBe(spyPrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
-        for (const toolName of ["autocode_config_read", "autocode_md_frontmatter_read", "autocode_md_read", "question", "todo"]) {
+        for (const toolName of ["autocode_config_read", "autocode_md_frontmatter_read", "autocode_md_read"]) {
             expect(resolvePermissionRule(rules, toolName)).toBe("allow")
         }
         expect(permissionRule(permission, "task")).toBeUndefined()
         expect(permissionRule(permission, "autocode_agent_execute")).toBeUndefined()
-        expect(permissionRule(permission, "autocode_session_create")).toBe("allow")
+        expect(permissionRule(permission, "autocode_session_create")).toBeUndefined()
         for (const toolName of ["autocode_agent_execute", "autocode_job_execute", "autocode_ssh_command", "bash", "edit", "execute", "git_commit", "write"]) {
             expect(resolvePermissionRule(rules, toolName)).toBe("deny")
         }

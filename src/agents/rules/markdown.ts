@@ -12,7 +12,9 @@ export const markdown = `
 * Except quoted source: Keep original format and text, but wrapped in quote blocks
 * All sources/files as inline md links (if url/path known); include line number (if known)
 * ALWAYS include paths in md links: cwd relative for project files; absolute for external files
-* NEVER mix backticks (\`\`) and md links
-* **Bold** important info
-* *italics* inline quotes of sources
+* NEVER mix \`backticks\` and md links
+* \`backticks\` only for inline code/config/values if not md link
+* **bold** key phrases
+* *italics* for assumptions
+* *"italic quotes"* for cited text sources
 `
