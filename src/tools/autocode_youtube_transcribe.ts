@@ -314,7 +314,7 @@ function sourceLabel(text: string): string | null {
     const colonIndex = text.indexOf(":")
     const prefix = text.slice(0, colonIndex)
     const words = prefix.split(/\s+/)
-    if (colonIndex <= 0 || prefix.length > 32 || words.length > 4 || !/^\p{Lu}[\p{L}\p{M}'’.\-]*$/u.test(words[0] ?? "") || !words.slice(1).every((word) => /^(?:\p{Lu}[\p{L}\p{M}'’.\-]*|\d+)$/u.test(word))) {
+    if (colonIndex <= 0 || prefix.length > 32 || words.length > 4 || !/^\p{Lu}[\p{L}\p{M}'’.-]*$/u.test(words[0] ?? "") || !words.slice(1).every((word) => /^(?:\p{Lu}[\p{L}\p{M}'’.-]*|\d+)$/u.test(word))) {
         return null
     }
     return `${prefix}:`
@@ -325,7 +325,7 @@ function isStandaloneNonSpeech(text: string): boolean {
 }
 
 function endsSentence(text: string): boolean {
-    return /[.?!…](?:["'”’\)\]\}»]+)?$/u.test(text)
+    return /[.?!…](?:["'”’)\u005D}»]+)?$/u.test(text)
 }
 
 function unicodeLength(text: string): number {
@@ -568,7 +568,7 @@ async function executeYoutubeTranscribe(url: string, timestamps: boolean): Promi
         }
 
         let formattedTranscript: string | null = null
-        let primaryError: unknown = undefined
+        let primaryError: unknown
         try {
             const transcript = await fetchTranscript(`https://www.youtube.com/watch?v=${parsedUrl.videoId}`, {
                 lang: selectedTrack.languageCode,

@@ -13,9 +13,6 @@ const requiredAgentKeys = [
 
 const requiredSlashCommands = [
     "job-concepts",
-    "job-design",
-    "job-facilitate",
-    "job-execute",
     "commit",
     "autocode-install",
     "autocode-version",

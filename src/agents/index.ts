@@ -238,11 +238,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             mode: "primary",
             permission: {
                 "*": "deny",
-                autocode_agent_execute: "allow",
                 autocode_concept_create: "allow",
                 autocode_concept_list: "allow",
                 autocode_concept_read: "allow",
-                autocode_job_execute: "allow",
                 autocode_job_list: "allow",
                 autocode_session_create: "allow",
                 doom_loop: "ask",

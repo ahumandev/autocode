@@ -366,7 +366,7 @@ describe("autocode_kill", () => {
         expect(deps.signalProcess).toHaveBeenCalledWith(3000, "SIGTERM")
     })
 
-    test("cleans only linked job sandbox storage after a successful kill", async () => {
+    test("cleans only current title workspace sandbox storage after a successful kill", async () => {
         const projectRoot = "/workspace/project"
         const ownerWorkspace = "2026-08-20_10-30-00_my_feature"
         const siblingWorkspace = "2026-08-19_10-30-00_sibling_feature"
@@ -382,7 +382,6 @@ describe("autocode_kill", () => {
             ".agents/sandboxes/dev/sandbox.json": { type: "file", content: "legacy" },
             ".agents/jobs": { type: "dir" },
             [`.agents/jobs/${ownerWorkspace}`]: { type: "dir" },
-            [`.agents/jobs/${ownerWorkspace}/session.yml`]: { type: "file", content: "session_id: session-1\n" },
             [`.agents/jobs/${ownerWorkspace}/sandboxes`]: { type: "dir" },
             [`.agents/jobs/${ownerWorkspace}/sandboxes/dev`]: { type: "dir" },
             [`.agents/jobs/${ownerWorkspace}/sandboxes/dev/sandbox.json`]: {
@@ -390,14 +389,13 @@ describe("autocode_kill", () => {
                 content: JSON.stringify({ sandbox_name: "dev", job_name: "my_feature", distro: "quick", backend: "bubblewrap", root_path: ownerSandbox }),
             },
             [`.agents/jobs/${siblingWorkspace}`]: { type: "dir" },
-            [`.agents/jobs/${siblingWorkspace}/session.yml`]: { type: "file", content: "session_id: session-2\n" },
             [`.agents/jobs/${siblingWorkspace}/sandboxes`]: { type: "dir" },
             [`.agents/jobs/${siblingWorkspace}/sandboxes/dev`]: { type: "dir" },
             [`.agents/jobs/${siblingWorkspace}/sandboxes/dev/sandbox.json`]: { type: "file", content: "sibling" },
         })
 
         const output = parseResult(await executeAutocodeKill(
-            createAutocodeKillTool(createClient("Sibling Feature"), deps),
+            createAutocodeKillTool(createClient("My Feature"), deps),
             { port: 3000, name: "node" },
             createToolContext({ sessionID: "session-1", directory: projectRoot, worktree: projectRoot }),
         ))
@@ -407,7 +405,7 @@ describe("autocode_kill", () => {
         expectNoSandboxAccess(deps, [siblingSandboxRoot, legacySandboxRoot])
     })
 
-    test("keeps successful kill result when no job workspace owns the session or title", async () => {
+    test("keeps successful kill result without creating absent title workspace", async () => {
         const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {
             ".agents": { type: "dir" },

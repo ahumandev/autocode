@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test"
 import type { Event } from "@opencode-ai/sdk"
 import { findActiveAutocodeAgent, restartAutocodeAgentInSession } from "@/hooks/agent_restart"
-import type { AgentRestartDependencies, AgentRestartInput, readCurrentJobPlan, summarizeAutocodeAgentSession } from "@/hooks/agent_restart"
+import type { AgentRestartDependencies, AgentRestartInput, summarizeAutocodeAgentSession } from "@/hooks/agent_restart"
 import {
     DEFAULT_AGENT_HANDOFF_TIMEOUT_MS,
     createPendingAgentRestartCoordinator,
@@ -14,7 +14,6 @@ import type { resolveAutocodeAgentSessionSettings } from "@/utils/agent_swap"
 type FindActiveFn = typeof findActiveAutocodeAgent
 type ResolveSettingsFn = typeof resolveAutocodeAgentSessionSettings
 type SummarizeFn = typeof summarizeAutocodeAgentSession
-type ReadCurrentJobPlanFn = typeof readCurrentJobPlan
 type PromptAsyncFn = NonNullable<AgentRestartInput["client"]["session"]["promptAsync"]>
 type PromptAsyncMock = (...args: Parameters<PromptAsyncFn>) => ReturnType<PromptAsyncFn>
 
@@ -31,7 +30,6 @@ const resolveSettingsMock = mock<ResolveSettingsFn>(async () => ({
     resolvedModel: { model: { providerID: "openai", modelID: "gpt-5" }, variant: "high" },
 }))
 const summarizeMock = mock<SummarizeFn>(async () => ({ data: true }))
-const readCurrentJobPlanMock = mock<ReadCurrentJobPlanFn>(async () => undefined)
 function promptAsyncSuccess(..._args: Parameters<PromptAsyncFn>): ReturnType<PromptAsyncFn> {
     return Promise.resolve({
         data: undefined,
@@ -160,7 +158,6 @@ function dependencies(): AgentRestartDependencies {
         findActiveAutocodeAgent: findActiveMock,
         resolveAutocodeAgentSessionSettings: resolveSettingsMock,
         summarizeAutocodeAgentSession: summarizeMock,
-        readCurrentJobPlan: readCurrentJobPlanMock,
     }
 }
 
@@ -190,14 +187,12 @@ describe("restartAutocodeAgentInSession", () => {
         findActiveMock.mockClear()
         resolveSettingsMock.mockClear()
         summarizeMock.mockClear()
-        readCurrentJobPlanMock.mockClear()
         promptAsyncMock.mockClear()
         findActiveMock.mockImplementation(async () => ({ currentAgent: "assist" }))
         resolveSettingsMock.mockImplementation(async () => ({
             resolvedModel: { model: { providerID: "openai", modelID: "gpt-5" }, variant: "high" },
         }))
         summarizeMock.mockImplementation(async () => ({ data: true }))
-        readCurrentJobPlanMock.mockImplementation(async () => undefined)
         promptAsyncMock.mockImplementation(promptAsyncSuccess)
     })
 
@@ -242,20 +237,6 @@ describe("restartAutocodeAgentInSession", () => {
             },
         })
         expect(coordinator.pendingCount()).toBe(0)
-    })
-
-    test("preserves selected job plan in deferred assist continuation", async () => {
-        readCurrentJobPlanMock.mockImplementation(async () => ({ jobName: "current_job", plan: "# Current plan" }))
-
-        await restartAutocodeAgentInSession(input(coordinator, "assist"), dependencies())
-        await coordinator.handleEvent(idleEvent())
-
-        expect(promptAsyncMock).toHaveBeenCalledWith(expect.objectContaining({
-            body: expect.objectContaining({
-                parts: [expect.objectContaining({ text: "Selected job: current_job\n\nplan.md:\n# Current plan" })],
-            }),
-        }))
-        expect(sessionCreateMock).not.toHaveBeenCalled()
     })
 
     test("consumes repeated and concurrent idle events before compaction awaits", async () => {

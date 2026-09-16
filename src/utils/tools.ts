@@ -87,18 +87,6 @@ export function createRetryResponse(failedAction: string, error: unknown, correc
     return createErrorResponse(failedAction, error, correctiveAction)
 }
 
-export function createLifecycleJobRequiredRetryResponse(failedAction: string, subject?: string): string {
-    const target = subject?.trim()
-        ? `No planned job directory was found in .agents/jobs/* for ${subject}.`
-        : "No planned job directory was found in .agents/jobs/* for the current session."
-
-    return createRetryResponse(
-        failedAction,
-        `${target} This tool requires a timestamped job workspace.`,
-        "Switch to a timestamped job workspace under .agents/jobs/*, then retry this tool."
-    )
-}
-
 export function resetRetryCounts(): void {
     retryCounts.clear()
 }

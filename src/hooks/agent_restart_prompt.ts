@@ -3,10 +3,6 @@ import type { PrimaryAutocodeAgent } from "@/utils/agent_swap"
 export type AgentRestartPromptInput = {
     currentAgent: PrimaryAutocodeAgent
     targetAgent: PrimaryAutocodeAgent
-    jobPlan?: {
-        jobName: string
-        plan: string
-    }
 }
 
 const RESTART_SAME_AGENT_PROMPT = "Continue"
@@ -24,13 +20,8 @@ const restartPromptByTarget: Record<PrimaryAutocodeAgent, string> = {
 }
 
 export function createAgentRestartPrompt(input: AgentRestartPromptInput): string {
-    if (input.targetAgent === "assist" || input.targetAgent === "auto") {
-        if (input.jobPlan) {
-            return `Selected job: ${input.jobPlan.jobName}\n\nplan.md:\n${input.jobPlan.plan}`
-        }
-
-        return input.targetAgent === "assist" ? RESTART_ASSIST_PROMPT : RESTART_AUTO_PROMPT
-    }
+    if (input.targetAgent === "assist") return RESTART_ASSIST_PROMPT
+    if (input.targetAgent === "auto") return RESTART_AUTO_PROMPT
 
     if (input.currentAgent === input.targetAgent) {
         return RESTART_SAME_AGENT_PROMPT

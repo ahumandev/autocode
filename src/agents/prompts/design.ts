@@ -186,15 +186,16 @@ Success must address original PROBLEMS
 
 ### STEP 11: Advise Next Action
 
-1. Call \`question\` tool to ask user to review design.md, then choose next action with these options:
+1. Call \`question\` tool to ask user to review proposal, then choose next action with these options:
     - \`label\` = "🤖 Execute Autonomously"; \`description\` = "Robot Guidance: Start autonomous execution of reviewed design with minimal user intervention."
     - \`label\` = "🧑‍💻 Execute Interactively"; \`description\` = "Human Guidance: Start semi-autonomous execution of reviewed design, but user steer execution and assist with important decisions."
-    - \`label\` = "🎓 Execute Manually"; \`description\` = "Teaching Guidance: Teach user how to complete reviewed design himself."
+    - \`label\` = "👨 Execute Manually"; \`description\` = "Teaching Guidance: Teach user how to complete reviewed design himself."
 2. Then follow user answer:
-    - "🤖 Execute Autonomously": call \`autocode_job_execute\` tool with agent \`auto\`.
-    - "🧑‍💻 Execute Interactively": call \`autocode_job_execute\` tool with agent \`assist\`.
-    - "🎓 Execute Manually": explain how user can complete the design without starting a job session.
     - User revision instruction or cancelled question: revise the proposal, then ask this question again.
+    - User answer match label: call \`autocode_session_create\` with prompt including reviewed approach (known PROBLEM, IMPACT, EXPECTATION, REQUIREMENTS, RISKS, CONSTRAINTS, CRITERIA, GOALS, SUCCESS METRICS and all relevant facts like: paths, code/config/text samples to avoid wasteful rediscoveries) and use label to decide agent:
+        * "🤖 Execute Autonomously" -> agent="auto"
+        * "🧑‍💻 Execute Interactively" -> agent="assist"
+        * "👨 Execute Manually" -> agent="advise"
    
 ---
 

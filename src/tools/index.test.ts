@@ -296,28 +296,6 @@ describe("auto resume wiring", () => {
         })
     })
 
-    test("registers job-design command for the design agent", async () => {
-        await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-
-                await configurePlugin(plugin, cfg)
-
-                expect(cfg.command["job-design"]?.agent).toBe("design")
-                expect(cfg.command["job-design"]?.template).toContain("autocode_concept_list")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
-        })
-    })
-
     test("allows assist to call dependency checks", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -373,72 +351,6 @@ describe("auto resume wiring", () => {
                     "*": "deny",
                     "/home/me/CarData/*": "allow",
                 }))
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
-        })
-    })
-
-    test("registers job-design command with design agent metadata", async () => {
-        await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-
-                await configurePlugin(plugin, cfg)
-
-                expect(cfg.command["job-design"]?.agent).toBe("design")
-                expect(cfg.command["job-design"]?.template).toContain("autocode_concept_list")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
-        })
-    })
-
-    test("registers job-design command description for design agent", async () => {
-        await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-
-                await configurePlugin(plugin, cfg)
-
-                expect(cfg.command["job-design"]?.agent).toBe("design")
-                expect(cfg.command["job-design"]?.description).toBe("📐 Design solution from existing concept or job.")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
-        })
-    })
-
-    test("registers job-design command as non-subtask design work", async () => {
-        await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-
-                await configurePlugin(plugin, cfg)
-
-                expect(cfg.command["job-design"]?.agent).toBe("design")
-                expect(cfg.command["job-design"]?.subtask).toBe(false)
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -1303,7 +1215,6 @@ describe("tool registrations", () => {
                 const cfg = createConfig()
                 await configurePlugin(plugin, cfg)
                 expect(Object.keys(plugin.tool ?? {}).sort()).toEqual([
-                    "autocode_agent_execute",
                     "autocode_concept_create",
                     "autocode_concept_list",
                     "autocode_concept_read",
@@ -1321,7 +1232,6 @@ describe("tool registrations", () => {
                     "autocode_db_table",
                     "autocode_db_table_read",
                     "autocode_db_tables",
-                    "autocode_job_execute",
                     "autocode_job_list",
                     "autocode_kill",
                     "autocode_logo_find",
@@ -1391,20 +1301,17 @@ describe("tool registrations", () => {
                 expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("List timestamped job workspaces.")
                 expect(plugin.tool?.autocode_act_prompt).toBeUndefined()
                 expect(plugin.tool?.autocode_act).toBeUndefined()
-                expect(plugin.tool?.autocode_agent_execute).toBeDefined()
+                expect(plugin.tool?.autocode_agent_execute).toBeUndefined()
                 expect(plugin.tool?.autocode_session_context).toBeDefined()
                 expect(toolSurfaceText(plugin.tool?.autocode_session_context)).toContain("Read sanitized current session context and token usage metadata.")
                 expect(plugin.tool?.autocode_session_create).toBeDefined()
                 expect(plugin.tool?.skill_learn).toBeDefined()
                 expect(plugin.tool?.skill).toBeDefined()
                 expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
-                expect(plugin.tool?.autocode_job_execute).toBeDefined()
+                expect(plugin.tool?.autocode_job_execute).toBeUndefined()
                 expect(plugin.tool?.autocode_execute_job).toBeUndefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Swap current session to selected agent with job workspace instructions injected.")
-                expect(toolSurfaceText(plugin.tool?.autocode_agent_execute)).toContain("Selected job_name in safe snake_case.")
                 const sessionCreateToolText = toolSurfaceText(plugin.tool?.autocode_session_create)
                 expect(sessionCreateToolText).toContain("Only call when requested by user.")
-                expect(toolSurfaceText(plugin.tool?.autocode_job_execute)).not.toContain("job_name")
                 expect(plugin.tool?.autocode_concept_create).toBeDefined()
                 expect(plugin.tool?.autocode_plan_start).toBeUndefined()
                 expect(plugin.tool?.autocode_db_table).toBeDefined()
@@ -1421,10 +1328,10 @@ describe("tool registrations", () => {
                 expect(cfg.agent.ask).toBeUndefined()
                 expect(cfg.agent.autocode).toBeUndefined()
                 expect(cfg.agent.plan).toEqual({ disable: true })
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_execute")).toBe("allow")
+                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_execute")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBe("allow")
+                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")
                 expect(getPermissionRule(cfg.agent["execute-author"]?.permission, "autocode_logo_find")).toBeUndefined()
                 expect(getPermissionRule(cfg.agent["execute-author"]?.permission, "autocode_logo")).toBeUndefined()
@@ -1449,7 +1356,7 @@ describe("tool registrations", () => {
                     "query_autocode", "query_browser", "query_code", "query_config", "query_db", "query_excel", "query_git", "query_os", "query_skills", "query_ssh", "query_text", "query_web", "query_youtube",
                 ]) expect(cfg.agent[legacyAgentId]).toBeUndefined()
                 expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
-                expect(cfg.agent.design?.prompt).toContain("autocode_job_execute")
+                expect(cfg.agent.design?.prompt).toContain("autocode_session_create")
                 expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
                 expect(cfg.agent.advise?.prompt).toContain("`task` query subagents")
                 const queryDbAgent = (cfg.agent as Record<string, Record<string, unknown>>)["query-db"]

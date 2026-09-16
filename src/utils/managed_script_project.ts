@@ -3,7 +3,7 @@ import { lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "no
 import { createRequire } from "node:module"
 import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { createSessionJobWorkspace, isMissingFile, resolveJobWorkspaceIdentity, type JobToolFileSystem, type SessionJobContext } from "./jobs"
+import { ensureSessionJobWorkspace, isMissingFile, type JobToolFileSystem, type SessionJobContext } from "./jobs"
 import { flattenError } from "./tools"
 
 export type ManagedScriptProjectCommandResult = {
@@ -202,14 +202,7 @@ export function createManagedScriptProjectPaths(workspacePath: string): ManagedS
 export async function resolveManagedScriptProjectOwner(dependencies: Pick<ManagedScriptProjectDependencies, "client" | "context" | "fileSystem">): Promise<ManagedScriptProjectOwnerResolution> {
     try {
         const fileSystem = dependencies.fileSystem ?? defaultFileSystem
-        const identity = await resolveJobWorkspaceIdentity(fileSystem, dependencies.client, dependencies.context, { sessionOnly: true })
-        if (identity.resolution === "found" && identity.workspace && identity.job_name) {
-            return { ok: true, owner: { jobName: identity.job_name, workspacePath: identity.workspace.absolute_path } }
-        }
-        if (dependencies.context.agent !== "execute-script") {
-            return { ok: false, reason: "No timestamped job workspace was found for the current session.", jobName: identity.job_name }
-        }
-        const workspace = await createSessionJobWorkspace(fileSystem, dependencies.client, dependencies.context)
+        const workspace = await ensureSessionJobWorkspace(fileSystem, dependencies.client, dependencies.context)
         return { ok: true, owner: { jobName: workspace.job_name, workspacePath: workspace.absolute_path } }
     }
     catch (error) {

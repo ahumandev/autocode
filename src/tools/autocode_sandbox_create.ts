@@ -143,9 +143,9 @@ function createInternetValidationFailureResponse(validationDiagnostics: Record<s
 
 export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies, sandboxConfig: SandboxConfig = {}) {
     return tool({
-        description: "Create sandbox environment in current resolved job when you need to test deployments, isolate dependency problem, or run experimental scripts. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before creation. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Always run `autocode_sandbox_create` before tasking `execute-sandbox` agents.",
+        description: "Create sandbox environment in current title-derived job workspace when you need to test deployments, isolate dependency problem, or run experimental scripts. Workspace is created on demand. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. Always run `autocode_sandbox_create` before tasking `execute-sandbox` agents.",
         args: {
-            sandbox_name: tool.schema.string().describe("Lowercase name inside current resolved job, using letters, numbers, and underscores only. Same names in other jobs are independent."),
+            sandbox_name: tool.schema.string().describe("Lowercase name inside current title-derived job workspace, using letters, numbers, and underscores only. Same names in other workspaces are independent."),
             distro: tool.schema.string().optional().describe("Omit `distro` for fast startup using read-only host OS filesystem mounts. Use `alpine` for isolated OS/installation testing and experimentation. Use `debian` when Alpine is incompatible with project dependencies or glibc expectations."),
             internet_enabled: tool.schema.boolean().optional().describe("Enable sandbox network access; defaults to false."),
         },
@@ -158,7 +158,7 @@ export function createAutocodeSandboxCreateTool(client?: OpencodeClient, deps: S
 
             try {
                 const owner = await resolveSandboxOwner(deps.fileSystem, client, context, sandboxName.value)
-                if (!owner.ok) return createRetryResponse("create sandbox", owner.reason, "Start or select a timestamped job workspace before creating a sandbox.")
+                if (!owner.ok) return createRetryResponse("create sandbox", owner.reason, "Set current session title to include letters or numbers, then retry.")
                 const paths = owner.owner
                 const safePath = assertDirectSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
                 if (!safePath.ok) return JSON.stringify({ ok: false, status: "unsafe_path", reason: safePath.reason, guidance: limitationGuidance })

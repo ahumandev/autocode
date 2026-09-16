@@ -4,7 +4,6 @@ import type { ManagedScriptLifecycle, ManagedScriptLifecycleDependencies } from 
 import type { SessionJobContext } from "@/utils/jobs"
 import type {
     ManagedScriptRuntime,
-    ManagedScriptRuntimeDependencies,
     ManagedScriptServiceCleanupResult,
     ManagedScriptServiceStartResult,
 } from "@/utils/managed_script_runtime"

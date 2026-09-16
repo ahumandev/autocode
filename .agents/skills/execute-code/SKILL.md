@@ -4,35 +4,33 @@ description: Use `execute-code` to get "Technical Design" when you must design t
 ---
 
 ## Architectural Overview
-TypeScript OpenCode plugin. Plugin registers agents, commands, skills, config, and runtime tools. Text files keep concept and design workspace state.
+TypeScript OpenCode plugin. Plugin registers agents, commands, skills, config, and runtime tools. OpenCode sessions own workflow and state. Job workspaces hold temp tool artifacts only.
 
 ## Technology Choices
 - **TypeScript**: Plugin source and Bun build target.
-- **OpenCode**: Hosts plugin agents, commands, config, and tools.
+- **OpenCode**: Hosts plugin agents, commands, config, tools, and sessions.
 - **JSONC**: Layered user and project config.
 
 ## Key Data Models
-- **Concept** (`.agents/concepts/`): Saved concept input for design work.
-- **Design workspace** (`.agents/jobs/`): Timestamped `design.md` work plan and script artifacts.
+- **Concept** (`.agents/concepts/`): Optional saved Markdown input for design agents.
 - **Tier set** (`autocode.jsonc`): Named model and variant overrides by agent tier.
 
 ## Key API Endpoints
-- `/job-concepts` (`src/commands/`): Save concepts.
-- `/job-design` (`src/commands/`): Make design workspace.
-- `/job-facilitate` (`src/commands/`): Select `assist` execution.
-- `/job-execute` (`src/commands/`): Select `auto` execution.
+- `/job-concepts` (`src/commands/job-concepts.ts`): Save concept Markdown.
+- `/new-design` (`src/commands/index.ts`): Start OpenCode design session.
+- `/resume` (`src/commands/index.ts`): Resume interrupted OpenCode session.
 
 ## Error Handling
 - **Tool errors** (`src/utils/tools.ts`): Shared tool error rules.
 - **Agent errors** (`src/agents/prompts/error.ts`): Managed agent error rules.
 
 ## Security Design
-External-directory rules use last matching rule. Database tools read only. REST and SSH credentials come from environment variables. Sandbox tools deny when host lacks supported isolation.
+No app auth layer. External-directory rules use last matching rule. Database tools read only. REST and SSH credentials use environment variables. Sandbox tools deny on unsupported hosts.
 
 ## External Integrations
 - **GitHub** (`src/skills/github.jsonc`): Sync tracked skill snapshots — GitHub.
 - **REST services** (`src/tools/`): Request and cached response tools — HTTP.
-- **Databases** (`src/tools/`): Discover and read one configured table — DB connection.
+- **Databases** (`src/tools/`): Discover and read configured tables — DB connection.
 - **SSH targets** (`src/tools/`): Remote command and file tools — SSH.
 
 ## Directory Structure
@@ -40,6 +38,7 @@ External-directory rules use last matching rule. Database tools read only. REST 
 - **Commands** (`src/commands/`): Slash-command registration.
 - **Tools** (`src/tools/`): Runtime tool implementations.
 - **Skills** (`src/skills/`): Bundled guidance and GitHub snapshots.
+- **Temp workspaces** (`.agents/jobs/`): Tool artifacts only; no workflow state.
 
 ## Special Files
 - `scripts/copy-skill-sources.ts`: Copy bundled skills into `dist/skills`.
@@ -49,6 +48,7 @@ External-directory rules use last matching rule. Database tools read only. REST 
 - **Tier config**: Missing override uses agent or OpenCode default.
 - **GitHub snapshots**: Sync accepts redistribution risk; grants no rights.
 - **Sandbox support**: Unsupported hosts deny all sandbox tools.
+- **Job workspace**: Tools create or reuse per-session temp workspace on demand.
 
 ---
 

@@ -96,7 +96,7 @@ function createSetupResponse(result: ManagedScriptProjectResult): string {
     if (result.ok) return createSuccessResponse(result)
     if (result.blocker) {
         const instruction = result.blocker.code === "job_workspace_required"
-            ? "Start or select a timestamped job workspace for the current session, then retry setup."
+            ? "Set current session title to include letters or numbers, then retry setup."
             : result.blocker.code === "runtime_unavailable"
                 ? "Install Node.js 20+ and npm in the current runtime, then retry setup."
                 : "Correct the managed-script setup input or project state, then retry setup."

@@ -18,11 +18,11 @@ The managed agent catalogue lives in [`src/agents/index.ts`](../src/agents/index
 
 Runtime tools live in [`src/tools/`](../src/tools/). They cover concepts, design workspace read/write, execution handoff, criteria tracking, read-only database discovery and table reads, REST requests and cached response lookup, sandbox operations, cross-project task execution, and session resume support. Shared tool error handling should stay aligned with [`src/utils/tools.ts`](../src/utils/tools.ts) and the agent error rules.
 
-## Concept and Design Workspace Architecture
+## Session and Temporary Workspace Architecture
 
-`/job-concepts` stores concepts in `.agents/concepts/`; `/job-design` uses a selected concept or current context to prepare a design proposal in the current session. Existing design workspaces follow `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/design.md`, where timestamps are UTC and `{title_dir}` derives from the session title.
+OpenCode sessions are sole workflow and state source. `autocode_session_create` requires a nonblank `prompt` and creates an agent handoff session.
 
-`autocode_session_create` uses an explicit nonblank `prompt` without lookup. A blank prompt derives the current-title slug and loads the newest matching design; an absent match returns a retriable provide-`prompt` error. Workspaces persist at their original paths: execution does not relocate them or use workspace status transitions. `/job-facilitate` only selects `assist` execution; `/job-execute` selects `auto` execution.
+Retained tools create or reuse `.agents/jobs/<timestamp>_<session-title-slug>/` on demand through shared utility. This directory holds temporary per-session artifacts only.
 
 ## Generated skills
 

@@ -24,7 +24,7 @@ flowchart TD
   Design -- 🤖 auto --> Auto([autonomous execution])
 ```
 
-`spy` cannot receive session handoff; use it directly.
+Switch any time between `💡 advise` and `🧑‍💻 assist` and `🤖 auto` when work needs a different autonomy level.
 
 ### Behavioural Differences
 
@@ -33,6 +33,7 @@ flowchart TD
 | 💡 advise | Autonomous     | Interactive | Human         |
 | 🧑‍💻 assist | Autonomous     | Interactive | AI*           |
 | 🤖 auto   | Autonomous     | Autonomous  | AI*           |
+| 🕵️ spy    | Autonomous     | Stop        | AI            |
 
 *Except dangerous tasks.
 
@@ -52,38 +53,35 @@ For example you may start in `assist` mode and then later when you get busy, swi
 | `/new-design`       | Create new 📐 design session to design solution to problem.                               |
 | `/new-auto`         | Create new 🤖 auto session to autonomously solve problems.                                |
 | `/new-assist`       | Create new 🧑‍💻 assist session to semi-autonomously assist with problems/improvements.      |
-| `/new-spy`          | Create new 🕵️ spy session from current context for read-only safety review and guidance.   |
+| `/new-spy`          | Create new 🕵️ spy session from current context for read-only safety review and guidance.  |
 | `/new-fix`          | Create new session to fix errors or requested issues.                                    |
 | `/job-concepts`     | Save concepts under `.agents/concepts/`.                                                 |
-| `/job-design`       | Design a solution from a concept or current context.                                     |
-| `/job-execute`      | Select `auto` execution for current design workspace.                                    |
-| `/job-facilitate`   | Select `assist` execution for current design workspace.                                  |
 
-### Concepts and Design Workspaces
+### Concepts and Temporary Workspaces
 
 Concepts are early Markdown descriptions saved in `.agents/concepts/`. `/job-concepts` remains available for creating them.
 
-| Path                                           | Purpose                                                                                       |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `.agents/concepts/{label}.md`                  | Early concept selected by `/job-design`.                                                      |
-| `.agents/jobs/{name}/design.md`                | Solution design with problems, impact, expectations, requirements, constraints, and proposal. |
-| `.agents/jobs/{name}/session.yml`              | Optional linked OpenCode session ID.                                                          |
-| `.agents/jobs/{name}/sandboxes/{sandbox_name}` | Canonical per-job sandbox storage.                                                            |
+OpenCode sessions own all workflow and state. Do not use `design.md`, `plan.md`, or `session.yml` as workflow state.
 
-`autocode_session_create` uses a nonblank `prompt` directly. With a blank `prompt`, it derives the current-title slug and uses the newest matching `design.md`; no match returns a retriable error instructing the caller to provide a nonblank `prompt`.
+| Path                                             | Purpose                                     |
+| ------------------------------------------------ | ------------------------------------------- |
+| `.agents/concepts/{label}.md`                    | Early concept created with `/job-concepts`. |
+| `.agents/jobs/<timestamp>_<session-title-slug>/` | Temporary workspace for current session.    |
+
+Retained tools create or reuse this temporary workspace on demand. It may hold scripts, sandboxes, REST cache, and similar temporary artifacts.
 
 ### Sandbox ownership
 
-Canonical sandbox path is exactly `.agents/jobs/{name}/sandboxes/{sandbox_name}`. Resolve current job first from its linked session; otherwise use deterministic newest timestamped workspace matching current session-title slug. No owner returns an error before filesystem mutation or process spawn.
+Sandboxes are temporary artifacts in current session workspace: `.agents/jobs/<timestamp>_<session-title-slug>/sandboxes/{sandbox_name}`. Retained sandbox tools create or reuse workspace on demand.
 
-All sandbox access, list, create, copy, and delete operations stay in resolved current job. Never look up sandbox names across jobs: same `{sandbox_name}` may exist independently in multiple jobs. Never access, fall back to, migrate, scan, delete, or write legacy `.agents/sandboxes`; legacy data remains untouched and inaccessible.
+Sandbox access, listing, creation, copying, and deletion stay in current session workspace. Same `{sandbox_name}` may exist in separate session workspaces. Legacy `.agents/sandboxes` is untouched and inaccessible.
 
 ### Managed Script Workflow
 
-Each managed script project belongs to its current job:
+Managed scripts are temporary artifacts in current session workspace:
 
 ```text
-.agents/jobs/{name}/scripts/
+.agents/jobs/<timestamp>_<session-title-slug>/scripts/
 ├── AGENTS.md
 ├── package.json
 ├── package-lock.json
@@ -94,9 +92,9 @@ Each managed script project belongs to its current job:
 └── services/                  # when applicable
 ```
 
-Log filenames vary, but all managed logs remain in current job's `scripts/logs/`. Agents in same job reuse one scripts project; different jobs or sessions resolve separate job roots. Missing or ambiguous job ownership rejects the operation. Script-project files persist across managed tool calls until whole-job cleanup.
+Retained script tools create or reuse this workspace on demand. Logs remain in `scripts/logs/`. Different sessions use separate temporary workspaces.
 
-`scripts/src` is the canonical managed `sourceRoot`; runtime fixes it and callers cannot supply another source root. `autocode_script_run` and `autocode_script_service` with `action` `start` accept entries relative to it, such as `task.mjs` or `nested/task.mjs`. Entries reject `src/` prefixes, absolute paths, backslashes, traversal, symlink escapes, broken symlinks, non-files, and extensions other than `.mjs`.
+`scripts/src` is canonical managed `sourceRoot`; runtime fixes it and callers cannot supply another source root. `autocode_script_run` and `autocode_script_service` with `action` `start` accept entries relative to it, such as `task.mjs` or `nested/task.mjs`. Entries reject `src/` prefixes, absolute paths, backslashes, traversal, symlink escapes, broken symlinks, non-files, and extensions other than `.mjs`.
 
 Managed processes use `scripts` root as cwd. `AUTOCODE_SCRIPT_ROOT` is `scripts` root, and `AUTOCODE_WORKSPACE_ROOT` remains unchanged. Dependency specs accept npm registry versions, ranges, and tags only; `file:`, `link:`, relative or absolute paths, URLs, Git sources, and filesystem or network archive sources are rejected.
 

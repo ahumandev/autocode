@@ -310,49 +310,8 @@ describe("managed script project", () => {
 
             expect(workspaceName).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_fresh_script_task$/)
             expect(setup.paths.workspacePath).toBe(reused.paths.workspacePath)
-            expect(await readFile(join(setup.paths.workspacePath, "session.yml"), "utf8")).toBe("session_id: child-session\n")
             expect(await readdir(join(storageRoot, ".agents", "jobs"))).toHaveLength(1)
             expect(await exists(setup.paths.sourceRoot)).toBe(true)
-        }
-        finally {
-            await rm(storageRoot, { recursive: true, force: true })
-        }
-    })
-
-    test("keeps non-execute-script sessions blocked without creating a workspace", async () => {
-        const storageRoot = await mkdtemp(join(tmpdir(), "managed-script-foreign-session-"))
-        try {
-            const result = await createManagedScriptProject({
-                context: { sessionID: "session-1", directory: storageRoot, worktree: storageRoot, agent: "assist" },
-                client: { session: { get: async () => ({ data: { title: "Foreign task" } }) } } as never,
-                fileSystem: createFileSystem(),
-            }).setup()
-
-            expect(result).toMatchObject({ ok: false, blocker: { code: "job_workspace_required", message: "No timestamped job workspace was found for the current session." } })
-            expect(await exists(join(storageRoot, ".agents"))).toBe(false)
-        }
-        finally {
-            await rm(storageRoot, { recursive: true, force: true })
-        }
-    })
-
-    test("removes newly created workspace when execute-script creation fails", async () => {
-        const storageRoot = await mkdtemp(join(tmpdir(), "managed-script-create-failure-"))
-        const fileSystem = createFileSystem()
-        const write = fileSystem.writeFile
-        fileSystem.writeFile = async (filePath, content) => {
-            if (filePath.includes("session.yml.autocode-tmp-")) throw new Error("session write denied")
-            await write(filePath, content)
-        }
-        try {
-            const result = await createManagedScriptProject({
-                context: { sessionID: "session-1", directory: storageRoot, worktree: storageRoot, agent: "execute-script" },
-                client: { session: { get: async () => ({ data: { title: "Creation failure" } }) } } as never,
-                fileSystem,
-            }).setup()
-
-            expect(result).toMatchObject({ ok: false, blocker: { code: "job_workspace_required" } })
-            expect(await readdir(join(storageRoot, ".agents", "jobs"))).toEqual([])
         }
         finally {
             await rm(storageRoot, { recursive: true, force: true })

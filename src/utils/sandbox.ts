@@ -4,7 +4,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { cp, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import path from "node:path"
-import { resolveAgentsStorageRoot, resolveJobWorkspaceIdentity, type JobToolFileSystem, type JobWorkspaceEntry, type SessionJobContext } from "./jobs"
+import { ensureSessionJobWorkspace, resolveAgentsStorageRoot, type JobToolFileSystem, type JobWorkspaceEntry, type SessionJobContext } from "./jobs"
 
 export const allowedSandboxDistros = ["alpine", "debian", "ubuntu", "archlinux", "opensuse"] as const
 export const supportedAlpineArchitectures = ["x86_64", "aarch64", "armv7"] as const
@@ -840,41 +840,36 @@ function assertSafeJobSandboxRootDeletionPath(candidatePath: string, owner: Sand
 }
 
 export function resolveSandboxOwner(
-    fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir">,
+    fileSystem: Pick<JobToolFileSystem, "mkdir" | "readdir">,
     client: OpencodeClient | undefined,
     context: SessionJobContext,
 ): Promise<SandboxOwnerResolution>
 export function resolveSandboxOwner(
-    fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir">,
+    fileSystem: Pick<JobToolFileSystem, "mkdir" | "readdir">,
     client: OpencodeClient | undefined,
     context: SessionJobContext,
     sandboxName: string,
 ): Promise<NamedSandboxOwnerResolution>
 export async function resolveSandboxOwner(
-    fileSystem: Pick<JobToolFileSystem, "readFile" | "readdir">,
+    fileSystem: Pick<JobToolFileSystem, "mkdir" | "readdir">,
     client: OpencodeClient | undefined,
     context: SessionJobContext,
     sandboxName?: string,
 ): Promise<SandboxOwnerResolution | NamedSandboxOwnerResolution> {
-    const identity = await resolveJobWorkspaceIdentity(fileSystem, client, {
-        sessionID: context.sessionID,
-        directory: context.directory,
-        worktree: context.worktree,
-    })
-    if (identity.resolution !== "found") {
-        return {
-            ok: false,
-            reason: "No timestamped job workspace was found for the current session.",
-            jobName: identity.title_derived_candidate,
-        }
+    let workspace: JobWorkspaceEntry
+    try {
+        workspace = await ensureSessionJobWorkspace(fileSystem, client, context)
+    }
+    catch (error) {
+        return { ok: false, reason: error instanceof Error ? error.message : String(error) }
     }
 
     const owner: SandboxOwner = {
         storageRoot: resolveAgentsStorageRoot(context),
-        workspace: identity.workspace,
-        jobName: identity.job_name,
-        workspacePath: identity.workspace.absolute_path,
-        jobSandboxRoot: path.join(identity.workspace.absolute_path, "sandboxes"),
+        workspace,
+        jobName: workspace.job_name,
+        workspacePath: workspace.absolute_path,
+        jobSandboxRoot: path.join(workspace.absolute_path, "sandboxes"),
     }
     if (sandboxName === undefined) return { ok: true, owner }
 

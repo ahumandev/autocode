@@ -182,9 +182,9 @@ function runSandboxCommand(command: string, args: string[], timeoutMs: number, d
 
 export function createAutocodeSandboxCliTool(client?: OpencodeClient, deps: SandboxCliDependencies = defaultSandboxDependencies) {
     return tool({
-        description: "Run shell command inside existing sandbox in current resolved job. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before spawning command. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`.",
+        description: "Run shell command inside existing sandbox in current title-derived job workspace. Workspace is created on demand. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`.",
         args: {
-            sandbox_name: tool.schema.string().describe("Existing sandbox name inside current resolved job. Same names in other jobs are independent."),
+            sandbox_name: tool.schema.string().describe("Existing sandbox name inside current title-derived job workspace. Same names in other workspaces are independent."),
             command: tool.schema.string().describe("Shell command to execute with /bin/sh -lc."),
             working_dir: tool.schema.string().optional().describe("Absolute guest path; defaults to /home/root."),
             timeout: tool.schema.number().optional().describe("Timeout in milliseconds; defaults to 300000."),
@@ -201,7 +201,7 @@ export function createAutocodeSandboxCliTool(client?: OpencodeClient, deps: Sand
 
             try {
                 const owner = await resolveSandboxOwner(deps.fileSystem, client, context, sandboxName.value)
-                if (!owner.ok) return createRetryResponse("run sandbox command", owner.reason, "Start or select a timestamped job workspace before using a sandbox.")
+                if (!owner.ok) return createRetryResponse("run sandbox command", owner.reason, "Set current session title to include letters or numbers, then retry.")
                 const sandbox = await resolveSandboxForCli(deps, owner.owner)
                 if (!sandbox.ok) return sandbox.response
                 const { paths, metadata } = sandbox

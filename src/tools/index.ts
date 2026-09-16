@@ -4,7 +4,6 @@ import type { AutocodeSandboxConfig } from "../config"
 import type { PlatformCapabilities } from "../utils/platform"
 import type { PendingAgentRestartCoordinator } from "../hooks/agent_restart_coordinator"
 import type { ManagedScriptLifecycle } from "../hooks/managed_script_lifecycle"
-import { createAutocodeAgentExecuteTool } from "./autocode_agent_execute"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptReadTool } from "./autocode_concept_read"
@@ -25,7 +24,6 @@ import { createAutocodeDbSchemasTool, createAutocodeDbTableReadTool, createAutoc
 import { createAutocodeDependenciesTool } from "./autocode_dependencies"
 import { createAutocodeYoutubeTranscribeTool } from "./autocode_youtube_transcribe"
 import { createGitTools } from "./git"
-import { createAutocodeJobExecuteTool } from "./autocode_job_execute"
 import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createAutocodeKillTool } from "./autocode_kill"
 import { createAutocodeProcessKillTool } from "./autocode_process_kill"
@@ -84,7 +82,6 @@ export function createTools(
     return {
         ...createGitTools(),
         ...sandboxTools,
-        autocode_agent_execute: createAutocodeAgentExecuteTool(client),
         autocode_concept_create: createAutocodeConceptCreateTool(client),
         autocode_concept_list: createAutocodeConceptListTool(),
         autocode_concept_read: createAutocodeConceptReadTool(client),
@@ -96,7 +93,6 @@ export function createTools(
         autocode_db_table_read: createAutocodeDbTableReadTool(),
         autocode_db_tables: createAutocodeDbTablesTool(),
         autocode_dependencies: createAutocodeDependenciesTool(undefined, capabilities),
-        autocode_job_execute: createAutocodeJobExecuteTool(client),
         autocode_job_list: createAutocodeJobListTool(),
         autocode_kill: createAutocodeKillTool(client),
         autocode_process_kill: createAutocodeProcessKillTool(),

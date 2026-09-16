@@ -1,6 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
 import type { OpencodeClient } from "@opencode-ai/sdk";
-import { readFile, readdir } from "node:fs/promises";
 import type {
 	PendingAgentHandoffLifecycleFailure,
 	PendingAgentRestartCoordinator,
@@ -11,13 +10,6 @@ import {
 	resolveAutocodeAgentSessionSettings,
 	validateAutocodeSessionCreateInput,
 } from "@/utils/agent_swap";
-import {
-	deriveJobNameFromTitle,
-	findLatestJobDesignFile,
-	getCurrentSessionTitle,
-	resolveAgentsStorageRoot,
-	type JobDesignFileSystem,
-} from "@/utils/jobs";
 import { cleanSessionTitleSuffix } from "@/utils/session_title";
 import {
 	createAbortResponse,
@@ -33,40 +25,10 @@ type ClientBaseUrlCapability = {
 	};
 };
 
-const defaultJobDesignFileSystem: JobDesignFileSystem = { readdir, readFile };
-
 function hasNonblankPrompt(
 	prompt: string | null | undefined,
 ): prompt is string {
 	return prompt !== undefined && prompt !== null && prompt.trim().length > 0;
-}
-
-async function resolveLatestJobDesign(
-	client: OpencodeClient,
-	context: {
-		sessionID: string;
-		directory: string;
-		worktree: string;
-	},
-	fileSystem: JobDesignFileSystem,
-): Promise<string | undefined> {
-	const currentSession = await getCurrentSessionTitle(client, context);
-	if (currentSession.title === undefined) {
-		return undefined;
-	}
-
-	const derivedTitleDirectory = deriveJobNameFromTitle(
-		cleanSessionTitleSuffix(currentSession.title),
-	);
-	if (derivedTitleDirectory.length === 0) {
-		return undefined;
-	}
-
-	return (await findLatestJobDesignFile(
-		fileSystem,
-		resolveAgentsStorageRoot(context),
-		derivedTitleDirectory,
-	))?.content;
 }
 
 function getUsableSourceTitle(title: unknown, fallbackTitle: string): string {
@@ -257,7 +219,6 @@ export function createAutocodeSessionCreateTool(
 	serverUrl?: string | URL,
 	getServerUrl?: () => string | URL | undefined,
 	getWebUrl?: () => string | URL | undefined,
-	fileSystem: JobDesignFileSystem = defaultJobDesignFileSystem,
 ): ReturnType<typeof tool> {
 	return tool({
 		description: "Only call when requested by user.",
@@ -286,23 +247,11 @@ export function createAutocodeSessionCreateTool(
 					);
 				}
 
-				try {
-					const designContent = await resolveLatestJobDesign(
-						client,
-						context,
-						fileSystem,
-					);
-					if (designContent === undefined) {
-						return createRetryResponse(
-							"autocode_session_create",
-							"No matching job design.md found for current session title.",
-							"Provide a nonempty prompt and retry autocode_session_create.",
-						);
-					}
-					prompt = designContent;
-				} catch (error) {
-					return createAbortResponse("autocode_session_create", error);
-				}
+				return createRetryResponse(
+					"autocode_session_create",
+					"prompt is required.",
+					"Provide a nonempty prompt and retry autocode_session_create.",
+				);
 			}
 
 			const validation = validateAutocodeSessionCreateInput(

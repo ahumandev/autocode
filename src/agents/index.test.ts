@@ -341,8 +341,6 @@ describe("agent policies", () => {
             expect(resolvePermissionRule(taskPermission, agentName)).toBe("deny")
         }
         for (const toolName of [
-            "autocode_job_execute",
-            "autocode_agent_execute",
             "write",
             "edit",
             "bash",
@@ -379,7 +377,7 @@ describe("agent policies", () => {
         expect(permissionRule(permission, "task")).toBeUndefined()
         expect(permissionRule(permission, "autocode_agent_execute")).toBeUndefined()
         expect(permissionRule(permission, "autocode_session_create")).toBeUndefined()
-        for (const toolName of ["autocode_agent_execute", "autocode_job_execute", "autocode_ssh_command", "bash", "edit", "execute", "git_commit", "write"]) {
+        for (const toolName of ["autocode_ssh_command", "bash", "edit", "execute", "git_commit", "write"]) {
             expect(resolvePermissionRule(rules, toolName)).toBe("deny")
         }
     })
@@ -391,7 +389,7 @@ describe("agent policies", () => {
         const assistTaskPermission = permissionRule(getAgentPermission("assist", capabilities), "task") as Record<string, unknown>
         const autoTaskPermission = permissionRule(agents.auto?.permission, "task") as Record<string, unknown>
 
-        for (const toolName of ["autocode_job_execute", "autocode_agent_execute", "write", "edit", "bash", "apply_patch"]) {
+        for (const toolName of ["write", "edit", "bash", "apply_patch"]) {
             expect(resolvePermissionRule(advisePermission as Record<string, unknown>, toolName)).toBe("deny")
         }
         expect(resolvePermissionRule(assistTaskPermission, "assist-browser")).toBe("allow")

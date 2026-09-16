@@ -8,9 +8,9 @@ const limitationGuidance = "Sandbox cleanup removes bubblewrap sandbox storage d
 
 export function createAutocodeSandboxDeleteTool(client?: OpencodeClient, deps: SandboxDependencies = defaultSandboxDependencies) {
     return tool({
-        description: "Delete one sandbox or all sandboxes in current resolved job only. The owner resolves exact linked session first; otherwise newest job workspace matching current session-title slug. Missing owner errors before deletion. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. MUST run when finish with sandbox and all `execute-sandbox` tasks have completed.",
+        description: "Delete one sandbox or all sandboxes in current title-derived job workspace only. Workspace is created on demand. Sandboxes are job-local at `.agents/jobs/YYYY-MM-DD_hh-mm-ss_{title_dir}/sandboxes/{sandbox_name}`. MUST run when finish with sandbox and all `execute-sandbox` tasks have completed.",
         args: {
-            sandbox_name: tool.schema.string().optional().describe("Sandbox name inside current resolved job to delete. Same names in other jobs are independent. Omit to delete all sandboxes in current resolved job only."),
+            sandbox_name: tool.schema.string().optional().describe("Sandbox name inside current title-derived job workspace to delete. Same names in other workspaces are independent. Omit to delete all sandboxes in current workspace only."),
         },
         async execute(args, context) {
             const rawName = typeof args.sandbox_name === "string" ? args.sandbox_name.trim() : undefined
@@ -20,12 +20,12 @@ export function createAutocodeSandboxDeleteTool(client?: OpencodeClient, deps: S
             try {
                 if (!sandboxName) {
                     const owner = await resolveSandboxOwner(deps.fileSystem, client, context)
-                    if (!owner.ok) return createRetryResponse("delete sandbox", owner.reason, "Start or select a timestamped job workspace before deleting sandboxes.")
+                    if (!owner.ok) return createRetryResponse("delete sandbox", owner.reason, "Set current session title to include letters or numbers, then retry.")
                     return JSON.stringify(await cleanupJobSandboxes(owner.owner, deps))
                 }
 
                 const owner = await resolveSandboxOwner(deps.fileSystem, client, context, sandboxName.value)
-                if (!owner.ok) return createRetryResponse("delete sandbox", owner.reason, "Start or select a timestamped job workspace before deleting sandboxes.")
+                if (!owner.ok) return createRetryResponse("delete sandbox", owner.reason, "Set current session title to include letters or numbers, then retry.")
                 const paths = owner.owner
                 if (!await pathExists(deps, paths.sandboxPath)) {
                     return JSON.stringify({ ok: true, status: "missing", sandbox_name: sandboxName.value, job_name: paths.jobName, guidance: limitationGuidance })

@@ -107,10 +107,6 @@ function dependencies(fixture: Fixture, state: { clones: number; fetches: number
     return { git }
 }
 
-function manifestSkills(inventory: { skills: { relativeInstallPath: string }[] }): string[] {
-    return inventory.skills.map((skill) => skill.relativeInstallPath)
-}
-
 afterEach(async () => {
     await Promise.all(tempRoots.splice(0).map(async (root) => nodeFs.rm(root, { recursive: true, force: true })))
 })

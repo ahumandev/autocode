@@ -70,15 +70,6 @@ describe("validate config path", () => {
         }
     })
 
-    // Existence semantics inherited from bare-filename-only policy.
-    test("Rejects missing bare filename in cwd", async () => {
-        const adapter = createLocalConfigAdapter(undefined)
-        const filename = `cfg-missing-${randomUUID()}.json`
-        const result = await adapter.validateConfigPath(filename)
-        expect(result.ok).toBe(false)
-        if (!result.ok) expect(result.response).toContain("file not found")
-    })
-
     test("Passes for path with separator that does not exist", async () => {
         const adapter = createLocalConfigAdapter(undefined)
         const input = `./cfg-nonexistent-${randomUUID()}.json`

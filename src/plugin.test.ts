@@ -731,13 +731,6 @@ describe("autocode plugin config", () => {
 						"execute-code": { model: "user-worker-model" },
 						"auto-test": { variant: "user-test-variant" },
 					},
-					command: {
-						"job-design": {
-							description: "user description",
-							template: "user template",
-							subtask: true,
-						},
-					},
 					permission: {
 						external_directory: {
 							"/native/*": "ask",
@@ -760,18 +753,7 @@ describe("autocode plugin config", () => {
 				);
 				expect(cfg.agent?.title?.options?.reasoningEffort).toBeUndefined();
 				expect(cfg.agent?.compaction?.model).toBeUndefined();
-				expect(cfg.command?.["job-design"]).toEqual(
-					expect.objectContaining({
-						description: "user description",
-						template: "user template",
-						subtask: true,
-					}),
-				);
-				expect(cfg.command?.["job-design"]?.agent).toBe("design");
 				expect(Object.keys(cfg.command ?? {})).toEqual([
-					"job-design",
-					"job-auto",
-					"job-assist",
 					"job-concepts",
 					"new-advise",
 					"new-assist",
@@ -798,16 +780,7 @@ describe("autocode plugin config", () => {
 					"resume",
 					"tests",
 				]);
-				for (const [name, commandDef] of Object.entries(commands)) {
-					if (name === "job-design") continue;
-					expect(cfg.command?.[name]).toEqual(commandDef);
-				}
-				expect(cfg.command?.["job-design"]).toEqual({
-					...commands["job-design"],
-					description: "user description",
-					template: "user template",
-					subtask: true,
-				});
+				for (const [name, commandDef] of Object.entries(commands)) expect(cfg.command?.[name]).toEqual(commandDef);
 				expect(cfg.agent?.assist?.model).toBe("user-model");
 				expect(cfg.agent?.assist?.variant).toBe("balanced-variant");
 				expect(cfg.agent?.["execute-code"]?.model).toBe("user-worker-model");

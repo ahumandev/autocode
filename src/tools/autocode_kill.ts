@@ -2,7 +2,8 @@ import type { Dirent } from "node:fs"
 import path from "node:path"
 import { tool, type ToolContext } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
-import { cleanupJobSandboxes, defaultSandboxDependencies, resolveSandboxOwner, type SandboxCommandResult, type SandboxDependencies } from "@/utils/sandbox"
+import { cleanupJobSandboxes, defaultSandboxDependencies, type SandboxCommandResult, type SandboxDependencies } from "@/utils/sandbox"
+import { findSessionJobWorkspace, resolveAgentsStorageRoot } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type AutocodeKillArgs = {
@@ -467,9 +468,15 @@ function isSuccessfulOperation(result: string): boolean {
 
 async function cleanupCurrentJobSandboxes(client: OpencodeClient | undefined, context: ToolContext, deps: AutocodeKillDependencies): Promise<void> {
     try {
-        const owner = await resolveSandboxOwner(deps.fileSystem, client, context)
-        if (!owner.ok) return
-        await cleanupJobSandboxes(owner.owner, deps)
+        const workspace = await findSessionJobWorkspace(deps.fileSystem, client, context)
+        if (!workspace) return
+        await cleanupJobSandboxes({
+            storageRoot: resolveAgentsStorageRoot(context),
+            workspace,
+            jobName: workspace.job_name,
+            workspacePath: workspace.absolute_path,
+            jobSandboxRoot: path.join(workspace.absolute_path, "sandboxes"),
+        }, deps)
     }
     catch {}
 }

@@ -81,7 +81,6 @@ async function withSandboxFixture<T>(fn: (fixture: { projectRoot: string, paths:
     try {
         await mkdir(paths.sandboxPath, { recursive: true })
         await writeFile(paths.metadataFile, createBubblewrapMetadata(paths))
-        await writeFile(path.join(paths.workspacePath, "session.yml"), "session_id: session-1\n")
         return await fn({ projectRoot, paths, deps, client: createClient("My Feature", projectRoot), context: createProjectToolContext(projectRoot) })
     }
     finally {
@@ -208,7 +207,6 @@ describe("createAutocodeSandboxConfigEditTool", () => {
         const foreign = createSandboxPaths(projectRoot, "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
         await mkdir(foreign.sandboxPath, { recursive: true })
         await writeFile(foreign.metadataFile, createBubblewrapMetadata(foreign))
-        await writeFile(path.join(foreign.workspacePath, "session.yml"), "session_id: session-2\n")
         await writeFile(path.join(paths.sandboxPath, "app.json"), JSON.stringify({ owner: "current" }))
         await writeFile(path.join(foreign.sandboxPath, "app.json"), JSON.stringify({ owner: "foreign" }))
         const tool = createAutocodeSandboxConfigEditTool(client, deps)
@@ -220,27 +218,13 @@ describe("createAutocodeSandboxConfigEditTool", () => {
         expect(JSON.parse(await readFile(path.join(foreign.sandboxPath, "app.json"), "utf8")).owner).toBe("foreign")
     }))
 
-    test("missing session owner leaves config storage unchanged", async () => {
-        const deps = createInMemoryDeps()
-        const tool = createAutocodeSandboxConfigEditTool(createClient(), deps)
-
-        const result = parseResult(await tool.execute({ sandbox_name: "dev", path: "app.json", current_key: "owner", content: '"updated"' }, createToolContext()))
-
-        expect(result.failedAction).toBe("edit sandbox config file")
-        expect(deps.fileSystem.mkdir).not.toHaveBeenCalled()
-        expect(deps.fileSystem.writeFile).not.toHaveBeenCalled()
-        expect(deps.fileSystem.rm).not.toHaveBeenCalled()
-    })
-
-    test("stale session owner falls back to matching title workspace config paths", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+    test("uses matching title workspace config paths", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
         const foreignPaths = createSandboxPaths(projectRoot, "other_feature", "dev", "2026-08-21_10-30-00_other_feature")
-        await writeFile(path.join(paths.workspacePath, "session.yml"), "session_id: prior-session\n")
         const configPath = path.join(paths.sandboxPath, "app.json")
         const originalContent = JSON.stringify({ owner: "current", mode: "keep" })
         await writeFile(configPath, originalContent)
         await mkdir(foreignPaths.sandboxPath, { recursive: true })
         await writeFile(foreignPaths.metadataFile, createBubblewrapMetadata(foreignPaths))
-        await writeFile(path.join(foreignPaths.workspacePath, "session.yml"), "session_id: session-2\n")
         await writeFile(path.join(foreignPaths.sandboxPath, "app.json"), JSON.stringify({ owner: "foreign", mode: "keep" }))
         const readdirSpy = mock(deps.fileSystem.readdir)
         deps.fileSystem.readdir = readdirSpy

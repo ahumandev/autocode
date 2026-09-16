@@ -63,10 +63,7 @@ function hasSetenvTriple(args: readonly string[], name: string, value: string): 
 
 function createDeps(options?: { existing?: string[], files?: Record<string, string>, platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, fetchOk?: boolean, spawnExit?: number, commandExit?: Record<string, number> }): SandboxDependencies & { spawnProcess: ReturnType<typeof mock> } {
     const existing = new Set(options?.existing ?? [])
-    const files: Record<string, string> = {
-        "/workspace/.agents/jobs/2026-08-20_10-30-00_my_feature/session.yml": "session_id: session-1\n",
-        ...(options?.files ?? {}),
-    }
+    const files: Record<string, string> = { ...(options?.files ?? {}) }
     const deps = {
         fileSystem: {
             mkdir: mock(async (filePath: string): Promise<string | undefined> => {
@@ -184,7 +181,6 @@ async function withSandboxFixture<T>(fn: (fixture: { projectRoot: string, paths:
     try {
         await mkdir(paths.sandboxPath, { recursive: true })
         await writeFile(paths.metadataFile, createBubblewrapMetadata(paths))
-        await writeFile(path.join(paths.workspacePath, "session.yml"), "session_id: session-1\n")
         return await fn({ projectRoot, paths, deps, client: createClient("My Feature", projectRoot), context: createProjectToolContext(projectRoot) })
     }
     finally {
@@ -193,30 +189,7 @@ async function withSandboxFixture<T>(fn: (fixture: { projectRoot: string, paths:
 }
 
 describe("autocode sandbox tools", () => {
-    test("create assigns same sandbox name to distinct session-owned workspaces", async () => {
-        const firstPaths = createSandboxPaths("/workspace", "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
-        const secondPaths = createSandboxPaths("/workspace", "my_feature", "dev", "2026-08-20_10-30-00_my_feature")
-        const deps = createDeps({
-            commands: { bwrap: true },
-            files: {
-                [path.join(firstPaths.workspacePath, "session.yml")]: "session_id: session-1\n",
-                [path.join(secondPaths.workspacePath, "session.yml")]: "session_id: session-2\n",
-            },
-        })
-        deps.fileSystem.readdir = mock(async (filePath: string) => filePath === "/workspace/.agents/jobs"
-            ? [path.basename(firstPaths.workspacePath), path.basename(secondPaths.workspacePath)]
-            : [])
-        const tool = createAutocodeSandboxCreateTool(createClient("Same Title"), deps)
-
-        const first = parseResult(await tool.execute({ sandbox_name: "dev" }, createToolContext({ sessionID: "session-1" })))
-        const second = parseResult(await tool.execute({ sandbox_name: "dev" }, createToolContext({ sessionID: "session-2" })))
-
-        expect(first.sandbox_path).toBe(firstPaths.sandboxPath)
-        expect(second.sandbox_path).toBe(secondPaths.sandboxPath)
-        expect(first.sandbox_path).not.toBe(second.sandbox_path)
-    })
-
-    test("create uses linked workspace when session metadata exists", async () => {
+    test("create reuses newest matching title workspace", async () => {
         const olderPaths = createSandboxPaths("/workspace", "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
         const newerPaths = createSandboxPaths("/workspace", "my_feature", "dev", "2026-08-20_10-30-00_my_feature")
         const deps = createDeps({ commands: { bwrap: true } })
@@ -232,37 +205,13 @@ describe("autocode sandbox tools", () => {
         expect(deps.fileSystem.writeFile).toHaveBeenCalledWith(newerPaths.metadataFile, expect.any(String))
     })
 
-    test("create and delete never fall back to legacy global sandbox storage", async () => {
-        const legacyPath = "/workspace/.agents/sandboxes/my_feature/dev"
-        const deps = createDeps({ existing: [legacyPath] })
-        deps.fileSystem.readdir = mock(async (filePath: string) => {
-            if (filePath === "/workspace/.agents/sandboxes") throw new Error("legacy storage read")
-            return []
-        })
-
-        const created = parseResult(await createAutocodeSandboxCreateTool(createClient(), deps).execute({ sandbox_name: "dev" }, createToolContext()))
-        const deleted = parseResult(await createAutocodeSandboxDeleteTool(createClient(), deps).execute({ sandbox_name: "dev" }, createToolContext()))
-
-        expect(created.failedAction).toBe("create sandbox")
-        expect(deleted.failedAction).toBe("delete sandbox")
-        expect(deps.fileSystem.rm).not.toHaveBeenCalled()
-        const readdir = deps.fileSystem.readdir as ReturnType<typeof mock>
-        const readdirCalls = readdir.mock.calls as unknown[][]
-        expect(readdirCalls.map((call) => String(call[0]))).not.toContain("/workspace/.agents/sandboxes")
-    })
-
     test("create and delete fall back to matching title workspace without mutating foreign sandbox", async () => {
         const olderPaths = createSandboxPaths("/workspace", "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
         const paths = createSandboxPaths("/workspace", "my_feature", "dev")
         const foreignPaths = createSandboxPaths("/workspace", "other_feature", "dev", "2026-08-21_10-30-00_other_feature")
         const deps = createDeps({
             existing: [foreignPaths.jobSandboxRoot, foreignPaths.sandboxPath],
-            files: {
-                [path.join(olderPaths.workspacePath, "session.yml")]: "session_id: prior-session\n",
-                [path.join(paths.workspacePath, "session.yml")]: "session_id: prior-session\n",
-                [path.join(foreignPaths.workspacePath, "session.yml")]: "session_id: session-2\n",
-                [foreignPaths.metadataFile]: createBubblewrapMetadata(foreignPaths),
-            },
+            files: { [foreignPaths.metadataFile]: createBubblewrapMetadata(foreignPaths) },
             commands: { bwrap: true },
         })
         deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => {
@@ -588,15 +537,15 @@ describe("autocode sandbox tools", () => {
         expect(result).toEqual(expect.objectContaining({ ok: false, status: "missing_dependency", source_url: "docker://docker.io/library/debian:bookworm", reason: expect.stringContaining("skopeo and umoci") }))
     })
 
-    test("create returns missing owner error when no workspace exists", async () => {
+    test("create creates title-derived workspace when no workspace exists", async () => {
         const deps = createDeps({ commands: { bwrap: true } })
         deps.fileSystem.readdir = mock(async () => [])
         const tool = createAutocodeSandboxCreateTool(createClient(), deps)
 
         const result = parseResult(await tool.execute({ sandbox_name: "dev", distro: "alpine" }, createToolContext()))
 
-        expect(result.failedAction).toBe("create sandbox")
-        expect(deps.spawn).not.toHaveBeenCalled()
+        expect(result).toEqual(expect.objectContaining({ ok: true, status: "created", job_name: "my_feature", sandbox_name: "dev" }))
+        expect(String(result.sandbox_path)).toMatch(/^\/workspace\/\.agents\/jobs\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature\/sandboxes\/dev$/)
     })
 
     test("create reports unsupported on macOS or bwrap probe failure", async () => {
@@ -893,28 +842,26 @@ describe("autocode sandbox tools", () => {
         expect(parseResult(await tool.execute({ sandbox_name: "dev", command: "pwd" }, createToolContext())).status).toBe("missing_metadata")
     })
 
-    test("cli reports absent title workspace without legacy sandbox lookup", async () => {
-        const legacyPath = "/workspace/.agents/sandboxes/my_feature/dev"
-        const deps = createDeps({ existing: [legacyPath, `${legacyPath}/home`, "/bin", "/usr"], commands: { bwrap: true } })
+    test("create creates title-derived workspace when no workspace exists", async () => {
+        const deps = createDeps({ commands: { bwrap: true } })
         deps.fileSystem.readdir = mock(async (filePath: string) => {
             if (filePath === "/workspace/.agents/jobs") return []
             return []
         })
-        const tool = createAutocodeSandboxCliTool(createClient("Sandbox Task"), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
+        const tool = createAutocodeSandboxCreateTool(createClient("My Feature"), deps)
 
-        const result = parseResult(await tool.execute({ sandbox_name: "dev", command: "pwd" }, createToolContext()))
+        const result = parseResult(await tool.execute({ sandbox_name: "dev" }, createToolContext()))
 
-        expect(result.error).toBe("No timestamped job workspace was found for the current session.")
-        expect((deps.fileSystem.readdir as ReturnType<typeof mock>).mock.calls.some((call) => call[0] === "/workspace/.agents/sandboxes")).toBe(false)
-        expect(deps.spawnProcess).not.toHaveBeenCalled()
+        expect(result).toEqual(expect.objectContaining({ ok: true, status: "created", job_name: "my_feature", sandbox_name: "dev" }))
+        expect(String(result.sandbox_path)).toMatch(/^\/workspace\/\.agents\/jobs\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature\/sandboxes\/dev$/)
     })
 
-    test("cli isolates duplicate sandbox names to linked workspace", async () => {
+    test("cli isolates duplicate sandbox names to title-derived workspace", async () => {
         const firstPaths = createSandboxPaths("/workspace", "my_feature", "dev")
         const secondPaths = createSandboxPaths("/workspace", "other_feature", "dev")
         const deps = createDeps({
             existing: [firstPaths.sandboxPath, `${firstPaths.sandboxPath}/home`, secondPaths.sandboxPath, `${secondPaths.sandboxPath}/home`, "/bin", "/usr"],
-            files: { [path.join(firstPaths.workspacePath, "session.yml")]: "session_id: session-1\n", [firstPaths.metadataFile]: createBubblewrapMetadata(firstPaths), [secondPaths.metadataFile]: createBubblewrapMetadata(secondPaths) },
+            files: { [firstPaths.metadataFile]: createBubblewrapMetadata(firstPaths), [secondPaths.metadataFile]: createBubblewrapMetadata(secondPaths) },
             commands: { bwrap: true },
         })
         deps.fileSystem.readdir = mock(async (filePath: string) => {
@@ -925,10 +872,10 @@ describe("autocode sandbox tools", () => {
 
         const result = parseResult(await tool.execute({ sandbox_name: "dev", command: "pwd" }, createToolContext()))
 
-        expect(result).toEqual(expect.objectContaining({ ok: true, status: "completed", job_name: "my_feature" }))
-        expect(deps.spawnProcess).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--bind", firstPaths.sandboxPath, "/sandbox"]), expect.any(Object))
-        expect(JSON.stringify(deps.spawnProcess.mock.calls)).not.toContain(secondPaths.sandboxPath)
-        expect((deps.fileSystem.readdir as ReturnType<typeof mock>).mock.calls.some((call) => call[0] === secondPaths.jobSandboxRoot)).toBe(false)
+        expect(result).toEqual(expect.objectContaining({ ok: true, status: "completed", job_name: "other_feature" }))
+        expect(deps.spawnProcess).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--bind", secondPaths.sandboxPath, "/sandbox"]), expect.any(Object))
+        expect(JSON.stringify(deps.spawnProcess.mock.calls)).not.toContain(firstPaths.sandboxPath)
+        expect((deps.fileSystem.readdir as ReturnType<typeof mock>).mock.calls.some((call) => call[0] === firstPaths.jobSandboxRoot)).toBe(false)
     })
 
     test("cli times out, falls back to child kill, and releases lock", async () => {
@@ -1041,7 +988,7 @@ describe("autocode sandbox tools", () => {
         const paths = createSandboxPaths("/workspace", "my_feature", "dev")
         const otherPaths = createSandboxPaths("/workspace", "other_feature", "dev")
         const existing = new Set([paths.jobSandboxRoot, paths.sandboxPath, otherPaths.jobSandboxRoot, otherPaths.sandboxPath])
-        const deps = createDeps({ files: { [path.join(paths.workspacePath, "session.yml")]: "session_id: session-1\n", [paths.metadataFile]: createBubblewrapMetadata(paths) } })
+        const deps = createDeps({ files: { [paths.metadataFile]: createBubblewrapMetadata(paths) } })
         deps.fileSystem.rm = mock(async (filePath: string) => { existing.delete(filePath) })
         deps.fileSystem.stat = mock(async (filePath: string) => {
             if (existing.has(filePath)) return { mtimeMs: 1 }

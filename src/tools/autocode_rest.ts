@@ -2,7 +2,7 @@ import path from "node:path"
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
-import { createDirectoryFileSystem, isMissingFile, resolveOrCreateJobWorkspaceIdentity, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
+import { ensureSessionJobWorkspace, isMissingFile, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
 import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
@@ -263,26 +263,16 @@ async function fileExists(fileSystem: RestToolFileSystem, filePath: string): Pro
 }
 
 async function resolveCurrentJobRestDirectory(action: string, fileSystem: RestToolFileSystem, client: OpencodeClient | undefined, context: SessionJobContext): Promise<{ jobName: string, restDir: string } | { error: string }> {
-    let identity
+    let workspace: Awaited<ReturnType<typeof ensureSessionJobWorkspace>>
     try {
-        identity = await resolveOrCreateJobWorkspaceIdentity(createDirectoryFileSystem(fileSystem), client, context)
+        workspace = await ensureSessionJobWorkspace(fileSystem, client, context)
     }
     catch (error) {
         return { error: createAbortResponse(action, error) }
     }
-    if (identity.resolution !== "found") {
-        return {
-            error: createRetryResponse(
-                action,
-                "Current session has no usable job name.",
-                `Set a session title containing letters or numbers, then retry ${action}.`,
-            ),
-        }
-    }
-
     return {
-        jobName: identity.job_name,
-        restDir: path.join(identity.workspace.absolute_path, "rest"),
+        jobName: workspace.job_name,
+        restDir: path.join(workspace.absolute_path, "rest"),
     }
 }
 

@@ -4,9 +4,7 @@ import type { Dirent } from "node:fs"
 import { cp, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import type { OpencodeClient } from "@opencode-ai/sdk"
-import { assertDirectSandboxPath, assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupEmptyJobSandboxRoot, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, materializeSandboxRootfs, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, resolveSandboxOwner, type SandboxCacheEntry, type SandboxDependencies, type SandboxOwner, type SandboxPaths } from "./sandbox"
-import { resolveJobWorkspaceIdentity } from "./jobs"
+import { assertDirectSandboxPath, assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupEmptyJobSandboxRoot, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, materializeSandboxRootfs, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, type SandboxCacheEntry, type SandboxDependencies, type SandboxOwner, type SandboxPaths } from "./sandbox"
 import { copyPath, resolveSafeRelativePath, validateSafeWriteTarget } from "./sandbox_file_tools"
 
 function missingError(): NodeJS.ErrnoException {
@@ -109,10 +107,6 @@ function getMetadataWrite(deps: SandboxDependencies, metadataFile: string): Reco
     const writeFile = deps.fileSystem.writeFile as ReturnType<typeof mock>
     const call = writeFile.mock.calls.find((candidate) => candidate[0] === metadataFile)
     return JSON.parse(call?.[1] as string) as Record<string, unknown>
-}
-
-function createClient(title: string): OpencodeClient {
-    return { session: { get: mock(async () => ({ data: { title } })) } } as unknown as OpencodeClient
 }
 
 function createSandboxOwner(storageRoot: string, jobName: string, workspaceName = `2026-08-20_10-30-00_${jobName}`): SandboxOwner {
@@ -405,24 +399,6 @@ describe("sandbox utils", () => {
         expect(deps.fileSystem.rm).not.toHaveBeenCalledWith(cache.entry_path, expect.any(Object))
     })
 
-    test("builds sandbox paths under resolved job workspace", async () => {
-        const workspaceName = "2026-08-20_10-30-00_my_job"
-        const deps = createDeps({
-            files: { [`/repo/.agents/jobs/${workspaceName}/session.yml`]: "session_id: session-1\n" },
-        })
-        deps.fileSystem.readdir = mock(async (dirPath: string) => dirPath === "/repo/.agents/jobs" ? [workspaceName] : [])
-
-        const result = await resolveSandboxOwner(deps.fileSystem, createClient("Other Title"), { sessionID: "session-1", directory: "/repo", worktree: "/repo" }, "dev")
-
-        expect(result).toEqual(expect.objectContaining({ ok: true, owner: expect.objectContaining({
-            jobName: "my_job",
-            workspacePath: "/repo/.agents/jobs/2026-08-20_10-30-00_my_job",
-            jobSandboxRoot: "/repo/.agents/jobs/2026-08-20_10-30-00_my_job/sandboxes",
-            sandboxPath: "/repo/.agents/jobs/2026-08-20_10-30-00_my_job/sandboxes/dev",
-        }),
-        }))
-    })
-
     test("guards sandbox paths and deletion targets", () => {
         const root = "/repo/.agents/jobs/2026-08-20_10-30-00_my_job/sandboxes"
 
@@ -465,50 +441,6 @@ describe("sandbox utils", () => {
 
         expect(result.backend).toBe("unsupported")
         expect(result.reason).toContain("usable bwrap")
-    })
-
-    test("exact session-linked sandbox workspace takes precedence over newer title match", async () => {
-        const linkedWorkspace = "2026-08-19_10-30-00_my_feature"
-        const newerWorkspace = "2026-08-20_10-30-00_my_feature"
-        const deps = createDeps({
-            files: {
-                [`/repo/.agents/jobs/${linkedWorkspace}/session.yml`]: "session_id: session-1\n",
-                [`/repo/.agents/jobs/${newerWorkspace}/session.yml`]: "session_id: session-2\n",
-            },
-        })
-        deps.fileSystem.readdir = mock(async (dirPath: string) => dirPath === "/repo/.agents/jobs" ? [newerWorkspace, linkedWorkspace] : [])
-
-        const owner = await resolveSandboxOwner(deps.fileSystem, createClient("My Feature"), { sessionID: "session-1", directory: "/repo", worktree: "/repo" })
-
-        expect(owner).toEqual(expect.objectContaining({ ok: true, owner: expect.objectContaining({ workspacePath: `/repo/.agents/jobs/${linkedWorkspace}` }) }))
-    })
-
-    test("sandbox owner selects newest title-matched workspace when session is not linked", async () => {
-        const olderWorkspace = "2026-08-19_10-30-00_my_feature"
-        const newerWorkspace = "2026-08-20_10-30-00_my_feature"
-        const deps = createDeps()
-        deps.fileSystem.readdir = mock(async (dirPath: string) => dirPath === "/repo/.agents/jobs" ? [olderWorkspace, newerWorkspace] : [])
-
-        const owner = await resolveSandboxOwner(deps.fileSystem, createClient("My Feature"), { sessionID: "session-1", directory: "/repo", worktree: "/repo" })
-
-        expect(owner).toEqual(expect.objectContaining({ ok: true, owner: expect.objectContaining({ workspacePath: `/repo/.agents/jobs/${newerWorkspace}` }) }))
-    })
-
-    test("sandbox owner reports normal resolver error when linked and title workspaces are absent", async () => {
-        const workspace = "2026-08-20_10-30-00_my_feature"
-        const deps = createDeps()
-        deps.fileSystem.readdir = mock(async (dirPath: string) => dirPath === "/repo/.agents/jobs" ? [workspace] : [])
-        const context = { sessionID: "session-1", directory: "/repo", worktree: "/repo" }
-
-        const normal = await resolveJobWorkspaceIdentity(deps.fileSystem, createClient("Other Feature"), context)
-        const owner = await resolveSandboxOwner(deps.fileSystem, createClient("Other Feature"), context)
-
-        expect(normal).toEqual({ resolution: "missing", session_title: "Other Feature", title_derived_candidate: "other_feature" })
-        expect(owner).toEqual({
-            ok: false,
-            reason: "No timestamped job workspace was found for the current session.",
-            jobName: "other_feature",
-        })
     })
 
     test("deletes sandbox paths safely and warns for legacy metadata", async () => {

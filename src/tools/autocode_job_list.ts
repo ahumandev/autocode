@@ -1,10 +1,9 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFile, readdir } from "node:fs/promises"
+import { readdir } from "node:fs/promises"
 import { createAbortResponse } from "../utils/tools"
 import { listJobWorkspaces, resolveAgentsStorageRoot } from "@/utils/jobs"
 
 type FileSystem = {
-    readFile: (filePath: string, encoding: "utf8") => Promise<string>
     readdir: (dirPath: string, options?: { withFileTypes?: boolean }) => Promise<string[] | import("fs").Dirent[]>
 }
 
@@ -13,7 +12,6 @@ async function readDirectory(dirPath: string, options?: { withFileTypes?: boolea
 }
 
 const defaultFileSystem: FileSystem = {
-    readFile,
     readdir: readDirectory,
 }
 

@@ -109,7 +109,7 @@ describe("autocode_script_project tool", () => {
             status: "blocked",
             failedAction: "setup managed scripts project",
             error: "Select one job.",
-            instruction: "Start or select a timestamped job workspace for the current session, then retry setup.",
+            instruction: "Set current session title to include letters or numbers, then retry setup.",
             blocker: { code: "job_workspace_required", message: "Select one job." },
             ...publicPaths,
             dependency_provenance: [],

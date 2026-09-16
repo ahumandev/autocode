@@ -178,10 +178,6 @@ function createMemoryRestFileSystem(options: { includeCurrentWorkspace?: boolean
     }
 }
 
-async function seedCurrentJobSession(fileSystem: ReturnType<typeof createMemoryRestFileSystem>): Promise<void> {
-    await fileSystem.seedFile("/workspace/.agents/jobs/2026-08-20_10-30-00_my_job/session.yml", "session_id: session-1\n")
-}
-
 async function withFixedDate<T>(isoDate: string, fn: () => Promise<T>): Promise<T> {
     const RealDate = Date
     const fixedMs = new RealDate(isoDate).valueOf()
@@ -240,8 +236,6 @@ describe("autocode_rest tools", () => {
         const client = createSessionClient()
         const tool = createAutocodeRestTool(client, fileSystem)
 
-        await seedCurrentJobSession(fileSystem)
-
         const invalidMethod = parseError(await tool.execute({ url: "http://example.com", method: "trace" } as never, createToolContext()))
         expect(invalidMethod.failedAction).toBe("autocode_rest")
         expect(invalidMethod.error).toContain("Invalid method: trace")
@@ -293,7 +287,6 @@ describe("autocode_rest tools", () => {
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
         const requests: Array<{ tls?: { rejectUnauthorized?: boolean } }> = []
 
-        await seedCurrentJobSession(fileSystem)
         globalThis.fetch = (async (_input: URL | RequestInfo, init?: RequestInit & { tls?: { rejectUnauthorized?: boolean } }): Promise<Response> => {
             requests.push({ tls: init?.tls })
             return new Response("ok")
@@ -311,8 +304,6 @@ describe("autocode_rest tools", () => {
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
         const smallBody = "hello world"
         const longBody = "b".repeat(500)
-
-        await seedCurrentJobSession(fileSystem)
 
         globalThis.fetch = (async () => new Response(smallBody, { status: 200, headers: { "Content-Type": "text/plain" } })) as unknown as typeof fetch
         const exactResult = parseResult<Record<string, unknown>>(await tool.execute({
@@ -359,7 +350,6 @@ describe("autocode_rest tools", () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
 
-        await seedCurrentJobSession(fileSystem)
         globalThis.fetch = (async () => new Response(new Uint8Array([0xff, 0xfe, 65]), { status: 200, headers: { "content-type": "text/plain" } })) as unknown as typeof fetch
 
         const parsed = parseResult<{ response_body: string, response_body_file_path: string, response_id: string, response_time: number }>(await tool.execute({
@@ -378,8 +368,6 @@ describe("autocode_rest tools", () => {
     test("returns timed_out json with actual response_time when request exceeds timeout", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-
-        await seedCurrentJobSession(fileSystem)
 
         let abortReceived: Error | undefined
         globalThis.fetch = ((_input: unknown, init?: { signal?: AbortSignal }) => {
@@ -430,14 +418,13 @@ describe("autocode_rest tools", () => {
         } as never, createToolContext()))
 
         expect(errored.failedAction).toBe("autocode_rest")
-        expect(errored.error).toContain("Current session has no usable job name.")
+        expect(errored.error).toContain("Current session title must contain letters or numbers.")
     })
 
     test("writes REST artifacts in the resolved timestamped workspace", async () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
 
-        await seedCurrentJobSession(fileSystem)
         globalThis.fetch = (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch
 
         const parsed = parseResult<{ status_code: number, response_id: string, response_time: number }>(await tool.execute({
@@ -449,11 +436,10 @@ describe("autocode_rest tools", () => {
         expect(parsed.response_id).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
         expect(typeof parsed.response_time).toBe("number")
         const allFiles = fileSystem.listFiles()
-        expect(allFiles).toContain("/workspace/.agents/jobs/2026-08-20_10-30-00_my_job/session.yml")
         expect(allFiles.some((filePath) => filePath.includes("/2026-08-20_10-30-00_my_job/rest/"))).toBe(true)
     })
 
-    test("creates root session workspace before writing REST artifact", async () => {
+    test("creates current title workspace before writing REST artifact", async () => {
         const fileSystem = createMemoryRestFileSystem({ includeCurrentWorkspace: false })
         const tool = createAutocodeRestTool(createSessionClient({
             "session-1": { parentID: "middle-session", title: "Child Job" },
@@ -469,8 +455,7 @@ describe("autocode_rest tools", () => {
 
         expect(parsed.status_code).toBe(200)
         const allFiles = fileSystem.listFiles()
-        expect(allFiles.some((filePath) => filePath.includes("_root_job/session.yml"))).toBe(true)
-        expect(allFiles.some((filePath) => filePath.includes("_root_job/rest/"))).toBe(true)
+        expect(allFiles.some((filePath) => filePath.includes("_child_job/rest/"))).toBe(true)
     })
 
     test("creates current title workspace when root lookup is unavailable", async () => {
@@ -494,7 +479,6 @@ describe("autocode_rest tools", () => {
 
         expect(parsed.status_code).toBe(200)
         const allFiles = fileSystem.listFiles()
-        expect(allFiles.some((filePath) => filePath.includes("_my_job/session.yml"))).toBe(true)
         expect(allFiles.some((filePath) => filePath.includes("_my_job/rest/"))).toBe(true)
     })
 
@@ -502,8 +486,6 @@ describe("autocode_rest tools", () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
         setRestEnvironment({ AUTOCODE_REST_API_AUTHORIZATION: "Bearer raw-secret" })
-        await seedCurrentJobSession(fileSystem)
-
         let requestHeaders: HeadersInit | undefined
         globalThis.fetch = (async (_input, init) => {
             requestHeaders = init?.headers
@@ -523,7 +505,6 @@ describe("autocode_rest tools", () => {
             AUTOCODE_REST_API_USERNAME: "user",
             AUTOCODE_REST_API_PASSWORD: "password",
         })
-        await seedCurrentJobSession(fileSystem)
 
         let requestHeaders: HeadersInit | undefined
         globalThis.fetch = (async (_input, init) => {
@@ -540,7 +521,6 @@ describe("autocode_rest tools", () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
         setRestEnvironment({ AUTOCODE_REST_API_USERNAME: "usér", AUTOCODE_REST_API_PASSWORD: "päss" })
-        await seedCurrentJobSession(fileSystem)
 
         let requestHeaders: HeadersInit | undefined
         globalThis.fetch = (async (_input, init) => {
@@ -569,7 +549,6 @@ describe("autocode_rest tools", () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
         setRestEnvironment({ AUTOCODE_REST_MY_KEY_AUTHORIZATION: "Bearer normalized" })
-        await seedCurrentJobSession(fileSystem)
 
         let requestHeaders: HeadersInit | undefined
         globalThis.fetch = (async (_input, init) => {
@@ -595,7 +574,6 @@ describe("autocode_rest tools", () => {
         const fileSystem = createMemoryRestFileSystem()
         const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
         setRestEnvironment({ AUTOCODE_REST_API_AUTHORIZATION: "Bearer environment-secret" })
-        await seedCurrentJobSession(fileSystem)
 
         let requestHeaders: HeadersInit | undefined
         globalThis.fetch = (async (_input, init) => {

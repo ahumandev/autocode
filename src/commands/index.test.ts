@@ -3,8 +3,6 @@ import { docsCommandTemplate } from "./docs"
 import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { createCommands } from "./index"
-import { jobAssistCommandTemplate } from "./job-assist"
-import { jobAutoCommandTemplate } from "./job-auto"
 import { learnCommand } from "./learn"
 import { newSessionTemplate } from "./new-session"
 import { testsCommandTemplate } from "./tests"
@@ -26,10 +24,7 @@ describe("commands", () => {
 
     test("keeps current command keys and command object shape", () => {
         expect(Object.keys(commands)).toEqual([
-            "job-auto",
-            "job-assist",
             "job-concepts",
-            "job-design",
             "new-advise",
             "new-assist",
             "new-auto",
@@ -65,7 +60,7 @@ describe("commands", () => {
             if ("model" in command) expect(command.model).toEqual(expect.any(String))
         }
 
-        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "rename", "review", "act", "ask", "advise", "assist", "auto", "design", "fix", "job-execute", "job-facilitate"] as const) {
+        for (const commandName of ["document", "document-conventions", "document-code", "document-prd", "document-ux", "execute-opencode", "execute_opencode", "git-commit", "help", "rename", "review", "act", "ask", "advise", "assist", "auto", "design", "fix", "job-assist", "job-auto", "job-design", "job-execute", "job-facilitate"] as const) {
             expect(commands[commandName]).toBeUndefined()
         }
 
@@ -77,16 +72,6 @@ describe("commands", () => {
             agent: "query-code",
             subtask: false,
             template: explainCommandTemplate,
-        })
-        expect(commands["job-auto"]).toMatchObject({
-            agent: "design",
-            subtask: false,
-            template: jobAutoCommandTemplate,
-        })
-        expect(commands["job-assist"]).toMatchObject({
-            agent: "design",
-            subtask: false,
-            template: jobAssistCommandTemplate,
         })
         expect(commands["new-fix"]).toMatchObject({
             subtask: false,
@@ -103,17 +88,32 @@ describe("commands", () => {
         }
     })
 
+    test("distills recent context before handing off auto and assist sessions", () => {
+        for (const [commandName, agent] of [["new-auto", "auto"], ["new-assist", "assist"]] as const) {
+            const template = commands[commandName]?.template ?? ""
+
+            expect(template).toContain("Call `autocode_session_context` first")
+            expect(template.indexOf("autocode_session_context")).toBeLessThan(template.indexOf("autocode_session_create"))
+            expect(template).toContain("GOALS")
+            expect(template).toContain("IMPACT")
+            expect(template).toContain("CONSTRAINTS")
+            expect(template).toContain("CRITERIA")
+            expect(template).toContain("Unfinished work")
+            expect(template).toContain("$ARGUMENTS")
+            expect(template).toContain("Redact secrets, tokens, credentials, and private keys")
+            expect(template).toContain("complete handoff prompt as `prompt`")
+            expect(template).toContain(`agent="${agent}"`)
+        }
+    })
+
     test("every explicit command target resolves in the current agent registry", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], { balanced: {}, smart: {}, spy: {} })
         const targets = Object.entries(commands)
             .flatMap(([commandName, command]) => "agent" in command && typeof command.agent === "string" ? [[commandName, command.agent] as const] : [])
 
-        expect(targets).toHaveLength(16)
+        expect(targets).toHaveLength(13)
         expect(Object.fromEntries(targets)).toEqual({
-            "job-auto": "design",
-            "job-assist": "design",
             "job-concepts": "design",
-            "job-design": "design",
             "autocode-install": "execute-os",
             author: "execute-author",
             docs: "execute-document",
@@ -145,10 +145,8 @@ describe("commands", () => {
     test("omits optional-agent commands without hiding generic commands", () => {
         const commandsWithoutOptionalAgents = createCommands(createPlatformCapabilities("linux"), false, false)
 
-        expect(commandsWithoutOptionalAgents["job-auto"]).toBeUndefined()
         expect(commandsWithoutOptionalAgents["new-auto"]).toBeUndefined()
         expect(commandsWithoutOptionalAgents["new-spy"]).toBeUndefined()
-        expect(commandsWithoutOptionalAgents["job-assist"]).toBeDefined()
         expect(commandsWithoutOptionalAgents["new-assist"]).toBeDefined()
         expect(commandsWithoutOptionalAgents.docs).toBeDefined()
     })
@@ -185,19 +183,7 @@ describe("commands", () => {
         }
     })
 
-    test("keeps job execution command template intent", () => {
-        expect(commands["job-assist"]?.template).toContain("Call `autocode_job_execute` with `agent` = `assist`")
-        for (const commandName of ["job-assist", "job-auto"] as const) {
-            const template = commands[commandName]?.template ?? ""
-            expect(template).toContain('`result_type == "workspace_required"`')
-            expect(template).toContain('`result_type == "no_workspaces"`')
-            expect(template).toContain('`result_type == "session_created"`')
-        }
-    })
-
     test("keeps key command template substrings stable", () => {
-        expect(commands["job-design"]?.template).toContain("Call `autocode_concept_list` tool to list available concepts.")
-        expect(commands["job-auto"]?.template).toContain("Call `autocode_job_execute` with `agent` = `auto`")
         expect(commands.commit?.subtask).toBe(false)
         expect(commands.commit?.template).toContain("$ARGUMENTS")
         expect(commands.commit?.template).toContain("git_commit")

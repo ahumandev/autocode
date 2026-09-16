@@ -8,10 +8,7 @@ import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { gitCommitCommandTemplate } from "./commit"
 import { gitConflictCommandTemplate } from "./git-conflict"
-import { jobAssistCommandTemplate } from "./job-assist"
-import { jobAutoCommandTemplate } from "./job-auto"
 import { jobConceptsCommandTemplate } from "./job-concepts"
-import { jobDesignCommandTemplate } from "./job-design"
 import { learnCommand } from "./learn"
 import { newSessionTemplate } from "./new-session"
 import { repeatAsMdCommandTemplate } from "./repeat-as-md"
@@ -24,14 +21,9 @@ type CommandMap = NonNullable<Config["command"]>
 export function createCommands(capabilities: PlatformCapabilities, spyAvailable = false, autoAvailable = true): CommandMap {
     return {
 
-        // Job workspace commands
+        // Concept commands
 
-        ...(autoAvailable ? {
-            "job-auto": { agent: "design", description: "🚀 Start autonomous execution in a new session.", subtask: false, template: jobAutoCommandTemplate },
-        } : {}),
-        "job-assist": { agent: "design", description: "🧑‍💻 Start assisted execution in a new session.", subtask: false, template: jobAssistCommandTemplate },
         "job-concepts": { agent: "design", description: "💭 Save concepts in .agents/concepts/.", template: jobConceptsCommandTemplate },
-        "job-design": { agent: "design", description: "📐 Design solution from existing concept or job.", subtask: false, template: jobDesignCommandTemplate },
 
         // New session commands
 

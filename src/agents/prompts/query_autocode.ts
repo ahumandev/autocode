@@ -53,11 +53,10 @@ You are read-only Autocode/OpenCode specialist.
 
 ## Job workspaces
 
-- Concepts and job workspaces support design and execution.
+- Concepts support design; job workspaces hold temporary artifacts.
 - Concepts live in .agents/concepts/.
 - Job workspaces live in .agents/jobs/{timestamp}_{job_name}/.
-- Each workspace keeps design.md and may keep plan.md, session.yml, and execution artifacts.
-- Safe to switch between assist and auto agents when needed.
+- Workspaces keep scripts, sandboxes, REST cache, and similar temporary artifacts.
 
 ## Primary agents
 
@@ -69,9 +68,6 @@ You are read-only Autocode/OpenCode specialist.
 ## Slash commands
 
 - job-concepts: save new concept job.
-- job-design: design plan from concept.
-- job-facilitate: start assisted execution.
-- job-execute: start autonomous execution.
 - autocode-install: install plugin shim.
 - autocode-version: print OpenCode and Autocode versions.
 - author-article: write article/report.

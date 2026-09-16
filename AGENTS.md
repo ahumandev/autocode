@@ -1,7 +1,7 @@
 # Purpose of project
 
-OpenCode plugin/library for concepts, durable design workspaces, safe execution, and docs.
-It turns concepts into designs, runs work in OpenCode, and keeps workspace state in text files.
+OpenCode plugin for reusable skills and safe tool execution.
+OpenCode sessions own workflow and state.
 
 ## Primary features
 
@@ -14,7 +14,7 @@ It turns concepts into designs, runs work in OpenCode, and keeps workspace state
 - `src/plugin.ts`: Plugin entry; registers agents, commands, tools, skills, config, and guidance.
 - `src/agents/`: Managed agents and prompts.
 - `src/commands/`: Slash command registration.
-- `src/tools/`: Runtime tools for jobs, DB read, sandbox, SSH, cross-project tasks, resume.
+- `src/tools/`: Retained runtime tools.
 - `src/skills/`: Source guidance bundled into `dist/skills`.
 - `src/install.ts`: Installs shim at `~/.config/opencode/plugins/autocode.js`.
 

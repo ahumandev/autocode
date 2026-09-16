@@ -88,7 +88,7 @@ export async function resolveSandboxForFileTool(client: OpencodeClient | undefin
     const sandboxName = normalizeSandboxName(sandboxNameInput)
     if (!sandboxName.ok) return { ok: false, response: createRetryResponse(action, sandboxName.reason, "Use an existing sandbox name with lowercase letters, numbers, and underscores only.") }
     const owner = await resolveSandboxOwner(deps.fileSystem, client, context, sandboxName.value)
-    if (!owner.ok) return { ok: false, response: createRetryResponse(action, owner.reason, "Start or select a timestamped job workspace before using a sandbox.") }
+    if (!owner.ok) return { ok: false, response: createRetryResponse(action, owner.reason, "Set current session title to include letters or numbers, then retry.") }
     const paths = owner.owner
     const safePath = assertDirectSandboxPath(paths.sandboxPath, paths.jobSandboxRoot)
     if (!safePath.ok) return { ok: false, response: JSON.stringify({ ok: false, status: "unsafe_path", reason: safePath.reason, guidance: limitationGuidance }) }
