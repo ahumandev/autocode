@@ -1,94 +1,93 @@
-# Learned skills
+# Skills and local memory
 
-Learned skills are persistent notes AutoCode writes to disk through `skill_learn_*` tools so future sessions recall corrections, environment quirks, permissions, and preferences without re-asking the user.
+`learn` stores a durable local memory. `skill_edit` creates or updates a reusable skill. Local memories are not reusable `SKILL.md` documents.
 
-## Storage location
+## Storage locations
 
-- Root: `{agentsStorageRoot}/.agents/skills/`.
-- Each skill directory contains `SKILL.md` and may contain supporting files.
-- Categories are metadata, never filesystem path segments.
-- `agentsStorageRoot` is resolved by `resolveAgentsStorageRoot` with priority: worktree → directory → fallback.
+- Active local-memory store: `.opencode/autocode/memories/`. A fresh transition starts empty; runtime creates Markdown `.md` memory files only through `learn`.
+- Reusable skills: each skill directory contains `SKILL.md` and may contain supporting files.
+- Managed built-in skills: `$XDG_CONFIG_HOME/skills/autocode` when `XDG_CONFIG_HOME` is set; otherwise `~/.agents/skills/autocode`.
+- Managed GitHub skills: `$XDG_CONFIG_HOME/skills/autocode/github/<owner>/<project>/<skill>/` when `XDG_CONFIG_HOME` is set; otherwise `~/.agents/skills/autocode/github/<owner>/<project>/<skill>/`.
+- Recommended global manual skill path: `~/.config/opencode/skills/<skill-name>/`.
+- Do not put custom skills in managed `autocode` directories; AutoCode reconciles them.
+- GitHub is the only supported provider. Its primary cache is `~/.cache/autocode/github/<owner>/<project>/`; the fallback is `.opencode/autocode/cache/github/<owner>/<project>/` only after primary access returns `EACCES` or `EPERM`. Both cache trees are disposable. `bun run skill:sync` refreshes tracked snapshots; `bun run skill:sync -- --force-refresh` bypasses cached repositories.
 
-Managed generated skills use `$XDG_CONFIG_HOME/skills/autocode` when `XDG_CONFIG_HOME` is set; otherwise `~/.agents/skills/autocode`.
+Automatic local-memory recall considers only an eligible user message: `output.message.role` is exactly `user`, it has at least one text part, and authoritative runtime agent tier is `smart`. Only the first eligible user-role text message for each `[sessionID, agentName]` triggers automatic recall.
 
-- Managed built-in path, relative to home: `.agents/skills/autocode/<skill-name>/`.
-- Managed GitHub path, relative to home: `.agents/skills/autocode/github/<owner>/<project>/<skill>/`.
-- With `XDG_CONFIG_HOME` set, replace the managed root with `$XDG_CONFIG_HOME/skills/autocode`.
-- Recommended global manual user-skill path, relative to home: `.config/opencode/skills/<skill-name>/`.
-- Do not put custom skills in managed `.agents/skills/autocode/`; AutoCode reconciles that directory.
-- GitHub is the only supported provider now. GitHub sync primary cache: `~/.cache/autocode/github/<owner>/<project>/`; fallback is `.opencode/autocode/cache/github/<owner>/<project>/` only after primary filesystem access returns `EACCES` or `EPERM`. The provider namespace leaves room for future sibling paths such as `~/.cache/autocode/gitlab/`; this does not indicate GitLab support. Both cache trees are disposable and safe to delete. `bun run skill:sync` refreshes tracked GitHub snapshots, and `bun run skill:sync -- --force-refresh` bypasses cached repositories and refreshes them remotely.
+Automatic recall records one claim per `[sessionID, agentName]`. First eligible event claims it even when recall has no match or fails. Config refresh preserves claims; `session.deleted` clears that session; dispose clears all claims.
 
-## SKILL.md format
+### Manual memory tools
 
-Each `SKILL.md` starts with YAML frontmatter, followed by a Caveman English body.
+- `autocode_memory_recall` schema: `{ keywords: string }`.
+- `autocode_memory_forget` schema: `{ id_keyword: string }`.
+- Manual `recall` and `forget` are available only to `advise`, `assist`, `auto`, `design`, `spy`, and `auto-troubleshoot`. `spy` `learn` remains denied after overrides.
 
-Frontmatter:
+### Manual recall
+
+- `keywords` is comma-validated, then each keyword uses NFKC, case, and whitespace normalization with ordered deduplication.
+- Recall scans each normalized keyword in declared order. Each keyword gets a full deterministic scan before the next; normalized whole phrases or identifier boundaries match primary ID, aliases, or context keywords on newest active version of each memory. A no-match keyword advances.
+- Selected primary IDs persist across scans, output order is deterministic, and each primary ID emits once. Manual recall does not exclude memories already loaded as context.
+- Only trusted complete XML memory blocks are returned. One cumulative model-visible UTF-16 budget of 7,000 characters carries across scans: whole blocks only; first overflow or exact-full accepted block stops entire lookup, with no bin-packing or later keyword scans.
+- Automatic recall output remains limited to 4,000 characters.
+
+### Manual forget and concurrent saves
+
+- `id_keyword` is normalized, then matches exact primary ID only; aliases and context keywords never match.
+- Forget deletes every timestamped active version for matching primary ID. Zero matches are idempotent success.
+- Before any removal, forget validates every active `.md` filename. A malformed filename aborts before deletes.
+- Forget removes at most 8 files concurrently. Filesystem errors use abort/retry behavior: successful partial deletes remain deleted, and retrying same exact ID safely removes remaining versions.
+- Results report IDs, counts, and locations, never memory bodies.
+- Pre-scan is a snapshot. A concurrent `learn` or save can create a new version after scan that survives this attempt; removal is best effort during concurrent saves, and retrying exact ID is safe.
+
+## `learn` durable memory
+
+Use `learn` for concise, durable facts: preferences, corrected fixes, environment configuration, project conventions, safety constraints, and verified findings. Do not store secrets, credentials, tokens, private keys, or temporary task progress. Learning, recall, and forget do not require trusted-attestation metadata.
+
+`learn` saves a local memory with a primary ID keyword, optional alias/context keywords, examples, and references. Its result reports saved filename, location, storage root, normalized ID, duplicate-keyword removal, same-time replacements, and recall status.
+
+There is no legacy import, conversion, or seed step. The archive is outside active-memory scans.
+
+## Reusable `SKILL.md` format
+
+Each reusable `SKILL.md` starts with YAML frontmatter, followed by a Caveman English body.
 
 ```yaml
 ---
-name: learned-{category}-{slug}
+name: <skill-name>
 description: Use this skill when [TRIGGER] to [BENEFIT]. NEVER for [EXCLUSIONS].
 ---
 ```
 
-- `name`: derived from the skill name parameter.
-- `description`: written by the caller; should follow the trigger / benefit / exclusion pattern, in Caveman English, max 40 words.
-- Body: skill content in Caveman English.
+- `name`: stable reusable skill name.
+- `description`: caller-written trigger / benefit / exclusion guidance in Caveman English, maximum 40 words.
+- Body: reusable instructions in Caveman English.
+- Put detailed templates and companion material in references. Link every reference from the body using its exact relative path.
 
-Example `SKILL.md` from [src/tools/skill_learn.test.ts:258-271](src/tools/skill_learn.test.ts):
+## Reusable skill creation and updates
 
-```markdown
----
-name: learned-corrections-avoid-re-render
-description: Use this skill when a component re-renders unnecessarily.
----
-
-- Wrap component in useMemo.
-
----
-
-Content outdated? Call `skill_learn` with name=`learned-corrections-avoid-re-render` to correct.
-```
-
-## Categories
-
-### Learned categories
-
-| Category    | Tool                      | Trigger                                                              | Content                                                                                                 |
-| ----------- | ------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| corrections | `skill_learn_correction`  | A mistake was self-corrected.                                        | Corrected mistakes and correction steps.                                                                |
-| env         | `skill_learn_env`         | An unusual environment capability or limit was found.                | Environment quirks: OS, platform, hardware, scripts, network, or access limits.                         |
-| permissions | `skill_learn_permission`  | User says a task is safe OR warns a task is unsafe.                  | Safety and manual-operation rules.                                                                      |
-| preferences | `skill_learn_preferences` | User sets a permanent rule ("always", "never", ALL CAPS plus `!!!`). | Durable user conventions for programming, organization, naming, or editing.                             |
+Use `skill_edit` to create or update reusable skills and their `references[]`. Keep reusable instructions, templates, and references in the skill directory; do not use `learn` as a skill-authoring path.
 
 ## Skill discovery and loading
 
-The agent system prompt instructs: check the skill list BEFORE doing anything; load a skill through the `skill` tool if its description matches the task.
+The agent system prompt instructs: check skill list before work; load a matching skill through `skill`.
 
-The skill list is walked from multiple roots in priority order:
+Skill roots are walked in priority order:
 
-1. Generated skills (plugin-bundled).
+1. Generated plugin-bundled skills.
 2. Plugin skills parent.
-3. Learned skills: `.agents/skills/`.
-4. Project skills: `.opencode/skills/`.
+3. Agent skills under `.agents/skills/`.
+4. Project skills under `.opencode/skills/`.
 
-- Match logic: **exact name match** (`candidate.name === name`) — no keyword or embedding search.
-- Dedup cache: 30 minute TTL, 256 max entries per session, keyed by sessionID + identity + hash.
+- Match logic is exact name match: `candidate.name === name`.
+- Dedup cache: 30-minute TTL, 256 maximum entries per session, keyed by session ID + identity + hash.
+- Legacy `.agents/skills/learned-*` categories are not registered or discovered. Ordinary reusable skills remain discoverable.
+- `.opencode/autocode/memory-archive/v1/` is outside skill discovery and active-memory scans.
 
-## Pruning
+## Recovering an archived skill artifact
 
-- Count-based, NOT time-based — no TTL or expiry window.
-- Runs once per plugin startup, NOT on each `skill_learn_*` call.
-- Limit applies **per category**, not globally.
-- Default: 10 per category; configurable via `autocode.learned.max` in `autocode.jsonc`.
-- Keeps the N newest skills by `SKILL.md` mtime; ties broken by directory name descending.
-- Pruned skill directories are removed with `rm -rf`.
-- Re-learning an existing skill updates its `SKILL.md` mtime, so it survives longer.
-- Invalid, zero, negative, or non-integer `max` falls back to 10.
-
-See [Configuration: Learned skills](configuration.md#learned-skills) for the full config reference.
+Archived files retain their original path below `v1/`. To recover or inspect one old skill artifact, copy the selected `SKILL.md` to that original relative path only. A restored legacy `.agents/skills/learned-*` path remains excluded from skill discovery and is not an active memory.
 
 ## See also
 
-- [Configuration reference](configuration.md) — `autocode.learned.max` and other keys.
+- [Configuration reference](configuration.md).
 - [Usage guide](usage.md).

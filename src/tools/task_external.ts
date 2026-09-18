@@ -92,7 +92,7 @@ function createSpawnEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 function runOpencode(directory: string, prompt: string, deps: TaskProjectDependencies): Promise<RunResult> {
     return new Promise((resolve, reject) => {
         const env = createSpawnEnv(process.env)
-        const child = deps.spawn("opencode", ["run", "--dir", directory, "--agent", TASK_EXTERNAL_AGENT, prompt], {
+        const child = deps.spawn(env.OPENCODE_BINARY ?? "opencode", ["run", "--dir", directory, "--agent", TASK_EXTERNAL_AGENT, prompt], {
             stdio: ["ignore", "pipe", "pipe"],
             env,
         })

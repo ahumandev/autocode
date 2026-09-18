@@ -10,9 +10,9 @@
 
 - 📦 **Cross-project tasking** — delegate investigation or edits to isolated OpenCode sessions in external directories.
 - 🪙 **Cost-saving workflows** — improve performance and reduce token usage with smart orchestration, tiered agent models, Caveman English.
-- 🔒 **Secret-safe tools** — agents never see passwords or secrets; predefined keys resolve credentials at tool runtime.
+- 🔒 **Secret-safe tools** — predefined credential keys resolve at tool runtime; never save secrets, credentials, tokens, or private keys to durable memory.
 - ⚠️ **Safe hand-offs** — provide a thorough manual task tutorial when an operation is unsafe.
-- 📚 **Self-learning memory** — auto capture corrections, environment quirks, permissions, and user preferences as skills for future sessions.
+- 📚 **Durable local memory** — smart agents automatically recall matching durable memories on first eligible user text; primary agents and `auto-troubleshoot` can manually recall prior fixes or forget confirmed misleading/outdated IDs. See [memory guidance](skill.md).
 - 🧹 **Agent cleanup** — agents remove temporary files and stop stray processes they started after debugging.
 
 ### Build-in Tools
@@ -155,7 +155,7 @@ Remove `@ahumandev/autocode` from [global OpenCode config](https://opencode.ai/d
 
 - [Configuration](configuration.md) — config locations, keys, model tiers, and DB/SSH environment variables.
 - [Usage](usage.md) — more details on how to use AutoCode.
-- [Self Learned Skills](skill.md) — reusable guidance files that extend AutoCode behavior.
+- [Local Memory](skill.md) — local memories and reusable guidance that extend AutoCode behavior.
 - [Terminology](terminology.md) — glossary of AutoCode concepts.
 
 ## Development & Distribution

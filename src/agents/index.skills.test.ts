@@ -32,11 +32,9 @@ describe("buildAgents with external skills", () => {
             "angular-new-app": "allow",
             "execute-install": "allow",
             "execute-sandbox": "allow",
-            "learned-corrections*": "allow",
-            "learned-env*": "allow",
-            "learned-permissions*": "allow",
-            "skill-write": "allow"
         })
+        expect(getSkillRule(agents["execute-os"], "learned-permissions*")).toBeUndefined()
+        expect(permissionRule(agents["execute-os"]?.permission, "learn")).toBe("allow")
     })
 
     test("bash category → execute-os and execute-script get the rule, other agents do not", () => {

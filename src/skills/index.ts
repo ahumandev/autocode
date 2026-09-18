@@ -1,9 +1,8 @@
-import { existsSync, readFileSync, statSync, type Dirent } from "node:fs"
-import { cp, mkdir, mkdtemp, readdir, rename, rm, stat } from "node:fs/promises"
+import { existsSync, readFileSync, statSync } from "node:fs"
+import { cp, mkdir, mkdtemp, rename, rm } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { resolveOpenCodePaths, type OpenCodePathResolverDependencies } from "@/utils/paths"
-import { isMissingFile } from "@/utils/jobs"
 import { loadGitHubSkillInventory } from "./github"
 import type { ExternalSkill } from "../utils/external"
 
@@ -209,62 +208,4 @@ export async function reconcileGeneratedSkills(options: GeneratedSkillsOptions =
 
 export async function ensureGeneratedSkills(options: GeneratedSkillsOptions = {}): Promise<string> {
     return (await reconcileGeneratedSkills(options)).root
-}
-
-const LEARNED_SKILL_CATEGORIES = ["corrections", "env", "permissions", "preferences"] as const
-const LEARNED_DEFAULT_MAX = 10
-
-export async function cleanupLearnedSkills(
-    agentsRoot: string,
-    max: number,
-    dependencies: OpenCodePathResolverDependencies = {},
-): Promise<void> {
-    const effectiveMax = Number.isInteger(max) && max > 0 ? max : LEARNED_DEFAULT_MAX
-    const skillsRoot = resolveOpenCodePaths(dependencies).learnedSkillsRoot(agentsRoot)
-
-    for (const category of LEARNED_SKILL_CATEGORIES) {
-        const categoryDir = path.join(skillsRoot, `learned-${category}`)
-        try {
-            let entries: Dirent[]
-            try {
-                entries = await readdir(categoryDir, { withFileTypes: true })
-            } catch (err) {
-                if (isMissingFile(err)) continue // no-op: category dir does not exist; never create
-                console.warn(`autocode: cleanup learned skills: failed to read ${categoryDir}: ${(err as Error).message}`)
-                continue
-            }
-
-            const skillStats: Array<{ dir: string; mtimeMs: number }> = []
-            for (const entry of entries) {
-                if (!entry.isDirectory()) continue
-                const skillFile = path.join(categoryDir, entry.name, "SKILL.md")
-                try {
-                    const stats = await stat(skillFile)
-                    skillStats.push({ dir: entry.name, mtimeMs: stats.mtimeMs })
-                } catch (err) {
-                    if (!isMissingFile(err)) {
-                        console.warn(`autocode: cleanup learned skills: failed to stat ${skillFile}: ${(err as Error).message}`)
-                    }
-                }
-            }
-
-            // Sort DESC by (mtimeMs, full dir name) — newest first, alpha-larger first on ties.
-            skillStats.sort((a, b) => {
-                if (a.mtimeMs !== b.mtimeMs) return a.mtimeMs < b.mtimeMs ? 1 : -1
-                return a.dir < b.dir ? 1 : -1
-            })
-
-            const stale = skillStats.slice(effectiveMax)
-            if (stale.length === 0) continue
-            await Promise.all(stale.map(async (entry) => {
-                try {
-                    await rm(path.join(categoryDir, entry.dir), { recursive: true, force: true })
-                } catch (err) {
-                    console.warn(`autocode: cleanup learned skills: failed to remove ${entry.dir}: ${(err as Error).message}`)
-                }
-            }))
-        } catch (err) {
-            console.warn(`autocode: cleanup learned skills: error for category ${category}: ${(err as Error).message}`)
-        }
-    }
 }

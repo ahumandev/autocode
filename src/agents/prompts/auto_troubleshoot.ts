@@ -80,17 +80,18 @@ Formulate 1-4 competing CAUSE hypotheses considering possible events leading to 
 
 Each formulated hypothesis need 1 or more follow up actions to confirm hypothesis in this preferred order (skip irrelevant/impractical actions):
 
-1. Check configs, env vars, input data (cheapest, try first)
-2. Search keywords in logs, local or sftp remote
-3. Compare Git versions, last working version - what changed?
-4. Check network, fs, permission state, system resources
-5. Inspect persisted data (missing, malformed, duplicated) for clues
-6. Trace source code - correlate with logs if possible
-7. Similar SYMPTOMS reported online - if opensource lib is suspected
-8. Debug tests starting/calling component in isolation
-9. Add debug logging, redeploy, reproduce (in local/test/sandbox env), view new logs
-10. Experiment: create and run stripped project copy with only suspicious components
-11. Reinstall last known working version separately and systematically reapply recent changes until broken
+1. Recall previous solutions \`autocode_memory_recall\`
+2. Check configs, env vars, input data (cheapest, try first)
+3. Search keywords in logs, local or sftp remote
+4. Compare Git versions, last working version - what changed?
+5. Check network, fs, permission state, system resources
+6. Inspect persisted data (missing, malformed, duplicated) for clues
+7. Trace source code - correlate with logs if possible
+8. Similar SYMPTOMS reported online - if opensource lib is suspected
+9. Debug tests starting/calling component in isolation
+10. Add debug logging, redeploy, reproduce (in local/test/sandbox env), view new logs
+11. Experiment: create and run stripped project copy with only suspicious components
+12. Reinstall last known working version separately and systematically reapply recent changes until broken
 
 ## STEP 4: Choose Hypothesis
 
@@ -111,6 +112,11 @@ Choose simplest APPROACHE that will solve hypothesis (ROOT CAUSE) with least unw
   - If subagent failed because lack of tools: \`task\` another subagent to complete task
   - If new CONSTRAINT discovered making APPROACH impractical: Restart Workflow Loop from STEP 1 with new CONSTRAINT and discoveries.
   - If APPROACH SOLUTION completed successfully, continue to next STEP.
+
+### STEP 7: Memorize Solution
+
+- Misleading/outdated memory? Call \`autocode_memory_forget\`
+- Learned from mistake? Call \`learn\`
 
 ### STEP 8: Report RCA Summary
 

@@ -94,9 +94,9 @@ Report to user 1-4 APPROACH PROPOSALS in PROPOSAL REPORT to solve confirmed hypo
   - If new CONSTRAINT discovered making APPROACH impractical: Restart Troubleshoot Workflow from STEP 1 with new CONSTRAINT and discoveries.
   - If APPROACH SOLUTION completed successfully, continue next STEP.
 
-### STEP 8: Learn From Mistakes
+### STEP 8: Store Durable Lesson
 
-Learn rules to prevent repetition of OBSTACLE using \`skill_learn\` tool as follows:
+Store durable lesson with \`learn\` tool as follows:
 - Describe OBSTACLE as SYMPTOM (include exact errors)
 - Include EVIDENCE that lead to CAUSE (include paths to source code/configs)
 - Explain what APPROACH solved issue (include key code/config changes)

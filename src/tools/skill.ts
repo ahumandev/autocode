@@ -100,6 +100,12 @@ type SkillLoadRuntime = {
     serverUrl?: string | URL
 }
 
+export type SkillToolTraceEvent =
+    | { type: "exclusion", reason: "learned-or-archive", path: string }
+    | { type: "active-store", found: boolean, method: string | null, cacheHit: boolean }
+
+export type SkillToolTrace = (event: SkillToolTraceEvent) => void
+
 type ClientFetchConfig = {
     baseUrl?: string
     fetch?: (request: Request) => Promise<Response>
@@ -233,8 +239,40 @@ function parseSkillMarkdown(filePath: string, source: string, inferredName?: str
     }
 }
 
-async function collectSkillFiles(fileSystem: FileSystem, root: string): Promise<string[]> {
+function isLearnedSkillPath(directory: string): boolean {
+    const segments = path.resolve(directory).split(path.sep)
+    return segments.some((segment, index) => (
+        segment === ".agents"
+        && segments[index + 1] === "skills"
+        && segments[index + 2]?.startsWith("learned-") === true
+    ))
+}
+
+function isArchivedSkillPath(directory: string): boolean {
+    const segments = path.resolve(directory).split(path.sep)
+    return segments.some((segment, index) => (
+        segment === ".opencode"
+        && segments[index + 1] === "autocode"
+        && segments[index + 2] === "memory-archive"
+    ))
+}
+
+function emitSkillTrace(trace: SkillToolTrace | undefined, event: SkillToolTraceEvent): void {
+    try {
+        trace?.(event)
+    }
+    catch {
+        // Tracing stays side-channel even when callback fails.
+    }
+}
+
+async function collectSkillFiles(fileSystem: FileSystem, root: string, trace?: SkillToolTrace): Promise<string[]> {
     async function walk(directory: string): Promise<string[]> {
+        if (isLearnedSkillPath(directory) || isArchivedSkillPath(directory)) {
+            emitSkillTrace(trace, { type: "exclusion", reason: "learned-or-archive", path: directory })
+            return []
+        }
+
         let entries: Awaited<ReturnType<FileSystem["readdir"]>>
         try {
             entries = await fileSystem.readdir(directory, { withFileTypes: true })
@@ -277,9 +315,9 @@ function inferNestedSkillName(root: string, filePath: string): string | undefine
     return relativeDirectory.split(path.sep).join("/")
 }
 
-async function loadSkillsFromRoot(fileSystem: FileSystem, root: string, inferNestedNames = false): Promise<LoadedSkill[]> {
+async function loadSkillsFromRoot(fileSystem: FileSystem, root: string, inferNestedNames = false, trace?: SkillToolTrace): Promise<LoadedSkill[]> {
     const skills: LoadedSkill[] = []
-    for (const filePath of await collectSkillFiles(fileSystem, root)) {
+    for (const filePath of await collectSkillFiles(fileSystem, root, trace)) {
         const source = await fileSystem.readFile(filePath, "utf8").catch((error: unknown) => {
             if (isMissingFile(error)) {
                 return undefined
@@ -300,7 +338,7 @@ async function loadSkillsFromRoot(fileSystem: FileSystem, root: string, inferNes
     return skills
 }
 
-async function loadSkill(fileSystem: FileSystem, context: SkillLoadContext, name: string, runtime?: SkillLoadRuntime): Promise<LoadedSkill | undefined> {
+async function loadSkill(fileSystem: FileSystem, context: SkillLoadContext, name: string, runtime?: SkillLoadRuntime, trace?: SkillToolTrace): Promise<LoadedSkill | undefined> {
     const generatedSkillsRoot = path.resolve(getGeneratedSkillsRoot({ home: runtime?.home }))
     const roots = [
         // Narrow autocode root first so loose .md files at its root are collected.
@@ -311,9 +349,10 @@ async function loadSkill(fileSystem: FileSystem, context: SkillLoadContext, name
         { path: path.dirname(generatedSkillsRoot), inferNestedNames: true },
         { path: path.resolve(resolveAgentsStorageRoot(context), ".agents", "skills"), inferNestedNames: true },
         { path: path.resolve(resolveAgentsStorageRoot(context), ".opencode", "skills"), inferNestedNames: false },
+        { path: path.resolve(resolveAgentsStorageRoot(context), ".opencode", "autocode", "memory-archive"), inferNestedNames: true },
     ]
     for (const root of roots) {
-        const skill = (await loadSkillsFromRoot(fileSystem, root.path, root.inferNestedNames)).find((candidate) => candidate.name === name)
+        const skill = (await loadSkillsFromRoot(fileSystem, root.path, root.inferNestedNames, trace)).find((candidate) => candidate.name === name)
         if (skill !== undefined) {
             return skill
         }
@@ -482,7 +521,7 @@ async function readActiveContext(client: OpencodeClient | undefined, context: Sk
     return { found: false, info: { checked: true, available: false, method: null, reason: "active context API unavailable; base URL unavailable", response_scan: null, probe_errors: [], client_top_level_keys: safeTopLevelKeys(client), probe_names: probeNames } }
 }
 
-export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem, runtime?: SkillLoadRuntime): ReturnType<typeof tool> {
+export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem, runtime?: SkillLoadRuntime, trace?: SkillToolTrace): ReturnType<typeof tool> {
     return tool({
         description: "Before starting work: load all applicable skills (not yet loaded) or skills needed by current step from `<available_skills>` block ONLY.",
         args: {
@@ -498,7 +537,7 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
             const skillContext = context as SkillLoadContext
             let skill: LoadedSkill | undefined
             try {
-                skill = await loadSkill(fileSystem, skillContext, validatedArgs.name, runtime)
+                skill = await loadSkill(fileSystem, skillContext, validatedArgs.name, runtime, trace)
             }
             catch {
                 return createRetryResponse(
@@ -544,10 +583,17 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
                 const checkedCache = checkLiveDedupeCache(skillContext, identity, hash)
 
                 if (checkedCache.hit) {
+                    emitSkillTrace(trace, { type: "active-store", found: false, method: null, cacheHit: true })
                     return ""
                 }
 
                 const activeContext = await readActiveContext(client, skillContext, marker, hash, runtime)
+                emitSkillTrace(trace, {
+                    type: "active-store",
+                    found: activeContext.found,
+                    method: activeContext.info.method,
+                    cacheHit: false,
+                })
 
                 if (activeContext.found) {
                     return ""

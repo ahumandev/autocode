@@ -127,9 +127,12 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_config_read: "allow",
                 autocode_md_frontmatter_read: "allow",
                 autocode_md_read: "allow",
+                autocode_memory_recall: "allow",
+                autocode_memory_forget: "allow",
                 autocode_session_create: "allow",
                 doom_loop: "ask",
                 git_commit: "ask",
+                learn: "allow",
                 question: "allow",
                 skill: {
                     "*": "deny",
@@ -137,12 +140,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "author-*": "allow",
                     "codebase-design": "allow", // From mattpocock/skills
                     "git-commit": "allow",
-                    "learned-preferences*": "allow",
                     "primary-manual*": "allow",
-                    "skill-write": "allow",
                     "ui-craft": "allow",
                 },
-                skill_learn: "allow",
                 task: {
                     "*": "deny",
                     "auto-research": "allow",
@@ -164,12 +164,15 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 "autocode_config_*": "allow",
                 "autocode_md_*": "allow",
+                autocode_memory_recall: "allow",
+                autocode_memory_forget: "allow",
                 autocode_sandbox_create: "ask",
                 autocode_sandbox_delete: "allow",
                 autocode_session_create: "allow",
                 doom_loop: "ask",
                 edit: "allow",
                 git_commit: "allow",
+                learn: "allow",
                 question: "allow",
                 skill: {
                     "*": "deny",
@@ -177,14 +180,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "author-*": "allow",
                     "codebase-design": "allow", // From mattpocock/skills
                     "git-commit": "allow",
-                    "learned-preferences*": "allow",
-                    "learned-permissions*": "allow",
                     "primary-manual*": "allow",
-                    "skill-write": "allow",
                     "ui-craft": "allow",
                 },
-                skill_edit: "allow",
-                skill_learn: "allow",
                 task: {
                     "*": "allow",
                     "auto*": "deny",
@@ -213,11 +211,11 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill: {
                     "*": "deny",
                     "git-commit": "allow",
-                    "learned-permissions*": "allow",
-                    "learned-preferences*": "allow",
                     "primary-manual": "allow"
                 },
-                skill_learn: "allow",
+                learn: "allow",
+                autocode_memory_recall: "allow",
+                autocode_memory_forget: "allow",
                 task: {
                     "*": "deny",
                     "auto-*": "allow",
@@ -242,17 +240,17 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_concept_list: "allow",
                 autocode_concept_read: "allow",
                 autocode_job_list: "allow",
+                autocode_memory_recall: "allow",
+                autocode_memory_forget: "allow",
                 autocode_session_create: "allow",
                 doom_loop: "ask",
                 external_directory: "ask",
+                learn: "allow",
                 question: "allow",
                 skill: {
                     "*": "deny",
                     "codebase-design": "allow", // From mattpocock/skills
-                    "learned-preferences*": "allow",
-                    "skill-write": "allow",
                 },
-                skill_learn: "allow",
                 task: {
                     "*": "deny",
                     "auto-research": "allow",
@@ -280,6 +278,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_db_tables: "allow",
                 autocode_md_frontmatter_read: "allow",
                 autocode_md_read: "allow",
+                autocode_memory_forget: "allow",
                 autocode_ssh_config_read: "allow",
                 autocode_ssh_glob: "allow",
                 autocode_ssh_grep_file: "allow",
@@ -311,9 +310,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill: {
                     "*": "deny",
                     "execute-ux": "allow",
-                    "skill-write": "allow",
                 },
-                skill_learn: "allow",
+                learn: "allow",
                 "todo*": "allow",
             },
             prompt: assistBrowserPrompt,
@@ -370,11 +368,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 "autocode_md_*": "allow",
                 edit: "allow",
-                skill: {
-                    "*": "deny",
-                    "learned-preferences*": "allow",
-                    "skill-write": "allow",
-                },
                 task: {
                     "*": "deny",
                     "document-*": "allow",
@@ -427,7 +420,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "code*": "allow",
                     "codebase-design": "allow", // From mattpocock/skills
                     "execute*": "allow",
-                    "learned-preferences*": "allow",
                     "vue-best-practices": "allow",
                     "ui-craft": "allow",
                 },
@@ -493,7 +485,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "code*": "allow",
                     "codebase-design": "allow", // From mattpocock/skills
                     "execute*": "allow",
-                    "learned-preferences*": "allow"
                 },
                 task: {
                     "*": "deny",
@@ -596,7 +587,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill: {
                     "*": "deny",
                     "test*": "allow",
-                    "learned-corrections*": "allow",
                 },
                 task: {
                     "*": "deny",
@@ -627,11 +617,11 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "context7*": "allow",
                 skill: {
                     "*": "deny",
-                    "learned-corrections*": "allow",
-                    "learned-env*": "allow",
                     "skill-write": "allow",
                 },
-                skill_learn: "allow",
+                learn: "allow",
+                autocode_memory_recall: "allow",
+                autocode_memory_forget: "allow",
                 task: {
                     "*": "deny",
                     "execute-code": "allow",
@@ -733,11 +723,10 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 read: "allow",
                 skill: {
                     "*": "deny",
-                    "learned-env*": "allow",
                     "skill-write": "allow",
                 },
                 skill_edit: "allow",
-                skill_learn: "allow",
+                learn: "allow",
                 task: {
                     "*": "deny",
                     "query-os": "allow",
@@ -858,7 +847,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "javascript-typescript-jest": "allow",
                     "nitro": "allow",
                     "nuxt": "allow",
-                    "learned-preferences*": "allow",
                     "tailwindcss": "allow",
                     "vitest": "allow"
                 },
@@ -899,12 +887,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 read: "allow",
                 skill: {
                     "*": "deny",
-                    "learned-corrections*": "allow",
-                    "learned-env*": "allow",
-                    "learned-permissions*": "allow",
                     "skill-write": "allow"
                 },
-                skill_learn: "allow",
+                learn: "allow",
             },
             prompt: executeDebugPrompt,
             temperature: 0.6,
@@ -1001,12 +986,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "angular-new-app": "allow",
                     "execute-install": "allow",
                     "execute-sandbox": "allow",
-                    "learned-corrections*": "allow",
-                    "learned-env*": "allow",
-                    "learned-permissions*": "allow",
-                    "skill-write": "allow"
                 },
-                skill_learn: "allow",
+                learn: "allow",
             },
             prompt: buildExecuteOsPrompt(capabilities),
             temperature: 0.1,
@@ -1023,14 +1004,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_config_read: "allow",
                 autocode_rest: "allow",
                 grep: "allow",
+                learn: "allow",
                 read: "allow",
-                skill: {
-                    "*": "deny",
-                    "learned-corrections*": "allow",
-                    "learned-env*": "allow",
-                    "skill-write": "allow"
-                },
-                skill_learn: "allow",
             },
             prompt: executeRestPrompt,
             temperature: 0.1,
@@ -1056,11 +1031,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "*": "deny",
                     "execute-install": "allow",
                     "execute-sandbox": "allow",
-                    "learned-corrections*": "allow",
-                    "learned-env*": "allow",
                     "skill-write": "allow"
                 },
-                skill_learn: "allow",
+                learn: "allow",
                 "todo*": "allow",
             },
             prompt: buildExecuteOsPrompt(sandboxLinuxCapabilities),
@@ -1081,16 +1054,12 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 edit: "allow",
                 glob: "allow",
                 grep: "allow",
+                learn: "allow",
                 read: "allow",
                 skill: {
                     "*": "deny",
-                    "execute-install": "allow",
-                    "learned-corrections*": "allow",
-                    "learned-env*": "allow",
-                    "learned-permissions*": "allow",
-                    "skill-write": "allow"
+                    "execute-install": "allow"
                 },
-                skill_learn: "allow",
                 write: "allow",
             },
             prompt: executeScriptPrompt,
@@ -1107,13 +1076,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "autocode_ssh*": "allow",
                 skill: {
                     "*": "deny",
-                    "execute-install": "allow",
-                    "learned-corrections*": "allow",
-                    "learned-env-*": "allow",
-                    "learned-permissions*": "allow",
-                    "skill-write": "allow"
+                    "execute-install": "allow"
                 },
-                skill_learn: "allow",
+                learn: "allow",
                 "todo*": "allow",
             },
             prompt: executeSshPrompt,
@@ -1270,13 +1235,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 grep: "allow",
                 lsp: "allow",
                 read: "allow",
-                skill: {
-                    "*": "deny",
-                    "learned-env*": "allow",
-                    "learned-permissions*": "allow",
-                    "skill-write": "allow",
-                },
-                skill_learn: "allow",
+                learn: "allow",
             },
             prompt: buildQueryOsPrompt(capabilities),
             temperature: 0.1,
@@ -1295,7 +1254,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "customize-opencode": "allow", // Build-in to OpenCode
                     "design*": "allow",
                     "execute*": "allow",
-                    "learned-*": "allow",
                     "vue-best-practices": "allow",
                     "ui-craft": "allow",
                 },
@@ -1319,13 +1277,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_ssh_list: "allow",
                 "autocode_ssh_read_*": "allow",
                 doom_loop: "deny",
-                skill: {
-                    "*": "deny",
-                    "learned-env*": "allow",
-                    "learned-permissions*": "allow",
-                    "skill-write": "allow",
-                },
-                skill_learn: "allow",
+                learn: "allow",
             },
             prompt: querySshPrompt,
             temperature: 0.1,

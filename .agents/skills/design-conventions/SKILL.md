@@ -8,17 +8,17 @@ description: Use `design-conventions` to get Project Conventions when deciding o
 
 ## Definitions
 - **Skill**: Reusable agent guidance loaded by `skill` tool.
-- **Learned skill**: Per-item reusable guidance created by `skill_learn`.
+- **Local memory**: Durable local fact stored by `learn`; not a reusable skill.
 - **Reference**: Companion file inside skill, read through `skill` `reference` arg.
 
 ## Naming Rules
 ### Skill Tool Names
 **Purpose:** Keep skill operations one tool family.
-**Pattern:** Use `skill` to load, `skill_edit` to replace main `SKILL.md`, and `skill_learn` to create learned skill. Do not use removed `skill_read` or `skill_edit_reference`.
+**Pattern:** Use `skill` to load and `skill_edit` to create or replace reusable `SKILL.md`. Use `learn` for durable local memory. Do not use removed `skill_read` or `skill_edit_reference`.
 
 ### Skill Reference Names
 **Purpose:** Keep companion files linked to main skill.
-**Pattern:** Pass relative reference path in `skill` `reference` arg. Pass `references[]` to `skill_edit` or `skill_learn`.
+**Pattern:** Pass relative reference path in `skill` `reference` arg. Pass `references[]` to `skill_edit`.
 
 ---
 

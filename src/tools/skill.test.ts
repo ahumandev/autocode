@@ -10,6 +10,8 @@ import {
     buildAutocodeSkillLoadMarker,
     clearAutocodeSkillLoadLiveCacheForTest,
     createSkillTool,
+    type SkillToolTrace,
+    type SkillToolTraceEvent,
 } from "./skill"
 import { createToolContext } from "./test_context"
 
@@ -137,17 +139,32 @@ function writeProjectSkill(worktree: string, name = "a", content = "Project skil
     return dir
 }
 
-function writeLearnedSkill(worktree: string, subject = "learned-corrections", agent = "pair", content = "Learned skill content."): string {
-    const name = `${subject}-${agent}`
-    const dir = join(worktree, ".agents", "skills", name)
+function writeLearnedSkill(worktree: string, category = "github", entry = "acme-commit", content = "Learned skill content."): string {
+    const name = `learned-${category}/${entry}`
+    const dir = join(worktree, ".agents", "skills", `learned-${category}`, entry)
     mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, "SKILL.md"), `---\ndescription: Use ${name} skill to recall ${subject} of previous sessions.\n---\n\n${content}`)
+    writeFileSync(join(dir, "SKILL.md"), skillMarkdown(name, content))
     return dir
 }
 
-async function executeSkillLoad(worktree: string, client: OpencodeClient | undefined = undefined, args: Record<string, unknown> = { name: "code-typescript" }, agent = "pair", sessionID: string | null = "session-1"): Promise<JsonObject> {
+function writeAgentSkill(worktree: string, name = "ordinary", content = "Ordinary agent skill content."): string {
+    const dir = join(worktree, ".agents", "skills", name)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "SKILL.md"), skillMarkdown(name, content))
+    return dir
+}
+
+function writeArchivedSkill(worktree: string, category = "learned-github", entry = "acme-commit", content = "Archived skill content."): string {
+    const name = `${category}/${entry}`
+    const dir = join(worktree, ".opencode", "autocode", "memory-archive", "v1", category, entry)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "SKILL.md"), skillMarkdown(name, content))
+    return dir
+}
+
+async function executeSkillLoad(worktree: string, client: OpencodeClient | undefined = undefined, args: Record<string, unknown> = { name: "code-typescript" }, agent = "pair", sessionID: string | null = "session-1", trace?: SkillToolTrace): Promise<JsonObject> {
     const root = dirname(worktree)
-    const tool = createSkillTool(client, undefined, { home: root })
+    const tool = createSkillTool(client, undefined, { home: root }, trace)
     const result = await tool.execute(args as never, createToolContext({
         agent,
         directory: worktree,
@@ -158,9 +175,9 @@ async function executeSkillLoad(worktree: string, client: OpencodeClient | undef
     return parseToolResult(result)
 }
 
-async function executeSkillAlias(worktree: string, client: OpencodeClient | undefined = undefined, args: Record<string, unknown> = { name: "code-typescript" }, agent = "pair"): Promise<JsonObject> {
+async function executeSkillAlias(worktree: string, client: OpencodeClient | undefined = undefined, args: Record<string, unknown> = { name: "code-typescript" }, agent = "pair", trace?: SkillToolTrace): Promise<JsonObject> {
     const root = dirname(worktree)
-    const tool = createSkillTool(client, undefined, { home: root })
+    const tool = createSkillTool(client, undefined, { home: root }, trace)
     const result = await tool.execute(args as never, createToolContext({
         agent,
         directory: worktree,
@@ -250,27 +267,39 @@ describe("skill tool", () => {
         })
     })
 
-    test("loads learned skill from hyphenated subject agent path", async () => {
-        await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            writeLearnedSkill(worktree, "learned-corrections", "pair", "Learned correction guidance.")
+    test("does not discover learned or archived skills while ordinary agent skills remain listed and loadable", async () => {
+        await withTempSkillRoots(async ({ worktree }) => {
+            writeLearnedSkill(worktree, "github", "acme-commit", "Learned Git guidance.")
+            writeAgentSkill(worktree, "ordinary", "Ordinary agent guidance.")
+            writeAgentSkill(worktree, "not-learned-github", "Boundary agent guidance.")
+            writeArchivedSkill(worktree, "archive-only", "acme-commit", "Archived Git guidance.")
 
-            const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-pair" })
+            const traces: SkillToolTraceEvent[] = []
+            const trace: SkillToolTrace = (event) => traces.push(event)
+            const learnedResult = await executeSkillAlias(worktree, undefined, { name: "learned-github/acme-commit" }, "pair", trace)
+            const ordinaryResult = await executeSkillAlias(worktree, undefined, { name: "ordinary" }, "pair", trace)
+            const boundaryResult = await executeSkillAlias(worktree, undefined, { name: "not-learned-github" }, "pair", trace)
+            const archiveResult = await executeSkillAlias(worktree, undefined, { name: "archive-only/acme-commit" }, "pair", trace)
+            const listedSkillNames = [learnedResult, ordinaryResult, boundaryResult, archiveResult].flatMap((result): string[] => {
+                const match = String(result.output ?? "").match(/<skill_content name="([^"]+)">/)
+                return match === null ? [] : [match[1]]
+            })
 
-            expectLoadedResultShape(result, "learned-corrections-pair")
-            expect(result.output).toContain("Learned correction guidance.")
-            expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
-        })
-    })
-
-    test("loads learned correction skill from shortened suffix path", async () => {
-        await withTempSkillRoots(async ({ root, configHome, worktree }) => {
-            writeLearnedSkill(worktree, "learned-corrections", "os", "Learned os correction guidance.")
-
-            const result = await executeSkillAlias(worktree, undefined, { name: "learned-corrections-os" }, "execute-os")
-
-            expectLoadedResultShape(result, "learned-corrections-os")
-            expect(result.output).toContain("Learned os correction guidance.")
-            expectMarkerSafe(extractMarker(result.output), [root, configHome, worktree])
+            expect(learnedResult.failedAction).toBe("load skill")
+            expect(learnedResult.error).toBe("Unable to load skill learned-github/acme-commit")
+            expect(learnedResult.instruction).toBe("Retry with a skill name from the available skills list.")
+            expect(listedSkillNames).toContain("ordinary")
+            expect(listedSkillNames).not.toContain("learned-github/acme-commit")
+            expect(listedSkillNames).not.toContain("archive-only/acme-commit")
+            expectLoadedResultShape(ordinaryResult, "ordinary")
+            expect(ordinaryResult.output).toContain("Ordinary agent guidance.")
+            expectLoadedResultShape(boundaryResult, "not-learned-github")
+            expect(boundaryResult.output).toContain("Boundary agent guidance.")
+            expect(archiveResult.failedAction).toBe("load skill")
+            expect(archiveResult.error).toBe("Unable to load skill archive-only/acme-commit")
+            expect(archiveResult.instruction).toBe("Retry with a skill name from the available skills list.")
+            expect(traces).toContainEqual({ type: "exclusion", reason: "learned-or-archive", path: join(worktree, ".agents", "skills", "learned-github") })
+            expect(traces).toContainEqual({ type: "exclusion", reason: "learned-or-archive", path: join(worktree, ".opencode", "autocode", "memory-archive") })
         })
     })
 
@@ -326,11 +355,19 @@ describe("skill tool", () => {
             })
 
             clearAutocodeSkillLoadLiveCacheForTest()
-            const result = await executeSkillLoad(worktree, client)
+            const traces: SkillToolTraceEvent[] = []
+            const tool = createSkillTool(client, undefined, { home: root }, (event) => traces.push(event))
+            const result = parseToolResult(await tool.execute({ name: "code-typescript" } as never, createToolContext({
+                agent: "pair",
+                directory: worktree,
+                worktree,
+                sessionID: "session-1",
+            })))
 
             expectSkippedResultShape(result)
             expect(activeContextCalls).toEqual([{ path: { id: "session-1" }, query: { directory: worktree } }])
             expectMarkerSafe(marker, [root, configHome, worktree])
+            expect(traces).toContainEqual({ type: "active-store", found: true, method: "client.session.activeContext", cacheHit: false })
         })
     })
 
@@ -369,6 +406,7 @@ describe("skill tool", () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
             writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance after v2 miss.")
             const contextCalls: unknown[] = []
+            const traces: SkillToolTraceEvent[] = []
             const client = createClient({
                 v2: {
                     session: {
@@ -380,11 +418,12 @@ describe("skill tool", () => {
                 },
             })
 
-            const result = await executeSkillLoad(worktree, client)
+            const result = await executeSkillLoad(worktree, client, undefined, "pair", "session-1", (event) => traces.push(event))
 
             expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("Generated TypeScript guidance after v2 miss.")
             expect(contextCalls).toEqual([{ sessionID: "session-1" }])
+            expect(traces).toEqual([{ type: "active-store", found: false, method: "client.v2.session.context", cacheHit: false }])
         })
     })
 
@@ -422,6 +461,7 @@ describe("skill tool", () => {
     test("loads when active context has no marker after compaction", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
             writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance after compaction.")
+            const traces: SkillToolTraceEvent[] = []
             const client = createClient({
                 session: {
                     async activeContext() {
@@ -430,10 +470,11 @@ describe("skill tool", () => {
                 },
             })
 
-            const result = await executeSkillLoad(worktree, client)
+            const result = await executeSkillLoad(worktree, client, undefined, "pair", "session-1", (event) => traces.push(event))
 
             expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("Generated TypeScript guidance after compaction.")
+            expect(traces).toEqual([{ type: "active-store", found: false, method: "client.session.activeContext", cacheHit: false }])
         })
     })
 
@@ -441,6 +482,7 @@ describe("skill tool", () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
             writeGeneratedSkill(configHome)
             const activeContextCalls: unknown[] = []
+            const traces: SkillToolTraceEvent[] = []
             const client = createClient({
                 session: {
                     async activeContext(args) {
@@ -450,12 +492,17 @@ describe("skill tool", () => {
                 },
             })
 
-            const loaded = await executeSkillLoad(worktree, client)
-            const cached = await executeSkillLoad(worktree, client)
+            const trace: SkillToolTrace = (event) => traces.push(event)
+            const loaded = await executeSkillLoad(worktree, client, undefined, "pair", "session-1", trace)
+            const cached = await executeSkillLoad(worktree, client, undefined, "pair", "session-1", trace)
 
             expectLoadedResultShape(loaded, "code-typescript")
             expectSkippedResultShape(cached)
             expect(activeContextCalls).toEqual([{ path: { id: "session-1" }, query: { directory: worktree } }])
+            expect(traces).toEqual([
+                { type: "active-store", found: false, method: "client.session.activeContext", cacheHit: false },
+                { type: "active-store", found: false, method: null, cacheHit: true },
+            ])
         })
     })
 
@@ -502,12 +549,18 @@ describe("skill tool", () => {
     test("missing sessionID does not use live cache", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
             writeGeneratedSkill(configHome)
+            const traces: SkillToolTraceEvent[] = []
+            const trace: SkillToolTrace = (event) => traces.push(event)
 
-            const first = await executeSkillLoad(worktree, undefined, { name: "code-typescript" }, "pair", null)
-            const second = await executeSkillLoad(worktree, undefined, { name: "code-typescript" }, "pair", null)
+            const first = await executeSkillLoad(worktree, undefined, { name: "code-typescript" }, "pair", null, trace)
+            const second = await executeSkillLoad(worktree, undefined, { name: "code-typescript" }, "pair", null, trace)
 
             expectLoadedResultShape(first, "code-typescript")
             expectLoadedResultShape(second, "code-typescript")
+            expect(traces).toEqual([
+                { type: "active-store", found: false, method: null, cacheHit: false },
+                { type: "active-store", found: false, method: null, cacheHit: false },
+            ])
         })
     })
 

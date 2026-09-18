@@ -380,21 +380,23 @@ describe("task_external tool", () => {
         })
         const tool = createTaskProjectTool({ stat, realpath, spawn })
 
-        const result = await tool.execute({ target_directory: "/project", prompt: "Do it" }, createToolContext())
+        await withEnv({ OPENCODE_BINARY: undefined }, async () => {
+            const result = await tool.execute({ target_directory: "/project", prompt: "Do it" }, createToolContext())
 
-        expect(spawn).toHaveBeenCalledTimes(1)
-        expect(getSpawnCall(spawn, 0).command).toBe("opencode")
-        expect(getSpawnCall(spawn, 0).args).toEqual(["run", "--dir", "/project", "--agent", "auto", "Do it"])
-        expect(getSpawnCall(spawn, 0).options.stdio).toEqual(["ignore", "pipe", "pipe"])
-        expect(getSpawnCall(spawn, 0).options.env).toBeDefined()
-        expect(result).toBe(JSON.stringify({
-            target_directory: "/project",
-            status: "completed",
-            exit_code: 0,
-            signal: null,
-            stdout: "done",
-            stderr: "warn",
-        }))
+            expect(spawn).toHaveBeenCalledTimes(1)
+            expect(getSpawnCall(spawn, 0).command).toBe("opencode")
+            expect(getSpawnCall(spawn, 0).args).toEqual(["run", "--dir", "/project", "--agent", "auto", "Do it"])
+            expect(getSpawnCall(spawn, 0).options.stdio).toEqual(["ignore", "pipe", "pipe"])
+            expect(getSpawnCall(spawn, 0).options.env).toBeDefined()
+            expect(result).toBe(JSON.stringify({
+                target_directory: "/project",
+                status: "completed",
+                exit_code: 0,
+                signal: null,
+                stdout: "done",
+                stderr: "warn",
+            }))
+        })
     })
 
     test("returns abort response for non-zero exit code", async () => {
@@ -465,7 +467,7 @@ describe("task_external tool", () => {
             const spawnCall = getSpawnCall(spawn)
             const env = spawnCall.options.env
 
-            expect(spawnCall.command).toBe("opencode")
+            expect(spawnCall.command).toBe("/custom/opencode")
             expect(spawnCall.args).toEqual(["run", "--dir", "/project", "--agent", "auto", "Do it"])
             expect(spawnCall.options.stdio).toEqual(["ignore", "pipe", "pipe"])
             expect(env).toBeDefined()

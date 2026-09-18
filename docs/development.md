@@ -24,6 +24,10 @@ OpenCode sessions are sole workflow and state source. `autocode_session_create` 
 
 Retained tools create or reuse `.agents/jobs/<timestamp>_<session-title-slug>/` on demand through shared utility. This directory holds temporary per-session artifacts only.
 
+## Local memory transition artifacts
+
+The active local-memory store is `.opencode/autocode/memories/`; it starts empty for this transition and runtime creates Markdown `.md` memory files only through `learn`. No legacy import, conversion, or seed is performed.
+
 ## Generated skills
 
 Builds copy bundled skills and tracked GitHub snapshots into `dist/skills`, and the plugin can install the generated output for OpenCode under `~/.agents/skills/autocode/` or the equivalent [XDG](https://specifications.freedesktop.org/basedir/latest/) configuration location. Skills are knowledge files that OpenCode loads into AI context so agents and workflows can follow project-specific instructions; users do not need to invoke these files directly.

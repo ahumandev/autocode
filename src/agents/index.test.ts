@@ -6,7 +6,11 @@ import { queryAutocodePrompt } from "./prompts/query_autocode"
 import { queryOsPrompt } from "./prompts/query_os"
 import { queryYoutubePrompt } from "./prompts/query_youtube"
 import { advisePrompt } from "./prompts/advise"
+import { assistPrompt } from "./prompts/assist"
+import { autoPrompt } from "./prompts/auto"
+import { designPrompt } from "./prompts/design"
 import { spyPrompt } from "./prompts/spy"
+import { buildTroubleshootPrompt } from "./prompts/auto_troubleshoot"
 import { createPlatformCapabilities } from "../utils/platform"
 
 function permissionRule(permission: AutocodeAgentConfig["permission"], key: string): unknown {
@@ -353,9 +357,10 @@ describe("agent policies", () => {
         }
         expect(permissionRule(permission, "task_external")).toBeUndefined()
         expect(permissionRule(permission, "external_directory")).toEqual({ "*": "deny" })
-        expect(permissionRule(permission, "skill_learn")).toBe("allow")
+        expect(permissionRule(permission, "learn")).toBe("allow")
+        expect(permissionRule(permission, "skill_learn")).toBeUndefined()
 		expect(skillPermission["learned-permissions*"]).toBeUndefined()
-        expect(skillPermission["skill-write"]).toBe("allow")
+        expect(skillPermission["skill-write"]).toBeUndefined()
     })
 
     test("buildAgents exposes spy as visible read-only direct-use primary", () => {
@@ -447,8 +452,8 @@ describe("agent policies", () => {
                 "edit",
                 "glob",
                 "grep",
+                "learn",
                 "read",
-                "skill_learn",
                 "write",
             ])
         for (const toolName of [
@@ -461,6 +466,7 @@ describe("agent policies", () => {
             "autocode_script_install",
             "autocode_script_run",
             "autocode_script_service",
+            "learn",
         ]) {
             expect(resolvePermissionRule(rules, toolName)).toBe("allow")
         }

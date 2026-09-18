@@ -79,6 +79,9 @@ type PluginRestartHooks = PluginConfigHook & {
 		autocode_session_create?: CreateTool;
 	};
 };
+type PluginLocalMemoryHooks = PluginConfigHook & {
+	"chat.message"?: (input: unknown, output: unknown) => Promise<void>;
+};
 type PluginInputWithSandboxSupportOverride = PluginInput & {
 	sandboxSupportOverride?: SandboxPlatformSupportOptions;
 	platformOverride?: NodeJS.Platform;
@@ -827,21 +830,14 @@ describe("autocode plugin config", () => {
 		);
 	});
 
-	test("registers generated root and existing learned category roots at startup", async () => {
+	test("registers generated root but skips existing learned permissions root at startup", async () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");
 		const learnedSkillsRoot = join(worktree, ".agents", "skills");
-		const categories = [
-			"learned-corrections",
-			"learned-env",
-			"learned-permissions",
-			"learned-preferences",
-		];
-		for (const category of categories) {
-			const skillDir = join(learnedSkillsRoot, category, "example");
-			await mkdir(skillDir, { recursive: true });
-			await writeFile(join(skillDir, "SKILL.md"), "learned skill");
-		}
+		const learnedPermissionsRoot = join(learnedSkillsRoot, "learned-permissions");
+		const learnedSkillDir = join(learnedPermissionsRoot, "example");
+		await mkdir(learnedSkillDir, { recursive: true });
+		await writeFile(join(learnedSkillDir, "SKILL.md"), "learned skill");
 		const unrelatedSkillDir = join(learnedSkillsRoot, "unrelated", "example");
 		await mkdir(unrelatedSkillDir, { recursive: true });
 		await writeFile(join(unrelatedSkillDir, "SKILL.md"), "unrelated skill");
@@ -853,18 +849,54 @@ describe("autocode plugin config", () => {
 				const sources = await registerGeneratedSkills(input);
 
 				expect(sources).toEqual(
-					expect.arrayContaining([
+				expect.arrayContaining([
 						{ type: "directory", path: join(root, ".agents", "skills", "autocode") },
-						...categories.map((category) => ({
-							type: "directory" as const,
-							path: join(learnedSkillsRoot, category),
-						})),
 					]),
 				);
 				expect(sources).not.toContainEqual({
 					type: "directory",
+					path: learnedPermissionsRoot,
+				});
+				expect(sources).not.toContainEqual({
+					type: "directory",
 					path: join(learnedSkillsRoot, "unrelated"),
 				});
+			},
+		);
+	});
+
+	test("keeps spy memory policy while forcing learn denial after hostile overrides", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({ autocode: { tiers: { spy: { model: "spy-model" } } } }),
+		);
+
+		await withEnv(
+			{ AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1" },
+			async () => {
+				const hooks = (await autocode(createInput(worktree))) as unknown as PluginConfigHook;
+				const baseConfig: PluginConfig = {};
+				await hooks.config?.(baseConfig);
+				const basePermission = baseConfig.agent?.spy?.permission as Record<string, unknown>;
+
+				expect(basePermission.learn).toBe("deny");
+				expect(basePermission.read).toBe("allow");
+
+				const hostileConfig: PluginConfig = {
+					agent: {
+						spy: {
+							permission: { "*": "allow", learn: "allow" },
+						},
+					},
+				};
+				await hooks.config?.(hostileConfig);
+				const hostilePermission = hostileConfig.agent?.spy?.permission as Record<string, unknown>;
+
+				expect(hostilePermission["*"]).toBe("allow");
+				expect(hostilePermission.learn).toBe("deny");
 			},
 		);
 	});
@@ -1234,6 +1266,40 @@ describe("autocode plugin config", () => {
 			);
 			const grants = Object.keys(skillPermissions(cfg, "execute-code") ?? {});
 			expect(new Set(grants).size).toBe(grants.length);
+		});
+	});
+
+	test("refreshes smart agents before tier stripping without resetting local-memory claims", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(
+			join(worktree, ".opencode", "autocode.jsonc"),
+			JSON.stringify({ autocode: { skills: { freeze: true }, tiers: { smart: { model: "smart-model" } } } }),
+		);
+		const messages = mock(async () => ({ data: [] }));
+
+		await withEnv({ XDG_CONFIG_HOME: join(root, "xdg"), HOME: root }, async () => {
+			const hooks = (await autocode({
+				...createInput(worktree),
+				client: { session: { messages } } as unknown as OpencodeClient,
+			})) as unknown as PluginLocalMemoryHooks;
+			if (!hooks.config || !hooks["chat.message"])
+				throw new Error("local-memory hooks unavailable");
+			const cfg: PluginConfig = {};
+			await hooks.config(cfg);
+			await hooks["chat.message"](
+				{ sessionID: "session-one" },
+				{ message: { id: "first", role: "user", agent: "auto" }, parts: [{ type: "text", text: "deploy" }] },
+			);
+			await hooks.config(cfg);
+			await hooks["chat.message"](
+				{ sessionID: "session-one" },
+				{ message: { id: "retry", role: "user", agent: "auto" }, parts: [{ type: "text", text: "deploy" }] },
+			);
+
+			expect(cfg.agent?.auto).not.toHaveProperty("tier");
+			expect(messages).toHaveBeenCalledTimes(1);
 		});
 	});
 });

@@ -16,4 +16,5 @@ describe("spyPrompt", () => {
     test("keeps guidance in current direct session", () => {
         expect(spyPrompt).not.toContain("autocode_session_create")
     })
+
 })

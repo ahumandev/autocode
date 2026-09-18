@@ -68,7 +68,7 @@ ${planningDefinitions}
 
 1. Use returned tool errors.
 2. Determine expected result, actual result, and cause by reviewing returned error output, logs, and permitted filesystem reads.
-3. When OBSTACLE resolves: call \`skill_learn\` to avoid future mistakes.
+3. When OBSTACLE resolves: call \`learn\` to avoid future mistakes.
 4. If failure is understood, fix recently created script when applicable, correct tool inputs, reuse or run another managed script, then retry from STEP 5.
 5. If failure is unclear, return a guidance-needed blocker with recent actions, errors, learning, and attempts.
 

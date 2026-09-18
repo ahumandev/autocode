@@ -254,21 +254,4 @@ describe("commands", () => {
         expect(command?.template).not.toContain("fenced Markdown code block")
     })
 
-    test("registers learn command under assist with required reflection template", () => {
-        expect(commands.learn).toEqual(learnCommand)
-        expect(commands.learn?.agent).toBeUndefined()
-        expect(commands.learn?.subtask).toBe(false)
-
-        const template = commands.learn?.template ?? ""
-        // Categorize into correction/env/permission/preference
-        expect(template).toContain("correction")
-        expect(template).toContain("env")
-        expect(template).toContain("permission")
-        expect(template).toContain("preference")
-        expect(template).toContain("`skill_learn`")
-        // Skip empty categories
-        expect(template).toMatch(/skip.*categor/i)
-        // $ARGUMENTS placeholder
-        expect(template).toContain("$ARGUMENTS")
-    })
 })

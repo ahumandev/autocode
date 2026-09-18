@@ -14,7 +14,6 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 
 | Key                                   | Type             | Description                                                                                         | Default                                          |
 | ------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `autocode.learned.max`                | integer          | Limits how many learned skills are kept per category before oldest are pruned.                      | `10`                                             |
 | `autocode.skills.freeze`              | boolean          | Strictly skips first-run extraction and all generated-root mutation; stale generated skills remain. | `false`                                          |
 | `autocode.sandbox.sync_method`        | string           | Sandbox sync strategy. Valid values are`auto`, `overlayfs`, `reflink`, and `copy`.                  | Unset.                                           |
 | `autocode.sandbox.distro.cache_path`  | string           | Optional sandbox distribution cache path.                                                           | Unset.                                           |
@@ -48,31 +47,7 @@ AUTOCODE_WEB_URL="https://app.example.com"
 
 Set `autocode.skills.freeze` to `true` to strictly skip first-run extraction and every generated-root mutation. Existing stale generated skills remain until manually removed or a later unfrozen startup updates them.
 
-`autocode.learned.max` caps how many learned skills AutoCode retains in each category. Each category is pruned independently:
-
-- `corrections`
-- `env`
-- `permissions`
-- `preferences`
-
-Pruning is count-based, not time-based: there is no TTL or expiry window. It runs once per plugin startup, not on every skill write. Within each category AutoCode keeps the `max` newest skills and removes the rest. "Newest" is determined by the `SKILL.md` modification time; ties are broken by directory name in descending order. Pruned skills are removed entirely with `rm -rf`. Re-learning an existing skill refreshes its `SKILL.md` mtime, so it survives longer.
-
-Only `Number.isInteger(max) && max > 0` overrides the default. Missing, zero, negative, or non-integer values fall back to `10`.
-
-For example:
-
-```jsonc
-{
-  "autocode": {
-    "skills": {
-      "freeze": false,
-      "learned": {
-        "max": 25
-      }
-    }
-  }
-}
-```
+Local memories are not configured as learned skills. The active store is `.opencode/autocode/memories/`, starts empty for this transition, and receives Markdown `.md` memory files only through `learn`; no legacy import, conversion, or seed occurs. The recoverable snapshot is `.opencode/autocode/memory-archive/v1/.agents/skills/<original learned path>/SKILL.md`, outside skill discovery and active-memory scans. The shared repository-root `.gitignore` ignores both paths.
 
 #### Tiers
 
@@ -98,10 +73,7 @@ Tier assignment requirements:
 {
   "autocode": {
     "skills": {
-      "freeze": false,
-      "learned": {
-        "max": 25
-      },
+      "freeze": false
     },
     "tier": "openai",
     "tiers": {

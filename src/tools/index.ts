@@ -28,6 +28,8 @@ import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createAutocodeKillTool } from "./autocode_kill"
 import { createAutocodeProcessKillTool } from "./autocode_process_kill"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
+import { createAutocodeMemoryForgetTool } from "./autocode_memory_forget"
+import { createAutocodeMemoryRecallTool } from "./autocode_memory_recall"
 import { createAutocodeRestTool } from "./autocode_rest"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
@@ -42,8 +44,8 @@ import { createAutocodeSessionContextTool } from "./autocode_session_context"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createAutocodeSkillEditTool } from "./skill_edit"
 import { createAutocodeSkillReadTool } from "./skill_read"
+import { createLearnTool } from "./learn"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
-import { createSkillLearnTool } from "./skill_learn"
 import { createSkillTool } from "./skill"
 import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
 import { createTaskResumeTool } from "./task_resume"
@@ -104,6 +106,8 @@ export function createTools(
         autocode_md_read: createAutocodeMdReadTool(),
         autocode_md_remove: createAutocodeMdRemoveTool(),
         autocode_md_update: createAutocodeMdUpdateTool(),
+        autocode_memory_forget: createAutocodeMemoryForgetTool(),
+        autocode_memory_recall: createAutocodeMemoryRecallTool(),
         autocode_rest: createAutocodeRestTool(client),
         autocode_script_install: createAutocodeScriptInstallTool(client),
         autocode_script_project: createAutocodeScriptProjectTool(client),
@@ -125,9 +129,9 @@ export function createTools(
         autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool(),
         autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
         autocode_youtube_transcribe: createAutocodeYoutubeTranscribeTool(),
+        learn: createLearnTool(),
         skill: createSkillTool(client, undefined, runtime),
         skill_edit: createAutocodeSkillEditTool(),
-        skill_learn: createSkillLearnTool(),
         skill_read: createAutocodeSkillReadTool(),
         task_external: createTaskExternalTool(),
         task_resume: createTaskResumeTool(client),

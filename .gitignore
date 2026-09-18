@@ -44,6 +44,8 @@ coverage/
 .agents/concepts/
 .agents/jobs/
 .opencode/autocode/cache/
+/.opencode/autocode/memories/
+/.opencode/autocode/memory-archive/
 .opencode/autocode.jsonc
 
 # mdsite: generated state (renderer working dir; runtime artifacts and materialized renderer)

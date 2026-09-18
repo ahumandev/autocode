@@ -14,6 +14,7 @@ TypeScript OpenCode plugin. Plugin registers agents, commands, skills, config, a
 ## Key Data Models
 - **Concept** (`.agents/concepts/`): Optional saved Markdown input for design agents.
 - **Tier set** (`autocode.jsonc`): Named model and variant overrides by agent tier.
+- **Local memory** (`.opencode/autocode/memories/`): Runtime Markdown `.md` memory files created only through `learn`; fresh transition starts empty.
 
 ## Key API Endpoints
 - `/job-concepts` (`src/commands/job-concepts.ts`): Save concept Markdown.
@@ -39,6 +40,7 @@ No app auth layer. External-directory rules use last matching rule. Database too
 - **Tools** (`src/tools/`): Runtime tool implementations.
 - **Skills** (`src/skills/`): Bundled guidance and GitHub snapshots.
 - **Temp workspaces** (`.agents/jobs/`): Tool artifacts only; no workflow state.
+- **Memory store** (`.opencode/autocode/memories/`): Active local-memory Markdown `.md` files only.
 
 ## Special Files
 - `scripts/copy-skill-sources.ts`: Copy bundled skills into `dist/skills`.

@@ -19,7 +19,6 @@ export type OpenCodePaths = {
     skillsRoot: string
     generatedSkillsRoot: string
     generatedGitHubSkillsRoot: string
-    learnedSkillsRoot: (agentsRoot: string) => string
 }
 
 function nonEmpty(value: string | undefined): string | undefined {
@@ -49,6 +48,5 @@ export function resolveOpenCodePaths(dependencies: OpenCodePathResolverDependenc
         skillsRoot,
         generatedSkillsRoot: path.join(skillsRoot, "autocode"),
         generatedGitHubSkillsRoot: path.join(skillsRoot, "github"),
-        learnedSkillsRoot: (agentsRoot: string): string => path.join(agentsRoot, ".agents", "skills"),
     }
 }

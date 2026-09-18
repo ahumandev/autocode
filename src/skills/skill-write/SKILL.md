@@ -1,6 +1,6 @@
 ---
 name: skill-write
-description: Use skill-write when writing skill descriptions and content using skill_edit or skill_learn tools.
+description: Use skill-write when writing skill descriptions and content using skill_edit.
 ---
 
 # description
@@ -24,7 +24,7 @@ Examples:
 `content` arg contains content of actual SKILL.md body as follows:
   * Preferably format as structured sequence lists or bullet points.
   * Only include: instructions, rules, links, common info always relevant.
-  * No examples, templates, details, explanations in `content`; Instead save these as `references[]` items (description, path, content) in `skill_edit` or `skill_learn` calls.
+  * No examples, templates, details, explanations in `content`; Instead save these as `references[]` items (description, path, content) in `skill_edit` calls.
   * ALWAYS link ALL references in `content` as md links using exact same `path` used in `references[]`.
   * Format links as md links in text, for example: `[Email Template](templates/email_template.html)` or `[Process Data Script](scripts/process_data.py)`
   * When rules contradict: Add conditions to clarify.
