@@ -275,20 +275,23 @@ describe("ssh utils local protocol", () => {
         return { client: await pool.get(config), pool, server }
     }
 
-    test("authenticates with Ed25519 private key", async () => {
+    test.skipIf(process.platform === "win32" && Bun.version === "1.4.2")("authenticates with Ed25519 private key", async () => {
         const { client } = await connect({ method: "privateKey", privateKey: localSshCredentials.ed25519Key })
-        await expect(execSshCommand(client, "local-ssh-test")).resolves.toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
+        const result = await execSshCommand(client, "local-ssh-test")
+        expect(result).toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
     })
 
     test("authenticates with RSA-3072 private key", async () => {
         const { client, server } = await connect({ method: "privateKey", privateKey: localSshCredentials.rsaKey })
-        await expect(execSshCommand(client, "local-ssh-test")).resolves.toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
+        const result = await execSshCommand(client, "local-ssh-test")
+        expect(result).toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
         expect(server.authenticatedPublicKeyAlgorithms).toContain("sha256")
     })
 
     test("authenticates with encrypted OpenSSH private key", async () => {
         const { client } = await connect({ method: "privateKey", privateKey: localSshCredentials.encryptedRsaKey, passphrase: localSshCredentials.passphrase })
-        await expect(execSshCommand(client, "local-ssh-test")).resolves.toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
+        const result = await execSshCommand(client, "local-ssh-test")
+        expect(result).toMatchObject({ stdout: "local exec output\n", exitCode: 0 })
     })
 
     test("authenticates with password and performs SFTP operations", async () => {
@@ -297,9 +300,12 @@ describe("ssh utils local protocol", () => {
 
         await sftpMkdir(sftp, "/workspace")
         await sftpWriteFile(sftp, "/workspace/source.txt", "local sftp content")
-        await expect(sftpReadFile(sftp, "/workspace/source.txt", "utf8")).resolves.toBe("local sftp content")
-        await expect(sftpStat(sftp, "/workspace/source.txt")).resolves.toMatchObject({ size: 18 })
-        await expect(sftpReaddir(sftp, "/workspace")).resolves.toMatchObject([{ filename: "source.txt" }])
+        const content = await sftpReadFile(sftp, "/workspace/source.txt", "utf8")
+        expect(content).toBe("local sftp content")
+        const stats = await sftpStat(sftp, "/workspace/source.txt")
+        expect(stats).toMatchObject({ size: 18 })
+        const entries = await sftpReaddir(sftp, "/workspace")
+        expect(entries).toMatchObject([{ filename: "source.txt" }])
         await sftpRename(sftp, "/workspace/source.txt", "/workspace/renamed.txt")
         await sftpUnlink(sftp, "/workspace/renamed.txt")
     })

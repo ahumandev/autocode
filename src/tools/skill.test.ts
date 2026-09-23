@@ -10,6 +10,7 @@ import {
     buildAutocodeSkillLoadMarker,
     clearAutocodeSkillLoadLiveCacheForTest,
     createSkillTool,
+    type ActiveSessionContext,
     type SkillToolTrace,
     type SkillToolTraceEvent,
 } from "./skill"
@@ -20,11 +21,6 @@ type JsonObject = Record<string, unknown>
 type ActiveContextClient = {
     _client?: {
         getConfig?: () => { baseUrl?: string, fetch?: (request: Request) => Promise<Response>, headers?: HeadersInit }
-    }
-    v2?: {
-        session?: {
-            context?: (args: unknown) => Promise<unknown>
-        }
     }
     session?: {
         activeContext?: (args: unknown) => Promise<unknown>
@@ -162,9 +158,9 @@ function writeArchivedSkill(worktree: string, category = "learned-github", entry
     return dir
 }
 
-async function executeSkillLoad(worktree: string, client: OpencodeClient | undefined = undefined, args: Record<string, unknown> = { name: "code-typescript" }, agent = "pair", sessionID: string | null = "session-1", trace?: SkillToolTrace): Promise<JsonObject> {
+async function executeSkillLoad(worktree: string, client: OpencodeClient | undefined = undefined, args: Record<string, unknown> = { name: "code-typescript" }, agent = "pair", sessionID: string | null = "session-1", trace?: SkillToolTrace, activeSessionContext?: ActiveSessionContext): Promise<JsonObject> {
     const root = dirname(worktree)
-    const tool = createSkillTool(client, undefined, { home: root }, trace)
+    const tool = createSkillTool(client, undefined, { home: root }, trace, activeSessionContext)
     const result = await tool.execute(args as never, createToolContext({
         agent,
         directory: worktree,
@@ -371,30 +367,26 @@ describe("skill tool", () => {
         })
     })
 
-    test("v2 context uses sessionID request and skips with real data response marker", async () => {
+    test("v2 plugin context uses sessionID request and skips with active marker", async () => {
         await withTempSkillRoots(async ({ root, configHome, worktree }) => {
             writeGeneratedSkill(configHome)
             const loaded = await executeSkillLoad(worktree)
             const marker = extractMarker(loaded.output)
             const contextCalls: unknown[] = []
             const client = createClient({
-                v2: {
-                    session: {
-                        async context(args) {
-                            contextCalls.push(args)
-                            return { data: [{ role: "assistant", parts: [{ text: `already loaded ${marker}` }] }] }
-                        },
-                    },
-                },
                 session: {
                     async activeContext() {
-                        throw new Error("legacy active context must not be used after v2 match")
+                        throw new Error("legacy active context must not be used on V2")
                     },
                 },
             })
+            const activeSessionContext: ActiveSessionContext = async (args) => {
+                contextCalls.push(args)
+                return [{ type: "assistant", content: [{ text: `already loaded ${marker}` }] }]
+            }
 
             clearAutocodeSkillLoadLiveCacheForTest()
-            const result = await executeSkillLoad(worktree, client)
+            const result = await executeSkillLoad(worktree, client, undefined, "pair", "session-1", undefined, activeSessionContext)
 
             expectSkippedResultShape(result)
             expect(contextCalls).toEqual([{ sessionID: "session-1" }])
@@ -402,49 +394,65 @@ describe("skill tool", () => {
         })
     })
 
-    test("loads when v2 context real data response has no active marker", async () => {
+    test("loads when v2 plugin context has no active marker", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
             writeGeneratedSkill(configHome, "code-typescript", "Generated TypeScript guidance after v2 miss.")
             const contextCalls: unknown[] = []
             const traces: SkillToolTraceEvent[] = []
-            const client = createClient({
-                v2: {
-                    session: {
-                        async context(args) {
-                            contextCalls.push(args)
-                            return { data: [{ role: "assistant", parts: [{ text: "context without skill marker" }] }] }
-                        },
-                    },
-                },
-            })
+            const activeSessionContext: ActiveSessionContext = async (args) => {
+                contextCalls.push(args)
+                return [{ type: "assistant", content: [{ text: "context without skill marker" }] }]
+            }
 
-            const result = await executeSkillLoad(worktree, client, undefined, "pair", "session-1", (event) => traces.push(event))
+            const result = await executeSkillLoad(worktree, undefined, undefined, "pair", "session-1", (event) => traces.push(event), activeSessionContext)
 
             expectLoadedResultShape(result, "code-typescript")
             expect(result.output).toContain("Generated TypeScript guidance after v2 miss.")
             expect(contextCalls).toEqual([{ sessionID: "session-1" }])
-            expect(traces).toEqual([{ type: "active-store", found: false, method: "client.v2.session.context", cacheHit: false }])
+            expect(traces).toEqual([{ type: "active-store", found: false, method: "context.session.context", cacheHit: false }])
         })
     })
 
-    test("probe error falls back to next active context probe", async () => {
+    test("v2 context failure does not probe legacy client methods", async () => {
         await withTempSkillRoots(async ({ configHome, worktree }) => {
             writeGeneratedSkill(configHome)
             const loaded = await executeSkillLoad(worktree)
             const marker = extractMarker(loaded.output)
             const calls: string[] = []
             const client = createClient({
-                v2: {
-                    session: {
-                        async context() {
-                            calls.push("v2")
-                            throw new Error("v2 context failed")
-                        },
-                    },
-                },
                 session: {
                     async activeContext() {
                         calls.push("legacy")
+                        return { data: [{ content: marker }] }
+                    },
+                },
+            })
+            const activeSessionContext: ActiveSessionContext = async () => {
+                calls.push("v2")
+                throw new Error("v2 context failed")
+            }
+
+            clearAutocodeSkillLoadLiveCacheForTest()
+            const result = await executeSkillLoad(worktree, client, undefined, "pair", "session-1", undefined, activeSessionContext)
+
+            expectLoadedResultShape(result, "code-typescript")
+            expect(calls).toEqual(["v2"])
+        })
+    })
+
+    test("v1 probe error falls back to next legacy context probe", async () => {
+        await withTempSkillRoots(async ({ configHome, worktree }) => {
+            writeGeneratedSkill(configHome)
+            const marker = extractMarker((await executeSkillLoad(worktree)).output)
+            const calls: string[] = []
+            const client = createClient({
+                session: {
+                    async activeContext() {
+                        calls.push("activeContext")
+                        throw new Error("active context failed")
+                    },
+                    async context() {
+                        calls.push("context")
                         return { data: [{ content: marker }] }
                     },
                 },
@@ -454,7 +462,7 @@ describe("skill tool", () => {
             const result = await executeSkillLoad(worktree, client)
 
             expectSkippedResultShape(result)
-            expect(calls).toEqual(["v2", "legacy"])
+            expect(calls).toEqual(["activeContext", "context"])
         })
     })
 

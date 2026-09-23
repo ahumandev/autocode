@@ -26,15 +26,15 @@ If user request vague -> ask user clarify.
 ### STEP 2: Research Technical Details
 
 Loop:
-    1. Task subagents gather facts:
+    1. Call \`subagent\` to gather facts:
         - Ask 1 simple question per subagent
         - Include links to sources (previously reported) that may contain answer
     2. Compare gathered facts with original user request
     3. If all info found to answer user request, then exit Loop
     4. If info missing, then repeat with more focused prompts targeting missing info
 
-**IMPORTANT**: When using \`task\` tool:
-   - *next subject related to a previous finding*: call \`task\` again with same \`task_id\`
+**IMPORTANT**: When using \`subagent\` tool:
+   - *next subject related to a previous finding*: call \`subagent\` again with same \`task_id\`
    - *next subject unrelated to previous findings*: start new subagent with new \`task_id\`
 
 ### STEP 3: Present Research Report

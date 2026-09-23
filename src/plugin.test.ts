@@ -23,6 +23,7 @@ import {
 } from "./hooks/managed_script_lifecycle";
 import { createNoopAsk } from "./tools/test_context";
 import { createPlatformCapabilities } from "./utils/platform";
+import { permissionEffect, type PermissionRule } from "./utils/permissions";
 
 let managedScriptLifecycleFactoryOverride:
 	| ((...args: Parameters<typeof createActualManagedScriptLifecycle>) => ManagedScriptLifecycle)
@@ -87,33 +88,17 @@ type PluginInputWithSandboxSupportOverride = PluginInput & {
 	platformOverride?: NodeJS.Platform;
 	homeOverride?: string;
 };
-type PluginAgentConfig = NonNullable<
-	NonNullable<PluginHookConfig["agent"]>[string]
->;
-type SandboxPermission = NonNullable<PluginAgentConfig["permission"]> & {
-	autocode_sandbox_cli?: "ask" | "allow" | "deny";
-	task?: { "execute-sandbox"?: "ask" | "allow" | "deny" };
+type V2SkillDefinition = {
+	id: string;
+	name: string;
+	description?: string;
+	path: string;
+	content: string;
 };
-type PluginConfigWithSandboxPermissions = Omit<PluginHookConfig, "agent"> & {
-	agent?: Record<
-		string,
-		| (Omit<PluginAgentConfig, "permission"> & {
-				permission?: SandboxPermission;
-		  })
-		| undefined
-	>;
-};
-type SkillSource = { type: "directory"; path: string };
 type V2Plugin = {
 	setup(
-		context: PluginInputWithSandboxSupportOverride & {
-			skill: {
-				transform(
-					callback: (draft: { source(source: SkillSource): void }) => void,
-				): void;
-			};
-		},
-	): Promise<void>;
+		context: unknown,
+	): Promise<(() => Promise<void> | void) | void>;
 };
 type RestartTestClient = OpencodeClient & {
 	session: Pick<
@@ -166,38 +151,82 @@ function createInput(
 		directory: worktree,
 		client: {},
 		sandboxSupportOverride,
+		platformOverride: "linux",
 	} as PluginInputWithSandboxSupportOverride;
 }
 
 async function registerGeneratedSkills(
 	input: PluginInputWithSandboxSupportOverride,
-): Promise<SkillSource[]> {
-	const sources: SkillSource[] = [];
-	await (autocode as unknown as V2Plugin).setup({
+): Promise<V2SkillDefinition[]> {
+	const skills: V2SkillDefinition[] = [];
+	const agents = new Map<string, Record<string, unknown>>();
+	const registration = { async dispose(): Promise<void> {} };
+	const transform = async (callback: (editor: unknown) => void, editor: unknown): Promise<typeof registration> => {
+		callback(editor);
+		return registration;
+	};
+	const context = {
 		...input,
-		skill: {
-			transform(callback) {
-				callback({
-					source(source) {
-						sources.push(source);
-					},
-				});
-			},
+		location: {
+			directory: input.directory,
+			project: { id: "test-project", directory: input.worktree, canonical: input.worktree },
 		},
-	});
-	return sources;
+		agent: {
+			transform: async (callback: (editor: unknown) => void) => transform(callback, {
+				get(id: string): Record<string, unknown> | undefined {
+					return agents.get(id);
+				},
+				remove(id: string): void {
+					agents.delete(id);
+				},
+				update(id: string, update: (agent: Record<string, unknown>) => void): void {
+					const agent = agents.get(id) ?? {
+						id,
+						name: id,
+						request: { settings: {}, headers: {}, body: {} },
+						mode: "primary",
+						hidden: false,
+						permissions: [],
+					};
+					update(agent);
+					agents.set(id, agent);
+				},
+			}),
+		},
+		skill: {
+			transform: async (callback: (editor: unknown) => void) => transform(callback, {
+				add(skill: V2SkillDefinition): void {
+					skills.push(skill);
+				},
+			}),
+		},
+		command: {
+			transform: async (callback: (editor: unknown) => void) => transform(callback, { add(): void {} }),
+		},
+		tool: {
+			transform: async (callback: (editor: unknown) => void) => transform(callback, { add(): void {} }),
+		},
+		session: {
+			hook: async (): Promise<typeof registration> => registration,
+		},
+		shell: {
+			hook: async (): Promise<typeof registration> => registration,
+		},
+		event: {
+			async *subscribe(): AsyncIterable<never> {},
+		},
+	};
+	const cleanup = await (autocode as unknown as V2Plugin).setup(context);
+	await cleanup?.();
+	return skills;
 }
 
 function skillPermissions(
 	config: PluginConfig,
 	agentName: string,
 ): Record<string, unknown> | undefined {
-	const permission = config.agent?.[agentName]?.permission;
-	if (!permission || typeof permission === "string") return undefined;
-	const skill = (permission as Record<string, unknown>).skill;
-	return skill && typeof skill !== "string"
-		? (skill as Record<string, unknown>)
-		: undefined;
+	const rules = config.agent?.[agentName]?.permissions;
+	return Array.isArray(rules) ? Object.fromEntries((rules as PermissionRule[]).filter((rule) => rule.action === "skill").map((rule) => [rule.resource, rule.effect])) : undefined;
 }
 
 afterEach(async () => {
@@ -217,7 +246,7 @@ afterEach(async () => {
 describe("autocode plugin config", () => {
 	test("runtime exposes create and restart session tools", async () => {
 		const root = await createTempRoot();
-		const hooks = (await autocode(
+		const hooks = (await autocode.server(
 			createInput(join(root, "worktree")),
 		)) as unknown as PluginRestartHooks;
 
@@ -249,7 +278,7 @@ describe("autocode plugin config", () => {
 		};
 		managedScriptLifecycleFactoryOverride = () => lifecycle;
 		restartCoordinatorFactoryOverride = () => restartCoordinator;
-		const hooks = (await autocode(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
+		const hooks = (await autocode.server(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
 		if (!hooks.event) throw new Error("plugin event hook unavailable");
 		const event = {
 			type: "session.status",
@@ -294,7 +323,7 @@ describe("autocode plugin config", () => {
 		};
 		managedScriptLifecycleFactoryOverride = () => lifecycle;
 		restartCoordinatorFactoryOverride = () => restartCoordinator;
-		const hooks = (await autocode(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
+		const hooks = (await autocode.server(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
 		if (!hooks.dispose || !releaseLifecycleCleanup) throw new Error("plugin dispose hook unavailable");
 		let disposeComplete = false;
 		const disposing = hooks.dispose().then((): void => {
@@ -340,7 +369,7 @@ describe("autocode plugin config", () => {
 		const warn = mock((): void => {});
 		console.warn = warn;
 		try {
-			const hooks = (await autocode(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
+			const hooks = (await autocode.server(createInput(join(root, "worktree")))) as unknown as PluginRestartHooks;
 			if (!hooks.dispose) throw new Error("plugin dispose hook unavailable");
 
 			await hooks.dispose();
@@ -386,7 +415,7 @@ describe("autocode plugin config", () => {
 				AUTOCODE_WEB_URL: "http://127.0.0.1:3200"
 			},
 			async () => {
-				const hooks = (await autocode({
+				const hooks = (await autocode.server({
 					...createInput(worktree),
 					client,
 					serverUrl: new URL("http://127.0.0.1:4444/"),
@@ -460,7 +489,7 @@ describe("autocode plugin config", () => {
 				}),
 			},
 		} as unknown as RestartTestClient;
-		const hooks = (await autocode({
+		const hooks = (await autocode.server({
 			...createInput(worktree),
 			client,
 		})) as unknown as PluginRestartHooks;
@@ -538,7 +567,7 @@ describe("autocode plugin config", () => {
 				promptAsync: mock(async () => ({})),
 			},
 		} as unknown as RestartTestClient;
-		const hooks = (await autocode({
+		const hooks = (await autocode.server({
 			...createInput(worktree),
 			client,
 		})) as unknown as PluginRestartHooks;
@@ -615,7 +644,7 @@ describe("autocode plugin config", () => {
 				promptAsync: destinationPrompt,
 			},
 		} as unknown as OpencodeClient;
-		const hooks = (await autocode({
+		const hooks = (await autocode.server({
 			...createInput(worktree),
 			client,
 		})) as unknown as PluginRestartHooks;
@@ -707,11 +736,7 @@ describe("autocode plugin config", () => {
 						smart: { model: "smart-model" },
 					},
 				},
-				permission: {
-					external_directory: {
-						"/configured/*": "allow",
-					},
-				},
+				permissions: [{ action: "external_directory", resource: "/configured/*", effect: "allow" }],
 			}),
 		);
 
@@ -722,27 +747,22 @@ describe("autocode plugin config", () => {
 				AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1",
 			},
 			async () => {
-				const cfg: PluginConfig = {
+				const cfg: PluginConfig & { permissions?: PermissionRule[] } = {
 					agent: {
 						assist: {
 							model: "user-model",
-							permission: {
-								question: "allow",
-								task_external: "ask",
-							},
+							permissions: [{ action: "question", resource: "*", effect: "allow" }],
 						},
 						"execute-code": { model: "user-worker-model" },
 						"auto-test": { variant: "user-test-variant" },
 					},
-					permission: {
-						external_directory: {
-							"/native/*": "ask",
-							"/configured/*": "deny",
-						},
-					},
+					permissions: [
+						{ action: "external_directory", resource: "/native/*", effect: "ask" },
+						{ action: "external_directory", resource: "/configured/*", effect: "deny" },
+					],
 				};
 				const input = { ...createInput(worktree), homeOverride: root };
-				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				const commands = createCommands(createPlatformCapabilities("linux"));
 
 				await hooks.config?.(cfg);
@@ -791,7 +811,7 @@ describe("autocode plugin config", () => {
 				expect(cfg.agent?.["auto-test"]?.variant).toBe("user-test-variant");
 				const assist = cfg.agent?.assist;
 				const design = cfg.agent?.design;
-				const assistPermission = assist?.permission;
+				const assistPermission = assist?.permissions as PermissionRule[] | undefined;
 				expect(
 					((assist ?? {}) as Record<string, unknown>).tier,
 				).toBeUndefined();
@@ -799,18 +819,18 @@ describe("autocode plugin config", () => {
 				expect(
 					((design ?? {}) as Record<string, unknown>).tier,
 				).toBeUndefined();
-				expect(
-					((assistPermission ?? {}) as Record<string, unknown>)
-						.external_directory,
-				).toEqual({
-					"*": "ask",
-					"/native/*": "ask",
-					"/configured/*": "allow",
-				});
-				expect(await registerGeneratedSkills(input)).toContainEqual({
-					type: "directory",
-					path: join(root, ".agents", "skills", "autocode"),
-				});
+				expect(permissionEffect(assistPermission, "external_directory", "/native/file.md")).toBe("ask");
+				expect(permissionEffect(assistPermission, "external_directory", "/configured/file.md")).toBe("allow");
+				expect(permissionEffect(assistPermission, "external_directory", "/unconfigured/file.md")).toBe("ask");
+				const registeredSkills = await registerGeneratedSkills(input);
+				expect(registeredSkills.some((skill) => skill.path === join(
+					root,
+					".agents",
+					"skills",
+					"autocode",
+					"code-typescript",
+					"SKILL.md",
+				))).toBe(true);
 
 				const explicitTitleConfig: PluginConfig = {
 					agent: {
@@ -848,19 +868,10 @@ describe("autocode plugin config", () => {
 				const input = { ...createInput(worktree), homeOverride: root };
 				const sources = await registerGeneratedSkills(input);
 
-				expect(sources).toEqual(
-				expect.arrayContaining([
-						{ type: "directory", path: join(root, ".agents", "skills", "autocode") },
-					]),
-				);
-				expect(sources).not.toContainEqual({
-					type: "directory",
-					path: learnedPermissionsRoot,
-				});
-				expect(sources).not.toContainEqual({
-					type: "directory",
-					path: join(learnedSkillsRoot, "unrelated"),
-				});
+				expect(sources.length).toBeGreaterThan(0);
+				expect(sources.every((skill) => skill.path.startsWith(join(root, ".agents", "skills", "autocode")))).toBe(true);
+				expect(sources.some((skill) => skill.path.startsWith(learnedPermissionsRoot))).toBe(false);
+				expect(sources.some((skill) => skill.path.startsWith(join(learnedSkillsRoot, "unrelated")))).toBe(false);
 			},
 		);
 	});
@@ -877,26 +888,29 @@ describe("autocode plugin config", () => {
 		await withEnv(
 			{ AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1" },
 			async () => {
-				const hooks = (await autocode(createInput(worktree))) as unknown as PluginConfigHook;
+				const hooks = (await autocode.server(createInput(worktree))) as unknown as PluginConfigHook;
 				const baseConfig: PluginConfig = {};
 				await hooks.config?.(baseConfig);
-				const basePermission = baseConfig.agent?.spy?.permission as Record<string, unknown>;
+				const basePermission = baseConfig.agent?.spy?.permissions as PermissionRule[] | undefined;
 
-				expect(basePermission.learn).toBe("deny");
-				expect(basePermission.read).toBe("allow");
+				expect(permissionEffect(basePermission, "learn", "*")).toBe("deny");
+				expect(permissionEffect(basePermission, "read", "*")).toBe("allow");
 
 				const hostileConfig: PluginConfig = {
 					agent: {
 						spy: {
-							permission: { "*": "allow", learn: "allow" },
+							permissions: [
+								{ action: "*", resource: "*", effect: "allow" },
+								{ action: "learn", resource: "*", effect: "allow" },
+							],
 						},
 					},
 				};
 				await hooks.config?.(hostileConfig);
-				const hostilePermission = hostileConfig.agent?.spy?.permission as Record<string, unknown>;
+				const hostilePermission = hostileConfig.agent?.spy?.permissions as PermissionRule[] | undefined;
 
-				expect(hostilePermission["*"]).toBe("allow");
-				expect(hostilePermission.learn).toBe("deny");
+				expect(hostilePermission).toContainEqual({ action: "*", resource: "*", effect: "allow" });
+				expect(permissionEffect(hostilePermission, "learn", "*")).toBe("deny");
 			},
 		);
 	});
@@ -905,18 +919,18 @@ describe("autocode plugin config", () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");
 		await withEnv({ PSModulePath: undefined }, async () => {
-			const cfg: PluginConfigWithSandboxPermissions = {
+			const cfg: PluginConfig = {
 				agent: {
 					"execute-sandbox": {
 						prompt: "sandbox guidance",
-						permission: { autocode_sandbox_cli: "allow" },
+						permissions: [{ action: "autocode_sandbox_cli", resource: "*", effect: "allow" }],
 					},
 					assist: {
 						prompt: "use sandbox guidance",
-						permission: {
-							autocode_sandbox_cli: "allow",
-							task: { "execute-sandbox": "allow" },
-						},
+						permissions: [
+							{ action: "autocode_sandbox_cli", resource: "*", effect: "allow" },
+							{ action: "subagent", resource: "execute-sandbox", effect: "allow" },
+						],
 					},
 				},
 			};
@@ -924,9 +938,9 @@ describe("autocode plugin config", () => {
 				...createInput(worktree),
 				platformOverride: "win32",
 			};
-			const hooks = await autocode(input);
+			const hooks = await autocode.server(input);
 
-			await hooks.config?.(cfg as PluginHookConfig);
+			await hooks.config?.(cfg as unknown as PluginHookConfig);
 
 			expect(cfg.agent?.["execute-sandbox"]).toBeUndefined();
 			for (const toolName of [
@@ -948,11 +962,7 @@ describe("autocode plugin config", () => {
 				expect(agent).toBeDefined();
 				if (agent === undefined)
 					throw new Error("agent override unexpectedly undefined");
-				const permission = agent.permission;
-				const rules =
-					permission && typeof permission !== "string"
-						? (permission as Record<string, unknown>)
-						: undefined;
+				const rules = agent.permissions as PermissionRule[] | undefined;
 				for (const toolName of [
 					"autocode_sandbox_create",
 					"autocode_sandbox_cli",
@@ -966,18 +976,13 @@ describe("autocode plugin config", () => {
 					"autocode_sandbox_config_read",
 					"autocode_sandbox_config_remove",
 				]) {
-					expect(rules?.[toolName]).toBeUndefined();
+					expect(rules?.some((rule) => rule.action === toolName)).toBe(false);
 				}
-				const task = rules?.task;
-				const taskRules =
-					task && typeof task === "object"
-						? (task as Record<string, unknown>)
-						: undefined;
-				expect(taskRules?.["execute-sandbox"]).toBeUndefined();
-				expect(`${agent.description ?? ""}\n${agent.prompt ?? ""}`).not.toMatch(
-					/sandbox/i,
-				);
+				expect(rules?.some((rule) => rule.action === "subagent" && rule.resource === "execute-sandbox")).toBe(false);
+				expect(agent.description ?? "").not.toMatch(/sandbox/i);
+				if (agent !== cfg.agent?.assist) expect(agent.prompt ?? "").not.toMatch(/sandbox/i);
 			}
+			expect(cfg.agent?.assist?.prompt).toBe("use sandbox guidance");
 			for (const agentName of ["execute-os", "query-os"] as const) {
 				expect(cfg.agent?.[agentName]?.prompt).toMatch(/cmd commands/i);
 				expect(cfg.agent?.[agentName]?.prompt).toMatch(/never use bash/i);
@@ -989,7 +994,7 @@ describe("autocode plugin config", () => {
 	test("Linux preserves supported sandbox registrations and Bash guidance", async () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");
-		const hooks = await autocode(createInput(worktree));
+		const hooks = await autocode.server(createInput(worktree));
 		const cfg: PluginConfig = {};
 
 		await hooks.config?.(cfg as unknown as PluginHookConfig);
@@ -1011,10 +1016,10 @@ describe("autocode plugin config", () => {
 			expect(hooks.tool).toHaveProperty(toolName);
 		}
 		expect(cfg.agent?.["execute-os"]?.prompt).toMatch(
-			/always use the `bash` tool/i,
+			/always use the `shell` tool/i,
 		);
 		expect(cfg.agent?.["query-os"]?.prompt).toMatch(
-			/prefer other tools over `bash` tool/i,
+			/prefer other tools over `shell` tool/i,
 		);
 		expect(cfg.command?.['autocode-install']?.template).toContain(
 			"If bwrap install is needed",
@@ -1030,7 +1035,7 @@ describe("autocode plugin config", () => {
 				...createInput(worktree),
 				platformOverride: "win32",
 			};
-			const hooks = await autocode(input);
+			const hooks = await autocode.server(input);
 			const cfg: PluginConfig = {};
 			await hooks.config?.(cfg as unknown as PluginHookConfig);
 
@@ -1054,7 +1059,7 @@ describe("autocode plugin config", () => {
 					...createInput(join(root, "worktree")),
 					homeOverride: home,
 				};
-				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				await hooks.config?.({});
 
 				expect(process.env.BUN_INSTALL).toBe(`${home}/.bun`);
@@ -1082,7 +1087,7 @@ describe("autocode plugin config", () => {
 					platformOverride: "win32",
 					homeOverride: home,
 				};
-				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				await hooks.config?.({});
 
 				expect(process.env.BUN_INSTALL).toBe("C:\\Users\\Jane Doe\\.bun");
@@ -1113,7 +1118,7 @@ describe("autocode plugin config", () => {
 						...createInput(join(root, "worktree")),
 						homeOverride: root,
 					};
-					const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+					const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 					await hooks.config?.({});
 				},
 			);
@@ -1155,14 +1160,14 @@ describe("autocode plugin config", () => {
 		try {
 			await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
 				const input = { ...createInput(worktree), homeOverride: root };
-				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				const cfg: PluginConfig = {};
 				await hooks.config?.(cfg);
 
-				expect(await registerGeneratedSkills(input)).toContainEqual({
-					type: "directory",
-					path: generatedRoot,
-				});
+				expect(await registerGeneratedSkills(input)).toContainEqual(expect.objectContaining({
+					id: "existing",
+					path: existingSkill,
+				}));
 			});
 		} finally {
 			globalThis.fetch = originalFetch;
@@ -1204,17 +1209,14 @@ describe("autocode plugin config", () => {
 		try {
 			await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
 				const input = { ...createInput(worktree), homeOverride: root };
-				const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				const cfg: PluginConfig = {};
 				await hooks.config?.(cfg);
 
 				expect(
 					skillPermissions(cfg, "execute-os")?.["legacy-startup-url"],
 				).toBeUndefined();
-				expect(await registerGeneratedSkills(input)).toContainEqual({
-					type: "directory",
-					path: join(root, ".agents", "skills", "autocode"),
-				});
+				expect(await registerGeneratedSkills(input)).toEqual([]);
 			});
 		} finally {
 			globalThis.fetch = originalFetch;
@@ -1246,7 +1248,7 @@ describe("autocode plugin config", () => {
 				...createInput(worktree),
 				homeOverride: root,
 			};
-			const hooks = (await autocode(input)) as unknown as PluginConfigHook;
+			const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 			const cfg: PluginConfig = {};
 			await hooks.config?.(cfg);
 
@@ -1280,7 +1282,7 @@ describe("autocode plugin config", () => {
 		const messages = mock(async () => ({ data: [] }));
 
 		await withEnv({ XDG_CONFIG_HOME: join(root, "xdg"), HOME: root }, async () => {
-			const hooks = (await autocode({
+			const hooks = (await autocode.server({
 				...createInput(worktree),
 				client: { session: { messages } } as unknown as OpencodeClient,
 			})) as unknown as PluginLocalMemoryHooks;

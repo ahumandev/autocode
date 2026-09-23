@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { applyExternalDirectoryPolicy, buildAgents } from "./agents"
-import type { AutocodeAgentConfig } from "./agents"
+import { join, resolve } from "node:path"
+import { applyExternalDirectoryPolicy, buildAgents, toV2Permissions } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig } from "./config"
 import type { ConfigFileSystem } from "./config"
 import { createPlatformCapabilities } from "./utils/platform"
+import { resolveOpenCodePaths } from "./utils/paths"
+import { permissionEffect, type PermissionRule } from "./utils/permissions"
 
 function makeFs(files: Record<string, string>, createdPaths: string[] = [], readPaths: string[] = [], writtenPaths: string[] = []): ConfigFileSystem {
     return {
@@ -30,32 +30,33 @@ function makeFs(files: Record<string, string>, createdPaths: string[] = [], read
 }
 
 function globalAutocodeConfigPath(): string {
-    return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode", "autocode.jsonc")
+    return resolveOpenCodePaths().globalAutocodeConfigPath
 }
 
 function globalOpencodeConfigPath(extension: "json" | "jsonc"): string {
-    return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode", `opencode.${extension}`)
+    return join(resolveOpenCodePaths().globalConfigRoot, `opencode.${extension}`)
 }
 
-function getPermissionRule(permission: AutocodeAgentConfig["permission"] | undefined, key: string): unknown {
-    if (!permission || typeof permission === "string") {
-        return undefined
-    }
-
-    return (permission as Record<string, unknown>)[key]
+function localAutocodeConfigPath(directory: string): string {
+    return join(resolve(directory), ".opencode", "autocode.jsonc")
 }
 
-function getTaskPermissionRule(permission: AutocodeAgentConfig["permission"] | undefined, key: string): unknown {
-    if (!permission || typeof permission === "string") {
-        return undefined
-    }
+function localOpencodeConfigPath(directory: string, extension: "json" | "jsonc"): string {
+    return join(resolve(directory), `opencode.${extension}`)
+}
 
-    const task = (permission as Record<string, unknown>).task
-    if (!task || typeof task === "string") {
-        return undefined
-    }
+function getPermissionRule(permission: unknown, key: string): unknown {
+    if (!permission) return undefined
+    if (!Array.isArray(permission)) return (permission as Record<string, unknown>)[key]
+    const rules = permission.filter((rule) => rule.action === key)
+    if (!rules.length) return undefined
+    if (rules.length === 1 && rules[0].resource === "*" && key !== "external_directory" && key !== "subagent") return rules[0].effect
+    return Object.fromEntries(rules.map((rule) => [rule.resource, rule.effect]))
+}
 
-    return (task as Record<string, unknown>)[key]
+function getTaskPermissionRule(permission: unknown, key: string): unknown {
+    const task = getPermissionRule(permission, Array.isArray(permission) ? "subagent" : "task")
+    return typeof task === "object" && task !== null ? (task as Record<string, unknown>)[key] : undefined
 }
 
 describe("external directory config", () => {
@@ -79,11 +80,11 @@ describe("external directory config", () => {
         const files: Record<string, string> = {}
         const createdPaths: string[] = []
 
-        await loadAutocodeConfig("/wt", "/dir", makeFs(files, createdPaths))
+        await loadAutocodeConfig(resolve("/wt"), resolve("/dir"), makeFs(files, createdPaths))
 
         expect(createdPaths).toEqual([globalAutocodeConfigPath()])
-        expect(files["/wt/.opencode/autocode.jsonc"]).toBeUndefined()
-        expect(files["/dir/.opencode/autocode.jsonc"]).toBeUndefined()
+        expect(files[localAutocodeConfigPath("/wt")]).toBeUndefined()
+        expect(files[localAutocodeConfigPath("/dir")]).toBeUndefined()
     })
 
     test("loadAutocodeConfig returns empty externalDirectories by default", async () => {
@@ -95,31 +96,23 @@ describe("external directory config", () => {
     test("loadAutocodeConfig keeps external_directory in candidate order and moves overrides last", async () => {
         const fs = makeFs({
             [globalAutocodeConfigPath()]: JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/global/*": "allow",
-                        "/shared/*": "deny",
-                    },
-                },
+                permissions: [
+                    { action: "external_directory", resource: "/global/*", effect: "allow" },
+                    { action: "external_directory", resource: "/shared/*", effect: "deny" },
+                ],
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/worktree/*": "ask",
-                        "/shared/*": "allow",
-                    },
-                },
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
+                permissions: [
+                    { action: "external_directory", resource: "/worktree/*", effect: "ask" },
+                    { action: "external_directory", resource: "/shared/*", effect: "allow" },
+                ],
             }),
-            "/dir/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/directory/*": "deny",
-                    },
-                },
+            [localAutocodeConfigPath("/dir")]: JSON.stringify({
+                permissions: [{ action: "external_directory", resource: "/directory/*", effect: "deny" }],
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/dir", fs)
+        const result = await loadAutocodeConfig(resolve("/wt"), resolve("/dir"), fs)
 
         expect(result.externalDirectories).toEqual({
             "/global/*": "allow",
@@ -135,39 +128,31 @@ describe("external directory config", () => {
         ])
     })
 
-    test("loadAutocodeConfig merges task_external rules from four sources in precedence order", async () => {
+    test("loadAutocodeConfig merges V2 external_directory rules from four sources in precedence order", async () => {
         const fs = makeFs({
             [globalOpencodeConfigPath("jsonc")]: JSON.stringify({
-                permission: {
-                    task_external: {
-                        "/global-opencode/*": "allow",
-                        "/shared/*": "deny",
-                    },
-                },
+                permissions: [
+                    { action: "external_directory", resource: "/global-opencode/*", effect: "allow" },
+                    { action: "external_directory", resource: "/shared/*", effect: "deny" },
+                ],
             }),
             [globalAutocodeConfigPath()]: JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/global-autocode/*": "ask",
-                        "/shared/*": "allow",
-                    },
-                },
+                permissions: [
+                    { action: "external_directory", resource: "/global-autocode/*", effect: "ask" },
+                    { action: "external_directory", resource: "/shared/*", effect: "allow" },
+                ],
             }),
-            "/wt/opencode.json": JSON.stringify({
-                permission: {
-                    task_external: {
-                        "/local-opencode/*": "deny",
-                        "/shared/*": "ask",
-                    },
-                },
+            [localOpencodeConfigPath("/wt", "json")]: JSON.stringify({
+                permissions: [
+                    { action: "external_directory", resource: "/local-opencode/*", effect: "deny" },
+                    { action: "external_directory", resource: "/shared/*", effect: "ask" },
+                ],
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/local-autocode/*": "allow",
-                        "/shared/*": "deny",
-                    },
-                },
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
+                permissions: [
+                    { action: "external_directory", resource: "/local-autocode/*", effect: "allow" },
+                    { action: "external_directory", resource: "/shared/*", effect: "deny" },
+                ],
             }),
         })
 
@@ -189,35 +174,19 @@ describe("external directory config", () => {
         ])
     })
 
-    test("loadAutocodeConfig prefers opencode.jsonc task_external rules over opencode.json", async () => {
+    test("loadAutocodeConfig prefers opencode.jsonc V2 rules over opencode.json", async () => {
         const fs = makeFs({
             [globalOpencodeConfigPath("jsonc")]: JSON.stringify({
-                permission: {
-                    task_external: {
-                        "/global-jsonc/*": "allow",
-                    },
-                },
+                permissions: [{ action: "external_directory", resource: "/global-jsonc/*", effect: "allow" }],
             }),
             [globalOpencodeConfigPath("json")]: JSON.stringify({
-                permission: {
-                    task_external: {
-                        "/global-json/*": "deny",
-                    },
-                },
+                permissions: [{ action: "external_directory", resource: "/global-json/*", effect: "deny" }],
             }),
-            "/wt/opencode.jsonc": JSON.stringify({
-                permission: {
-                    task_external: {
-                        "/local-jsonc/*": "ask",
-                    },
-                },
+            [localOpencodeConfigPath("/wt", "jsonc")]: JSON.stringify({
+                permissions: [{ action: "external_directory", resource: "/local-jsonc/*", effect: "ask" }],
             }),
-            "/wt/opencode.json": JSON.stringify({
-                permission: {
-                    task_external: {
-                        "/local-json/*": "deny",
-                    },
-                },
+            [localOpencodeConfigPath("/wt", "json")]: JSON.stringify({
+                permissions: [{ action: "external_directory", resource: "/local-json/*", effect: "deny" }],
             }),
         })
 
@@ -232,15 +201,15 @@ describe("external directory config", () => {
     test("loadAutocodeConfig discovers sibling global configs under OPENCODE_CONFIG_DIR", async () => {
         const originalConfigDir = process.env.OPENCODE_CONFIG_DIR
         const originalXdgConfigHome = process.env.XDG_CONFIG_HOME
-        const configRoot = "/override/OpenCode Config"
+        const configRoot = resolve("/override/OpenCode Config")
         process.env.OPENCODE_CONFIG_DIR = configRoot
         process.env.XDG_CONFIG_HOME = "/ignored-xdg"
 
         try {
             const fs = makeFs({
-                [join(configRoot, "opencode.json")]: JSON.stringify({ permission: { task_external: { "/json/*": "deny" } } }),
-                [join(configRoot, "opencode.jsonc")]: JSON.stringify({ permission: { task_external: { "/jsonc/*": "allow" } } }),
-                [join(configRoot, "autocode.jsonc")]: JSON.stringify({ permission: { external_directory: { "/autocode/*": "ask" } } }),
+                [join(configRoot, "opencode.json")]: JSON.stringify({ permissions: [{ action: "external_directory", resource: "/json/*", effect: "deny" }] }),
+                [join(configRoot, "opencode.jsonc")]: JSON.stringify({ permissions: [{ action: "external_directory", resource: "/jsonc/*", effect: "allow" }] }),
+                [join(configRoot, "autocode.jsonc")]: JSON.stringify({ permissions: [{ action: "external_directory", resource: "/autocode/*", effect: "ask" }] }),
             })
 
             const result = await loadAutocodeConfig("/wt", "/wt", fs)
@@ -257,13 +226,11 @@ describe("external directory config", () => {
 
     test("loadAutocodeConfig ignores invalid external_directory actions", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/allowed/*": "allow",
-                        "/invalid/*": "maybe",
-                    },
-                },
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
+                permissions: [
+                    { action: "external_directory", resource: "/allowed/*", effect: "allow" },
+                    { action: "external_directory", resource: "/invalid/*", effect: "maybe" },
+                ],
             }),
         })
 
@@ -274,9 +241,9 @@ describe("external directory config", () => {
         })
     })
 
-    test("loadAutocodeConfig reads singular external_directory object rules", async () => {
+    test("loadAutocodeConfig ignores singular legacy external_directory object rules", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 permission: {
                     external_directory: {
                         "/native/*": "allow",
@@ -287,14 +254,12 @@ describe("external directory config", () => {
 
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
-        expect(result.externalDirectories).toEqual({
-            "/native/*": "allow",
-        })
+        expect(result.externalDirectories).toEqual({})
     })
 
-    test("loadAutocodeConfig reads singular external_directory string rules", async () => {
+    test("loadAutocodeConfig ignores singular legacy external_directory string rules", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 permission: {
                     external_directory: "ask",
                 },
@@ -303,40 +268,32 @@ describe("external directory config", () => {
 
         const result = await loadAutocodeConfig("/wt", "/wt", fs)
 
-        expect(result.externalDirectories).toEqual({
-            "*": "ask",
-        })
+        expect(result.externalDirectories).toEqual({})
     })
 
     test("loadAutocodeConfig loads ancestor configs upward with closer directory overrides", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/shared/*": "deny",
-                        "/worktree/*": "allow",
-                    },
-                },
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
+                permissions: [
+                    { action: "external_directory", resource: "/shared/*", effect: "deny" },
+                    { action: "external_directory", resource: "/worktree/*", effect: "allow" },
+                ],
             }),
-            "/wt/packages/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/packages/*": "ask",
-                        "/shared/*": "allow",
-                    },
-                },
+            [localAutocodeConfigPath("/wt/packages")]: JSON.stringify({
+                permissions: [
+                    { action: "external_directory", resource: "/packages/*", effect: "ask" },
+                    { action: "external_directory", resource: "/shared/*", effect: "allow" },
+                ],
             }),
-            "/wt/packages/app/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/app/*": "allow",
-                        "/shared/*": "ask",
-                    },
-                },
+            [localAutocodeConfigPath("/wt/packages/app")]: JSON.stringify({
+                permissions: [
+                    { action: "external_directory", resource: "/app/*", effect: "allow" },
+                    { action: "external_directory", resource: "/shared/*", effect: "ask" },
+                ],
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt/packages/app", fs)
+        const result = await loadAutocodeConfig(resolve("/wt"), resolve("/wt/packages/app"), fs)
 
         expect(result.externalDirectories).toEqual({
             "/worktree/*": "allow",
@@ -347,40 +304,24 @@ describe("external directory config", () => {
     })
 
     test("loadAutocodeConfig reads exact outside directory config without unrelated parents", async () => {
-        const outsideParentConfigPath = "/outside/.opencode/autocode.jsonc"
+        const outsideParentConfigPath = localAutocodeConfigPath("/outside")
         const readPaths: string[] = []
         const fs = makeFs({
             [globalAutocodeConfigPath()]: JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/global/*": "allow",
-                    },
-                },
+                permissions: [{ action: "external_directory", resource: "/global/*", effect: "allow" }],
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/worktree/*": "ask",
-                    },
-                },
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
+                permissions: [{ action: "external_directory", resource: "/worktree/*", effect: "ask" }],
             }),
             [outsideParentConfigPath]: JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/outside-parent/*": "deny",
-                    },
-                },
+                permissions: [{ action: "external_directory", resource: "/outside-parent/*", effect: "deny" }],
             }),
-            "/outside/project/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/outside-project/*": "allow",
-                    },
-                },
+            [localAutocodeConfigPath("/outside/project")]: JSON.stringify({
+                permissions: [{ action: "external_directory", resource: "/outside-project/*", effect: "allow" }],
             }),
         }, [], readPaths)
 
-        const result = await loadAutocodeConfig("/wt", "/outside/project", fs)
+        const result = await loadAutocodeConfig(resolve("/wt"), resolve("/outside/project"), fs)
 
         expect(result.externalDirectories).toEqual({
             "/global/*": "allow",
@@ -391,45 +332,46 @@ describe("external directory config", () => {
         expect(readPaths).not.toContain(outsideParentConfigPath)
     })
 
-    test("collectExternalDirectories accepts native external_directory action and object rules", () => {
-        expect(collectExternalDirectories("allow")).toEqual({
-            "*": "allow",
-        })
-        expect(collectExternalDirectories({
-            "/allowed/*": "allow",
-            "/invalid/*": "maybe",
-        })).toEqual({
-            "/allowed/*": "allow",
-        })
+    test("collectExternalDirectories reads only ordered V2 external_directory rules", () => {
+        expect(collectExternalDirectories([
+            { action: "external_directory", resource: "*", effect: "ask" },
+            { action: "external_directory", resource: "/allowed/*", effect: "deny" },
+            { action: "subagent", resource: "/allowed/*", effect: "allow" },
+            { action: "external_directory", resource: "/allowed/*", effect: "allow" },
+        ])).toEqual({ "*": "ask", "/allowed/*": "allow" })
+        expect(collectExternalDirectories({ external_directory: "allow" })).toBeUndefined()
+    })
+
+    test("loadAutocodeConfig retains repeated V2 rules and final wildcard denial", async () => {
+        const rules: PermissionRule[] = [
+            { action: "external_directory", resource: "/shared/*", effect: "allow" },
+            { action: "external_directory", resource: "/shared/*", effect: "ask" },
+            { action: "external_directory", resource: "*", effect: "deny" },
+        ]
+        const result = await loadAutocodeConfig("/wt", "/wt", makeFs({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({ permissions: rules }),
+        }))
+
+        expect(result.externalDirectoryPermissions).toEqual(rules)
     })
 
     test("existing local files still override global config", async () => {
         const fs = makeFs({
             [globalAutocodeConfigPath()]: JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/shared/*": "deny",
-                        "/global/*": "allow",
-                    },
-                },
+                permissions: [
+                    { action: "external_directory", resource: "/shared/*", effect: "deny" },
+                    { action: "external_directory", resource: "/global/*", effect: "allow" },
+                ],
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/shared/*": "allow",
-                    },
-                },
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
+                permissions: [{ action: "external_directory", resource: "/shared/*", effect: "allow" }],
             }),
-            "/dir/.opencode/autocode.jsonc": JSON.stringify({
-                permission: {
-                    external_directory: {
-                        "/shared/*": "ask",
-                    },
-                },
+            [localAutocodeConfigPath("/dir")]: JSON.stringify({
+                permissions: [{ action: "external_directory", resource: "/shared/*", effect: "ask" }],
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/dir", fs)
+        const result = await loadAutocodeConfig(resolve("/wt"), resolve("/dir"), fs)
 
         expect(result.externalDirectories).toEqual({
             "/global/*": "allow",
@@ -443,26 +385,26 @@ describe("external directory config", () => {
             "/review/*": "ask",
             "/blocked/*": "deny",
         })
-        expect(getPermissionRule(agents.design?.permission, "external_directory")).toEqual({
+        expect(getPermissionRule(agents.design?.permissions, "external_directory")).toEqual({
             "*": "ask",
             "/allowed/*": "allow",
             "/review/*": "ask",
             "/blocked/*": "deny",
         })
-        expect(getPermissionRule(agents["execute-os"]?.permission, "external_directory")).toEqual({
+        expect(getPermissionRule(agents["execute-os"]?.permissions, "external_directory")).toEqual({
             "*": "allow",
             "/allowed/*": "allow",
             "/review/*": "deny",
             "/blocked/*": "deny",
         })
-        expect(getPermissionRule(agents.assist?.permission, "external_directory")).toEqual({
+        expect(getPermissionRule(agents.assist?.permissions, "external_directory")).toEqual({
             "*": "ask",
             "/allowed/*": "allow",
             "/review/*": "ask",
             "/blocked/*": "deny",
         })
-        expect(getPermissionRule(agents["query-code"]?.permission, "external_directory")).toEqual({
-            "*": "deny",
+        expect(getPermissionRule(agents["query-code"]?.permissions, "external_directory")).toEqual({
+            "*": "ask",
             "/allowed/*": "allow",
             "/review/*": "deny",
             "/blocked/*": "deny",
@@ -475,34 +417,29 @@ describe("external directory config", () => {
                 permission: {
                     external_directory: "ask",
                     question: "allow",
-                    task_external: "ask",
                 },
             },
             question_ask: {
                 permission: {
                     external_directory: "ask",
                     question: "ask",
-                    task_external: "ask",
                 },
             },
             question_deny: {
                 permission: {
                     external_directory: "ask",
                     question: "deny",
-                    task_external: "ask",
                 },
             },
             action_allow: {
                 permission: {
                     external_directory: "allow",
-                    task_external: "allow",
                 },
             },
             action_deny: {
                 permission: {
                     external_directory: "deny",
                     question: "allow",
-                    task_external: "deny",
                 },
             },
             object_rules: {
@@ -512,17 +449,6 @@ describe("external directory config", () => {
                         "/source-allow/*": "allow",
                         "/source-deny/*": "deny",
                     },
-                    task_external: {
-                        "*": "ask",
-                        "/source-allow/*": "allow",
-                        "/source-deny/*": "deny",
-                    },
-                },
-            },
-            task_external_source: {
-                permission: {
-                    question: "allow",
-                    task_external: "ask",
                 },
             },
         }, {
@@ -537,7 +463,7 @@ describe("external directory config", () => {
             "/configured-ask/*": "ask",
             "/configured-deny/*": "deny",
         })
-        expect(getPermissionRule(agents.question_ask?.permission, "task_external")).toEqual({
+        expect(getPermissionRule(agents.question_ask?.permission, "external_directory")).toEqual({
             "*": "ask",
             "/configured-allow/*": "allow",
             "/configured-ask/*": "ask",
@@ -555,24 +481,21 @@ describe("external directory config", () => {
             "/configured-ask/*": "deny",
             "/configured-deny/*": "deny",
         })
-        expect(getPermissionRule(agents.action_deny?.permission, "task_external")).toEqual({
-            "*": "deny",
-            "/configured-allow/*": "allow",
-            "/configured-ask/*": "ask",
-            "/configured-deny/*": "deny",
-        })
+        expect(getPermissionRule(agents.action_deny?.permission, "external_directory")).toEqual([
+            { action: "external_directory", resource: "*", effect: "ask" },
+            { action: "external_directory", resource: "/configured-allow/*", effect: "allow" },
+            { action: "external_directory", resource: "/configured-ask/*", effect: "ask" },
+            { action: "external_directory", resource: "/configured-deny/*", effect: "deny" },
+            { action: "external_directory", resource: "*", effect: "deny" },
+        ])
+        const actionDenyRules = toV2Permissions(agents.action_deny?.permission)
+        expect(permissionEffect(actionDenyRules, "external_directory", "/configured-allow/file.md")).toBe("deny")
         expect(getPermissionRule(agents.object_rules?.permission, "external_directory")).toEqual({
             "*": "deny",
             "/source-allow/*": "allow",
             "/source-deny/*": "deny",
             "/configured-allow/*": "allow",
             "/configured-ask/*": "deny",
-            "/configured-deny/*": "deny",
-        })
-        expect(getPermissionRule(agents.task_external_source?.permission, "external_directory")).toEqual({
-            "*": "ask",
-            "/configured-allow/*": "allow",
-            "/configured-ask/*": "ask",
             "/configured-deny/*": "deny",
         })
     })
@@ -582,7 +505,7 @@ describe("sandbox config", () => {
     test("loadAutocodeConfig parses hidden sandbox sync and distro cache config", async () => {
         for (const syncMethod of ["auto", "overlayfs", "reflink", "copy"] as const) {
             const fs = makeFs({
-                "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                [localAutocodeConfigPath("/wt")]: JSON.stringify({
                     autocode: {
                         sandbox: {
                             sync_method: syncMethod,
@@ -604,7 +527,7 @@ describe("sandbox config", () => {
     test("loadAutocodeConfig ignores invalid sandbox sync config and keeps absent default empty", async () => {
         const absent = await loadAutocodeConfig("/wt", "/wt", makeFs({}))
         const invalid = await loadAutocodeConfig("/wt", "/wt", makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 autocode: {
                     sandbox: {
                         sync_method: "rsync",
@@ -626,7 +549,7 @@ describe("sandbox config", () => {
             [globalAutocodeConfigPath()]: JSON.stringify({
                 autocode: { sandbox: { sync_method: "copy", distro: { cache_path: "/global/cache", expire: "never" } } },
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 autocode: { sandbox: { sync_method: "reflink", distro: { cache_path: "/worktree/cache" } } },
             }),
         })
@@ -656,10 +579,10 @@ describe("agent workflow wiring", () => {
     test("keeps current canonical permissions on primary workflow agents", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [], { balanced: {}, smart: {} })
 
-        expect(getTaskPermissionRule(agents.assist?.permission, "auto*")).toBe("deny")
-        expect(getTaskPermissionRule(agents.auto?.permission, "auto-*")).toBe("allow")
-        expect(getPermissionRule(agents.assist?.permission, "question")).toBe("allow")
-        expect(getPermissionRule(agents.auto?.permission, "question")).toBeUndefined()
+        expect(getTaskPermissionRule(agents.assist?.permissions, "auto*")).toBe("deny")
+        expect(getTaskPermissionRule(agents.auto?.permissions, "auto-*")).toBe("allow")
+        expect(getPermissionRule(agents.assist?.permissions, "question")).toBe("allow")
+        expect(getPermissionRule(agents.auto?.permissions, "question")).toBeUndefined()
     })
 
     test("does not register legacy act or ask primary agents", () => {
@@ -685,7 +608,7 @@ describe("learned config", () => {
 
     test("loadAutocodeConfig returns skills.learned.max from local config", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 autocode: {
                     skills: { learned: { max: 3 } },
                 },
@@ -700,7 +623,7 @@ describe("learned config", () => {
     test("loadAutocodeConfig falls back to default max=10 when max is invalid", async () => {
         for (const invalid of ["oops", 0, -2, 2.5, null]) {
             const fs = makeFs({
-                "/wt/.opencode/autocode.jsonc": JSON.stringify({
+                [localAutocodeConfigPath("/wt")]: JSON.stringify({
                     autocode: {
                         skills: { learned: { max: invalid } },
                     },
@@ -715,7 +638,7 @@ describe("learned config", () => {
 
     test("loadAutocodeConfig defaults skills.learned when absent from local config", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 autocode: {
                     sandbox: { sync_method: "copy" },
                 },
@@ -731,7 +654,7 @@ describe("learned config", () => {
 describe("model tier config", () => {
     test("loadAutocodeConfig accepts directly configured spy tier", async () => {
         const result = await loadAutocodeConfig("/wt", "/wt", makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 autocode: { tiers: { spy: { model: "openai/gpt-spy", variant: "strict" } } },
             }),
         }))
@@ -741,7 +664,7 @@ describe("model tier config", () => {
 
     test("loadAutocodeConfig selects spy tier from configured provider", async () => {
         const result = await loadAutocodeConfig("/wt", "/wt", makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 autocode: {
                     tier: "openai",
                     tiers: { openai: { spy: { model: "openai/gpt-spy" } } },
@@ -754,7 +677,7 @@ describe("model tier config", () => {
 
     test("loadAutocodeConfig accepts legacy spy model and variant aliases", async () => {
         const result = await loadAutocodeConfig("/wt", "/wt", makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 autocode: {
                     model: { spy: "openai/gpt-spy" },
                     variant: { spy: "strict" },
@@ -778,7 +701,7 @@ describe("model tier config", () => {
                     },
                 },
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [localAutocodeConfigPath("/wt")]: JSON.stringify({
                 autocode: {
                     tiers: {
                         context: { model: "openai/gpt-5-context", variant: "high" },

@@ -21,8 +21,8 @@ User is unsure how to solve problem, that means:
 
 Reactions user interruptions:
 - REQUIREMENTS unclear? Follow STEP 2 (ask with \`question\` tool)
-- CONSTRAINTS unclear? Follow STEP 3 (\`task\` subagent to find facts)
-- User concerned about uncertainty? Follow STEP 4 (\`task\` subagent to find facts)
+- CONSTRAINTS unclear? Follow STEP 3 (call \`subagent\` to find facts)
+- User concerned about uncertainty? Follow STEP 4 (call \`subagent\` to find facts)
 - User need clarification? Explain known info with simulated examples or TD mermaid graphs
 - User add REQUIREMENT/CONSTRAINT?
 
@@ -106,7 +106,7 @@ For each requirement in REQUIREMENTS:
 A CONSTRAINTS is a confirmed limits, restrictions, and non-goals that shape APPROACHES.
 
 * For each RISK (unresolved limit):
-    1. \`task\` subagents to verify the limit.
+    1. Call \`subagent\` to verify the limit.
     2. If confirmed: promote RISK to confirmed CONSTRAINT with proof (source url, filenames, line numbers, commands, user answer, etc).
     3. If disproven: remove RISK.
     4. If unverified: retain as RISK and suggest mitigation.
@@ -119,7 +119,7 @@ A CONSTRAINTS is a confirmed limits, restrictions, and non-goals that shape APPR
 
 1. Use research discoveries as evidence when evaluating approaches.
 2. If PROPOSAL already in INSTRUCTIONS: critically evaluate if INSTRUCTED PROPOSAL is feasible?
-    - If INSTRUCTIONS reference sources that influence design and uncertain: validate feasibility by tasking \`query*\` subagents to investigate (skip \`task\` tool if info is already verified)
+    - If INSTRUCTIONS reference sources that influence design and uncertain: validate feasibility by tasking \`query*\` subagents to investigate (skip \`subagent\` tool if info is already verified)
     - Then, for every design flaw or improvement opportunity in INSTRUCTED PROPOSAL:
         1. Name potential flow improvement opportunity with formatted examples / TD mermaid diagram (if applicable) and why it is better than user APPROACH with comparison table (if applicable)
         2. After responding with improvement suggestion, call \`question\` tool with 2-4 alternative options: labels=describe alternatives, descriptions=influence on plan if option is chosen; last option = original user APPROACH

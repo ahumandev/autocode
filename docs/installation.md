@@ -49,11 +49,11 @@ opencode --version
 command -v opencode
 ```
 
-If version prints, continue with Step 4.
+If an OpenCode V2 version prints, continue with Step 4. If the installed command is OpenCode V1, remove that package-managed installation before installing V2; V1 plugin implementations do not run in V2.
 
 ### Step 3: Install OpenCode
 
-1. Install OpenCode according to [OpenCode Installation Docs](https://opencode.ai).
+1. Install OpenCode according to the [OpenCode V2 CLI guide](https://opencode.ai/v2/docs/cli/).
 2. Use official OpenCode install command or package-manager option for that OS.
 3. Ask user before commands needing `sudo` or system changes.
 
@@ -86,10 +86,10 @@ Continue only when command path and version print and npm registry access works.
 Run this in native CMD or Bash:
 
 ```text
-opencode plugin @ahumandev/autocode@latest -g -f
+opencode plugin add @ahumandev/autocode@latest
 ```
 
-`-g` installs plugin in global OpenCode configuration. Default config directory is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` applies when `OPENCODE_CONFIG_DIR` is unset.
+OpenCode V2 package-plugin management updates global OpenCode configuration. The default config directory is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` applies when `OPENCODE_CONFIG_DIR` is unset.
 
 ### Step 6: Start AutoCode Install
 
@@ -139,13 +139,13 @@ Check parse error details, then check these things:
 - `.json` file has no trailing commas.
 - `.jsonc` file can keep comments and trailing commas.
 - Quotes and brackets match.
-- `plugin` is an array.
+- `plugins` is an array.
 
 Bad:
 
 ```json
 {
-  "plugin": [
+  "plugins": [
     "@ahumandev/autocode",
   ],
 }
@@ -155,7 +155,7 @@ Good JSON:
 
 ```json
 {
-  "plugin": [
+  "plugins": [
     "@ahumandev/autocode"
   ]
 }
@@ -170,7 +170,7 @@ If current file uses comments or trailing commas, rename plan should be careful:
 
 Use this if OpenCode starts but cannot install AutoCode.
 
-1. Run `opencode plugin @ahumandev/autocode@latest -g -f` again.
+1. Run `opencode plugin add @ahumandev/autocode@latest` again, or `opencode plugin update @ahumandev/autocode@latest` when it is already configured.
 2. Confirm OpenCode global config is valid and preserves unrelated settings.
 3. Restart OpenCode.
 4. Run `/autocode-install` after startup.
@@ -201,14 +201,14 @@ If config directory is overridden, replace default shim path with configured dir
 
 ### Official OpenCode Docs
 
-Still stuck? Read [Official OpenCode Docs](https://opencode.ai/docs).
+Still stuck? Read the [official OpenCode V2 docs](https://opencode.ai/v2/docs/).
 
 ## Success
 
 Success checks:
 
 - `opencode --version` prints version.
-- `opencode plugin @ahumandev/autocode@latest -g -f` completes.
+- `opencode plugin list` includes `@ahumandev/autocode`.
 - OpenCode starts and `/autocode-install` runs.
 - Generated skills, when created, are in `<home>/.agents/skills`.
 
@@ -220,11 +220,18 @@ Set up Chrome DevTools MCP after AutoCode plugin install.
 
 Prerequisites: Node.js LTS with npm and current stable Chrome. Global npm install is not required.
 
-Merge this entry into existing global OpenCode config at `<home>/.config/opencode/opencode.json`; never overwrite unrelated settings. If `mcp` already exists, add `chrome-devtools` inside it. Config-directory overrides remain as documented in [Step 5](#step-5-install-autocode-plugin).
+Merge this entry into existing global OpenCode config at `<home>/.config/opencode/opencode.json`; never overwrite unrelated settings. If `mcp.servers` already exists, add `chrome-devtools` inside it. Config-directory overrides remain as documented in [Step 5](#step-5-install-autocode-plugin).
 
 ```json
 {
-  "mcp": { "chrome-devtools": { "type": "local", "command": ["npx", "-y", "chrome-devtools-mcp@latest"] } }
+  "mcp": {
+    "servers": {
+      "chrome-devtools": {
+        "type": "local",
+        "command": ["npx", "-y", "chrome-devtools-mcp@latest"]
+      }
+    }
+  }
 }
 ```
 
@@ -262,17 +269,19 @@ Install package:
 npm install -g open-websearch@latest
 ```
 
-Merge this entry into existing global OpenCode config at `<home>/.config/opencode/opencode.json`; never overwrite unrelated settings. If `mcp` already exists, add `open-websearch` inside it. Config-directory overrides remain as documented in [Step 5](#step-5-install-autocode-plugin).
+Merge this entry into existing global OpenCode config at `<home>/.config/opencode/opencode.json`; never overwrite unrelated settings. If `mcp.servers` already exists, add `open-websearch` inside it. Config-directory overrides remain as documented in [Step 5](#step-5-install-autocode-plugin).
 
 Default config:
 
 ```json
 {
   "mcp": {
-    "open-websearch": {
-      "type": "local",
-      "command": ["open-websearch"],
-      "environment": { "MODE": "stdio" }
+    "servers": {
+      "open-websearch": {
+        "type": "local",
+        "command": ["open-websearch"],
+        "environment": { "MODE": "stdio" }
+      }
     }
   }
 }
@@ -287,13 +296,15 @@ Merge proxy settings into `environment` only when user confirms custom local pro
 ```json
 {
   "mcp": {
-    "open-websearch": {
-      "type": "local",
-      "command": ["open-websearch"],
-      "environment": {
-        "MODE": "stdio",
-        "USE_PROXY": "true",
-        "PROXY_URL": "http://127.0.0.1:1234"
+    "servers": {
+      "open-websearch": {
+        "type": "local",
+        "command": ["open-websearch"],
+        "environment": {
+          "MODE": "stdio",
+          "USE_PROXY": "true",
+          "PROXY_URL": "http://127.0.0.1:1234"
+        }
       }
     }
   }
@@ -308,6 +319,6 @@ Verify setup:
 
 ## Uninstall AutoCode
 
-Remove `@ahumandev/autocode` from global OpenCode `plugin` array and restart OpenCode. Do not delete unrelated plugins or settings.
+Run `opencode plugin remove @ahumandev/autocode@latest`, or remove only its entry from the global OpenCode `plugins` array, then restart OpenCode. Do not delete unrelated plugins or settings.
 
 For repository-only shim workflow, use `del /f /q` in Windows CMD or `rm -f` in Linux Bash for `autocode.js`; see [Fix stale local shim](#fix-stale-local-shim).

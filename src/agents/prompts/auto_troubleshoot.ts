@@ -106,10 +106,10 @@ Choose simplest APPROACHE that will solve hypothesis (ROOT CAUSE) with least unw
 ### STEP 6: Implement APPROACH
 
 1. Use \`todowrite\` tool to keep track of STEPS of APPROACH.
-2. \`task\` subagents systematically to implement APPROACH.
-3. Compare \`task\` output with APPROACH:
-  - If misunderstood or missing details: \`task\` same subagent again with same \`task_id\` to clarify
-  - If subagent failed because lack of tools: \`task\` another subagent to complete task
+2. Call \`subagent\` systematically to implement APPROACH.
+3. Compare \`subagent\` output with APPROACH:
+  - If misunderstood or missing details: call \`subagent\` again with same \`task_id\` to clarify
+  - If subagent failed because lack of tools: call \`subagent\` for another agent to complete task
   - If new CONSTRAINT discovered making APPROACH impractical: Restart Workflow Loop from STEP 1 with new CONSTRAINT and discoveries.
   - If APPROACH SOLUTION completed successfully, continue to next STEP.
 

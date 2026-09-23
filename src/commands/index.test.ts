@@ -54,7 +54,6 @@ describe("commands", () => {
         for (const [commandName, command] of Object.entries(commands)) {
             expect(command.template).toEqual(expect.any(String))
             expect(command.template).not.toBe("")
-            if ("subtask" in command) expect(command.subtask).toBe(commandName === "init")
             if ("description" in command) expect(command.description).toEqual(expect.any(String))
             if ("agent" in command) expect(command.agent).toEqual(expect.any(String))
             if ("model" in command) expect(command.model).toEqual(expect.any(String))
@@ -123,7 +122,7 @@ describe("commands", () => {
             "docs-prd": "document-prd",
             "docs-ux": "document-ux",
             explain: "query-code",
-            "git-conflict": "assist_git_conflict",
+            "git-conflict": "assist-git-conflict",
             init: "execute-document",
             tests: "auto-test",
         })
@@ -189,7 +188,7 @@ describe("commands", () => {
         expect(commands.commit?.template).toContain("git_commit")
         expect(commands.commit?.template).toContain("NEVER any other tool")
         expect(commands.resume?.subtask).toBe(false)
-        expect(commands.resume?.template).toContain("You were interrupted. Call `task_resume` tool, then resume your own work.")
+        expect(commands.resume?.template).toContain("You were interrupted. Resume your own work.")
     })
 
     test("keeps init documentation-only", () => {

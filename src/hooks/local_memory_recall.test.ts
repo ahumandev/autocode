@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import type { Part, TextPart } from "@opencode-ai/sdk"
 import {
     createLocalMemoryRecallHook,
@@ -22,7 +23,8 @@ import {
 import { createAutocodeMemoryRecallTool } from "@/tools/autocode_memory_recall"
 import { createToolContext } from "@/tools/test_context"
 
-const CONTEXT = { directory: "/repo", worktree: "/repo" }
+const repoRoot = path.resolve("/repo")
+const CONTEXT = { directory: repoRoot, worktree: repoRoot }
 const OWNER_METADATA = { "autocode.local_memory": "v1" }
 const PREPARATION_METADATA = { ...OWNER_METADATA, "autocode.local_memory_prepared": "v1" }
 
@@ -76,7 +78,7 @@ function createFileSystem(): FileSystem {
             actions.push("readdir")
             if (!directories.has(directoryPath)) throw missingError()
             return [...files.keys()]
-                .filter((filePath: string): boolean => filePath.startsWith(`${directoryPath}/`))
+                .filter((filePath: string): boolean => filePath.startsWith(`${directoryPath}${path.sep}`))
                 .map((filePath: string): string => filePath.slice(directoryPath.length + 1))
         },
         async rename(oldPath: string, newPath: string): Promise<void> {

@@ -1,8 +1,11 @@
 import { describe, beforeEach, expect, mock, test } from "bun:test"
+import path from "node:path"
 import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createNoopAsk } from "./test_context"
 import { createAbortResponse, resetRetryCounts } from "@/utils/tools"
 import type { ToolContext } from "@opencode-ai/plugin"
+
+const workspace = path.resolve("workspace")
 
 function parseToolResult(result: string | { output: string }) {
     return JSON.parse(typeof result === "string" ? result : result.output)
@@ -13,8 +16,8 @@ export function createToolContext(): ToolContext {
         sessionID: "session-1",
         messageID: "message-1",
         agent: "execute",
-        directory: "/workspace",
-        worktree: "/workspace",
+        directory: workspace,
+        worktree: workspace,
         abort: new AbortController().signal,
         metadata() {
         },
@@ -29,6 +32,7 @@ function createMissingError(): NodeJS.ErrnoException {
 }
 
 describe("autocode_job_list tool", () => {
+    const jobsDir = path.join(workspace, ".agents", "jobs")
     beforeEach(() => { resetRetryCounts() })
 
     function createMockFs() {
@@ -40,7 +44,7 @@ describe("autocode_job_list tool", () => {
 
     test("lists timestamped workspaces with statusless identities", async () => {
         const fs = createMockFs()
-        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs"
+        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === jobsDir
             ? ["2026-08-20_10-30-00_job_1", "2026-08-21_10-30-00_job_2", "not-a-workspace"]
             : [])
 
@@ -59,7 +63,7 @@ describe("autocode_job_list tool", () => {
 
     test("lists jobs without reading plan content", async () => {
         const fs = createMockFs()
-        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === "/workspace/.agents/jobs" ? ["2026-08-20_10-30-00_long_job"] : [])
+        fs.readdir.mockImplementation(async (dirPath: string) => dirPath === jobsDir ? ["2026-08-20_10-30-00_long_job"] : [])
 
         const tool = createAutocodeJobListTool(fs)
         const result = await tool.execute({}, createToolContext())

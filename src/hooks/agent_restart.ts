@@ -142,6 +142,7 @@ export async function summarizeAutocodeAgentSession(
         query: { directory },
         body: { ...model, auto: false },
     }
+    // V2 plugin contexts have no session.compact; active context cannot perform this V1 compaction.
     return client.session.summarize(request) as Promise<AgentRestartCompactionResponse>
 }
 

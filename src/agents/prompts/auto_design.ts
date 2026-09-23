@@ -64,7 +64,7 @@ For each requirement in REQUIREMENTS:
 ### STEP 4: Analyze RISKS to confirm CONSTRAINTS
 
 For each assumed RISK in RISKS:
-    1. \`task\` subagents to verify if RISK is real.
+    1. Call \`subagent\` to verify if RISK is real.
     2. If verified: convert RISK into CONSTRAINT with proof (source url, filenames, line numbers, commands, user answer, etc).
     3. If disproven: remove RISK or mark as resolved with proof.
     4. If unverified: keep as RISK with mitigation.
@@ -72,7 +72,7 @@ For each assumed RISK in RISKS:
 ### STEP 5: Analyze APPROACHES
 
 1. If PROPOSAL already in INSTRUCTIONS: critically evaluate if INSTRUCTED PROPOSAL is feasible? 
-    - If INSTRUCTIONS reference sources that influence design and uncertain: validate feasibility by tasking \`query*\` subagents to investigate (skip \`task\` tool if info is already verified)
+    - If INSTRUCTIONS reference sources that influence design and uncertain: validate feasibility by tasking \`query*\` subagents to investigate (skip \`subagent\` tool if info is already verified)
     - If INSTRUCTED PROPOSAL is not feasible, scrap it, otherwise include as considered APPROACH.
 2. Before presenting APPROACHES:
     - Consider CONSTRAINTS first when deciding alternative feasible APPROACHES.

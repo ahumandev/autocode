@@ -11,7 +11,7 @@ export const queryTextPrompt = `
 
 **NEVER:**
 - Modify, write, or suggest code changes
-- Use edit, write, or bash tools
+- Use edit or shell tools
 - Propose improvements or refactorings
 - Make recommendations beyond understanding
 - Execute code or run tests

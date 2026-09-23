@@ -2,7 +2,7 @@
 
 ### Implementation Modes
 
-- 💡 **Advise mode** — *guidance*: agent researches topics, answers questions, and guides manual implementation.
+- 👨 **Advise mode** — *guidance*: agent researches topics, answers questions, and guides manual implementation.
 - 🧑‍💻 **Assist mode** — *interactive*: you make decisions while agent orchestration does the work and suggests next steps.
 - 🤖 **Auto mode** — *autonomous*: agent executes structured design work until completion.
 
@@ -24,7 +24,7 @@
 - 🧪 **Sandbox isolation** — agents automatically manage and experiment in their own isolated sandboxes.
 - 🛠️ **Self-building tools** — agents create durable per-job Node `.mjs` tools, reconcile dependencies, run finite scripts, and manage long-running services.
 
-As well as [OpenCode bundled tools](https://opencode.ai/docs/tools/).
+As well as [OpenCode V2 bundled tools](https://opencode.ai/v2/docs/tools/).
 
 ## Installation
 
@@ -50,7 +50,7 @@ As well as [OpenCode bundled tools](https://opencode.ai/docs/tools/).
 Run this in native CMD on Windows or Bash on Linux:
 
 ```text
-opencode plugin -g @ahumandev/autocode@latest
+opencode plugin add @ahumandev/autocode@latest
 ```
 
 OpenCode loads global plugins at startup. Default config directory is `<home>/.config/opencode`; `OPENCODE_CONFIG_DIR` overrides it, then `XDG_CONFIG_HOME/opencode` applies when `OPENCODE_CONFIG_DIR` is unset.
@@ -133,19 +133,19 @@ Git is a built-in tool, not an MCP server. Confirm Git CLI is available with `gi
 Update public plugin with native CMD on Windows or Bash on Linux:
 
 ```text
-opencode plugin -g @ahumandev/autocode@latest
+opencode plugin update @ahumandev/autocode@latest
 ```
 
 Restart OpenCode after update. It detects OS at startup and uses CMD for Windows agents or Bash for Linux agents.
 
 ### Uninstall
 
-Remove `@ahumandev/autocode` from [global OpenCode config](https://opencode.ai/docs/config/) `plugin` array, save config, and restart OpenCode. Default config directory is `<home>/.config/opencode`.
+Run `opencode plugin remove @ahumandev/autocode@latest`, or remove `@ahumandev/autocode` from the [global OpenCode V2 config](https://opencode.ai/v2/docs/config/) `plugins` array, then restart OpenCode. Default config directory is `<home>/.config/opencode`.
 
 ### Troubleshooting
 
 - Confirm `opencode --version` works; use `where opencode` in Windows CMD or `command -v opencode` in Linux Bash.
-- Confirm plugin install uses `opencode plugin -g @ahumandev/autocode@latest`.
+- Confirm `opencode plugin list` includes `@ahumandev/autocode`.
 - Confirm config directory. Note that `OPENCODE_CONFIG_DIR` overrides default opencode config directory.
 - Keep JSON or JSONC valid and preserve unrelated config.
 - Restart OpenCode after config or plugin changes, then run `/autocode-install`.

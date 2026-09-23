@@ -59,18 +59,6 @@ export async function validateFilePath(
         { searchSubdirs: options.existence !== "off" },
     )
 
-    if (existence !== "off") {
-        const isBareFilename = !input.includes("/") && !input.includes("\\")
-        if (existence === "always" || isBareFilename) {
-            try {
-                const s = await stat(absolutePath)
-                if (!s.isFile()) throw new Error("not a regular file")
-            } catch {
-                return { ok: false, response: createRetryResponse(failedAction, new Error(`file not found: ${input}`), "Provide a file_path that exists in the current working directory or use an absolute path.") }
-            }
-        }
-    }
-
     const cwd = options.context?.directory ?? process.cwd()
     const rel = relative(cwd, absolutePath)
     const isInsideCwd = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel)
@@ -83,6 +71,18 @@ export async function validateFilePath(
         } else {
             const auth = await authorizeExternalContentPath(context, absolutePath, failedAction)
             if (!auth.ok) return auth
+        }
+    }
+
+    if (existence !== "off") {
+        const isBareFilename = !input.includes("/") && !input.includes("\\")
+        if (existence === "always" || isBareFilename) {
+            try {
+                const s = await stat(absolutePath)
+                if (!s.isFile()) throw new Error("not a regular file")
+            } catch {
+                return { ok: false, response: createRetryResponse(failedAction, new Error(`file not found: ${input}`), "Provide a file_path that exists in the current working directory or use an absolute path.") }
+            }
         }
     }
 

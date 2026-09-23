@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import type { Dirent } from "node:fs"
+import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptReadTool } from "./autocode_concept_read"
-import { createToolContext } from "./test_context"
+import { createToolContext as baseCreateToolContext } from "./test_context"
+
+const workspace = path.resolve("/workspace")
+const createToolContext = (): ReturnType<typeof baseCreateToolContext> => baseCreateToolContext({ directory: workspace, worktree: workspace })
 
 function createMissingFileError(): NodeJS.ErrnoException {
     const error = new Error("missing") as NodeJS.ErrnoException
@@ -21,6 +25,7 @@ function createFile(name: string): Dirent {
 }
 
 describe("concept tools", () => {
+    const conceptsDir = path.join(workspace, ".agents", "concepts")
     test("creates concepts under .agents/concepts", async () => {
         const writes: Array<{ filePath: string, content: string }> = []
         const tool = createAutocodeConceptCreateTool({
@@ -44,14 +49,14 @@ describe("concept tools", () => {
         const result = await tool.execute({ label: "Checkout Flow", concept: "Body" }, createToolContext())
 
         expect(result).toBe(JSON.stringify({ label: "checkout_flow", file_path: ".agents/concepts/checkout_flow.md" }))
-        expect(writes[0]?.filePath).toBe("/workspace/.agents/concepts/checkout_flow.md")
+        expect(writes[0]?.filePath).toBe(path.join(conceptsDir, "checkout_flow.md"))
     })
 
     test("lists concepts from .agents/concepts only", async () => {
         const reads: string[] = []
         const tool = createAutocodeConceptListTool({
             async readdir(directory: string, _options: { withFileTypes: true }): Promise<Dirent[]> {
-                expect(directory).toBe("/workspace/.agents/concepts")
+                expect(directory).toBe(conceptsDir)
                 return [createFile("beta.md"), createFile("alpha.md")]
             },
             async readFile(filePath: string, _encoding: "utf8"): Promise<string> {
@@ -67,15 +72,15 @@ describe("concept tools", () => {
             ],
         }))
         expect(reads).toEqual([
-            "/workspace/.agents/concepts/alpha.md",
-            "/workspace/.agents/concepts/beta.md",
+            path.join(conceptsDir, "alpha.md"),
+            path.join(conceptsDir, "beta.md"),
         ])
     })
 
     test("reads a concept without changing workspace files", async () => {
         const tool = createAutocodeConceptReadTool({
             async readFile(filePath: string, _encoding: "utf8"): Promise<string> {
-                expect(filePath).toBe("/workspace/.agents/concepts/example.md")
+                expect(filePath).toBe(path.join(conceptsDir, "example.md"))
                 return "---\ntitle: Example\n---\n\n# Example\n\nBody"
             },
         })

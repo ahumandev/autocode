@@ -7,13 +7,17 @@ import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { bubblewrapProxyEnvNames } from "@/utils/autocode_sandbox_helpers"
 import type { SandboxDependencies, SandboxPaths } from "@/utils/sandbox"
-import { createAskEffect, createToolContext } from "./test_context"
+import { createAskEffect, createToolContext as baseCreateToolContext } from "./test_context"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
 import { createAutocodeSandboxDeleteTool } from "./autocode_sandbox_delete"
 import { createAutocodeSandboxCopyTool, createAutocodeSandboxEditTool, createAutocodeSandboxGlobTool, createAutocodeSandboxGrepTool, createAutocodeSandboxReadTool } from "./autocode_sandbox_file_tools"
 
 type FakeChild = EventEmitter & { stdout: EventEmitter & { setEncoding: (encoding: string) => void }, stderr: EventEmitter & { setEncoding: (encoding: string) => void }, pid: number, kill: ReturnType<typeof mock> }
+
+const workspace = path.resolve("workspace")
+const distroCache = path.resolve("cache", "distros")
+const createToolContext = (): ReturnType<typeof baseCreateToolContext> => baseCreateToolContext({ directory: workspace, worktree: workspace })
 
 function parseResult(result: string | { output: string }): Record<string, unknown> {
     return JSON.parse(typeof result === "string" ? result : result.output) as Record<string, unknown>
@@ -29,7 +33,7 @@ function dirent(name: string): Dirent {
     return { name, isDirectory: () => true, isFile: () => false } as Dirent
 }
 
-function createClient(title = "My Feature", directory = "/workspace"): OpencodeClient {
+function createClient(title = "My Feature", directory = workspace): OpencodeClient {
     return { session: { get: mock(async () => ({ data: { id: "session-1", title, directory } })) } } as unknown as OpencodeClient
 }
 
@@ -38,11 +42,11 @@ function createProjectToolContext(projectRoot: string): ReturnType<typeof create
 }
 
 function createSandboxPaths(projectRoot: string, jobName: string, sandboxName: string, workspaceName = `2026-08-20_10-30-00_${jobName}`): SandboxPaths {
-    const workspacePath = path.join(projectRoot, ".agents", "jobs", workspaceName)
+    const workspacePath = path.join(path.resolve(projectRoot), ".agents", "jobs", workspaceName)
     const jobSandboxRoot = path.join(workspacePath, "sandboxes")
     const sandboxPath = path.join(jobSandboxRoot, sandboxName)
     return {
-        storageRoot: projectRoot,
+        storageRoot: path.resolve(projectRoot),
         workspace: { job_name: jobName, job_path: `.agents/jobs/${workspaceName}/`, absolute_path: workspacePath },
         jobName,
         workspacePath,
@@ -62,7 +66,7 @@ function hasSetenvTriple(args: readonly string[], name: string, value: string): 
 }
 
 function createDeps(options?: { existing?: string[], files?: Record<string, string>, platform?: NodeJS.Platform, arch?: string, env?: NodeJS.ProcessEnv, commands?: Record<string, boolean>, fetchOk?: boolean, spawnExit?: number, commandExit?: Record<string, number> }): SandboxDependencies & { spawnProcess: ReturnType<typeof mock> } {
-    const existing = new Set(options?.existing ?? [])
+    const existing = new Set((options?.existing ?? []).map((entry) => entry.includes(".agents") ? path.resolve(entry) : entry))
     const files: Record<string, string> = { ...(options?.files ?? {}) }
     const deps = {
         fileSystem: {
@@ -74,7 +78,7 @@ function createDeps(options?: { existing?: string[], files?: Record<string, stri
                 if (filePath in files) return files[filePath]
                 throw missingError()
             }),
-            readdir: mock(async (filePath: string) => filePath === "/workspace/.agents/jobs" ? ["2026-08-20_10-30-00_my_feature"] : []),
+            readdir: mock(async (filePath: string) => filePath === path.join(workspace, ".agents", "jobs") ? ["2026-08-20_10-30-00_my_feature"] : []),
             rename: mock(async () => { }),
             rm: mock(async (filePath: string) => { existing.delete(filePath) }),
             stat: mock(async (filePath: string) => {
@@ -190,10 +194,10 @@ async function withSandboxFixture<T>(fn: (fixture: { projectRoot: string, paths:
 
 describe("autocode sandbox tools", () => {
     test("create reuses newest matching title workspace", async () => {
-        const olderPaths = createSandboxPaths("/workspace", "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
-        const newerPaths = createSandboxPaths("/workspace", "my_feature", "dev", "2026-08-20_10-30-00_my_feature")
+        const olderPaths = createSandboxPaths(workspace, "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
+        const newerPaths = createSandboxPaths(workspace, "my_feature", "dev", "2026-08-20_10-30-00_my_feature")
         const deps = createDeps({ commands: { bwrap: true } })
-        deps.fileSystem.readdir = mock(async (filePath: string) => filePath === "/workspace/.agents/jobs"
+        deps.fileSystem.readdir = mock(async (filePath: string) => filePath === path.join(workspace, ".agents", "jobs")
             ? [path.basename(olderPaths.workspacePath), path.basename(newerPaths.workspacePath)]
             : [])
         const tool = createAutocodeSandboxCreateTool(createClient("My Feature"), deps)
@@ -206,16 +210,16 @@ describe("autocode sandbox tools", () => {
     })
 
     test("create and delete fall back to matching title workspace without mutating foreign sandbox", async () => {
-        const olderPaths = createSandboxPaths("/workspace", "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const foreignPaths = createSandboxPaths("/workspace", "other_feature", "dev", "2026-08-21_10-30-00_other_feature")
+        const olderPaths = createSandboxPaths(workspace, "my_feature", "dev", "2026-08-19_10-30-00_my_feature")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
+        const foreignPaths = createSandboxPaths(workspace, "other_feature", "dev", "2026-08-21_10-30-00_other_feature")
         const deps = createDeps({
             existing: [foreignPaths.jobSandboxRoot, foreignPaths.sandboxPath],
             files: { [foreignPaths.metadataFile]: createBubblewrapMetadata(foreignPaths) },
             commands: { bwrap: true },
         })
         deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => {
-            if (filePath === "/workspace/.agents/jobs") {
+            if (filePath === path.join(workspace, ".agents", "jobs")) {
                 return [path.basename(olderPaths.workspacePath), path.basename(paths.workspacePath), path.basename(foreignPaths.workspacePath)]
             }
             if (filePath === paths.jobSandboxRoot && options?.withFileTypes) return []
@@ -232,12 +236,12 @@ describe("autocode sandbox tools", () => {
         expect(deps.fileSystem.rm).not.toHaveBeenCalledWith(foreignPaths.sandboxPath, expect.anything())
         expect(deps.spawnProcess).not.toHaveBeenCalled()
         const readdirCalls = (deps.fileSystem.readdir as ReturnType<typeof mock>).mock.calls as unknown[][]
-        expect(readdirCalls.map((call) => String(call[0]))).not.toContain("/workspace/.agents/sandboxes")
+        expect(readdirCalls.map((call) => String(call[0]))).not.toContain(path.join(workspace, ".agents", "sandboxes"))
         expect(readdirCalls.map((call) => String(call[0]))).not.toContain(foreignPaths.jobSandboxRoot)
     })
 
     test("create refuses existing sandbox overwrite", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: [paths.sandboxPath], files: { [paths.metadataFile]: createBubblewrapMetadata(paths) } })
         const tool = createAutocodeSandboxCreateTool(createClient(), deps)
 
@@ -249,7 +253,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("create repairs stale sandbox directory without metadata", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: [paths.sandboxPath], commands: { bwrap: true } })
         const tool = createAutocodeSandboxCreateTool(createClient(), deps)
 
@@ -279,7 +283,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("create defaults omitted distro and internet_enabled to quick offline mode", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ commands: { bwrap: true } })
         const tool = createAutocodeSandboxCreateTool(createClient(), deps)
 
@@ -290,15 +294,15 @@ describe("autocode sandbox tools", () => {
         expect(deps.fetch).not.toHaveBeenCalled()
         expect(deps.spawn).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--die-with-parent", "--unshare-all", "--new-session", "--proc", "/proc", "/bin/sh", "-lc", "true"]), expect.any(Object))
         expect(deps.fileSystem.mkdir).toHaveBeenCalledWith(paths.sandboxPath, { recursive: true })
-        expect(deps.fileSystem.mkdir).toHaveBeenCalledWith(`${paths.sandboxPath}/home/root`, { recursive: true })
+        expect(deps.fileSystem.mkdir).toHaveBeenCalledWith(path.join(paths.sandboxPath, "home", "root"), { recursive: true })
         expect(deps.fileSystem.writeFile).toHaveBeenCalledWith(paths.metadataFile, expect.stringContaining('"backend": "bubblewrap"'))
         const metadata = getMetadataWrite(deps, paths.metadataFile)
         expect(metadata).toEqual(expect.objectContaining({ sandbox_name: "dev", job_name: "my_feature", distro: "quick", backend: "bubblewrap", root_path: paths.sandboxPath, created_at: expect.any(String), updated_at: expect.any(String), backend_data: expect.objectContaining({ bwrap: "bwrap", internet_enabled: false, distro_mode: "quick", filesystem_mode: "quick", requested_sync_method: "auto" }) }))
     })
 
     test("blank distro uses quick mode with host read-only binds and writable sandbox/home", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const deps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, "/bin", "/usr", "/lib", "/etc/passwd"], commands: { bwrap: true } })
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
+        const deps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), "/bin", "/usr", "/lib", "/etc/passwd"], commands: { bwrap: true } })
         const tool = createAutocodeSandboxCreateTool(createClient(), deps)
 
         const created = parseResult(await tool.execute({ sandbox_name: "dev", distro: "   " }, createToolContext()))
@@ -307,16 +311,16 @@ describe("autocode sandbox tools", () => {
 
         expect(created).toEqual(expect.objectContaining({ ok: true, distro: "quick", filesystem_mode: "quick" }))
         expect(result.status).toBe("completed")
-        expect(deps.spawnProcess).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--ro-bind", "/bin", "/bin", "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib", "--dir", "/etc", "--ro-bind", "/etc/passwd", "/etc/passwd", "--bind", paths.sandboxPath, "/sandbox", "--bind", `${paths.sandboxPath}/home`, "/home"]), expect.any(Object))
+        expect(deps.spawnProcess).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--ro-bind", "/bin", "/bin", "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib", "--dir", "/etc", "--ro-bind", "/etc/passwd", "/etc/passwd", "--bind", paths.sandboxPath, "/sandbox", "--bind", path.join(paths.sandboxPath, "home"), "/home"]), expect.any(Object))
         expect(JSON.stringify(deps.spawnProcess.mock.calls[0]?.[1])).not.toContain("--bind,/bin,/")
     })
 
     test("optional quick bind tolerates broken symlink reported by lstat", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const deps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, "/bin", "/etc/passwd"], commands: { bwrap: true } })
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
+        const deps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), "/bin", "/etc/passwd"], commands: { bwrap: true } })
         deps.fileSystem.stat = mock(async (filePath: string) => {
             if (filePath === "/etc/passwd") throw missingError()
-            if ([paths.sandboxPath, `${paths.sandboxPath}/home`, "/bin"].includes(filePath)) return { mtimeMs: 1 }
+            if ([paths.sandboxPath, path.join(paths.sandboxPath, "home"), "/bin"].includes(filePath)) return { mtimeMs: 1 }
             throw missingError()
         })
         const tool = createAutocodeSandboxCreateTool(createClient(), deps)
@@ -330,26 +334,26 @@ describe("autocode sandbox tools", () => {
 
     test("nonblank alpine and debian distro create rootfs metadata and CLI binds rootfs instead of host OS", async () => {
         for (const distro of ["alpine", "debian"]) {
-            const paths = createSandboxPaths("/workspace", "my_feature", `dev_${distro}`)
+            const paths = createSandboxPaths(workspace, "my_feature", `dev_${distro}`)
             const deps = createDeps({ commands: { bwrap: true, xz: true, skopeo: true, umoci: true }, arch: "x64" })
-            const tool = createAutocodeSandboxCreateTool(createClient(), deps, { distro_cache_path: "/cache/distros", sync_method: "copy" })
+            const tool = createAutocodeSandboxCreateTool(createClient(), deps, { distro_cache_path: distroCache, sync_method: "copy" })
 
             const created = parseResult(await tool.execute({ sandbox_name: `dev_${distro}`, distro }, createToolContext()))
             const metadata = getMetadataWrite(deps, paths.metadataFile)
             const cli = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
             await cli.execute({ sandbox_name: `dev_${distro}`, command: "cat /etc/os-release" }, createToolContext())
 
-            expect(created).toEqual(expect.objectContaining({ ok: true, distro, filesystem_mode: "rootfs", rootfs_path: `${paths.sandboxPath}/rootfs`, cache_entry_path: expect.stringContaining(`/cache/distros/${distro}/x86_64/`), effective_sync_method: "copy" }))
-            expect(metadata).toEqual(expect.objectContaining({ distro, backend_data: expect.objectContaining({ distro_mode: "rootfs", filesystem_mode: "rootfs", rootfs_path: `${paths.sandboxPath}/rootfs`, cache_entry_path: expect.stringContaining(`/cache/distros/${distro}/x86_64/`), cache_rootfs_path: expect.stringContaining(`/cache/distros/${distro}/x86_64/`), requested_sync_method: "copy", effective_sync_method: "copy" }) }))
+            expect(created).toEqual(expect.objectContaining({ ok: true, distro, filesystem_mode: "rootfs", rootfs_path: path.join(paths.sandboxPath, "rootfs"), cache_entry_path: expect.stringContaining(path.join(distroCache, distro, "x86_64") + path.sep), effective_sync_method: "copy" }))
+            expect(metadata).toEqual(expect.objectContaining({ distro, backend_data: expect.objectContaining({ distro_mode: "rootfs", filesystem_mode: "rootfs", rootfs_path: path.join(paths.sandboxPath, "rootfs"), cache_entry_path: expect.stringContaining(path.join(distroCache, distro, "x86_64") + path.sep), cache_rootfs_path: expect.stringContaining(path.join(distroCache, distro, "x86_64") + path.sep), requested_sync_method: "copy", effective_sync_method: "copy" }) }))
             const cliArgs = deps.spawnProcess.mock.calls[0]?.[1] as string[]
-            expect(cliArgs).toEqual(expect.arrayContaining(["--bind", `${paths.sandboxPath}/rootfs`, "/", "--bind", paths.sandboxPath, "/sandbox"]))
+            expect(cliArgs).toEqual(expect.arrayContaining(["--bind", path.join(paths.sandboxPath, "rootfs"), "/", "--bind", paths.sandboxPath, "/sandbox"]))
             expect(cliArgs).not.toEqual(expect.arrayContaining(["--ro-bind", "/bin", "/bin"]))
             expect(cliArgs).not.toEqual(expect.arrayContaining(["--ro-bind", "/usr", "/usr"]))
         }
     })
 
     test("internet_enabled true validates endpoints through sandbox network and removes storage on failure", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: ["/bin", "/usr", "/etc/resolv.conf"], commands: { bwrap: true } })
         deps.spawn = mock(async (command: string, args: readonly string[]) => {
             if (command === "bwrap" && args.at(-1) === "true") return { exitCode: 0, stdout: "out", stderr: "err" }
@@ -388,7 +392,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("internet_enabled true succeeds when GitHub fails but npm validates", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: ["/bin", "/usr", "/etc/resolv.conf"], commands: { bwrap: true } })
         deps.spawn = mock(async (command: string, args: readonly string[]) => {
             if (command === "bwrap" && args.at(-1) === "true") return { exitCode: 0, stdout: "out", stderr: "err" }
@@ -408,7 +412,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("internet_enabled true succeeds when HTTPS endpoints fail but HTTP fallback validates", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: ["/bin", "/usr", "/etc/resolv.conf"], commands: { bwrap: true } })
         deps.spawn = mock(async (command: string, args: readonly string[]) => {
             if (command === "bwrap" && args.at(-1) === "true") return { exitCode: 0, stdout: "out", stderr: "err" }
@@ -431,7 +435,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("internet validation failure preserves diagnostics when cleanup rm throws", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: ["/bin", "/usr", "/etc/resolv.conf"], commands: { bwrap: true } })
         deps.spawn = mock(async (command: string, args: readonly string[]) => {
             if (command === "bwrap" && args.at(-1) === "true") return { exitCode: 0, stdout: "out", stderr: "err" }
@@ -449,7 +453,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("internet validation failure reports skipped cleanup when rm is unavailable", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: ["/bin", "/usr", "/etc/resolv.conf"], commands: { bwrap: true } })
         deps.spawn = mock(async (command: string, args: readonly string[]) => {
             if (command === "bwrap" && args.at(-1) === "true") return { exitCode: 0, stdout: "out", stderr: "err" }
@@ -466,7 +470,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("internet_enabled true persists metadata after successful validation", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: ["/etc/ssl", "/etc/ssl/certs/ca-certificates.crt"], commands: { bwrap: true } })
         const tool = createAutocodeSandboxCreateTool(createClient(), deps)
 
@@ -482,21 +486,21 @@ describe("autocode sandbox tools", () => {
 
     test("Debian OCI rootfs pulls and unpacks on host before internet validation bwrap", async () => {
         const events: string[] = []
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ commands: { bwrap: true, skopeo: true, umoci: true }, arch: "x64" })
         deps.spawn = mock(async (command: string, args: readonly string[]) => {
             if (command === "skopeo") events.push("skopeo")
             if (command === "umoci") {
                 events.push("umoci")
                 const rootfsPath = path.join(String(args.at(-1)), "rootfs")
-                const rootfsEntryExists = mock(async (filePath: string) => filePath === path.join(rootfsPath, "bin", "sh") || filePath === paths.sandboxPath || filePath === `${paths.sandboxPath}/rootfs` ? { mtimeMs: 1 } : Promise.reject(missingError()))
+                const rootfsEntryExists = mock(async (filePath: string) => filePath === path.join(rootfsPath, "bin", "sh") || filePath === paths.sandboxPath || filePath === path.join(paths.sandboxPath, "rootfs") ? { mtimeMs: 1 } : Promise.reject(missingError()))
                 deps.fileSystem.stat = rootfsEntryExists
                 deps.fileSystem.lstat = rootfsEntryExists
             }
             if (command === "bwrap" && args.some((arg) => arg.includes("https://github.com"))) events.push("validation-bwrap")
             return { exitCode: 0, stdout: "out", stderr: "err" }
         })
-        const tool = createAutocodeSandboxCreateTool(createClient(), deps, { distro_cache_path: "/cache/distros", sync_method: "copy" })
+        const tool = createAutocodeSandboxCreateTool(createClient(), deps, { distro_cache_path: distroCache, sync_method: "copy" })
 
         const result = parseResult(await tool.execute({ sandbox_name: "dev", distro: "debian", internet_enabled: true }, createToolContext()))
         const metadata = getMetadataWrite(deps, paths.metadataFile)
@@ -509,9 +513,9 @@ describe("autocode sandbox tools", () => {
     })
 
     test("rootfs internet validation binds existing host CA and network config only", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: ["/etc/resolv.conf", "/etc/nsswitch.conf", "/etc/hosts", "/etc/ssl", "/etc/ssl/certs/ca-certificates.crt"], commands: { bwrap: true, xz: true }, arch: "x64", env: { HTTP_PROXY: "http://localhost:1234" } })
-        const tool = createAutocodeSandboxCreateTool(createClient(), deps, { distro_cache_path: "/cache/distros", sync_method: "copy" })
+        const tool = createAutocodeSandboxCreateTool(createClient(), deps, { distro_cache_path: distroCache, sync_method: "copy" })
 
         const result = parseResult(await tool.execute({ sandbox_name: "dev", distro: "alpine", internet_enabled: true }, createToolContext()))
 
@@ -524,7 +528,7 @@ describe("autocode sandbox tools", () => {
         expect(hasBindTriple(validationArgs, "--ro-bind", "/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/certs/ca-certificates.crt")).toBe(true)
         expect(hasBindTriple(validationArgs, "--ro-bind", "/etc/pki", "/etc/pki")).toBe(false)
         expect(hasBindTriple(validationArgs, "--ro-bind", "/etc/ca-certificates", "/etc/ca-certificates")).toBe(false)
-        expect(hasBindTriple(validationArgs, "--bind", `${paths.sandboxPath}/rootfs`, "/")).toBe(true)
+        expect(hasBindTriple(validationArgs, "--bind", path.join(paths.sandboxPath, "rootfs"), "/")).toBe(true)
         expect(validationArgs).toEqual(expect.arrayContaining(["--setenv", "HTTP_PROXY", "http://localhost:1234"]))
     })
 
@@ -545,7 +549,10 @@ describe("autocode sandbox tools", () => {
         const result = parseResult(await tool.execute({ sandbox_name: "dev", distro: "alpine" }, createToolContext()))
 
         expect(result).toEqual(expect.objectContaining({ ok: true, status: "created", job_name: "my_feature", sandbox_name: "dev" }))
-        expect(String(result.sandbox_path)).toMatch(/^\/workspace\/\.agents\/jobs\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature\/sandboxes\/dev$/)
+        expect(path.basename(String(result.sandbox_path))).toBe("dev")
+        expect(path.basename(path.dirname(String(result.sandbox_path)))).toBe("sandboxes")
+        expect(path.basename(path.dirname(path.dirname(String(result.sandbox_path))))).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature$/)
+        expect(path.dirname(path.dirname(path.dirname(String(result.sandbox_path))))).toBe(path.join(workspace, ".agents", "jobs"))
     })
 
     test("create reports unsupported on macOS or bwrap probe failure", async () => {
@@ -558,9 +565,9 @@ describe("autocode sandbox tools", () => {
     })
 
     test("cli validates sandbox, metadata, arguments, lock, result, and bubblewrap command", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const metadata = createBubblewrapMetadata(paths, { bwrap: "/tmp/evil" })
-        const deps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, "/bin", "/usr"], files: { [paths.metadataFile]: metadata }, commands: { bwrap: true } })
+        const deps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), "/bin", "/usr"], files: { [paths.metadataFile]: metadata }, commands: { bwrap: true } })
         const tool = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
 
         expect(parseResult(await tool.execute({ sandbox_name: "dev", command: "pwd", working_dir: "relative" }, createToolContext())).error).toContain("working_dir")
@@ -570,30 +577,30 @@ describe("autocode sandbox tools", () => {
         const result = parseResult(await tool.execute({ sandbox_name: "dev", command: "pwd", working_dir: "/", timeout: 1000 }, createToolContext()))
 
         expect(result).toEqual(expect.objectContaining({ status: "completed", stdout: "stdout", stderr: "stderr", output: "stdoutstderr", exit_code: 0, timed_out: false, success: true }))
-        expect(deps.spawnProcess).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--die-with-parent", "--unshare-all", "--new-session", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", "/home", "--dir", "/sandbox", "--bind", paths.sandboxPath, "/sandbox", "--bind", `${paths.sandboxPath}/home`, "/home", "--chdir", "/", "/bin/sh", "-lc", "pwd"]), expect.any(Object))
+        expect(deps.spawnProcess).toHaveBeenCalledWith("bwrap", expect.arrayContaining(["--die-with-parent", "--unshare-all", "--new-session", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", "/home", "--dir", "/sandbox", "--bind", paths.sandboxPath, "/sandbox", "--bind", path.join(paths.sandboxPath, "home"), "/home", "--chdir", "/", "/bin/sh", "-lc", "pwd"]), expect.any(Object))
         const cliArgs = deps.spawnProcess.mock.calls[0]?.[1] as string[]
-        expect(hasBindTriple(cliArgs, "--ro-bind", "/workspace", "/workspace")).toBe(true)
-        expect(hasBindTriple(cliArgs, "--bind", "/workspace", "/workspace")).toBe(false)
+        expect(hasBindTriple(cliArgs, "--ro-bind", workspace, "/workspace")).toBe(true)
+        expect(hasBindTriple(cliArgs, "--bind", workspace, "/workspace")).toBe(false)
         expect(deps.spawnProcess.mock.calls[0]?.[0]).toBe("bwrap")
         expect(JSON.stringify(deps.spawnProcess.mock.calls)).not.toContain("proot")
     })
 
     test("rootfs CLI binds project root read-only at /workspace", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const deps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, `${paths.sandboxPath}/rootfs`], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", rootfs_path: `${paths.sandboxPath}/rootfs`, filesystem_mode: "rootfs" }) }, commands: { bwrap: true } })
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
+        const deps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), path.join(paths.sandboxPath, "rootfs")], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", rootfs_path: path.join(paths.sandboxPath, "rootfs"), filesystem_mode: "rootfs" }) }, commands: { bwrap: true } })
         const tool = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
 
         await tool.execute({ sandbox_name: "dev", command: "pwd" }, createToolContext())
 
         const cliArgs = deps.spawnProcess.mock.calls[0]?.[1] as string[]
-        expect(hasBindTriple(cliArgs, "--ro-bind", "/workspace", "/workspace")).toBe(true)
-        expect(hasBindTriple(cliArgs, "--bind", "/workspace", "/workspace")).toBe(false)
-        expect(hasBindTriple(cliArgs, "--bind", `${paths.sandboxPath}/rootfs`, "/")).toBe(true)
+        expect(hasBindTriple(cliArgs, "--ro-bind", workspace, "/workspace")).toBe(true)
+        expect(hasBindTriple(cliArgs, "--bind", workspace, "/workspace")).toBe(false)
+        expect(hasBindTriple(cliArgs, "--bind", path.join(paths.sandboxPath, "rootfs"), "/")).toBe(true)
     })
 
     test("rootfs CLI runtime internet binds existing host CA and network config only", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const deps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, `${paths.sandboxPath}/rootfs`, "/etc/resolv.conf", "/etc/hosts", "/etc/ssl"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", rootfs_path: `${paths.sandboxPath}/rootfs`, filesystem_mode: "rootfs", internet_enabled: true }) }, commands: { bwrap: true } })
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
+        const deps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), path.join(paths.sandboxPath, "rootfs"), "/etc/resolv.conf", "/etc/hosts", "/etc/ssl"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", rootfs_path: path.join(paths.sandboxPath, "rootfs"), filesystem_mode: "rootfs", internet_enabled: true }) }, commands: { bwrap: true } })
         const tool = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
 
         await tool.execute({ sandbox_name: "dev", command: "pwd" }, createToolContext())
@@ -607,10 +614,10 @@ describe("autocode sandbox tools", () => {
     })
 
     test("CLI runtime gates host proxy env by metadata internet_enabled", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const proxyEnv = Object.fromEntries(bubblewrapProxyEnvNames.map((name) => [name, `http://localhost/${name}`])) as NodeJS.ProcessEnv
-        const offlineDeps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, "/bin", "/usr"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", internet_enabled: false }) }, commands: { bwrap: true }, env: proxyEnv })
-        const onlineDeps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, "/bin", "/usr"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", internet_enabled: true }) }, commands: { bwrap: true }, env: proxyEnv })
+        const offlineDeps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), "/bin", "/usr"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", internet_enabled: false }) }, commands: { bwrap: true }, env: proxyEnv })
+        const onlineDeps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), "/bin", "/usr"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", internet_enabled: true }) }, commands: { bwrap: true }, env: proxyEnv })
         const offlineTool = createAutocodeSandboxCliTool(createClient(), offlineDeps as Parameters<typeof createAutocodeSandboxCliTool>[1])
         const onlineTool = createAutocodeSandboxCliTool(createClient(), onlineDeps as Parameters<typeof createAutocodeSandboxCliTool>[1])
 
@@ -673,21 +680,31 @@ describe("autocode sandbox tools", () => {
         expect(grepped).toEqual([expect.objectContaining({ path: "src/a.ts", line: 1, column: 1, text: "needle a" }), expect.objectContaining({ path: "src/b.ts", line: 2, column: 1, text: "needle b" })])
     }))
 
-    test("file tools reject unsafe paths and symlink traversal outside sandbox", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
-        await writeFile(path.join(projectRoot, "outside.txt"), "outside")
-        await symlink(path.join(projectRoot, "outside.txt"), path.join(paths.sandboxPath, "escape"))
+    test("file tools reject unsafe paths", async () => withSandboxFixture(async ({ deps, client, context }) => {
         const readTool = createAutocodeSandboxReadTool(client, deps)
-        const editTool = createAutocodeSandboxEditTool(client, deps)
 
         for (const [value, error] of [
             ["", "path must be a non-empty relative path."],
             ["bad\0path", "path must not contain NUL bytes."],
-            ["/absolute", "path must be relative."],
+            [path.join(path.parse(process.cwd()).root, "absolute"), "path must be relative."],
             ["../escape", "path must not escape its root."],
             ["workspace/file", "path must not target /workspace; /workspace is a read-only CLI mount only."],
         ]) {
             expect(parseResult(await readTool.execute({ sandbox_name: "dev", path: value }, context)).error).toBe(error)
         }
+    }))
+
+    test("file tools reject symlink traversal outside sandbox when symlinks are available", async () => withSandboxFixture(async ({ projectRoot, paths, deps, client, context }) => {
+        await writeFile(path.join(projectRoot, "outside.txt"), "outside")
+        try {
+            await symlink(path.join(projectRoot, "outside.txt"), path.join(paths.sandboxPath, "escape"))
+        } catch (error) {
+            if (["EPERM", "EACCES", "ENOTSUP", "ENOSYS", "EINVAL"].includes((error as NodeJS.ErrnoException).code ?? "")) return
+            throw error
+        }
+        const readTool = createAutocodeSandboxReadTool(client, deps)
+        const editTool = createAutocodeSandboxEditTool(client, deps)
+
         expect(parseResult(await readTool.execute({ sandbox_name: "dev", path: "escape" }, context)).error).toContain("Symlink")
         expect(parseResult(await editTool.execute({ sandbox_name: "dev", path: "escape", oldString: "outside", newString: "inside" }, context)).error).toContain("Symlink")
         expect(await realpath(path.join(paths.sandboxPath, "escape"))).toBe(path.join(projectRoot, "outside.txt"))
@@ -820,9 +837,9 @@ describe("autocode sandbox tools", () => {
     }))
 
     test("cli network mode comes only from metadata and schema has no per-run network option", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const offlineDeps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, "/bin", "/usr"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", internet_enabled: false }) }, commands: { bwrap: true } })
-        const onlineDeps = createDeps({ existing: [paths.sandboxPath, `${paths.sandboxPath}/home`, "/bin", "/usr"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", internet_enabled: true }) }, commands: { bwrap: true } })
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
+        const offlineDeps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), "/bin", "/usr"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", internet_enabled: false }) }, commands: { bwrap: true } })
+        const onlineDeps = createDeps({ existing: [paths.sandboxPath, path.join(paths.sandboxPath, "home"), "/bin", "/usr"], files: { [paths.metadataFile]: createBubblewrapMetadata(paths, { bwrap: "bwrap", internet_enabled: true }) }, commands: { bwrap: true } })
         const offlineTool = createAutocodeSandboxCliTool(createClient(), offlineDeps as Parameters<typeof createAutocodeSandboxCliTool>[1])
         const onlineTool = createAutocodeSandboxCliTool(createClient(), onlineDeps as Parameters<typeof createAutocodeSandboxCliTool>[1])
 
@@ -835,7 +852,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("cli requires sandbox metadata", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: [paths.sandboxPath] })
         const tool = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
 
@@ -845,7 +862,7 @@ describe("autocode sandbox tools", () => {
     test("create creates title-derived workspace when no workspace exists", async () => {
         const deps = createDeps({ commands: { bwrap: true } })
         deps.fileSystem.readdir = mock(async (filePath: string) => {
-            if (filePath === "/workspace/.agents/jobs") return []
+            if (filePath === path.join(workspace, ".agents", "jobs")) return []
             return []
         })
         const tool = createAutocodeSandboxCreateTool(createClient("My Feature"), deps)
@@ -853,19 +870,22 @@ describe("autocode sandbox tools", () => {
         const result = parseResult(await tool.execute({ sandbox_name: "dev" }, createToolContext()))
 
         expect(result).toEqual(expect.objectContaining({ ok: true, status: "created", job_name: "my_feature", sandbox_name: "dev" }))
-        expect(String(result.sandbox_path)).toMatch(/^\/workspace\/\.agents\/jobs\/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature\/sandboxes\/dev$/)
+        expect(path.basename(String(result.sandbox_path))).toBe("dev")
+        expect(path.basename(path.dirname(String(result.sandbox_path)))).toBe("sandboxes")
+        expect(path.basename(path.dirname(path.dirname(String(result.sandbox_path))))).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_my_feature$/)
+        expect(path.dirname(path.dirname(path.dirname(String(result.sandbox_path))))).toBe(path.join(workspace, ".agents", "jobs"))
     })
 
     test("cli isolates duplicate sandbox names to title-derived workspace", async () => {
-        const firstPaths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const secondPaths = createSandboxPaths("/workspace", "other_feature", "dev")
+        const firstPaths = createSandboxPaths(workspace, "my_feature", "dev")
+        const secondPaths = createSandboxPaths(workspace, "other_feature", "dev")
         const deps = createDeps({
-            existing: [firstPaths.sandboxPath, `${firstPaths.sandboxPath}/home`, secondPaths.sandboxPath, `${secondPaths.sandboxPath}/home`, "/bin", "/usr"],
+            existing: [firstPaths.sandboxPath, path.join(firstPaths.sandboxPath, "home"), secondPaths.sandboxPath, path.join(secondPaths.sandboxPath, "home"), "/bin", "/usr"],
             files: { [firstPaths.metadataFile]: createBubblewrapMetadata(firstPaths), [secondPaths.metadataFile]: createBubblewrapMetadata(secondPaths) },
             commands: { bwrap: true },
         })
         deps.fileSystem.readdir = mock(async (filePath: string) => {
-            if (filePath === "/workspace/.agents/jobs") return ["2026-08-20_10-30-00_my_feature", "2026-08-20_10-30-00_other_feature"]
+            if (filePath === path.join(workspace, ".agents", "jobs")) return ["2026-08-20_10-30-00_my_feature", "2026-08-20_10-30-00_other_feature"]
             return []
         })
         const tool = createAutocodeSandboxCliTool(createClient("Other Feature"), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
@@ -879,8 +899,8 @@ describe("autocode sandbox tools", () => {
     })
 
     test("cli times out, falls back to child kill, and releases lock", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const lockPath = `${paths.sandboxPath}/.autocode_run_lock`
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
+        const lockPath = path.join(paths.sandboxPath, ".autocode_run_lock")
         const metadata = createBubblewrapMetadata(paths)
         const deps = createDeps({ existing: [paths.sandboxPath], files: { [paths.metadataFile]: metadata }, commands: { bwrap: true } })
         const child = new EventEmitter() as FakeChild
@@ -918,7 +938,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("cli defaults working dir, reports busy lock, and builds bubblewrap command", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const metadata = createBubblewrapMetadata(paths)
         const deps = createDeps({ existing: [paths.sandboxPath], files: { [paths.metadataFile]: metadata }, commands: { bwrap: true } })
         const tool = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
@@ -938,7 +958,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("cli rejects legacy sandbox metadata without spawning", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: [paths.sandboxPath], files: { [paths.metadataFile]: JSON.stringify({ sandbox_name: "dev", job_name: "my_feature", distro: "alpine", backend: "manual_proot", root_path: paths.sandboxPath }) } })
         const tool = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
 
@@ -949,7 +969,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("cli validates bubblewrap usability before spawning", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: [paths.sandboxPath], files: { [paths.metadataFile]: createBubblewrapMetadata(paths) } })
         const tool = createAutocodeSandboxCliTool(createClient(), deps as Parameters<typeof createAutocodeSandboxCliTool>[1])
 
@@ -960,11 +980,11 @@ describe("autocode sandbox tools", () => {
     })
 
     test("delete removes all current-job bubblewrap sandboxes idempotently", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: [paths.jobSandboxRoot, paths.sandboxPath], commands: { "proot-distro": true }, files: { [paths.metadataFile]: createBubblewrapMetadata(paths) } })
         let jobRootEntries = [dirent("dev")]
         deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => {
-            if (filePath === "/workspace/.agents/jobs") return ["2026-08-20_10-30-00_my_feature"]
+            if (filePath === path.join(workspace, ".agents", "jobs")) return ["2026-08-20_10-30-00_my_feature"]
             if (filePath === paths.jobSandboxRoot && options?.withFileTypes) {
                 const entries = jobRootEntries
                 jobRootEntries = []
@@ -985,8 +1005,8 @@ describe("autocode sandbox tools", () => {
     })
 
     test("named delete affects resolved owner only when jobs share sandbox name", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
-        const otherPaths = createSandboxPaths("/workspace", "other_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
+        const otherPaths = createSandboxPaths(workspace, "other_feature", "dev")
         const existing = new Set([paths.jobSandboxRoot, paths.sandboxPath, otherPaths.jobSandboxRoot, otherPaths.sandboxPath])
         const deps = createDeps({ files: { [paths.metadataFile]: createBubblewrapMetadata(paths) } })
         deps.fileSystem.rm = mock(async (filePath: string) => { existing.delete(filePath) })
@@ -995,7 +1015,7 @@ describe("autocode sandbox tools", () => {
             throw missingError()
         })
         deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => {
-            if (filePath === "/workspace/.agents/jobs") return ["2026-08-20_10-30-00_my_feature", "2026-08-20_10-30-00_other_feature"]
+            if (filePath === path.join(workspace, ".agents", "jobs")) return ["2026-08-20_10-30-00_my_feature", "2026-08-20_10-30-00_other_feature"]
             if (filePath === paths.jobSandboxRoot && options?.withFileTypes) return []
             return []
         })
@@ -1011,7 +1031,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("named delete removes job sandbox root when last sandbox is deleted", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const existing = new Set([paths.jobSandboxRoot, paths.sandboxPath])
         const deps = createDeps({ files: { [paths.metadataFile]: createBubblewrapMetadata(paths) } })
         deps.fileSystem.rm = mock(async (filePath: string) => { existing.delete(filePath) })
@@ -1020,7 +1040,7 @@ describe("autocode sandbox tools", () => {
             throw missingError()
         })
         deps.fileSystem.readdir = mock(async (filePath: string, options?: { withFileTypes?: boolean }) => {
-            if (filePath === "/workspace/.agents/jobs") return ["2026-08-20_10-30-00_my_feature"]
+            if (filePath === path.join(workspace, ".agents", "jobs")) return ["2026-08-20_10-30-00_my_feature"]
             if (filePath === paths.jobSandboxRoot && options?.withFileTypes) return []
             return []
         })
@@ -1034,7 +1054,7 @@ describe("autocode sandbox tools", () => {
     })
 
     test("delete warns and removes legacy metadata storage without spawning", async () => {
-        const paths = createSandboxPaths("/workspace", "my_feature", "dev")
+        const paths = createSandboxPaths(workspace, "my_feature", "dev")
         const deps = createDeps({ existing: [paths.sandboxPath], commands: { "proot-distro": true }, files: { [paths.metadataFile]: JSON.stringify({ sandbox_name: "dev", job_name: "my_feature", distro: "alpine", backend: "termux_proot_distro", root_path: paths.sandboxPath }) } })
         const tool = createAutocodeSandboxDeleteTool(createClient(), deps)
 

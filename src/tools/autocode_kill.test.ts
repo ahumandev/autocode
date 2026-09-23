@@ -84,6 +84,8 @@ const defaultSsLines = [
     "LISTEN 0 511 127.0.0.1:65535 0.0.0.0:* users:((\"node\",pid=65535,fd=22))",
 ]
 
+const projectRoot = path.resolve("workspace", "project")
+
 function parseResult(result: string): AutocodeKillResult {
     return JSON.parse(result) as AutocodeKillResult
 }
@@ -124,7 +126,7 @@ function executeAutocodeKill(tool: ReturnType<typeof createAutocodeKillTool>, ar
 
 function createDeps(projectRoot: string, entries: Record<string, FakeEntry>, options: CreateDepsOptions = {}): TestAutocodeKillDependencies {
     const fakeEntries: Record<string, FakeEntry> = { ...entries }
-    const relativeEntryPath = (filePath: string): string => path.relative(projectRoot, filePath)
+    const relativeEntryPath = (filePath: string): string => path.relative(path.resolve(projectRoot), filePath).split(path.sep).join("/")
     const hasEntry = (entryPath: string): boolean => entryPath in fakeEntries || Object.keys(fakeEntries).some((candidatePath: string): boolean => candidatePath.startsWith(`${entryPath}/`))
     const fileSystem = {
         readFile: mock(async (filePath: string): Promise<string> => fakeEntries[relativeEntryPath(filePath)]?.content ?? ""),
@@ -202,7 +204,6 @@ describe("autocode_kill", () => {
     })
 
     test("returns abort when current platform is unsupported", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {}, { platform: "darwin" })
 
         const text = await runAutocodeKill({}, { cwd: projectRoot }, deps)
@@ -223,7 +224,6 @@ describe("autocode_kill", () => {
     })
 
     test("returns abort when required Linux commands are missing", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {}, { commandExists: false })
 
         const text = await runAutocodeKill({}, { cwd: projectRoot }, deps)
@@ -243,7 +243,6 @@ describe("autocode_kill", () => {
     })
 
     test("lists config-backed candidates without killing processes", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {
             "application.yml": { type: "file", content: "port: 3000\n" },
             "application.yaml": { type: "file", content: "api: http://localhost:9000\n" },
@@ -289,14 +288,14 @@ describe("autocode_kill", () => {
         expect(candidates.map((candidate) => candidate.port)).toEqual([3000, 3000, 4321, 5173, 5173, 8080, 8080, 9000, 11111])
         expect(candidates.map((candidate) => candidate.config_file)).toEqual([
             "application.yml",
-            "config/package.json",
-            "config/settings.conf",
-            "config/.env",
-            "config/package.jsonc",
-            "config/server.ts",
-            "config/service.yml",
+            path.join("config", "package.json"),
+            path.join("config", "settings.conf"),
+            path.join("config", ".env"),
+            path.join("config", "package.jsonc"),
+            path.join("config", "server.ts"),
+            path.join("config", "service.yml"),
             "application.yaml",
-            "config/app.yaml",
+            path.join("config", "app.yaml"),
         ])
         expect(candidates.map((candidate) => candidate.config_match)).toEqual([
             "port: 3000",
@@ -320,7 +319,6 @@ describe("autocode_kill", () => {
     })
 
     test("skips agents storage before walking descendants", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {
             ".agents": { type: "dir" },
             ".agents/sandboxes": { type: "dir" },
@@ -344,7 +342,6 @@ describe("autocode_kill", () => {
     })
 
     test("kills one explicit port listener through injected signalProcess", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {}, {
             ssLines: [
                 "State Recv-Q Send-Q Local Address:Port Peer Address:Port Process",
@@ -367,7 +364,6 @@ describe("autocode_kill", () => {
     })
 
     test("cleans only current title workspace sandbox storage after a successful kill", async () => {
-        const projectRoot = "/workspace/project"
         const ownerWorkspace = "2026-08-20_10-30-00_my_feature"
         const siblingWorkspace = "2026-08-19_10-30-00_sibling_feature"
         const ownerRoot = path.join(projectRoot, ".agents", "jobs", ownerWorkspace)
@@ -406,7 +402,6 @@ describe("autocode_kill", () => {
     })
 
     test("keeps successful kill result without creating absent title workspace", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {
             ".agents": { type: "dir" },
             ".agents/jobs": { type: "dir" },
@@ -424,7 +419,6 @@ describe("autocode_kill", () => {
     })
 
     test("returns retry when explicit port has no listener", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {}, {
             ssLines: ["State Recv-Q Send-Q Local Address:Port Peer Address:Port Process"],
         })
@@ -438,7 +432,6 @@ describe("autocode_kill", () => {
     })
 
     test("returns retry when explicit port listener name differs", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {}, {
             ssLines: [
                 "State Recv-Q Send-Q Local Address:Port Peer Address:Port Process",
@@ -456,7 +449,6 @@ describe("autocode_kill", () => {
     })
 
     test("returns abort when injected signalProcess reports permission failure", async () => {
-        const projectRoot = "/workspace/project"
         const permissionError = new Error("permission denied") as Error & { code: string }
         permissionError.code = "EPERM"
         const deps = createDeps(projectRoot, {}, {
@@ -476,7 +468,6 @@ describe("autocode_kill", () => {
     })
 
     test("returns retry when explicit port has ambiguous listeners", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {}, {
             ssLines: [
                 "State Recv-Q Send-Q Local Address:Port Peer Address:Port Process",
@@ -494,7 +485,6 @@ describe("autocode_kill", () => {
     })
 
     test("filters safe list candidates by exact name without killing", async () => {
-        const projectRoot = "/workspace/project"
         const deps = createDeps(projectRoot, {
             "app.yaml": { type: "file", content: "port: 3000\n" },
             "vite.yaml": { type: "file", content: "port: 5173\n" },
@@ -512,7 +502,6 @@ describe("autocode_kill", () => {
     })
 
     test("kills verified Windows IPv4 and IPv6 listeners with safe commands", async () => {
-        const projectRoot = "/workspace/project"
         for (const [endpoint, lineEnding, pid, name] of [
             ["127.0.0.1:3000", "\r\n", "3000", "node.exe"],
             ["[::1]:3000", "\n", "3001", "bun.exe"],
@@ -537,7 +526,6 @@ describe("autocode_kill", () => {
     })
 
     test("does not kill unsafe Windows listener targets", async () => {
-        const projectRoot = "/workspace/project"
         const cases: Array<{ name: string, netstat: string, tasklist?: string, expectedName?: string, calls: number }> = [
             { name: "no listener", netstat: "", calls: 1 },
             { name: "ambiguous listener", netstat: "  TCP    127.0.0.1:3000     0.0.0.0:0      LISTENING       3000\r\n  TCP    [::1]:3000          [::]:0           LISTENING       3001\r\n", calls: 1 },
@@ -568,7 +556,6 @@ describe("autocode_kill", () => {
     })
 
     test("stops Windows command sequence when command exit code fails", async () => {
-        const projectRoot = "/workspace/project"
         const cases: Array<{ command: "netstat.exe" | "tasklist.exe" | "taskkill.exe", result: WindowsCommandResult, expectedCalls: number }> = [
             { command: "netstat.exe", result: { exitCode: 1, stdout: "", stderr: "netstat failed" }, expectedCalls: 1 },
             { command: "netstat.exe", result: { exitCode: null, stdout: "", stderr: "netstat missing exit code" }, expectedCalls: 1 },

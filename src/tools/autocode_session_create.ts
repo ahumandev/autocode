@@ -180,6 +180,7 @@ async function rollbackDestination(
 	destinationSessionID: string,
 ): Promise<string | undefined> {
 	try {
+		// V2 plugin contexts cannot remove sessions, so this V1 rollback reports cleanup failure there.
 		const response = await client.session.delete({
 			path: { id: destinationSessionID },
 			query: { directory },

@@ -21,11 +21,11 @@ AutoCode reads optional JSONC configuration from global OpenCode configuration f
 | `autocode.tier`                       | string           | Selects a named tier set from`autocode.tiers`.                                                      | No selected set.                                 |
 | `autocode.tiers.<set>.<tier>.model`   | string           | Optional model override for a tier in a tier set.                                                   | Uses the agent or OpenCode default when omitted. |
 | `autocode.tiers.<set>.<tier>.variant` | string           | Optional variant override for a tier in a tier set.                                                 | Uses the agent or OpenCode default when omitted. |
-| `permission.external_directory`       | object or string | Path-pattern permissions for external-directory access. Values are`allow`, `ask`, or `deny`.        | `{}`                                             |
+| `permissions`                           | rule array       | Ordered `{ action, resource, effect }` rules; use `external_directory` for external paths.          | `[]`                                             |
 
-OpenCode applies a last-matching-rule-wins model to external-directory permissions. Place broad defaults first and more specific overrides later.
+OpenCode applies a last-matching-rule-wins model to permissions. Place broad defaults first and exceptions later. V2 actions include `shell` (formerly `bash`), `subagent` (formerly `task`), and `edit` (for writes and patches). External paths require `external_directory` approval before `read` or `edit` checks.
 
-See [OpenCode Go documentation](https://opencode.ai/docs/go#endpoints) for supported model names.
+See the [OpenCode V2 models guide](https://opencode.ai/v2/docs/models/) for model selection and identifiers.
 
 ### Web session links
 
@@ -46,6 +46,16 @@ AUTOCODE_WEB_URL="https://app.example.com"
 #### Skills
 
 Set `autocode.skills.freeze` to `true` to strictly skip first-run extraction and every generated-root mutation. Existing stale generated skills remain until manually removed or a later unfrozen startup updates them.
+
+OpenCode's top-level `skills` setting is separate from `autocode.skills`. In V2, list extra local paths and URLs together in order; do not use the V1 `skills.paths` and `skills.urls` object:
+
+```jsonc
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+Existing skill files and automatic `.opencode/skills/` discovery are unchanged.
 
 Local memories are not configured as learned skills. The active store is `.opencode/autocode/memories/`, starts empty for this transition, and receives Markdown `.md` memory files only through `learn`; no legacy import, conversion, or seed occurs. The recoverable snapshot is `.opencode/autocode/memory-archive/v1/.agents/skills/<original learned path>/SKILL.md`, outside skill discovery and active-memory scans. The shared repository-root `.gitignore` ignores both paths.
 
@@ -78,13 +88,20 @@ Tier assignment requirements:
     "tier": "openai",
     "tiers": {
       "openai": {
-        "smart":    { "model": "openai/gpt-5.6-sol", "variant": "high" },
-        "balanced": { "model": "openai/gpt-5.6-terra", "variant": "medium" },
-        "operator": { "model": "openai/gpt-5.6-terra", "variant": "low" },
-        "context":  { "model": "openai/gpt-5.6-luna", "variant": "low" },
-        "fast":     { "model": "openai/gpt-5.3-codex-spark", "variant": "low" },
-        "cheap":    { "model": "openai/gpt-5.6-luna", "variant": "none" },
-        "spy":      { "model": "ollama/llama-3.1-8B", "variant": "none" }
+          "smart": { "model": "openai/gpt-6-astra", "variant": "xhigh"},
+          "balanced": { "model": "openai/gpt-6-sol", "variant": "high" },
+          "operator": { "model": "openai/gpt-6-sol", "variant": "medium" },
+          "context": { "model": "openai/gpt-6-luna", "variant": "low" },
+          "fast": { "model": "openai/gpt-6-luna-fast", "variant": "low" },
+          "cheap": { "model": "openai/gpt-6-luna", "variant": "low" }
+      },
+      "rush": {
+          "smart": { "model": "openai/gpt-6-astra-fast", "variant": "high"},
+          "balanced": { "model": "openai/gpt-6-sol-fast", "variant": "medium" },
+          "operator": { "model": "openai/gpt-6-sol-fast", "variant": "low" },
+          "context": { "model": "openai/gpt-6-luna-fast", "variant": "low" },
+          "fast": { "model": "openai/gpt-6-luna-fast", "variant": "low" },
+          "cheap": { "model": "openai/gpt-6-luna-fast", "variant": "low" }
       },
       "zai-coding-plan": {
         "smart":    { "model": "zai-coding-plan/glm-5.2", "variant": "high" },
@@ -96,12 +113,11 @@ Tier assignment requirements:
       }
     }
   },
-  "permission": {
-    "external_directory": {
-      "/tmp/safe/**": "allow",
-      "/tmp/safe/specific": "deny"
-    }
-  }
+  "permissions": [
+    { "action": "external_directory", "resource": "/tmp/safe/*", "effect": "allow" },
+    { "action": "external_directory", "resource": "/tmp/safe/specific", "effect": "deny" },
+    { "action": "read", "resource": "/tmp/safe/*", "effect": "allow" }
+  ]
 }
 ```
 

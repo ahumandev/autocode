@@ -3,19 +3,9 @@ import type { ToolContext } from "@opencode-ai/plugin"
 import type { ExternalDirectoryRules, PermissionAction } from "@/config"
 import { loadAutocodeConfig } from "@/config"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
+import type { PermissionRule } from "./permissions"
+import { matchesPermissionPattern } from "./permissions"
 import { authorizeToolAsk } from "./tool_permission"
-
-const REGEX_ESCAPE_PATTERN = /[.+^${}()|[\]\\]/g
-
-function patternToRegExp(pattern: string): RegExp {
-    let source = "^"
-    for (let i = 0; i < pattern.length; i += 1) {
-        const ch = pattern[i]
-        if (ch === "*") source += ".*"
-        else source += ch.replace(REGEX_ESCAPE_PATTERN, "\\$&")
-    }
-    return new RegExp(`${source}$`)
-}
 
 function hasWindowsPathSemantics(absolutePath: string): boolean {
     return /^[a-z]:[\\/]/i.test(absolutePath) || /^(?:\\\\|\/\/)/.test(absolutePath)
@@ -30,30 +20,47 @@ function patternMatches(pattern: string, absolutePath: string): boolean {
     const matchPattern = isWindowsPath ? normalizeWindowsPath(pattern) : pattern
     const matchPath = isWindowsPath ? normalizeWindowsPath(absolutePath) : absolutePath
 
-    if (matchPattern === matchPath) return true
-    if (matchPath.startsWith(`${matchPattern}/`)) return true
-    return patternToRegExp(matchPattern).test(matchPath)
+    return matchesPermissionPattern(matchPattern, matchPath)
 }
 
-export function matchExternalDirectoryAction(rules: ExternalDirectoryRules, absolutePath: string): PermissionAction | undefined {
-    let longestLength = -1
-    let matched: PermissionAction | undefined
-    for (const [pattern, action] of Object.entries(rules)) {
+export function matchExternalDirectoryAction(rules: ExternalDirectoryRules | readonly PermissionRule[], absolutePath: string): PermissionAction {
+    let matched: PermissionAction = "ask"
+    const entries = Array.isArray(rules)
+        ? rules.filter((rule) => rule.action === "external_directory").map((rule) => [rule.resource, rule.effect] as const)
+        : Object.entries(rules as ExternalDirectoryRules)
+    for (const [pattern, action] of entries) {
         if (!patternMatches(pattern, absolutePath)) continue
-        if (pattern.length <= longestLength) continue
-        longestLength = pattern.length
         matched = action
     }
     return matched
 }
 
+export function effectiveExternalDirectoryAction(
+    configRules: readonly PermissionRule[],
+    agentRules: readonly PermissionRule[],
+    absolutePath: string,
+): PermissionAction {
+    const configAction = matchExternalDirectoryAction(configRules, absolutePath)
+    let agentAction: PermissionAction = "ask"
+    for (const rule of agentRules) {
+        if (matchesPermissionPattern(rule.action, "external_directory") && patternMatches(rule.resource, absolutePath)) {
+            agentAction = rule.effect
+        }
+    }
+    return configAction === "deny" || agentAction === "deny" ? "deny" : agentAction
+}
+
 export async function authorizeExternalContentPath(
-    context: ToolContext,
+    context: ToolContext & { externalDirectoryPermissions?: readonly PermissionRule[] },
     absolutePath: string,
     failedAction: string,
 ): Promise<{ ok: true } | { ok: false, response: string }> {
-    const { externalDirectories } = await loadAutocodeConfig(context.worktree, context.directory)
-    const action = matchExternalDirectoryAction(externalDirectories, absolutePath)
+    const agentPermissions = context.externalDirectoryPermissions
+    if (!agentPermissions) {
+        return { ok: false, response: createAbortResponse(failedAction, "Effective agent external_directory permissions are unavailable") }
+    }
+    const { externalDirectoryPermissions } = await loadAutocodeConfig(context.worktree, context.directory)
+    const action = effectiveExternalDirectoryAction(externalDirectoryPermissions, agentPermissions, absolutePath)
 
     if (action === "allow") return { ok: true }
 
@@ -88,7 +95,7 @@ export async function authorizeExternalContentPath(
         response: createRetryResponse(
             failedAction,
             `Path '${absolutePath}' is outside the working directory and is not allowed by external_directory configuration.`,
-            "Add an allow/ask rule for this path in autocode.jsonc permission.external_directory, or use a path inside the working directory.",
+            "Add an allow/ask external_directory rule to autocode.jsonc permissions, or use a path inside the working directory.",
         ),
     }
 }

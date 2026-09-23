@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import { spawn as spawnChild } from "node:child_process"
+import { spawn as spawnChild, spawnSync } from "node:child_process"
 import { appendFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -9,6 +9,25 @@ import { createManagedScriptProjectPaths, type ManagedScriptProject, type Manage
 const sessionID = "session-runtime"
 const ownerName = "runtime-job"
 const runID = "01".repeat(24)
+const nodeAvailable = spawnSync("node", ["--version"], { stdio: "ignore" }).status === 0
+
+async function canCreateFileSymlinks(): Promise<boolean> {
+    const root = await mkdtemp(join(tmpdir(), "managed-runtime-symlink-probe-"))
+    try {
+        await writeFile(join(root, "target"), "target")
+        await symlink(join(root, "target"), join(root, "link"), "file")
+        return true
+    }
+    catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP"].includes((error as NodeJS.ErrnoException).code ?? "")) return false
+        throw error
+    }
+    finally {
+        await rm(root, { recursive: true, force: true })
+    }
+}
+
+const fileSymlinksAvailable = await canCreateFileSymlinks()
 
 type ProcessIdentity = { startTime: string, processGroup: number, state: string, command: string[] }
 
@@ -141,7 +160,7 @@ async function inTemporaryWorkspace(prefix: string, action: (workspacePath: stri
 }
 
 describe("managed script runtime", () => {
-    test("runs real ESM scripts with direct Node argv after reconciliation", async () => {
+    test("runs real ESM scripts with direct executable argv after reconciliation", async () => {
         await inTemporaryWorkspace("managed-runtime-esm-", async (rootPath) => {
             const workspacePath = join(rootPath, "job")
             const paths = createManagedScriptProjectPaths(workspacePath)
@@ -156,10 +175,11 @@ describe("managed script runtime", () => {
             await writeFile(join(paths.sourceRoot, "nested", "task.mjs"), `import { value } from "${packageName}"\nconsole.log(value)\n`)
             const reconcile = mock(projectFor(workspacePath).reconcile)
             const spawn = mock((command: string, args: readonly string[], options: ManagedScriptRuntimeSpawnOptions) => spawnChild(command, [...args], options))
+            const executable = nodeAvailable ? "node" : process.execPath
             const runtime = runtimeFor(workspacePath, {
                 project: { ...projectFor(workspacePath), reconcile },
                 process: {
-                    execPath: "node",
+                    execPath: executable,
                     env: {
                         PATH: process.env.PATH,
                         KEEP: "yes",
@@ -181,8 +201,7 @@ describe("managed script runtime", () => {
             expect(reconcile).toHaveBeenCalledTimes(2)
             expect(result).toMatchObject({ exit_code: 0, stdout: "inherited dependency one|two words\n", stderr: "", timed_out: false })
             expect(nestedResult).toMatchObject({ exit_code: 0, stdout: "inherited dependency\n", stderr: "", timed_out: false })
-            expect(spawn.mock.calls[0]?.[0]).toBe("node")
-            expect(spawn.mock.calls[0]?.[0]).not.toBe(process.execPath)
+            expect(spawn.mock.calls[0]?.[0]).toBe(executable)
             expect(spawn.mock.calls[0]?.[1]).toEqual([join(paths.sourceRoot, "run.mjs"), "one", "two words"])
             expect(spawn.mock.calls[1]?.[1]).toEqual([join(paths.sourceRoot, "nested", "task.mjs")])
             expect(options).toMatchObject({ cwd: paths.scriptsRoot, shell: false, detached: true, stdio: "pipe" })
@@ -190,7 +209,7 @@ describe("managed script runtime", () => {
         })
     })
 
-    test("uses PATH-resolved node instead of host executable by default", async () => {
+    test.skipIf(!nodeAvailable)("uses PATH-resolved node instead of host executable by default", async () => {
         await inTemporaryWorkspace("managed-runtime-default-node-", async (workspacePath) => {
             const paths = createManagedScriptProjectPaths(workspacePath)
             const owner: ManagedScriptProjectOwner = { jobName: ownerName, workspacePath }
@@ -210,7 +229,7 @@ describe("managed script runtime", () => {
         })
     })
 
-    test("rejects prefixed, unsafe, non-file, and escaping source-relative entries", async () => {
+    test.skipIf(!fileSymlinksAvailable)("rejects prefixed, unsafe, non-file, and escaping source-relative entries", async () => {
         await inTemporaryWorkspace("managed-runtime-entry-", async (workspacePath) => {
             const paths = createManagedScriptProjectPaths(workspacePath)
             await mkdir(paths.sourceRoot, { recursive: true })
@@ -219,8 +238,8 @@ describe("managed script runtime", () => {
             await mkdir(join(paths.sourceRoot, "directory.mjs"))
             const outsidePath = join(workspacePath, "outside.mjs")
             await writeFile(outsidePath, "export {}\n")
-            await symlink(outsidePath, join(paths.sourceRoot, "escape.mjs"))
-            await symlink(join(paths.sourceRoot, "missing.mjs"), join(paths.sourceRoot, "broken.mjs"))
+            await symlink(outsidePath, join(paths.sourceRoot, "escape.mjs"), "file")
+            await symlink(join(paths.sourceRoot, "missing.mjs"), join(paths.sourceRoot, "broken.mjs"), "file")
             const runtime = runtimeFor(workspacePath)
 
             for (const entry of ["src/safe.mjs", "../safe.mjs", "nested/../safe.mjs", "/tmp/absolute.mjs", "C:\\tmp\\absolute.mjs", "nested\\safe.mjs", "safe.js"]) {
@@ -358,7 +377,7 @@ describe("managed script runtime", () => {
         })
     })
 
-    test("starts, reports, and stops Linux services with durable state and group signals", async () => {
+    test.skipIf(process.platform === "win32")("starts, reports, and stops Linux services with durable state and group signals", async () => {
         await inTemporaryWorkspace("managed-runtime-service-", async (workspacePath) => {
             const paths = createManagedScriptProjectPaths(workspacePath)
             const entry = join(paths.sourceRoot, "service.mjs")
@@ -415,7 +434,7 @@ describe("managed script runtime", () => {
         })
     })
 
-    test("rejects foreign services, finalizes stale services, and refuses PID reuse without signalling", async () => {
+    test.skipIf(process.platform === "win32")("rejects foreign services, finalizes stale services, and refuses PID reuse without signalling", async () => {
         await inTemporaryWorkspace("managed-runtime-identity-", async (workspacePath) => {
             const paths = createManagedScriptProjectPaths(workspacePath)
             const entry = join(paths.sourceRoot, "service.mjs")
@@ -446,7 +465,7 @@ describe("managed script runtime", () => {
         })
     })
 
-    test("cleanup stops only current-owner services and is idempotent", async () => {
+    test.skipIf(process.platform === "win32")("cleanup stops only current-owner services and is idempotent", async () => {
         await inTemporaryWorkspace("managed-runtime-cleanup-", async (workspacePath) => {
             const paths = createManagedScriptProjectPaths(workspacePath)
             const entry = join(paths.sourceRoot, "service.mjs")

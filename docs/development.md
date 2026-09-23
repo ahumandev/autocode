@@ -110,7 +110,7 @@ Local setup is for repository development only. It is not the public npm install
 
 4. Load the plugin in OpenCode.
 
-   For local development in this repository, [`.opencode/plugin/autocode.ts`](../.opencode/plugin/autocode.ts) re-exports the built plugin from `dist/plugin.js`.
+   For local development in this repository, [`.opencode/plugins/autocode.ts`](../.opencode/plugins/autocode.ts) re-exports the built plugin from `dist/plugin.js`.
 
 ## Development commands
 
