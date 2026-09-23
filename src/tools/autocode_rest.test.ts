@@ -3,7 +3,10 @@ import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { resetRetryCounts } from "@/utils/tools"
 import { createAutocodeRestTool } from "./autocode_rest"
-import { createToolContext } from "./test_context"
+import { createToolContext as baseCreateToolContext } from "./test_context"
+
+const workspace = path.resolve("workspace")
+const createToolContext = (): ReturnType<typeof baseCreateToolContext> => baseCreateToolContext({ directory: workspace, worktree: workspace })
 
 type ParsedError = {
     error: string
@@ -55,11 +58,10 @@ function createSessionClient(sessions: Record<string, SessionRecord> = { "sessio
 function createMemoryRestFileSystem(options: { includeCurrentWorkspace?: boolean } = {}) {
     const files = new Map<string, string>()
     const directories = new Set<string>([
-        "/",
-        "/workspace",
-        "/workspace/.agents",
-        "/workspace/.agents/jobs",
-        ...(options.includeCurrentWorkspace === false ? [] : ["/workspace/.agents/jobs/2026-08-20_10-30-00_my_job"]),
+        workspace,
+        path.join(workspace, ".agents"),
+        path.join(workspace, ".agents", "jobs"),
+        ...(options.includeCurrentWorkspace === false ? [] : [path.join(workspace, ".agents", "jobs", "2026-08-20_10-30-00_my_job")]),
     ])
 
     function normalize(targetPath: string): string {
@@ -119,10 +121,10 @@ function createMemoryRestFileSystem(options: { includeCurrentWorkspace?: boolean
     async function rm(targetPath: string): Promise<void> {
         const normalizedPath = normalize(targetPath)
         for (const filePath of files.keys()) {
-            if (filePath === normalizedPath || filePath.startsWith(`${normalizedPath}/`)) files.delete(filePath)
+            if (filePath === normalizedPath || filePath.startsWith(`${normalizedPath}${path.sep}`)) files.delete(filePath)
         }
         for (const directoryPath of directories) {
-            if (directoryPath === normalizedPath || directoryPath.startsWith(`${normalizedPath}/`)) directories.delete(directoryPath)
+            if (directoryPath === normalizedPath || directoryPath.startsWith(`${normalizedPath}${path.sep}`)) directories.delete(directoryPath)
         }
     }
 
@@ -436,7 +438,7 @@ describe("autocode_rest tools", () => {
         expect(parsed.response_id).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{3}$/)
         expect(typeof parsed.response_time).toBe("number")
         const allFiles = fileSystem.listFiles()
-        expect(allFiles.some((filePath) => filePath.includes("/2026-08-20_10-30-00_my_job/rest/"))).toBe(true)
+        expect(allFiles.some((filePath) => filePath.includes(`${path.sep}2026-08-20_10-30-00_my_job${path.sep}rest${path.sep}`))).toBe(true)
     })
 
     test("creates current title workspace before writing REST artifact", async () => {
@@ -455,7 +457,7 @@ describe("autocode_rest tools", () => {
 
         expect(parsed.status_code).toBe(200)
         const allFiles = fileSystem.listFiles()
-        expect(allFiles.some((filePath) => filePath.includes("_child_job/rest/"))).toBe(true)
+        expect(allFiles.some((filePath) => filePath.includes(`_child_job${path.sep}rest${path.sep}`))).toBe(true)
     })
 
     test("creates current title workspace when root lookup is unavailable", async () => {
@@ -479,7 +481,7 @@ describe("autocode_rest tools", () => {
 
         expect(parsed.status_code).toBe(200)
         const allFiles = fileSystem.listFiles()
-        expect(allFiles.some((filePath) => filePath.includes("_my_job/rest/"))).toBe(true)
+        expect(allFiles.some((filePath) => filePath.includes(`_my_job${path.sep}rest${path.sep}`))).toBe(true)
     })
 
     test("uses raw Authorization environment value", async () => {

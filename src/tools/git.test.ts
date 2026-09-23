@@ -125,7 +125,12 @@ describe("autocode git tools", () => {
         const linkParent = await fs.promises.mkdtemp(path.join(os.tmpdir(), "autocode-git-link-"))
         tempDirs.push(linkParent)
         const symlinkRepo = path.join(linkParent, "repo")
-        await fs.promises.symlink(realRepo, symlinkRepo, "dir")
+        try {
+            await fs.promises.symlink(realRepo, symlinkRepo, process.platform === "win32" ? "junction" : "dir")
+        } catch (error) {
+            if (["EPERM", "EACCES", "ENOTSUP", "ENOSYS", "EINVAL"].includes((error as NodeJS.ErrnoException).code ?? "")) return
+            throw error
+        }
         const finalResult = { exitCode: 0, stdout: "## main\n", stderr: "" }
         const { deps, spawn } = createSuccessfulDeps(realRepo, finalResult)
 
@@ -195,7 +200,7 @@ describe("autocode git tools", () => {
     })
 
     test("git_add validates files and builds add args", async () => {
-        const invalidFiles = [[], ["/tmp/file"], ["../x"], ["-x"]]
+        const invalidFiles = [[], [path.join(path.parse(process.cwd()).root, "tmp", "file")], ["../x"], ["-x"]]
         for (const files of invalidFiles) {
             const realRepo = await createRealRepoPath()
             const { deps } = createSuccessfulDeps(realRepo)

@@ -65,11 +65,6 @@ type OptionalActiveContextClient = {
         getConfig?: () => ClientFetchConfig
         request?: (options: { method?: string, parseAs?: string, url: string, query?: Record<string, string> }) => Promise<unknown>
     }
-    v2?: {
-        session?: {
-            context?: (args: V2ContextRequest) => Promise<unknown>
-        }
-    }
     session?: {
         activeContext?: (args: ActiveContextRequest) => Promise<unknown>
         context?: (args: ActiveContextRequest) => Promise<unknown>
@@ -89,6 +84,8 @@ type ActiveContextRequest = {
 type V2ContextRequest = {
     sessionID: string
 }
+
+export type ActiveSessionContext = (args: V2ContextRequest) => Promise<unknown>
 
 type ExperimentalContextRequest = {
     directory: string
@@ -459,8 +456,8 @@ function renderSkillContent(marker: string, skill: LoadedSkill): string {
     ].join("\n")
 }
 
-async function readActiveContext(client: OpencodeClient | undefined, context: SkillLoadContext, marker: string, hash: string, runtime?: SkillLoadRuntime): Promise<ActiveContextResult> {
-    if (client === undefined) {
+async function readActiveContext(client: OpencodeClient | undefined, context: SkillLoadContext, marker: string, hash: string, runtime?: SkillLoadRuntime, activeSessionContext?: ActiveSessionContext): Promise<ActiveContextResult> {
+    if (client === undefined && activeSessionContext === undefined) {
         return { found: false, info: { checked: false, available: false, method: null, reason: "client unavailable", response_scan: null, probe_errors: [] } }
     }
 
@@ -468,16 +465,30 @@ async function readActiveContext(client: OpencodeClient | undefined, context: Sk
         return { found: false, info: { checked: false, available: false, method: null, reason: "session id unavailable", response_scan: null, probe_errors: [] } }
     }
 
+    if (activeSessionContext !== undefined) {
+        const method = "context.session.context"
+        try {
+            const response = await activeSessionContext({ sessionID: context.sessionID })
+            return {
+                found: activeContextIncludesMarkerHash(response, marker, hash),
+                info: { checked: true, available: true, method, reason: null, response_scan: summarizeActiveContextResponse(response), probe_errors: [] },
+            }
+        }
+        catch (error) {
+            const reason = `${method}: ${flattenError(error)}`
+            return { found: false, info: { checked: true, available: false, method: null, reason, response_scan: null, probe_errors: [reason] } }
+        }
+    }
+
+    // V1 probes remain for V1 hosts; V2 active context is not durable session history.
     const activeClient = client as unknown as OptionalActiveContextClient
     const request = { path: { id: context.sessionID }, query: { directory: context.directory } }
-    const v2Request = { sessionID: context.sessionID }
     const probes: Array<{ method: string, call: () => Promise<unknown> } | undefined> = [
-        activeClient.v2?.session?.context === undefined ? undefined : { method: "client.v2.session.context", call: () => activeClient.v2?.session?.context?.(v2Request) ?? Promise.resolve(undefined) },
         activeClient.session?.activeContext === undefined ? undefined : { method: "client.session.activeContext", call: () => activeClient.session?.activeContext?.(request) ?? Promise.resolve(undefined) },
         activeClient.session?.context === undefined ? undefined : { method: "client.session.context", call: () => activeClient.session?.context?.(request) ?? Promise.resolve(undefined) },
         activeClient.experimental?.context?.get === undefined ? undefined : { method: "client.experimental.context.get", call: () => activeClient.experimental?.context?.get?.({ directory: context.directory, sessionID: context.sessionID ?? "" }) ?? Promise.resolve(undefined) },
     ]
-    const probeNames = ["client.v2.session.context", "client.session.activeContext", "client.session.context", "client.experimental.context.get", "http.GET /api/session/{sessionID}/context"]
+    const probeNames = ["client.session.activeContext", "client.session.context", "client.experimental.context.get", "http.GET /api/session/{sessionID}/context"]
     const errors: string[] = []
 
     for (const probe of probes) {
@@ -521,7 +532,7 @@ async function readActiveContext(client: OpencodeClient | undefined, context: Sk
     return { found: false, info: { checked: true, available: false, method: null, reason: "active context API unavailable; base URL unavailable", response_scan: null, probe_errors: [], client_top_level_keys: safeTopLevelKeys(client), probe_names: probeNames } }
 }
 
-export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem, runtime?: SkillLoadRuntime, trace?: SkillToolTrace): ReturnType<typeof tool> {
+export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem = defaultFileSystem, runtime?: SkillLoadRuntime, trace?: SkillToolTrace, activeSessionContext?: ActiveSessionContext): ReturnType<typeof tool> {
     return tool({
         description: "Before starting work: load all applicable skills (not yet loaded) or skills needed by current step from `<available_skills>` block ONLY.",
         args: {
@@ -587,7 +598,7 @@ export function createSkillTool(client?: OpencodeClient, fileSystem: FileSystem 
                     return ""
                 }
 
-                const activeContext = await readActiveContext(client, skillContext, marker, hash, runtime)
+                const activeContext = await readActiveContext(client, skillContext, marker, hash, runtime, activeSessionContext)
                 emitSkillTrace(trace, {
                     type: "active-store",
                     found: activeContext.found,

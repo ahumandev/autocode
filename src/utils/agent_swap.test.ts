@@ -299,7 +299,7 @@ describe("agent swap utilities", () => {
                     "query-code": { model: "openai/gpt-5.5", variant: "high" },
                 },
             }
-            const hooks = await autocode({ worktree, directory: worktree, client: {} } as Parameters<typeof autocode>[0]) as unknown as PluginConfigHook
+            const hooks = await autocode.server({ worktree, directory: worktree, client: {} } as Parameters<typeof autocode.server>[0]) as unknown as PluginConfigHook
 
             await hooks.config?.(cfg)
 

@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json" }
 import { resolveOpenCodePaths } from "./utils/paths"
 import { createJsoncDocumentEditor } from "./tools/config/json"
+import type { PermissionRule } from "./utils/permissions"
 
 const MODEL_TIERS = ["cheap", "fast", "operator", "context", "balanced", "smart", "spy"] as const
 const PERMISSION_ACTIONS = ["ask", "allow", "deny"] as const
@@ -14,7 +15,6 @@ export type ModelTier = (typeof MODEL_TIERS)[number]
 export type TierConfig = { model?: string; variant?: string }
 export type PermissionAction = (typeof PERMISSION_ACTIONS)[number]
 export type ExternalDirectoryRules = Record<string, PermissionAction>
-export type TaskExternalRules = ExternalDirectoryRules
 export type SandboxSyncMethod = (typeof SANDBOX_SYNC_METHODS)[number]
 export type AutocodeSandboxConfig = {
     sync_method?: SandboxSyncMethod
@@ -66,10 +66,7 @@ type AutocodeJsoncNew = {
         sandbox?: unknown
         skills?: unknown
     }
-    permission?: {
-        external_directory?: unknown
-        task_external?: unknown
-    }
+    permissions?: unknown
 }
 
 type AutocodeJsoncLegacy = {
@@ -84,7 +81,7 @@ type ParsedAutocodeConfig = {
     tiers?: Record<string, unknown>
     legacyTiers?: Partial<Record<ModelTier, TierConfig>>
     externalDirectories?: ExternalDirectoryRules
-    taskExternalRules?: TaskExternalRules
+    externalDirectoryPermissions?: PermissionRule[]
     sandbox?: AutocodeSandboxConfig
     skills?: SkillsConfig
 }
@@ -147,27 +144,20 @@ function collectTiers(value: unknown): Partial<Record<ModelTier, TierConfig>> | 
 }
 
 export function collectExternalDirectories(value: unknown): ExternalDirectoryRules | undefined {
-    if (typeof value === "string" && PERMISSION_ACTIONS.includes(value as PermissionAction)) {
-        return { "*": value as PermissionAction }
-    }
-
-    if (!isRecord(value)) return undefined
-
     const result: ExternalDirectoryRules = {}
-
-    for (const [pattern, action] of Object.entries(value)) {
-        if (typeof action !== "string" || !PERMISSION_ACTIONS.includes(action as PermissionAction)) {
-            continue
-        }
-
-        result[pattern] = action as PermissionAction
+    for (const rule of collectExternalDirectoryPermissions(value)) {
+        if (rule.resource in result) delete result[rule.resource]
+        result[rule.resource] = rule.effect
     }
 
     return Object.keys(result).length > 0 ? result : undefined
 }
 
-export function collectTaskExternalRules(value: unknown): TaskExternalRules | undefined {
-    return collectExternalDirectories(value)
+export function collectExternalDirectoryPermissions(value: unknown): PermissionRule[] {
+    if (!Array.isArray(value)) return []
+    return value.filter((rule): rule is PermissionRule => isRecord(rule)
+        && rule.action === "external_directory" && typeof rule.resource === "string"
+        && PERMISSION_ACTIONS.includes(rule.effect as PermissionAction))
 }
 
 function collectSandboxConfig(value: unknown): AutocodeSandboxConfig | undefined {
@@ -259,26 +249,26 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
         throw new Error(`autocode: malformed JSONC in ${path}: ${(err as Error).message}`)
     }
     const ac = parsed?.autocode
-    const externalDirectories = collectExternalDirectories(parsed.permission?.external_directory)
-    const taskExternalRules = collectTaskExternalRules(parsed.permission?.task_external)
+    const externalDirectories = collectExternalDirectories(parsed.permissions)
+    const externalDirectoryPermissions = collectExternalDirectoryPermissions(parsed.permissions)
     const sandbox = collectSandboxConfig(ac?.sandbox)
     const skills = collectSkills(ac?.skills)
 
-    if (!ac) return { externalDirectories, taskExternalRules, sandbox, skills }
+    if (!ac) return { externalDirectories, externalDirectoryPermissions, sandbox, skills }
 
     if (isRecord(ac.tiers)) {
         return {
             tier: typeof ac.tier === "string" ? ac.tier : undefined,
             tiers: ac.tiers,
             externalDirectories,
-            taskExternalRules,
+            externalDirectoryPermissions,
             sandbox,
             skills,
         }
     }
 
     if (typeof ac.tier === "string") {
-        return { tier: ac.tier, externalDirectories, taskExternalRules, sandbox, skills }
+        return { tier: ac.tier, externalDirectories, externalDirectoryPermissions, sandbox, skills }
     }
 
     // legacy shape: autocode.model.<tier> + optional autocode.variant.<tier>
@@ -290,10 +280,10 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
                 result[tier] = { model, variant: ac.variant?.[tier] }
             }
         }
-        return { legacyTiers: result, externalDirectories, taskExternalRules, sandbox, skills }
+        return { legacyTiers: result, externalDirectories, externalDirectoryPermissions, sandbox, skills }
     }
 
-    return { externalDirectories, taskExternalRules, sandbox, skills }
+    return { externalDirectories, externalDirectoryPermissions, sandbox, skills }
 }
 
 function addCandidate(candidates: string[], path: string): void {
@@ -386,7 +376,7 @@ export async function loadAutocodeConfig(
     worktree: string,
     directory: string,
     fs: ConfigFileSystem = defaultFs,
-): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined }> {
+): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, externalDirectoryPermissions: PermissionRule[], sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined }> {
     const globalConfigDirectory = resolveOpenCodePaths().globalConfigRoot
     const globalConfigPath = join(globalConfigDirectory, "autocode.jsonc")
     const candidates: string[][] = []
@@ -404,6 +394,7 @@ export async function loadAutocodeConfig(
     let providerTiers: Record<string, Partial<Record<ModelTier, TierConfig>>> = {}
     let selectedProvider: string | undefined
     let externalDirectories: ExternalDirectoryRules = {}
+    const externalDirectoryPermissions: PermissionRule[] = []
     let sandbox: AutocodeSandboxConfig = {}
     let skills: SkillsConfig | undefined
     for (const candidate of candidates) {
@@ -439,9 +430,7 @@ export async function loadAutocodeConfig(
         if (parsed.externalDirectories) {
             externalDirectories = mergeExternalDirectoryRules(externalDirectories, parsed.externalDirectories)
         }
-        if (parsed.taskExternalRules) {
-            externalDirectories = mergeExternalDirectoryRules(externalDirectories, parsed.taskExternalRules)
-        }
+        externalDirectoryPermissions.push(...parsed.externalDirectoryPermissions ?? [])
         if (parsed.sandbox) {
             sandbox = { ...sandbox, ...parsed.sandbox }
         }
@@ -484,6 +473,7 @@ export async function loadAutocodeConfig(
     return {
         tiers,
         externalDirectories,
+        externalDirectoryPermissions,
         sandbox,
         skills,
     }

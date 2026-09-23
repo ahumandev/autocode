@@ -13,7 +13,7 @@
 
 import type { Dirent } from "node:fs"
 import { access, readFile, readdir } from "node:fs/promises"
-import { dirname, join, relative, resolve } from "node:path"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 import { loadGitHubSkillInventory, type GitHubSkillInventory } from "../src/skills/github"
 import { verifySkillBundleManifest } from "./skill-bundle"
@@ -41,7 +41,7 @@ const requiredFiles = [
 
 function isWithinDirectory(filePath: string, directory: string): boolean {
   const pathRelative = relative(directory, filePath)
-  return pathRelative !== "" && !pathRelative.startsWith("..") && !pathRelative.includes("\\")
+  return pathRelative !== "" && pathRelative !== ".." && !pathRelative.startsWith(`..${sep}`) && !isAbsolute(pathRelative)
 }
 
 function isDeclaredGitHubFile(relativePath: string, inventory: GitHubSkillInventory): boolean {
@@ -84,7 +84,7 @@ async function verifyGitHubTree(inventory: GitHubSkillInventory): Promise<void> 
   }
 
   for (const filePath of files) {
-    const fileRelativePath = relative(skillsRoot, filePath)
+    const fileRelativePath = relative(skillsRoot, filePath).replaceAll("\\", "/")
     if (!isWithinDirectory(filePath, skillsRoot) || !isDeclaredGitHubFile(fileRelativePath, inventory)) {
       throw new Error(`GitHub skill tree contains file absent from manifest: ${fileRelativePath}`)
     }

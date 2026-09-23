@@ -1,27 +1,30 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import { homedir, tmpdir } from "node:os"
 import type { Dirent } from "node:fs"
 import type { Config as PluginConfig, Hooks, PluginInput } from "@opencode-ai/plugin"
-import type { Session, OpencodeClient, SessionGetData, SessionChildrenData, SessionPromptAsyncData } from "@opencode-ai/sdk"
+import type { Session, OpencodeClient } from "@opencode-ai/sdk"
 import autocode from "../plugin"
 import { loadAutocodeConfig } from "@/config"
 import type { ConfigFileSystem } from "@/config"
 import { createAutocodeConceptReadTool } from "./autocode_concept_read"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
-import { createTaskResumeTool } from "./task_resume"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
-import { createAbortResponse, createErrorResponse } from "@/utils/tools"
+import { createErrorResponse } from "@/utils/tools"
 import { applySandboxPlatformPolicy } from "@/agents"
 import { createTools } from "./index"
-import { createToolContext } from "./test_context"
+import { createToolContext as baseCreateToolContext } from "./test_context"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
+import { permissionEffect, type PermissionRule as V2PermissionRule } from "@/utils/permissions"
 
-const PROMPT_TASK_RESUME = "You have been interrupted, therefore you MUST:\n\n1. For each previous `task` call that were interrupted (no output when due):\n    - Call `task_resume` tool with same `task_id` used in previous `task` call.\n2. Then resume your own work"
-const PROMPT_WORK_RESUME = "Resume"
 const sandboxToolNames = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"]
+const workspace = resolve("/workspace")
+
+function createToolContext(): ReturnType<typeof baseCreateToolContext> {
+    return baseCreateToolContext({ directory: workspace, worktree: workspace })
+}
 
 type PermissionRule = "ask" | "allow" | "deny"
 type ExternalDirectoryPermission = PermissionRule | Record<string, PermissionRule>
@@ -40,9 +43,11 @@ type ConfigWithRuntimeSections = Omit<PluginConfig, "agent" | "command" | "permi
     agent: Record<string, RuntimeAgentConfig>
     command: NonNullable<PluginConfig["command"]>
     permission?: RuntimeConfigPermission
+    permissions?: V2PermissionRule[]
 }
 type PluginInputWithSandboxSupportOverride = PluginInput & {
     sandboxSupportOverride?: SandboxPlatformSupportOptions
+    platformOverride?: NodeJS.Platform
 }
 
 function getPermissionRule(permission: RuntimePermission, key: string): unknown {
@@ -53,17 +58,9 @@ function getPermissionRule(permission: RuntimePermission, key: string): unknown 
     return permission[key]
 }
 
-function getTaskPermissionRule(permission: RuntimePermission, key: string): unknown {
-    if (!permission || typeof permission === "string") {
-        return undefined
-    }
-
-    const task = permission.task
-    if (!task || typeof task === "string") {
-        return undefined
-    }
-
-    return task[key]
+function getV2PermissionRule(agent: RuntimeAgentConfig | undefined, action: string, resource = "*"): V2PermissionRule["effect"] | undefined {
+    const rules = agent?.permissions as V2PermissionRule[] | undefined
+    return rules?.findLast((rule) => rule.action === action && rule.resource === resource)?.effect
 }
 
 function getAgentField(cfg: ConfigWithRuntimeSections, agentName: string, key: string): unknown {
@@ -86,7 +83,7 @@ function createDirent(name: string, type: MockDirentType = "directory"): Dirent 
 
 function createPluginInput(
     client: OpencodeClient,
-    worktree = "/workspace",
+    worktree = workspace,
     directory?: string,
     sandboxSupportOverride: SandboxPlatformSupportOptions = { platform: "linux", env: {}, bwrapUsable: true },
 ): PluginInputWithSandboxSupportOverride {
@@ -106,6 +103,7 @@ function createPluginInput(
         },
         serverUrl: new URL("http://localhost:4096"),
         sandboxSupportOverride,
+        platformOverride: "linux",
         $: {} as PluginInput["$"],
     }
 }
@@ -129,11 +127,11 @@ function toolSurfaceText(tool: unknown) {
     return [surface.description ?? "", ...argDescriptions].join("\n")
 }
 
-function createSession(id: string, directory: string, permission?: unknown): Session & { permission?: unknown } {
+function createSession(id: string, directory: string, permissions?: V2PermissionRule[]): Session & { permissions?: V2PermissionRule[] } {
     return {
         id,
         projectID: "project-1",
-        permission,
+        permissions,
         directory,
         title: "Session",
         version: "1",
@@ -165,56 +163,11 @@ async function withIsolatedConfigHome<T>(fn: () => Promise<T>): Promise<T> {
     }
 }
 
-function createResumeMessages(permission?: unknown, toolName = "task") {
-    return [
-        {
-            info: {
-                id: "user-1",
-                role: "user",
-                agent: "pair",
-                permission,
-                time: {
-                    created: 1,
-                },
-            },
-            parts: [],
-        },
-        {
-            info: {
-                id: "assistant-1",
-                role: "assistant",
-                providerID: "provider",
-                modelID: "model",
-                time: {
-                    created: 2,
-                },
-            },
-            parts: [{
-                type: "tool",
-                tool: toolName,
-                messageID: "assistant-1",
-                state: {
-                    status: "running",
-                    time: {
-                        start: 3,
-                    },
-                },
-            }],
-        },
-    ] as Awaited<ReturnType<OpencodeClient["session"]["messages"]>>["data"]
-}
-
-function createChildrenForParent(parent: Session, child: Session) {
-    return async function children(args: SessionChildrenData) {
-        return { data: args.path.id === parent.id ? [child] : [] }
-    }
-}
-
 function createMockClient(): OpencodeClient {
     return {
         session: {
             async get() {
-                return { data: { id: "session-1", projectID: "project-1", directory: "/workspace", title: "Session", version: "1", time: { created: Date.now(), updated: Date.now() } } }
+                return { data: { id: "session-1", projectID: "project-1", directory: workspace, title: "Session", version: "1", time: { created: Date.now(), updated: Date.now() } } }
             },
             async children() {
                 return { data: [] }
@@ -249,59 +202,12 @@ function injectedPromptText(cfg: ConfigWithRuntimeSections) {
 }
 
 describe("auto resume wiring", () => {
-    test("registers task_resume tool with the injected client and resume command agent", async () => {
-        await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const calls: Array<{ sessionID: string, directory: string }> = []
-                const client: OpencodeClient = {
-                    session: {
-                        async get(args: SessionGetData) {
-                            calls.push({ sessionID: args.path.id, directory: args.query?.directory ?? "" })
-                            return {
-                                data: createSession(args.path.id, args.query?.directory ?? ""),
-                            }
-                        },
-                        async children() {
-                            return { data: [] }
-                        },
-                        async messages() {
-                            return { data: [] }
-                        },
-                        async promptAsync() {
-                            return {}
-                        },
-                    },
-                } as unknown as OpencodeClient
-                const plugin = await autocode(createPluginInput(client))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
-
-                await configurePlugin(plugin, cfg)
-                const result = await plugin.tool?.task_resume.execute({}, createToolContext())
-
-                expect(plugin.tool?.task_resume).toBeDefined()
-                expect(result).toBe("No interrupted descendants found.")
-                expect(calls).toEqual([{ sessionID: "session-1", directory: "/workspace" }])
-                expect(cfg.command.resume?.agent).toBeUndefined() // Very important otherwise it cannot resume with original agent
-                expect(cfg.command.resume?.template).toContain("task_resume")
-                expect(getPermissionRule(cfg.agent.assist?.permission, "task_resume")).toBe("allow")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
-        })
-    })
-
     test("allows assist to call dependency checks", async () => {
         await withIsolatedConfigHome(async () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
             try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
+                const plugin = await autocode.server(createPluginInput(createMockClient()))
                 const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
 
                 await configurePlugin(plugin, cfg)
@@ -322,35 +228,20 @@ describe("auto resume wiring", () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
             try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
+                const plugin = await autocode.server(createPluginInput(createMockClient()))
                 const cfg: ConfigWithRuntimeSections = {
                     agent: {},
                     command: {},
-                    permission: {
-                        external_directory: {
-                            "/home/me/CarData/*": "allow",
-                        },
-                    },
+                    permissions: [{ action: "external_directory", resource: "/home/me/CarData/*", effect: "allow" }],
                 }
 
                 await configurePlugin(plugin, cfg)
 
-                expect(getPermissionRule(cfg.agent.design?.permission, "external_directory")).toEqual(expect.objectContaining({
-                    "*": "ask",
-                    "/home/me/CarData/*": "allow",
-                }))
-                expect(getPermissionRule(cfg.agent["execute-os"]?.permission, "external_directory")).toEqual(expect.objectContaining({
-                    "*": "allow",
-                    "/home/me/CarData/*": "allow",
-                }))
-                expect(getPermissionRule(cfg.agent.assist?.permission, "external_directory")).toEqual(expect.objectContaining({
-                    "*": "ask",
-                    "/home/me/CarData/*": "allow",
-                }))
-                expect(getPermissionRule(cfg.agent["query-code"]?.permission, "external_directory")).toEqual(expect.objectContaining({
-                    "*": "deny",
-                    "/home/me/CarData/*": "allow",
-                }))
+                for (const [name, fallback, allowed] of [["design", "ask", "allow"], ["execute-os", "allow", "allow"], ["assist", "ask", "allow"], ["query-code", "ask", "allow"], ["auto-general", "deny", "deny"]] as const) {
+                    const rules = cfg.agent[name]?.permissions as V2PermissionRule[] | undefined
+                    expect(permissionEffect(rules, "external_directory", "/unconfigured/file")).toBe(fallback)
+                    expect(permissionEffect(rules, "external_directory", "/home/me/CarData/file")).toBe(allowed)
+                }
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -549,12 +440,12 @@ describe("auto resume wiring", () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
             try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
+                const plugin = await autocode.server(createPluginInput(createMockClient()))
                 const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
 
                 await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["git-conflict"]?.agent).toBe("assist_git_conflict")
+                expect(cfg.command["git-conflict"]?.agent).toBe("assist-git-conflict")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -570,7 +461,7 @@ describe("auto resume wiring", () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
             try {
-                const plugin = await autocode(createPluginInput(createMockClient()))
+                const plugin = await autocode.server(createPluginInput(createMockClient()))
                 const cfg = createConfig()
 
                 await configurePlugin(plugin, cfg)
@@ -600,285 +491,6 @@ describe("auto resume wiring", () => {
             }
         })
     })
-
-    test("uses resume prompt when task_resume is not allowed", async () => {
-        const prompts: string[] = []
-        const parent = createSession("session-1", "/workspace")
-        const child = createSession("session-2", "/workspace", {
-            "*": "deny",
-            task: {
-                "*": "deny",
-                "execute-code": "allow",
-            },
-        })
-        const client: OpencodeClient = {
-            session: {
-                async get() {
-                    return { data: parent }
-                },
-                children: createChildrenForParent(parent, child),
-                async messages() {
-                    return {
-                        data: createResumeMessages({
-                            "*": "deny",
-                            task: {
-                                "*": "deny",
-                            },
-                        }),
-                    }
-                },
-                async promptAsync(args: Parameters<OpencodeClient["session"]["promptAsync"]>[0]) {
-                    const firstPart = args.body?.parts[0]
-                    prompts.push(firstPart?.type === "text" ? firstPart.text : "")
-                    return {}
-                },
-            },
-        } as unknown as OpencodeClient
-
-        await createTaskResumeTool(client).execute({}, createToolContext())
-
-        expect(prompts).toEqual([PROMPT_WORK_RESUME])
-    })
-
-    test("uses task_resume prompt when task_resume is allowed", async () => {
-        const prompts: string[] = []
-        const parent = createSession("session-1", "/workspace")
-        const child = createSession("session-2", "/workspace", {
-            "*": "deny",
-            task: {
-                "*": "deny",
-                "execute-code": "allow",
-            },
-            task_resume: "allow",
-        })
-        const client: OpencodeClient = {
-            session: {
-                async get() {
-                    return { data: parent }
-                },
-                children: createChildrenForParent(parent, child),
-                async messages() {
-                    return {
-                        data: createResumeMessages({
-                            "*": "deny",
-                            task: {
-                                "*": "deny",
-                            },
-                        }),
-                    }
-                },
-                async promptAsync(args: SessionPromptAsyncData) {
-                    const firstPart = args.body?.parts[0]
-                    prompts.push(firstPart?.type === "text" ? firstPart.text : "")
-                    return {}
-                },
-            },
-        } as unknown as OpencodeClient
-
-        await createTaskResumeTool(client).execute({}, createToolContext())
-
-        expect(prompts).toEqual([PROMPT_TASK_RESUME])
-    })
-
-    test("resumes interrupted task sessions", async () => {
-        const prompts: string[] = []
-        const parent = createSession("session-1", "/workspace")
-        const child = createSession("session-2", "/workspace", {
-            "*": "deny",
-            task: {
-                "*": "deny",
-                "execute-code": "allow",
-            },
-            task_resume: "allow",
-        })
-        const client: OpencodeClient = {
-            session: {
-                async get() {
-                    return { data: parent }
-                },
-                children: createChildrenForParent(parent, child),
-                async messages() {
-                    return {
-                        data: createResumeMessages({
-                            "*": "deny",
-                            task: {
-                                "*": "deny",
-                            },
-                        }, "task"),
-                    }
-                },
-                async promptAsync(args: SessionPromptAsyncData) {
-                    const firstPart = args.body?.parts[0]
-                    prompts.push(firstPart?.type === "text" ? firstPart.text : "")
-                    return {}
-                },
-            },
-        } as unknown as OpencodeClient
-
-        await createTaskResumeTool(client).execute({}, createToolContext())
-
-        expect(prompts).toEqual([PROMPT_TASK_RESUME])
-    })
-
-    test("ignores message permission and uses session permission", async () => {
-        const prompts: string[] = []
-        const parent = createSession("session-1", "/workspace")
-        const child = createSession("session-2", "/workspace", {
-            "*": "deny",
-            task: {
-                "*": "deny",
-                "execute-code": "allow",
-            },
-            task_resume: "allow",
-        })
-        const client: OpencodeClient = {
-            session: {
-                async get() {
-                    return { data: parent }
-                },
-                children: createChildrenForParent(parent, child),
-                async messages() {
-                    return {
-                        data: createResumeMessages({
-                            "*": "deny",
-                            task: {
-                                "*": "deny",
-                            },
-                        }),
-                    }
-                },
-                async promptAsync(args: SessionPromptAsyncData) {
-                    const firstPart = args.body?.parts[0]
-                    prompts.push(firstPart?.type === "text" ? firstPart.text : "")
-                    return {}
-                },
-            },
-        } as unknown as OpencodeClient
-
-        await createTaskResumeTool(client).execute({}, createToolContext())
-
-        expect(prompts).toEqual([PROMPT_TASK_RESUME])
-    })
-
-    test("resumes interrupted children whose latest tool was not task", async () => {
-        const prompts: string[] = []
-        const parent = createSession("session-1", "/workspace")
-        const child = createSession("session-2", "/workspace", {
-            task: {
-                "*": "deny",
-                "execute-code": "allow",
-            },
-            task_resume: "allow",
-        })
-        const client: OpencodeClient = {
-            session: {
-                async get() {
-                    return { data: parent }
-                },
-                children: createChildrenForParent(parent, child),
-                async messages() {
-                    return {
-                        data: [{
-                            info: {
-                                id: "user-1",
-                                role: "user",
-                                time: { created: 1 },
-                            },
-                            parts: [],
-                        }, {
-                            info: {
-                                id: "assistant-1",
-                                role: "assistant",
-                                providerID: "provider",
-                                modelID: "model",
-                                time: { created: 2 },
-                            },
-                            parts: [{
-                                type: "tool",
-                                tool: "edit",
-                                messageID: "assistant-1",
-                                state: {
-                                    status: "running",
-                                    time: { start: 3 },
-                                },
-                            }],
-                        }],
-                    }
-                },
-                async promptAsync(args: SessionPromptAsyncData) {
-                    const firstPart = args.body?.parts[0]
-                    prompts.push(firstPart?.type === "text" ? firstPart.text : "")
-                    return {}
-                },
-            },
-        } as unknown as OpencodeClient
-
-        const result = await createTaskResumeTool(client).execute({}, createToolContext())
-
-        expect(result).toBe("Resumed 1 session: session-2. You can now resume your own work.")
-        expect(prompts).toEqual([PROMPT_TASK_RESUME])
-    })
-
-    test("resumes children with aborted tool state errors", async () => {
-        const prompts: string[] = []
-        const parent = createSession("session-1", "/workspace")
-        const child = createSession("session-2", "/workspace", {
-            task: {
-                "*": "deny",
-                "execute-code": "allow",
-            },
-            task_resume: "allow",
-        })
-        const client: OpencodeClient = {
-            session: {
-                async get() {
-                    return { data: parent }
-                },
-                children: createChildrenForParent(parent, child),
-                async messages() {
-                    return {
-                        data: [{
-                            info: {
-                                id: "user-1",
-                                role: "user",
-                                time: { created: 1 },
-                            },
-                            parts: [],
-                        }, {
-                            info: {
-                                id: "assistant-1",
-                                role: "assistant",
-                                providerID: "provider",
-                                modelID: "model",
-                                time: { created: 2, completed: 5 },
-                            },
-                            parts: [{
-                                type: "tool",
-                                tool: "bash",
-                                messageID: "assistant-1",
-                                state: {
-                                    status: "error",
-                                    error: { message: "Request aborted by user" },
-                                    time: { start: 3, end: 4 },
-                                },
-                            }],
-                        }],
-                    }
-                },
-                async promptAsync(args: SessionPromptAsyncData) {
-                    const firstPart = args.body?.parts[0]
-                    prompts.push(firstPart?.type === "text" ? firstPart.text : "")
-                    return {}
-                },
-            },
-        } as unknown as OpencodeClient
-
-        const result = await createTaskResumeTool(client).execute({}, createToolContext())
-
-        expect(result).toBe("Resumed 1 session: session-2. You can now resume your own work.")
-        expect(prompts).toEqual([PROMPT_TASK_RESUME])
-    })
-
 })
 
 describe("autocode_concept_list tool", () => {
@@ -887,10 +499,10 @@ describe("autocode_concept_list tool", () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
             try {
-                const plugin = await autocode(createPluginInput({
+                const plugin = await autocode.server(createPluginInput({
                     session: {
                         async get() {
-                            return { data: createSession("session-1", "/workspace") }
+                            return { data: createSession("session-1", workspace) }
                         },
                         async children() {
                             return { data: [] }
@@ -909,7 +521,7 @@ describe("autocode_concept_list tool", () => {
 
                 expect(plugin.tool?.autocode_concept_list).toBeDefined()
                 expect(cfg.agent.autocode).toBeUndefined()
-                expect(getPermissionRule(cfg.agent["auto-general"]?.permission, "*")).toBe("allow")
+                expect(getV2PermissionRule(cfg.agent["auto-general"], "*")).toBe("allow")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -924,7 +536,7 @@ describe("autocode_concept_list tool", () => {
         const reads: string[] = []
         const tool = createAutocodeConceptListTool({
             async readdir(filePath: string, _options: { withFileTypes: true }): Promise<Dirent[]> {
-                if (!String(filePath).endsWith("/concepts")) return []
+                if (basename(String(filePath)) !== "concepts") return []
                 return [
                     createDirent("zeta.md", "file"),
                     createDirent("notes.txt", "file"),
@@ -962,9 +574,9 @@ describe("autocode_concept_list tool", () => {
             ],
         }))
         expect(reads).toEqual([
-            "/workspace/.agents/concepts/alpha.md",
-            "/workspace/.agents/concepts/plain.md",
-            "/workspace/.agents/concepts/zeta.md",
+            join(workspace, ".agents", "concepts", "alpha.md"),
+            join(workspace, ".agents", "concepts", "plain.md"),
+            join(workspace, ".agents", "concepts", "zeta.md"),
         ])
     })
 
@@ -989,11 +601,11 @@ describe("autocode_concept_list tool", () => {
         const tool = createAutocodeConceptListTool({
             async readdir(filePath: string, _options: { withFileTypes: true }): Promise<Dirent[]> {
                 const directory = String(filePath)
-                if (directory.endsWith("/.agents/concepts")) return [createDirent("idea.md", "file")]
+                if (directory.endsWith(join(".agents", "concepts"))) return [createDirent("idea.md", "file")]
                 return []
             },
             async readFile(filePath: string, _encoding: "utf8"): Promise<string> {
-                return `Description for ${String(filePath).split("/").at(-2)}`
+                return `Description for ${basename(dirname(String(filePath)))}`
             },
         })
 
@@ -1013,10 +625,10 @@ describe("autocode_concept_read tool", () => {
             const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
             try {
-                const plugin = await autocode(createPluginInput({
+                const plugin = await autocode.server(createPluginInput({
                     session: {
                         async get() {
-                            return { data: createSession("session-1", "/workspace") }
+                            return { data: createSession("session-1", workspace) }
                         },
                         async children() {
                             return { data: [] }
@@ -1035,7 +647,7 @@ describe("autocode_concept_read tool", () => {
 
                 expect(plugin.tool?.autocode_concept_read).toBeDefined()
                 expect(getPermissionRule(cfg.agent.general?.permission, "autocode_concept_read")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
+                expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_read")).toBe("allow")
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -1059,7 +671,7 @@ describe("autocode_concept_read tool", () => {
 
         expect(result).toBe("# Item Title\n\nRaw body\n---\nKeep separator\n")
         expect(reads).toEqual([
-            "/workspace/.agents/concepts/example-item.md",
+            join(workspace, ".agents", "concepts", "example-item.md"),
         ])
     })
 
@@ -1143,8 +755,8 @@ describe("autocode_concept_create tool", () => {
             file_path: ".agents/concepts/checkout_flow.md",
         })
         expect(writes).toEqual([{
-            filePath: "/workspace/.agents/concepts/checkout_flow.md",
-            content: "---\nsource session title: \"Current Session\"\nsource directory: \"/workspace\"\ncreate: \"2026-06-02 10:11:12\"\nconcept title: \"Checkout Flow\"\n---\n\n# Idea\n\nBuild it.",
+            filePath: join(workspace, ".agents", "concepts", "checkout_flow.md"),
+            content: `---\nsource session title: "Current Session"\nsource directory: ${JSON.stringify(workspace)}\ncreate: "2026-06-02 10:11:12"\nconcept title: "Checkout Flow"\n---\n\n# Idea\n\nBuild it.`,
         }])
     })
 
@@ -1169,8 +781,8 @@ describe("autocode_concept_create tool", () => {
 
         const result = await tool.execute({ label: "Checkout Flow", concept: "Body" }, {
             ...createToolContext(),
-            directory: "/workspace/fallback",
-            worktree: "/",
+            directory: join(workspace, "fallback"),
+            worktree: resolve("/"),
         })
 
         expect(parseToolResult(result)).toEqual({
@@ -1178,8 +790,8 @@ describe("autocode_concept_create tool", () => {
             file_path: ".agents/concepts/checkout_flow.md",
         })
         expect(writes).toEqual([{
-            filePath: "/workspace/fallback/.agents/concepts/checkout_flow.md",
-            content: "---\nsource session title: \"Current Session\"\nsource directory: \"/workspace/fallback\"\ncreate: \"2026-06-02 10:11:12\"\nconcept title: \"Checkout Flow\"\n---\n\nBody",
+            filePath: join(workspace, "fallback", ".agents", "concepts", "checkout_flow.md"),
+            content: `---\nsource session title: "Current Session"\nsource directory: ${JSON.stringify(join(workspace, "fallback"))}\ncreate: "2026-06-02 10:11:12"\nconcept title: "Checkout Flow"\n---\n\nBody`,
         }])
     })
 
@@ -1204,31 +816,6 @@ describe("autocode_concept_create tool", () => {
     })
 })
 
-describe("shared tool error handling", () => {
-    test("returns abort response when task_resume cannot inspect the current session", async () => {
-        const tool = createTaskResumeTool({
-            session: {
-                async get() {
-                    return { error: { message: "Session lookup failed", code: "ESESSION" } }
-                },
-                async children() {
-                    return { data: [] }
-                },
-                async messages() {
-                    return { data: [] }
-                },
-                async promptAsync() {
-                    return {}
-                },
-            },
-        } as unknown as OpencodeClient)
-
-        const result = await tool.execute({}, createToolContext())
-
-        expect(result).toBe(createAbortResponse("inspect current session", { message: "Session lookup failed", code: "ESESSION" }))
-    })
-})
-
 describe("tool registrations", () => {
     test("registers design tools and grants design permission", async () => {
         await withIsolatedConfigHome(async () => {
@@ -1236,7 +823,7 @@ describe("tool registrations", () => {
             process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
             try {
                 const client = createMockClient()
-                const plugin = await autocode(createPluginInput(client))
+                const plugin = await autocode.server(createPluginInput(client))
                 const cfg = createConfig()
                 await configurePlugin(plugin, cfg)
                 const manualMemoryToolKeys: readonly string[] = ["autocode_memory_forget", "autocode_memory_recall"]
@@ -1311,8 +898,6 @@ describe("tool registrations", () => {
                     "git_show",
                     "git_status",
                     "skill",
-                    "task_external",
-                    "task_resume",
                 ].sort())
                 expect(Object.keys(plugin.tool ?? {}).filter((toolName: string): boolean => toolName.startsWith("autocode_memory_")).sort()).toEqual([...manualMemoryToolKeys])
                 expect(plugin.tool?.autocode_draft_job_create).toBeUndefined()
@@ -1355,28 +940,29 @@ describe("tool registrations", () => {
                 expect(cfg.agent.act).toBeUndefined()
                 expect(cfg.agent.ask).toBeUndefined()
                 expect(cfg.agent.autocode).toBeUndefined()
-                expect(cfg.agent.plan).toEqual({ disable: true })
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_agent_execute")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_list")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_concept_read")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_job_execute")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.design?.permission, "autocode_session_create")).toBe("allow")
-                expect(getPermissionRule(cfg.agent["execute-author"]?.permission, "autocode_logo_find")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent["execute-author"]?.permission, "autocode_logo")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_dependencies")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent["execute-document"]?.permission, "autocode_dependencies")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent["auto-general"]?.permission, "*")).toBe("allow")
-                expect(getPermissionRule(cfg.agent["auto-general"]?.permission, "doom_loop")).toBe("deny")
-                expect(getTaskPermissionRule(cfg.agent["auto-general"]?.permission, "design")).toBe("deny")
+                expect(cfg.agent.plan?.disable).toBe(true)
+                expect(getV2PermissionRule(cfg.agent.plan, "external_directory")).toBe("ask")
+                expect(getV2PermissionRule(cfg.agent.design, "autocode_agent_execute")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_list")).toBe("allow")
+                expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_read")).toBe("allow")
+                expect(getV2PermissionRule(cfg.agent.design, "autocode_job_execute")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.design, "autocode_session_create")).toBe("allow")
+                expect(getV2PermissionRule(cfg.agent["execute-author"], "autocode_logo_find")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent["execute-author"], "autocode_logo")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.assist, "autocode_dependencies")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent["execute-document"], "autocode_dependencies")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent["auto-general"], "*")).toBe("allow")
+                expect(getV2PermissionRule(cfg.agent["auto-general"], "doom_loop")).toBeUndefined()
+                expect(permissionEffect(cfg.agent["auto-general"]?.permissions as V2PermissionRule[], "subagent", "design")).toBe("deny")
                 expect(cfg.agent["auto-general"]?.prompt).toContain("fallback auto orchestrator")
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_session_create")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_feedback")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_review")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_job_list")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.auto?.permission, "autocode_draft_job_create")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_session_create")).toBe("allow")
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_job_list")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent.assist?.permission, "autocode_auto_start")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.auto, "autocode_session_create")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.auto, "autocode_feedback")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.auto, "autocode_review")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.auto, "autocode_job_list")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.auto, "autocode_draft_job_create")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.assist, "autocode_session_create")).toBe("allow")
+                expect(getV2PermissionRule(cfg.agent.assist, "autocode_job_list")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent.assist, "autocode_auto_start")).toBeUndefined()
                 for (const legacyAgentId of [
                     "assist_browser", "auto_author", "auto_design", "auto_feature", "auto_general", "auto_refactor", "auto_research", "auto_test", "auto_troubleshoot",
                     "document_agents", "document_conventions", "document_code", "document_env", "document_install", "document_prd", "document_ux",
@@ -1386,19 +972,17 @@ describe("tool registrations", () => {
                 expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
                 expect(cfg.agent.design?.prompt).toContain("autocode_session_create")
                 expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
-                expect(cfg.agent.advise?.prompt).toContain("`task` query subagents")
+                expect(cfg.agent.advise?.prompt).toContain("`subagent` to discover solution facts")
                 const queryDbAgent = (cfg.agent as Record<string, Record<string, unknown>>)["query-db"]
                 expect(queryDbAgent.mode).toBe("subagent")
                 expect(queryDbAgent.hidden).toBe(true)
                 expect(String(queryDbAgent.prompt)).toContain("Use only `autocode_db_tables`, `autocode_db_table`, and `autocode_db_table_read`")
                 expect(String(queryDbAgent.prompt)).toContain("AUTOCODE_DB_<UPPERCASE_KEY>_CONNECTION")
-                expect(queryDbAgent.permission).toEqual(expect.objectContaining({
-                    "*": "deny",
-                    autocode_db_table: "allow",
-                    autocode_db_table_read: "allow",
-                    autocode_db_tables: "allow",
-                    external_directory: expect.objectContaining({ "*": "deny" }),
-                }))
+                expect(getV2PermissionRule(cfg.agent["query-db"], "*")).toBe("deny")
+                for (const action of ["autocode_db_table", "autocode_db_table_read", "autocode_db_tables"]) {
+                    expect(getV2PermissionRule(cfg.agent["query-db"], action)).toBe("allow")
+                }
+                expect(permissionEffect(queryDbAgent.permissions as V2PermissionRule[], "external_directory", "/outside/file")).toBe("ask")
                 const executeRestAgent = (cfg.agent as Record<string, Record<string, unknown>>)["execute-rest"]
                 expect(getAgentField(cfg, "execute-rest", "mode")).toBe("subagent")
                 expect(getAgentField(cfg, "execute-rest", "hidden")).toBe(true)
@@ -1412,15 +996,13 @@ describe("tool registrations", () => {
                 expect(String(executeRestAgent.prompt)).toContain("Caveman English")
                 expect(String(executeRestAgent.prompt)).not.toContain("`query`")
                 expect(String(executeRestAgent.prompt)).not.toContain("rest_key")
-                expect(executeRestAgent.permission).toEqual(expect.objectContaining({
-                    "*": "deny",
-                    autocode_rest: "allow",
-                    external_directory: expect.objectContaining({ "*": "deny" }),
-                }))
-                expect(getPermissionRule(cfg.agent["execute-rest"]?.permission, "session")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent["execute-rest"]?.permission, "agent")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent["execute-rest"]?.permission, "previous_session")).toBeUndefined()
-                expect(getPermissionRule(cfg.agent["execute-rest"]?.permission, "previous_agent")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent["execute-rest"], "*")).toBe("deny")
+                expect(getV2PermissionRule(cfg.agent["execute-rest"], "autocode_rest")).toBe("allow")
+                expect(permissionEffect(executeRestAgent.permissions as V2PermissionRule[], "external_directory", "/outside/file")).toBe("ask")
+                expect(getV2PermissionRule(cfg.agent["execute-rest"], "session")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent["execute-rest"], "agent")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent["execute-rest"], "previous_session")).toBeUndefined()
+                expect(getV2PermissionRule(cfg.agent["execute-rest"], "previous_agent")).toBeUndefined()
             } finally {
                 if (previousSkipBootstrap === undefined) {
                     delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
@@ -1470,7 +1052,7 @@ describe("autocode_logo_find tool", () => {
     }
 
     test("returns the first logo path in search order", async () => {
-        const existing = new Set(["/workspace/docs/logo.svg", "/workspace/assets/favicon.png"])
+        const existing = new Set([join(workspace, "docs/logo.svg"), join(workspace, "assets/favicon.png")])
         const tool = createAutocodeLogoFindTool({
             async access(filePath: string) {
                 if (!existing.has(filePath)) {
@@ -1486,7 +1068,7 @@ describe("autocode_logo_find tool", () => {
 
     test("checks svg, webp, png, jpg extension priority for a candidate location", async () => {
         const checked: string[] = []
-        const existing = new Set(["/workspace/assets/logo.jpg"])
+        const existing = new Set([join(workspace, "assets/logo.jpg")])
         const tool = createAutocodeLogoFindTool({
             async access(filePath: string) {
                 checked.push(filePath)
@@ -1501,10 +1083,10 @@ describe("autocode_logo_find tool", () => {
 
         expect(result).toEqual({ found: true, path: "assets/logo.jpg" })
         expect(checked).toEqual([
-            "/workspace/assets/logo.svg",
-            "/workspace/assets/logo.webp",
-            "/workspace/assets/logo.png",
-            "/workspace/assets/logo.jpg",
+            join(workspace, "assets/logo.svg"),
+            join(workspace, "assets/logo.webp"),
+            join(workspace, "assets/logo.png"),
+            join(workspace, "assets/logo.jpg"),
         ])
     })
 
@@ -1539,20 +1121,21 @@ describe("autocode_logo_find tool", () => {
 // ── loadAutocodeConfig unit tests ────────────────────────────────────────────
 
 function makeFs(files: Record<string, string>): ConfigFileSystem {
+    const normalizedFiles = Object.fromEntries(Object.entries(files).map(([filePath, content]) => [resolve(filePath), content]))
     return {
         readFileSync(path: string) {
-            if (path in files) return files[path]
+            if (resolve(path) in normalizedFiles) return normalizedFiles[resolve(path)]
             const err = new Error("ENOENT") as NodeJS.ErrnoException
             err.code = "ENOENT"
             throw err
         },
         ensureFileSync(path: string, contents: string) {
-            if (!(path in files)) {
-                files[path] = contents
+            if (!(resolve(path) in normalizedFiles)) {
+                normalizedFiles[resolve(path)] = contents
             }
         },
         writeFileSync(path: string, contents: string) {
-            files[path] = contents
+            normalizedFiles[resolve(path)] = contents
         },
     }
 }
@@ -1562,8 +1145,13 @@ function globalAutocodeConfigPath() {
 }
 
 describe("loadAutocodeConfig", () => {
+    const worktree = resolve("/wt")
+    const directory = resolve("/dir")
+    const worktreeConfig = join(worktree, ".opencode", "autocode.jsonc")
+    const directoryConfig = join(directory, ".opencode", "autocode.jsonc")
+
     test("no config returns empty tiers", async () => {
-        const result = await loadAutocodeConfig("/wt", "/wt", makeFs({}))
+        const result = await loadAutocodeConfig(worktree, worktree, makeFs({}))
         expect(result.tiers).toEqual({})
         expect(result.externalDirectories).toEqual({})
     })
@@ -1575,22 +1163,23 @@ describe("loadAutocodeConfig", () => {
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
         expect(result.tiers.fast?.model).toBe("global-fast")
         expect(result.tiers.smart?.model).toBe("global-smart")
     })
 
     test("global config respects XDG_CONFIG_HOME", async () => {
         const oldXdgConfigHome = process.env.XDG_CONFIG_HOME
-        process.env.XDG_CONFIG_HOME = "/xdg-config"
+        const xdgConfigHome = resolve("/xdg-config")
+        process.env.XDG_CONFIG_HOME = xdgConfigHome
         try {
             const fs = makeFs({
-                "/xdg-config/opencode/autocode.jsonc": JSON.stringify({
+                [join(xdgConfigHome, "opencode", "autocode.jsonc")]: JSON.stringify({
                     autocode: { tiers: { fast: { model: "xdg-fast" } } },
                 }),
             })
 
-            const result = await loadAutocodeConfig("/wt", "/wt", fs)
+            const result = await loadAutocodeConfig(worktree, worktree, fs)
             expect(result.tiers.fast?.model).toBe("xdg-fast")
         } finally {
             if (oldXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME
@@ -1603,12 +1192,12 @@ describe("loadAutocodeConfig", () => {
             [globalAutocodeConfigPath()]: JSON.stringify({
                 autocode: { tiers: { fast: { model: "global-fast" }, smart: { model: "global-smart" } } },
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: { tiers: { fast: { model: "local-fast" } } },
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
         expect(result.tiers.fast?.model).toBe("local-fast")
         expect(result.tiers.smart?.model).toBe("global-smart")
     })
@@ -1618,15 +1207,15 @@ describe("loadAutocodeConfig", () => {
             [globalAutocodeConfigPath()]: JSON.stringify({
                 autocode: { tiers: { fast: { model: "global-fast" }, balanced: { model: "global-balanced" }, smart: { model: "global-smart" } } },
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: { tiers: { fast: { model: "wt-fast" }, balanced: { model: "wt-balanced" } } },
             }),
-            "/dir/.opencode/autocode.jsonc": JSON.stringify({
+            [directoryConfig]: JSON.stringify({
                 autocode: { tiers: { fast: { model: "dir-fast" } } },
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/dir", fs)
+        const result = await loadAutocodeConfig(worktree, directory, fs)
         expect(result.tiers.fast?.model).toBe("dir-fast")
         expect(result.tiers.balanced?.model).toBe("wt-balanced")
         expect(result.tiers.smart?.model).toBe("global-smart")
@@ -1634,7 +1223,7 @@ describe("loadAutocodeConfig", () => {
 
     test("selected provider via tier and provider-keyed tiers", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tier: "openai",
                     tiers: {
@@ -1651,7 +1240,7 @@ describe("loadAutocodeConfig", () => {
                 },
             }),
         })
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
         expect(result.tiers.smart).toEqual({ model: "openai/gpt-5.5", variant: "thinking" })
         expect(result.tiers.balanced).toEqual({ model: "openai/gpt-5" })
         expect(result.tiers.fast).toEqual({ model: "openai/gpt-5-mini" })
@@ -1660,7 +1249,7 @@ describe("loadAutocodeConfig", () => {
 
     test("provider-selected cheap tier config is parsed", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tier: "openai",
                     tiers: {
@@ -1675,7 +1264,7 @@ describe("loadAutocodeConfig", () => {
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.tiers.cheap).toEqual({ model: "openai/gpt-5-nano", variant: "economy" })
         expect(result.tiers.smart).toEqual({ model: "openai/gpt-5.5", variant: "thinking" })
@@ -1684,7 +1273,7 @@ describe("loadAutocodeConfig", () => {
 
     test("current direct tier schema is parsed", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tiers: {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
@@ -1698,7 +1287,7 @@ describe("loadAutocodeConfig", () => {
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.tiers.cheap).toEqual({ model: "openai/gpt-5-nano", variant: "economy" })
         expect(result.tiers.fast).toEqual({ model: "anthropic/claude-haiku-4-5", variant: "quick" })
@@ -1713,19 +1302,19 @@ describe("loadAutocodeConfig", () => {
             [globalAutocodeConfigPath()]: JSON.stringify({
                 autocode: { tiers: { context: { model: "openai/gpt-5", variant: "standard" } } },
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: { tiers: { context: { model: "anthropic/claude-opus-4-5", variant: "thinking" } } },
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.tiers.context).toEqual({ model: "anthropic/claude-opus-4-5", variant: "thinking" })
     })
 
     test("provider-selected operator tier config is parsed", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tier: "openai",
                     tiers: {
@@ -1738,7 +1327,7 @@ describe("loadAutocodeConfig", () => {
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.tiers.operator).toEqual({ model: "openai/gpt-5", variant: "standard" })
         expect(result.tiers.balanced).toEqual({ model: "openai/gpt-5-mini" })
@@ -1746,14 +1335,14 @@ describe("loadAutocodeConfig", () => {
 
     test("missing or non-string tier falls back to direct tiers", async () => {
         const missingTierFs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tiers: { balanced: { model: "missing-tier-direct" }, openai: { balanced: { model: "provider-model" } } },
                 },
             }),
         })
         const nonStringTierFs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tier: 1,
                     tiers: { balanced: { model: "non-string-tier-direct" }, openai: { balanced: { model: "provider-model" } } },
@@ -1761,15 +1350,15 @@ describe("loadAutocodeConfig", () => {
             }),
         })
 
-        const missingTierResult = await loadAutocodeConfig("/wt", "/wt", missingTierFs)
-        const nonStringTierResult = await loadAutocodeConfig("/wt", "/wt", nonStringTierFs)
+        const missingTierResult = await loadAutocodeConfig(worktree, worktree, missingTierFs)
+        const nonStringTierResult = await loadAutocodeConfig(worktree, worktree, nonStringTierFs)
         expect(missingTierResult.tiers.balanced?.model).toBe("missing-tier-direct")
         expect(nonStringTierResult.tiers.balanced?.model).toBe("non-string-tier-direct")
     })
 
     test("unknown or invalid selected provider falls back to direct tiers", async () => {
         const unknownProviderFs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tier: "missing",
                     tiers: { fast: { model: "unknown-direct" }, openai: { fast: { model: "provider-model" } } },
@@ -1777,7 +1366,7 @@ describe("loadAutocodeConfig", () => {
             }),
         })
         const invalidProviderFs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tier: "openai",
                     tiers: { smart: { model: "invalid-direct" }, openai: { default: { model: "provider-model" } } },
@@ -1785,15 +1374,15 @@ describe("loadAutocodeConfig", () => {
             }),
         })
 
-        const unknownProviderResult = await loadAutocodeConfig("/wt", "/wt", unknownProviderFs)
-        const invalidProviderResult = await loadAutocodeConfig("/wt", "/wt", invalidProviderFs)
+        const unknownProviderResult = await loadAutocodeConfig(worktree, worktree, unknownProviderFs)
+        const invalidProviderResult = await loadAutocodeConfig(worktree, worktree, invalidProviderFs)
         expect(unknownProviderResult.tiers.fast?.model).toBe("unknown-direct")
         expect(invalidProviderResult.tiers.smart?.model).toBe("invalid-direct")
     })
 
     test("directory override with provider-selected tiers", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tier: "openai",
                     tiers: {
@@ -1801,7 +1390,7 @@ describe("loadAutocodeConfig", () => {
                     },
                 },
             }),
-            "/dir/.opencode/autocode.jsonc": JSON.stringify({
+            [directoryConfig]: JSON.stringify({
                 autocode: {
                     tier: "google",
                     tiers: {
@@ -1810,7 +1399,7 @@ describe("loadAutocodeConfig", () => {
                 },
             }),
         })
-        const result = await loadAutocodeConfig("/wt", "/dir", fs)
+        const result = await loadAutocodeConfig(worktree, directory, fs)
         expect(result.tiers.fast?.model).toBe("dir-fast")
         expect(result.tiers.smart?.model).toBe("wt-smart")
     })
@@ -1830,14 +1419,14 @@ describe("loadAutocodeConfig", () => {
                     },
                 },
             }),
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tier: "openai",
                 },
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.tiers.fast).toEqual({ model: "global-fast" })
         expect(result.tiers.smart).toEqual({ model: "global-smart" })
@@ -1845,7 +1434,7 @@ describe("loadAutocodeConfig", () => {
 
     test("direct tiers compatibility still works", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tiers: {
                         smart: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
@@ -1855,7 +1444,7 @@ describe("loadAutocodeConfig", () => {
                 },
             }),
         })
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
         expect(result.tiers.smart).toEqual({ model: "anthropic/claude-opus-4-5", variant: "thinking" })
         expect(result.tiers.balanced).toEqual({ model: "anthropic/claude-sonnet-4-5" })
         expect(result.tiers.fast).toEqual({ model: "anthropic/claude-haiku-4-5" })
@@ -1863,7 +1452,7 @@ describe("loadAutocodeConfig", () => {
 
     test("direct tier-map supports every current tier", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     tiers: {
                         cheap: { model: "openai/gpt-5-nano", variant: "economy" },
@@ -1877,7 +1466,7 @@ describe("loadAutocodeConfig", () => {
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.tiers.cheap).toEqual({ model: "openai/gpt-5-nano", variant: "economy" })
         expect(result.tiers.fast).toEqual({ model: "anthropic/claude-haiku-4-5" })
@@ -1889,7 +1478,7 @@ describe("loadAutocodeConfig", () => {
 
     test("legacy shape: reads model and variant from model/variant maps", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     model: {
                         smart: "openai/gpt-4o",
@@ -1901,7 +1490,7 @@ describe("loadAutocodeConfig", () => {
                 },
             }),
         })
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
         expect(result.tiers.smart).toEqual({ model: "openai/gpt-4o", variant: "extended" })
         expect(result.tiers.fast).toEqual({ model: "openai/gpt-4o-mini", variant: undefined })
         expect(result.tiers.balanced).toBeUndefined()
@@ -1909,7 +1498,7 @@ describe("loadAutocodeConfig", () => {
 
     test("legacy model.cheap / variant.cheap is parsed", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({
+            [worktreeConfig]: JSON.stringify({
                 autocode: {
                     model: {
                         cheap: "openai/gpt-5-nano",
@@ -1924,7 +1513,7 @@ describe("loadAutocodeConfig", () => {
             }),
         })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.tiers.cheap).toEqual({ model: "openai/gpt-5-nano", variant: "economy" })
         expect(result.tiers.smart).toEqual({ model: "openai/gpt-4o", variant: "extended" })
@@ -1933,23 +1522,23 @@ describe("loadAutocodeConfig", () => {
 
     test("directory overrides worktree for same tier", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": JSON.stringify({ autocode: { tiers: { fast: { model: "wt-model" } } } }),
-            "/dir/.opencode/autocode.jsonc": JSON.stringify({ autocode: { tiers: { fast: { model: "dir-model" } } } }),
+            [worktreeConfig]: JSON.stringify({ autocode: { tiers: { fast: { model: "wt-model" } } } }),
+            [directoryConfig]: JSON.stringify({ autocode: { tiers: { fast: { model: "dir-model" } } } }),
         })
-        const result = await loadAutocodeConfig("/wt", "/dir", fs)
+        const result = await loadAutocodeConfig(worktree, directory, fs)
         expect(result.tiers.fast?.model).toBe("dir-model")
     })
 
     test("malformed JSONC throws with path and message", async () => {
-        const fs = makeFs({ "/wt/.opencode/autocode.jsonc": "{ bad json }" })
-        await expect(loadAutocodeConfig("/wt", "/wt", fs)).rejects.toThrow(
+        const fs = makeFs({ [worktreeConfig]: "{ bad json }" })
+        await expect(loadAutocodeConfig(worktree, worktree, fs)).rejects.toThrow(
             /autocode: malformed JSONC in .*autocode\.jsonc/
         )
     })
 
     test("JSONC comments are stripped before parsing", async () => {
         const fs = makeFs({
-            "/wt/.opencode/autocode.jsonc": `{
+            [worktreeConfig]: `{
                 // global model settings
                 "autocode": {
                     "tiers": {
@@ -1958,7 +1547,7 @@ describe("loadAutocodeConfig", () => {
                 },
             }`,
         })
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
         expect(result.tiers.smart?.model).toBe("anthropic/claude-opus-4-5")
     })
 })
@@ -1984,7 +1573,7 @@ describe("plugin.config tier wiring", () => {
     function createTierClient(): OpencodeClient {
         return {
             session: {
-                async get() { return { data: createSession("session-1", "/workspace") } },
+                async get() { return { data: createSession("session-1", workspace) } },
                 async children() { return { data: [] } },
                 async messages() { return { data: [] } },
                 async promptAsync() { return {} },
@@ -2005,7 +1594,7 @@ describe("plugin.config tier wiring", () => {
         await withIsolatedConfigHome(async () => {
             const worktree = mkdtempSync(join(tmpdir(), "autocode-test-"))
             try {
-                const plugin = await autocode(createPluginInput(createTierClient(), worktree))
+                const plugin = await autocode.server(createPluginInput(createTierClient(), worktree))
                 const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
                 await configurePlugin(plugin, cfg)
 
@@ -2027,7 +1616,7 @@ describe("plugin.config tier wiring", () => {
                     autocode: { tiers: { smart: { model: "anthropic/claude-opus-4-5" } } },
                 }))
 
-                const plugin = await autocode(createPluginInput(createTierClient(), worktree))
+                const plugin = await autocode.server(createPluginInput(createTierClient(), worktree))
                 const cfg: ConfigWithRuntimeSections = {
                     agent: {
                         assist: { model: "user/custom-model" },
@@ -2060,7 +1649,7 @@ describe("plugin.config tier wiring", () => {
                     },
                 })
 
-                const plugin = await autocode(createPluginInput(createTierClient(), worktree))
+                const plugin = await autocode.server(createPluginInput(createTierClient(), worktree))
                 const cfg: ConfigWithRuntimeSections & { small_model?: string } = { agent: {}, command: {} }
 
                 await configurePlugin(plugin, cfg)
@@ -2122,7 +1711,7 @@ describe("plugin.config tier wiring", () => {
                     },
                 })
 
-                const plugin = await autocode(createPluginInput(createTierClient(), worktree))
+                const plugin = await autocode.server(createPluginInput(createTierClient(), worktree))
                 const cfg: ConfigWithRuntimeSections & { small_model?: string } = { agent: {}, command: {} }
 
                 await configurePlugin(plugin, cfg)
@@ -2152,7 +1741,7 @@ describe("plugin.config tier wiring", () => {
                     },
                 })
 
-                const plugin = await autocode(createPluginInput(createTierClient(), worktree))
+                const plugin = await autocode.server(createPluginInput(createTierClient(), worktree))
                 const cfg: ConfigWithRuntimeSections & { small_model?: string } = {
                     agent: {},
                     command: {},
@@ -2182,7 +1771,7 @@ describe("plugin.config tier wiring", () => {
                 })
 
                 const titleAgent = { model: "user/title-model", prompt: "Keep title agent" }
-                const plugin = await autocode(createPluginInput(createTierClient(), worktree))
+                const plugin = await autocode.server(createPluginInput(createTierClient(), worktree))
                 const cfg = { agent: { title: titleAgent }, command: {} } satisfies ConfigWithRuntimeSections
 
                 await configurePlugin(plugin, cfg)
@@ -2209,7 +1798,7 @@ describe("plugin.config tier wiring", () => {
                     },
                 })
 
-                const plugin = await autocode(createPluginInput(createTierClient(), worktree))
+                const plugin = await autocode.server(createPluginInput(createTierClient(), worktree))
                 const cfg = {
                     agent: {
                         general: {
@@ -2244,7 +1833,7 @@ describe("plugin.config tier wiring", () => {
                     },
                 })
 
-                const plugin = await autocode(createPluginInput(createTierClient(), worktree))
+                const plugin = await autocode.server(createPluginInput(createTierClient(), worktree))
                 const cfg = {
                     agent: {
                         compaction: {

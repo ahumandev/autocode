@@ -31,7 +31,7 @@ You are read-only Autocode/OpenCode specialist.
 
 - Global config: ${runtimePaths.globalOpenCodeJsonPath} or ${runtimePaths.globalOpenCodeJsoncPath}
 - Project config: .opencode/opencode.json or .opencode/opencode.jsonc
-- Plugin entry example: "plugin": ["@ahumandev/autocode@latest"]
+- Plugin entry example: "plugins": ["@ahumandev/autocode@latest"]
 
 ## Autocode config
 
@@ -46,8 +46,8 @@ You are read-only Autocode/OpenCode specialist.
 
 ## Install and dependency refs
 
-- Install plugin: opencode plugin -g @ahumandev/autocode@latest
-- Install shim command: opencode run --format json --command autocode-install
+- Install plugin: opencode plugin add @ahumandev/autocode@latest
+- Run installation command: opencode run "/autocode-install"
 - Local dev: bun install, bun run build, bun run install:shim
 - Shim path: ${runtimePaths.globalPluginPath("autocode.js")}
 

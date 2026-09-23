@@ -9,6 +9,24 @@ import { syncGitHubSkillInventory, type GitHubSkillGit, type GitHubSkillSyncDepe
 const tempRoots: string[] = []
 const commit = "a".repeat(40)
 
+async function canCreateFileSymlinks(): Promise<boolean> {
+    const root = await nodeFs.mkdtemp(join(tmpdir(), "autocode-github-symlink-probe-"))
+    try {
+        await nodeFs.writeFile(join(root, "target"), "target")
+        await nodeFs.symlink(join(root, "target"), join(root, "link"), "file")
+        return true
+    }
+    catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP"].includes((error as NodeJS.ErrnoException).code ?? "")) return false
+        throw error
+    }
+    finally {
+        await nodeFs.rm(root, { recursive: true, force: true })
+    }
+}
+
+const fileSymlinksAvailable = await canCreateFileSymlinks()
+
 type Fixture = {
     root: string
     manifestPath: string
@@ -394,23 +412,27 @@ describe("syncGitHubSkillInventory", () => {
         await expect(syncGitHubSkillInventory(options(traversal), dependencies(traversal))).rejects.toThrow("unsafe source path")
     })
 
-    test("rejects external symlinks and missing or malformed skill files", async () => {
+    test.skipIf(!fileSymlinksAvailable)("rejects external symlinks", async () => {
         const symlinkUrl = "https://github.com/acme/symlink"
-        const missingUrl = "https://github.com/acme/missing"
-        const emptyUrl = "https://github.com/acme/empty"
         const symlink = await createFixture([{ sourceUrl: symlinkUrl, relativeInstallPath: "github/acme/symlink/linked" }])
         const symlinkRepository = await addRepository(symlink, symlinkUrl, { "LICENSE": "license\n" })
         const outside = join(symlink.root, "outside.txt")
         await nodeFs.writeFile(outside, "outside\n")
         await nodeFs.mkdir(join(symlinkRepository, "linked"), { recursive: true })
         await nodeFs.writeFile(join(symlinkRepository, "linked", "SKILL.md"), "linked\n")
-        await nodeFs.symlink(outside, join(symlinkRepository, "linked", "outside-link"))
+        await nodeFs.symlink(outside, join(symlinkRepository, "linked", "outside-link"), "file")
+
+        await expect(syncGitHubSkillInventory(options(symlink), dependencies(symlink))).rejects.toThrow("external symlink rejected")
+    })
+
+    test("rejects missing or malformed skill files", async () => {
+        const missingUrl = "https://github.com/acme/missing"
+        const emptyUrl = "https://github.com/acme/empty"
         const missing = await createFixture([{ sourceUrl: missingUrl, relativeInstallPath: "github/acme/missing/missing" }])
         await addRepository(missing, missingUrl, { "LICENSE": "license\n", "other/file.txt": "none\n" })
         const empty = await createFixture([{ sourceUrl: emptyUrl, relativeInstallPath: "github/acme/empty/empty" }])
         await addRepository(empty, emptyUrl, { "LICENSE": "license\n", "empty/SKILL.md": "" })
 
-        await expect(syncGitHubSkillInventory(options(symlink), dependencies(symlink))).rejects.toThrow("external symlink rejected")
         await expect(syncGitHubSkillInventory(options(missing), dependencies(missing))).rejects.toThrow("no SKILL.md found")
         await expect(syncGitHubSkillInventory(options(empty), dependencies(empty))).rejects.toThrow("malformed SKILL.md")
     })

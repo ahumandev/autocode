@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { basename, dirname, join } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import type { LocalMemoryFileSystem } from "@/utils/local_memory"
 import { resetRetryCounts } from "@/utils/tools"
 import { createLearnTool, validateLearnArgs } from "./learn"
@@ -79,8 +79,8 @@ async function withFixedTime<T>(run: () => Promise<T>, time: Date = fixedTime): 
 
 async function executeLearn(fileSystem: LocalMemoryFileSystem, args: Record<string, unknown>): Promise<string> {
     const result = await createLearnTool(fileSystem).execute(args as never, createToolContext({
-        directory: "/project-root/packages/ui",
-        worktree: "/project-root",
+        directory: join(resolve("/project-root"), "packages", "ui"),
+        worktree: resolve("/project-root"),
     }))
     return result as string
 }
@@ -109,7 +109,7 @@ describe("learn tool", () => {
             })
 
             const filename = "2026-09-16 12h34s56 Browser Tools,Chrome,Firefox;UI tests.md"
-            const directory = "/project-root/.opencode/autocode/memories"
+            const directory = join(resolve("/project-root"), ".opencode", "autocode", "memories")
             const savedPath = join(directory, filename)
 
             expect(memoryFileSystem.mkdirPaths).toEqual([directory])
@@ -124,7 +124,7 @@ describe("learn tool", () => {
 
     test("supersedes same-timestamp memory with same normalized ID", async () => {
         await withFixedTime(async () => {
-            const directory = "/project-root/.opencode/autocode/memories"
+            const directory = join(resolve("/project-root"), ".opencode", "autocode", "memories")
             const oldPath = join(directory, "2026-09-16 12h34s56 browser tools.md")
             const filename = "2026-09-16 12h34s56 Browser Tools,Chrome,Firefox;UI tests.md"
             const savedPath = join(directory, filename)
@@ -155,7 +155,7 @@ describe("learn tool", () => {
                 context_keywords: "environment,wsl2,ubuntu,windows",
             })
 
-            expect(memoryFileSystem.renamedPaths[0]?.newPath).toBe(join("/project-root/.opencode/autocode/memories", filename))
+            expect(memoryFileSystem.renamedPaths[0]?.newPath).toBe(join(resolve("/project-root"), ".opencode", "autocode", "memories", filename))
             expect(result).toBe("OK")
         }, new Date("2026-09-17T12:28:52.000Z"))
     })

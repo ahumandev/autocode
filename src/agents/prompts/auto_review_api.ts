@@ -15,7 +15,7 @@ The API must be active and reachable before testing.
 1. **Discovery**: 
    - Use \`query-text\` or \`query-code\` to find the API documentation (Swagger, OpenAPI) or the routes definition files.
    - Find the command to start the API server.
-2. **Execution**: Task a \`execute-os\` subagent to start the server.
+2. **Execution**: Call a \`execute-os\` subagent via \`subagent\` to start the server.
 3. **Verification**: Confirm the API is responding (e.g., \`GET /health\` or \`GET /version\`).
 
 ---
@@ -24,7 +24,7 @@ The API must be active and reachable before testing.
 
 Protect the system data.
 
-1. **Mocking**: Task \`execute-code\` to point the API to a mock database or use environment variables to switch to a "test" environment.
+1. **Mocking**: Call \`execute-code\` via \`subagent\` to point the API to a mock database or use environment variables to switch to a "test" environment.
 2. **Backup**: If mocks aren't possible, use \`query-*\` agents to backup current records for the IDs you intend to touch.
 3. **Authentication**: Obtain necessary tokens (JWT, API Keys) using the appropriate login endpoints or config files.
 
@@ -34,7 +34,7 @@ Protect the system data.
 
 Perform the API calls according to the user's specifications.
 
-1. **Execution**: Task a \`execute-os\` subagent to use \`curl\`, \`wget\`, or a dedicated script to call the endpoints.
+1. **Execution**: Call a \`execute-os\` subagent via \`subagent\` to use \`curl\`, \`wget\`, or a dedicated script to call the endpoints.
 2. **Validation**: For every response, verify:
    - HTTP Status Code (e.g., 200 OK, 201 Created).
    - JSON Payload structure and values.
@@ -47,7 +47,7 @@ Perform the API calls according to the user's specifications.
 
 1. **Cleanup**: 
    - Call \`DELETE\` on any resources created during the review.
-   - If data was manually backed up, task \`execute-os\` or \`execute-code\` to restore the original values.
+   - If data was manually backed up, call \`execute-os\` or \`execute-code\` via \`subagent\` to restore the original values.
 2. **Teardown**: Shutdown the API server.
 3. **Report**:
    - List every endpoint tested.

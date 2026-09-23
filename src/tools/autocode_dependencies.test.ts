@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
+import path from "node:path"
 import { createAutocodeDependenciesTool } from "./autocode_dependencies"
 import { createToolContext } from "./test_context"
 import { inspectAutocodeDependencies, isAtLeastMinimumOpencodeVersion, parseTolerantSemver, type DependencyDebugEvent } from "@/utils/autocode_dependencies"
@@ -22,6 +23,8 @@ type DependencyEntry = Record<string, unknown> & {
 }
 
 type CommandMap = Record<string, boolean | { path?: string, version?: string }>
+
+const fixturePath = (filePath: string): string => path.resolve(filePath)
 
 function parseResult(result: string): DependencyToolResult {
     return JSON.parse(result) as DependencyToolResult
@@ -92,12 +95,13 @@ function createDeps(options?: {
         fileSystem: {
             async readFile(filePath: string) {
                 if (filePath === "/etc/os-release") return options?.osRelease ?? "ID=ubuntu\nID_LIKE=debian\n"
-                if (options?.fileMap?.[filePath] !== undefined) return options.fileMap[filePath]
+                const content = Object.entries(options?.fileMap ?? {}).find(([key]) => fixturePath(key) === filePath)?.[1]
+                if (content !== undefined) return content
                 const error = new Error("missing") as NodeJS.ErrnoException
                 error.code = "ENOENT"
                 throw error
             },
-            async readdir(dirPath: string) { return options?.readdirMap?.[dirPath] ?? [] },
+            async readdir(dirPath: string) { return Object.entries(options?.readdirMap ?? {}).find(([key]) => fixturePath(key) === dirPath)?.[1] ?? [] },
             async mkdir() {},
             async writeFile() {},
             async stat() {
@@ -355,10 +359,10 @@ describe("autocode_dependencies", () => {
     })
 
     test("detects optional MCP from OpenCode config entry under global and local paths", async () => {
-        const globalConfig = "/xdg/opencode/opencode.jsonc"
-        const worktreeConfig = "/repo/.opencode/opencode.json"
+        const globalConfig = fixturePath("/xdg/opencode/opencode.jsonc")
+        const worktreeConfig = fixturePath("/repo/.opencode/opencode.json")
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
             fileMap: {
                 [globalConfig]: `{
                     // global config
@@ -376,7 +380,7 @@ describe("autocode_dependencies", () => {
                     },
                 }),
             },
-        })).execute({}, createToolContext({ directory: "/repo/app", worktree: "/repo" })) as string)
+        })).execute({}, createToolContext({ directory: fixturePath("/repo/app"), worktree: fixturePath("/repo") })) as string)
 
         expect(result.optional_dependencies?.context7_mcp?.status).toBe("ok")
         expect(result.optional_dependencies?.context7_mcp?.detection_source).toBe("launcher_command")
@@ -392,9 +396,9 @@ describe("autocode_dependencies", () => {
             commandMap: { "open-websearch": true },
         })).execute({}, createToolContext()) as string)
         const configResult = parseResult(await createAutocodeDependenciesTool(createDeps({
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
             fileMap: {
-                "/xdg/opencode/opencode.json": JSON.stringify({
+                [fixturePath("/xdg/opencode/opencode.json")]: JSON.stringify({
                     mcp: {
                         servers: {
                             websearch: { command: "npx", args: ["-y", "open-websearch@latest"] },
@@ -414,7 +418,7 @@ describe("autocode_dependencies", () => {
     })
 
     test("detects MCP launcher config and system git independently", async () => {
-        const ancestorConfig = "/repo/packages/.opencode/opencode.jsonc"
+        const ancestorConfig = fixturePath("/repo/packages/.opencode/opencode.jsonc")
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
             fileMap: {
                 [ancestorConfig]: JSON.stringify({
@@ -426,7 +430,7 @@ describe("autocode_dependencies", () => {
                 }),
             },
             commandMap: { git: true },
-        })).execute({}, createToolContext({ directory: "/repo/packages/app", worktree: "/repo" })) as string)
+        })).execute({}, createToolContext({ directory: fixturePath("/repo/packages/app"), worktree: fixturePath("/repo") })) as string)
 
         expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
         expect(result.optional_dependencies?.git_cli?.command).toBe("git")
@@ -439,7 +443,7 @@ describe("autocode_dependencies", () => {
     test("detects windows cmd wrappers from config", async () => {
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
             fileMap: {
-                "/xdg/opencode/opencode.json": JSON.stringify({
+                [fixturePath("/xdg/opencode/opencode.json")]: JSON.stringify({
                     mcp: {
                         servers: {
                             chrome: { command: "cmd.exe", args: ["/c", "npx", "-y", "chrome-devtools-mcp@latest"] },
@@ -447,7 +451,7 @@ describe("autocode_dependencies", () => {
                     },
                 }),
             },
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
         })).execute({}, createToolContext()) as string)
 
         expect(result.optional_dependencies?.chrome_devtools_mcp?.status).toBe("ok")
@@ -457,9 +461,9 @@ describe("autocode_dependencies", () => {
 
     test("detects MCP config entries with command arrays and ignores non-string items", async () => {
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
             fileMap: {
-                "/xdg/opencode/opencode.json": JSON.stringify({
+                [fixturePath("/xdg/opencode/opencode.json")]: JSON.stringify({
                     mcpServers: {
                         chrome: { command: ["node", "/opt/tools/chrome-devtools-mcp.js"] },
                         context7: { command: ["npx", "-y", "@upstash/context7-mcp@latest"] },
@@ -482,9 +486,9 @@ describe("autocode_dependencies", () => {
 
     test("unwraps windows command arrays from config", async () => {
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
             fileMap: {
-                "/xdg/opencode/opencode.json": JSON.stringify({
+                [fixturePath("/xdg/opencode/opencode.json")]: JSON.stringify({
                     mcp: {
                         servers: {
                             chrome: { command: ["cmd.exe", "/c", "npx", "chrome-devtools-mcp@latest"] },
@@ -500,9 +504,9 @@ describe("autocode_dependencies", () => {
 
     test("does not detect MCP from unrelated config objects", async () => {
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
             fileMap: {
-                "/xdg/opencode/opencode.json": JSON.stringify({
+                [fixturePath("/xdg/opencode/opencode.json")]: JSON.stringify({
                     tools: {
                         servers: {
                             context7: { command: "npx", args: ["@upstash/context7-mcp"] },
@@ -518,11 +522,11 @@ describe("autocode_dependencies", () => {
     })
 
     test("detects MCP from supplemental OpenCode config files and ignores unrelated files", async () => {
-        const supplementalConfig = "/xdg/opencode/sample.opencode.jsonc"
+        const supplementalConfig = fixturePath("/xdg/opencode/sample.opencode.jsonc")
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
             readdirMap: {
-                "/xdg/opencode": ["notes.json", "nested", "sample.opencode.jsonc", "sample.opencode.yaml"],
+                [fixturePath("/xdg/opencode")]: ["notes.json", "nested", "sample.opencode.jsonc", "sample.opencode.yaml"],
             },
             fileMap: {
                 [supplementalConfig]: JSON.stringify({
@@ -544,7 +548,7 @@ describe("autocode_dependencies", () => {
     })
 
     test("resolves relative OPENCODE_CONFIG from context directory first", async () => {
-        const configPath = "/repo/app/config/opencode.jsonc"
+        const configPath = fixturePath("/repo/app/config/opencode.jsonc")
         const result = parseResult(await createAutocodeDependenciesTool(createDeps({
             env: { OPENCODE_CONFIG: "config/opencode.jsonc" },
             fileMap: {
@@ -553,7 +557,7 @@ describe("autocode_dependencies", () => {
                 }),
             },
             commandMap: { git: true },
-        })).execute({}, createToolContext({ directory: "/repo/app", worktree: "/repo" })) as string)
+        })).execute({}, createToolContext({ directory: fixturePath("/repo/app"), worktree: fixturePath("/repo") })) as string)
 
         expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
         expect(result.optional_dependencies?.git_cli?.config_path).toBeUndefined()
@@ -601,7 +605,7 @@ describe("autocode_dependencies", () => {
     })
 
     test("utility inspection keeps tool result shape", async () => {
-        const result = await inspectAutocodeDependencies(createDeps(), { directory: "/repo/app", worktree: "/repo" }) as DependencyToolResult
+        const result = await inspectAutocodeDependencies(createDeps(), { directory: fixturePath("/repo/app"), worktree: fixturePath("/repo") }) as DependencyToolResult
 
         expect(result.detect_only).toBe(true)
         expect(result.required_ok).toBe(true)
@@ -613,12 +617,12 @@ describe("autocode_dependencies", () => {
     test("debug mode reports missed config files, supplemental config matches, and final reason", async () => {
         const events: DependencyDebugEvent[] = []
         await inspectAutocodeDependencies(createDeps({
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
             readdirMap: {
-                "/xdg/opencode": ["sample.opencode.jsonc"],
+                [fixturePath("/xdg/opencode")]: ["sample.opencode.jsonc"],
             },
             fileMap: {
-                "/xdg/opencode/sample.opencode.jsonc": JSON.stringify({
+                [fixturePath("/xdg/opencode/sample.opencode.jsonc")]: JSON.stringify({
                     mcpServers: [
                         { name: "context7", command: ["npx", "-y", "@upstash/context7-mcp@latest"] },
                     ],
@@ -634,18 +638,18 @@ describe("autocode_dependencies", () => {
         expect(events).toContainEqual(expect.objectContaining({
             dependency: "context7_mcp",
             stage: "config_paths",
-            config_paths: expect.arrayContaining(["/xdg/opencode/opencode.jsonc", "/xdg/opencode/sample.opencode.jsonc"]),
+            config_paths: expect.arrayContaining([fixturePath("/xdg/opencode/opencode.jsonc"), fixturePath("/xdg/opencode/sample.opencode.jsonc")]),
         }))
         expect(events).toContainEqual(expect.objectContaining({
             dependency: "context7_mcp",
             stage: "config_file",
-            config_path: "/xdg/opencode/opencode.jsonc",
+            config_path: fixturePath("/xdg/opencode/opencode.jsonc"),
             outcome: "missing",
         }))
         expect(events).toContainEqual(expect.objectContaining({
             dependency: "context7_mcp",
             stage: "config_match",
-            config_path: "/xdg/opencode/sample.opencode.jsonc",
+            config_path: fixturePath("/xdg/opencode/sample.opencode.jsonc"),
             section: "mcpServers",
             key: "context7",
             detection_source: "launcher_command",
@@ -661,9 +665,9 @@ describe("autocode_dependencies", () => {
 
     test("detects MCP array entries in config", async () => {
         const result = await inspectAutocodeDependencies(createDeps({
-            env: { XDG_CONFIG_HOME: "/xdg" },
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
             fileMap: {
-                "/xdg/opencode/opencode.jsonc": JSON.stringify({
+                [fixturePath("/xdg/opencode/opencode.jsonc")]: JSON.stringify({
                     mcp: {
                         servers: [
                             { name: "excel", command: ["npx", "--yes", "@negokaz/excel-mcp-server@0.12.0"] },

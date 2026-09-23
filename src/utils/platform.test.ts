@@ -54,7 +54,7 @@ describe("OS prompts", () => {
     test("buildExecuteOsPrompt keeps Bash guidance outside Windows", () => {
         const prompt = buildExecuteOsPrompt(createPlatformCapabilities("linux"))
 
-        expect(prompt).toMatch(/always use the `bash` tool/i)
+        expect(prompt).toMatch(/always use the `shell` tool/i)
         expect(prompt).not.toMatch(/running on windows/i)
         expect(prompt).not.toMatch(/cmd commands/i)
     })
@@ -83,7 +83,7 @@ describe("OS prompts", () => {
     test("buildQueryOsPrompt keeps Bash guidance outside Windows", () => {
         const prompt = queryOsPrompt(createPlatformCapabilities("linux"))
 
-        expect(prompt).toMatch(/prefer other tools over `bash` tool/i)
+        expect(prompt).toMatch(/prefer other tools over `shell` tool/i)
         expect(prompt).not.toMatch(/running on windows/i)
         expect(prompt).not.toMatch(/cmd commands/i)
     })

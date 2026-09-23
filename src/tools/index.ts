@@ -46,9 +46,7 @@ import { createAutocodeSkillEditTool } from "./skill_edit"
 import { createAutocodeSkillReadTool } from "./skill_read"
 import { createLearnTool } from "./learn"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
-import { createSkillTool } from "./skill"
-import { createTaskProjectTool as createTaskExternalTool } from "./task_external"
-import { createTaskResumeTool } from "./task_resume"
+import { createSkillTool, type ActiveSessionContext } from "./skill"
 
 type ToolRuntime = {
     home?: string
@@ -57,6 +55,7 @@ type ToolRuntime = {
     getWebUrl?: () => string | URL | undefined
     restartCoordinator?: PendingAgentRestartCoordinator
     managedScriptLifecycle?: ManagedScriptLifecycle
+    activeSessionContext?: ActiveSessionContext
 }
 
 type ToolMap = Record<string, ToolDefinition>
@@ -130,10 +129,8 @@ export function createTools(
         autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
         autocode_youtube_transcribe: createAutocodeYoutubeTranscribeTool(),
         learn: createLearnTool(),
-        skill: createSkillTool(client, undefined, runtime),
+        skill: createSkillTool(client, undefined, runtime, undefined, runtime?.activeSessionContext),
         skill_edit: createAutocodeSkillEditTool(),
         skill_read: createAutocodeSkillReadTool(),
-        task_external: createTaskExternalTool(),
-        task_resume: createTaskResumeTool(client),
     }
 }

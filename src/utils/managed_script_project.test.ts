@@ -1,10 +1,30 @@
 import { describe, expect, mock, test } from "bun:test"
 import { lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { basename, join, parse } from "node:path"
 import { createManagedScriptProject, type ManagedScriptProjectCommandResult, type ManagedScriptProjectDependencies, type ManagedScriptProjectFileSystem, type ManagedScriptProjectResult, type ManagedScriptProjectSpawn } from "./managed_script_project"
 
 const npmInstallSuccess: ManagedScriptProjectCommandResult = { exitCode: 0, stdout: "installed\n", stderr: "" }
+
+async function canCreateFixtureSymlinks(): Promise<boolean> {
+    const root = await mkdtemp(join(tmpdir(), "managed-script-symlink-probe-"))
+    try {
+        await writeFile(join(root, "target"), "target")
+        await symlink(join(root, "target"), join(root, "link"), "file")
+        await mkdir(join(root, "directory"))
+        await symlink(join(root, "directory"), join(root, "directory-link"), process.platform === "win32" ? "junction" : "dir")
+        return true
+    }
+    catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP"].includes((error as NodeJS.ErrnoException).code ?? "")) return false
+        throw error
+    }
+    finally {
+        await rm(root, { recursive: true, force: true })
+    }
+}
+
+const fixtureSymlinksAvailable = await canCreateFixtureSymlinks()
 
 function createFileSystem(): ManagedScriptProjectFileSystem {
     return {
@@ -115,7 +135,7 @@ describe("managed script project", () => {
         }
     })
 
-    test("writes initial managed guidance with authoring context, source index, and lifecycle rules", async () => {
+    test.skipIf(!fixtureSymlinksAvailable)("writes initial managed guidance with authoring context, source index, and lifecycle rules", async () => {
         const workspacePath = await mkdtemp(join(tmpdir(), "managed-script-agents-initial-"))
         const sourceRoot = join(workspacePath, "scripts", "src")
         const originalDirectory = join(workspacePath, "original-directory")
@@ -130,8 +150,8 @@ describe("managed script project", () => {
             await writeFile(join(sourceRoot, "alpha.ts"), "export {}\n")
             await writeFile(join(sourceRoot, "nested", "beta.ts"), "export {}\n")
             await writeFile(join(workspacePath, "outside.ts"), "export {}\n")
-            await symlink(join(workspacePath, "outside.ts"), join(sourceRoot, "linked.ts"))
-            await symlink(join(sourceRoot, "nested"), join(sourceRoot, "linked-directory"))
+            await symlink(join(workspacePath, "outside.ts"), join(sourceRoot, "linked.ts"), "file")
+            await symlink(join(sourceRoot, "nested"), join(sourceRoot, "linked-directory"), process.platform === "win32" ? "junction" : "dir")
             const result = expectSuccess(await createProject(workspacePath, spawn, {
                 context: { sessionID: "session-1", directory: originalDirectory, worktree: originalWorktree },
             }).setup())
@@ -140,7 +160,7 @@ describe("managed script project", () => {
             expect(agents).toContain(`- Original authoring directory: \`${originalDirectory}\``)
             expect(agents).toContain(`- Original authoring worktree: \`${originalWorktree}\``)
             for (const root of [result.paths.workspacePath, result.paths.scriptsRoot, result.paths.sourceRoot, result.paths.manifestPath, result.paths.lockPath, result.paths.nodeModulesPath, result.paths.logsPath, result.paths.servicesPath, result.paths.agentsPath]) {
-                expect(root).toStartWith("/")
+                expect(root).toStartWith(parse(root).root)
                 expect(agents).toContain(`\`${root}\``)
             }
             expect(agents.indexOf("- `alpha.ts`")).toBeLessThan(agents.indexOf("- `nested/beta.ts`"))
@@ -306,7 +326,7 @@ describe("managed script project", () => {
 
             const setup = expectSuccess(await project.setup())
             const reused = expectSuccess(await project.setup())
-            const workspaceName = setup.paths.workspacePath.split("/").pop()
+            const workspaceName = basename(setup.paths.workspacePath)
 
             expect(workspaceName).toMatch(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_fresh_script_task$/)
             expect(setup.paths.workspacePath).toBe(reused.paths.workspacePath)

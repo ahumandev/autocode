@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, win32 } from "node:path"
 import { deriveShimFilename, getShimPath, installPluginShim } from "./install"
@@ -17,7 +17,8 @@ describe("install plugin shim", () => {
     })
 
     test("getShimPath uses derived shim filename in plugin path", () => {
-        expect(getShimPath("/tmp/home", "@ahumandev/autocode", { platform: "linux", env: {} })).toBe(join("/tmp/home", ".config", "opencode", "plugins", "autocode.js"))
+        expect(getShimPath("/tmp/home", "@ahumandev/autocode", { platform: "linux", env: {} })).toBe("/tmp/home/.config/opencode/plugins/autocode.js")
+        expect(getShimPath("C:\\Users\\Ada", "@ahumandev/autocode", { platform: "win32", env: {} })).toBe(win32.join("C:\\Users\\Ada", ".config", "opencode", "plugins", "autocode.js"))
     })
 
     test("installPluginShim writes shim under OPENCODE_CONFIG_DIR", async () => {
@@ -35,30 +36,27 @@ describe("install plugin shim", () => {
         }
     })
 
-    test("installPluginShim uses Windows config root for shim path", async () => {
-        const testId = crypto.randomUUID()
-        const rootDir = `C:\\autocode-shim-${testId}`
-        const homeDir = `C:\\Users\\Ada-${testId}`
-        const configRoot = `C:\\Users\\Ada-${testId}\\AppData\\Roaming\\OpenCode`
-        const expectedShimPath = win32.join(configRoot, "plugins", "autocode.js")
+    test("installPluginShim uses platform config root for shim path", async () => {
+        const rootDir = await mkdtemp(join(tmpdir(), "autocode-shim-platform-"))
+        const homeDir = join(rootDir, "home")
+        const configRoot = join(homeDir, "AppData", "Roaming", "OpenCode")
+        const expectedShimPath = join(configRoot, "plugins", "autocode.js")
 
         try {
-            await mkdir(rootDir)
             await writeFile(join(rootDir, "package.json"), JSON.stringify({ name: "@ahumandev/autocode" }))
             const shimPath = await installPluginShim({
                 rootDir,
                 homeDir,
-                platform: "win32",
+                platform: process.platform,
                 env: { OPENCODE_CONFIG_DIR: configRoot },
             })
 
             expect(shimPath).toBe(expectedShimPath)
-            expect(shimPath.startsWith(`${configRoot}\\plugins\\`)).toBeTrue()
+            expect(shimPath.startsWith(join(configRoot, "plugins"))).toBeTrue()
             expect(await readFile(shimPath, "utf8")).toContain("export { default } from")
             expect(await readFile(shimPath, "utf8")).toContain("dist/plugin.js")
         } finally {
             await rm(rootDir, { recursive: true, force: true })
-            await rm(expectedShimPath, { force: true })
         }
     })
 })

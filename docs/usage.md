@@ -6,7 +6,7 @@ AutoCode is used from inside OpenCode after the plugin is loaded. It is not a st
 
 | Agent      | Purpose                                                   |
 | ---------- | --------------------------------------------------------- |
-| 💡 `advise` | Research topics, answer questions, and guide manual work. |
+| 👨 `advise` | Research topics, answer questions, and guide manual work. |
 | 📐 `design` | Design and propose solutions.                             |
 | 🤖 `auto`   | **Autonomously** solve problems.                          |
 | 🧑‍💻 `assist` | Assist **interactively** to solve problems.               |
@@ -19,18 +19,18 @@ flowchart TD
   Concepts([.agents/concepts])
   Concepts -- 📐 design --> Design([proposal in current session])
 
-  Design -- 💡 advise --> Advise([manual execution])
+  Design -- 👨 advise --> Advise([manual execution])
   Design -- 🧑‍💻 assist --> Assist([interactive execution])
   Design -- 🤖 auto --> Auto([autonomous execution])
 ```
 
-Switch any time between `💡 advise` and `🧑‍💻 assist` and `🤖 auto` when work needs a different autonomy level.
+Switch any time between `👨 advise` and `🧑‍💻 assist` and `🤖 auto` when work needs a different autonomy level.
 
 ### Behavioural Differences
 
 | Agent    | Investigations | Next Action | Apply Changes |
 | -------- | -------------- | ----------- | ------------- |
-| 💡 advise | Autonomous     | Interactive | Human         |
+| 👨 advise | Autonomous     | Interactive | Human         |
 | 🧑‍💻 assist | Autonomous     | Interactive | AI*           |
 | 🤖 auto   | Autonomous     | Autonomous  | AI*           |
 | 🕵️ spy    | Autonomous     | Stop        | AI            |
@@ -49,7 +49,7 @@ For example you may start in `assist` mode and then later when you get busy, swi
 | ------------------- | ---------------------------------------------------------------------------------------- |
 | `/autocode-install` | Start AutoCode installation checks and remediation.                                      |
 | `/assist`           | Same assist session as `/new-assist`.                                                    |
-| `/new-advise`       | Create new 💡 advise session to research topics, answer questions, and guide manual work. |
+| `/new-advise`       | Create new 👨 advise session to research topics, answer questions, and guide manual work. |
 | `/new-design`       | Create new 📐 design session to design solution to problem.                               |
 | `/new-auto`         | Create new 🤖 auto session to autonomously solve problems.                                |
 | `/new-assist`       | Create new 🧑‍💻 assist session to semi-autonomously assist with problems/improvements.      |

@@ -7,6 +7,42 @@ import path from "node:path"
 import { assertDirectSandboxPath, assertSafeSandboxDeletionPath, assertSafeSandboxPath, cleanupEmptyJobSandboxRoot, cleanupExpiredSandboxCacheEntries, cleanupJobSandboxes, deleteSandboxPath, detectEffectiveSandboxSyncMethod, detectSandboxBackend, ensureSandboxRootfsCache, materializeSandboxRootfs, normalizeDistro, normalizeOptionalDistro, normalizeSandboxName, resolveSandboxCachePath, type SandboxCacheEntry, type SandboxDependencies, type SandboxOwner, type SandboxPaths } from "./sandbox"
 import { copyPath, resolveSafeRelativePath, validateSafeWriteTarget } from "./sandbox_file_tools"
 
+async function canCreateFileSymlinks(): Promise<boolean> {
+    const root = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-symlink-probe-"))
+    try {
+        await writeFile(path.join(root, "target"), "target")
+        await symlink(path.join(root, "target"), path.join(root, "link"), "file")
+        return true
+    }
+    catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP"].includes((error as NodeJS.ErrnoException).code ?? "")) return false
+        throw error
+    }
+    finally {
+        await rm(root, { recursive: true, force: true })
+    }
+}
+
+const fileSymlinksAvailable = await canCreateFileSymlinks()
+
+async function canCreateDirectorySymlinks(): Promise<boolean> {
+    const root = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-junction-probe-"))
+    try {
+        await mkdir(path.join(root, "target"))
+        await symlink(path.join(root, "target"), path.join(root, "link"), process.platform === "win32" ? "junction" : "dir")
+        return true
+    }
+    catch (error) {
+        if (["EPERM", "EACCES", "ENOTSUP"].includes((error as NodeJS.ErrnoException).code ?? "")) return false
+        throw error
+    }
+    finally {
+        await rm(root, { recursive: true, force: true })
+    }
+}
+
+const directorySymlinksAvailable = await canCreateDirectorySymlinks()
+
 function missingError(): NodeJS.ErrnoException {
     const error = new Error("missing") as NodeJS.ErrnoException
     error.code = "ENOENT"
@@ -143,6 +179,9 @@ async function runCommand(command: string, args: readonly string[], options?: { 
 }
 
 describe("sandbox utils", () => {
+    const home = path.join(tmpdir(), "autocode-sandbox-home")
+    const cacheRoot = path.join(tmpdir(), "autocode-sandbox-cache")
+
     test("normalizes sandbox names", () => {
         expect(normalizeSandboxName(" sandbox_123 ")).toEqual({ ok: true, value: "sandbox_123" })
 
@@ -160,9 +199,9 @@ describe("sandbox utils", () => {
     })
 
     test("resolves global distro cache path with home default and override", () => {
-        expect(resolveSandboxCachePath(undefined, createDeps({ env: { HOME: "/home/user" } }))).toBe("/home/user/.cache/autocode/distros")
-        expect(resolveSandboxCachePath({ distro_cache_path: "~/.custom/autocode-distros" }, createDeps({ env: { HOME: "/home/user" } }))).toBe("/home/user/.custom/autocode-distros")
-        expect(resolveSandboxCachePath({ distro_cache_path: "/shared/cache" }, createDeps())).toBe("/shared/cache")
+        expect(resolveSandboxCachePath(undefined, createDeps({ env: { HOME: home } }))).toBe(path.join(home, ".cache", "autocode", "distros"))
+        expect(resolveSandboxCachePath({ distro_cache_path: "~/.custom/autocode-distros" }, createDeps({ env: { HOME: home } }))).toBe(path.join(home, ".custom", "autocode-distros"))
+        expect(resolveSandboxCachePath({ distro_cache_path: cacheRoot }, createDeps())).toBe(cacheRoot)
     })
 
     test("detects requested sync methods and conservative auto fallback", async () => {
@@ -176,7 +215,7 @@ describe("sandbox utils", () => {
         expect(await detectEffectiveSandboxSyncMethod(undefined, copyDeps)).toBe("copy")
     })
 
-    test("rootfs materialization copies broken symlinks without dereferencing targets", async () => {
+    test.skipIf(process.platform === "win32")("rootfs materialization copies broken /proc symlinks without dereferencing targets", async () => {
         const tempRoot = await mkdtemp(path.join(tmpdir(), "autocode-rootfs-copy-"))
         const cacheRootfs = path.join(tempRoot, "cache", "rootfs")
         const destinationRootfs = path.join(tempRoot, "sandbox", "rootfs")
@@ -225,7 +264,7 @@ describe("sandbox utils", () => {
     })
 
     test("Debian OCI rootfs cache pulls, unpacks, and reuses Bookworm entries", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { skopeo: true, umoci: true } })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64", commands: { skopeo: true, umoci: true } })
 
         const first = await ensureSandboxRootfsCache("debian", undefined, deps)
         const second = await ensureSandboxRootfsCache("debian", undefined, deps)
@@ -234,15 +273,15 @@ describe("sandbox utils", () => {
         expect(second).toEqual(expect.objectContaining({ ok: true, downloaded: false }))
         if (first.ok && second.ok) {
             expect(first.cache.entry_path).toBe(second.cache.entry_path)
-            expect(first.cache.entry_path).toContain("/home/user/.cache/autocode/distros/debian/x86_64/debian-x86_64-bookworm-oci-")
+            expect(first.cache.entry_path).toContain(path.join(home, ".cache", "autocode", "distros", "debian", "x86_64", "debian-x86_64-bookworm-oci-"))
             expect(first.cache.version).toBe("bookworm")
             expect(first.cache.archive_format).toBe("oci")
-            expect(deps.fileSystem.rename).toHaveBeenCalledWith(expect.stringMatching(/\/debian\/x86_64\/debian-x86_64-bookworm-oci-[^/]+\.tmp-[^/]+$/), first.cache.entry_path)
+            expect(deps.fileSystem.rename).toHaveBeenCalledWith(expect.stringContaining(`${path.join("debian", "x86_64", "debian-x86_64-bookworm-oci-")}`), first.cache.entry_path)
         }
         expect(deps.spawn).toHaveBeenCalledWith("skopeo", expect.arrayContaining(["copy", "--override-os", "linux", "--override-arch", "amd64", "docker://docker.io/library/debian:bookworm"]), expect.any(Object))
-        expect(deps.spawn).toHaveBeenCalledWith("umoci", ["unpack", "--rootless", "--image", expect.stringMatching(/:bookworm$/), expect.stringMatching(/\/bundle$/)], expect.any(Object))
+        expect(deps.spawn).toHaveBeenCalledWith("umoci", ["unpack", "--rootless", "--image", expect.stringMatching(/:bookworm$/), expect.stringMatching(/bundle$/)], expect.any(Object))
         expect(deps.fetch).not.toHaveBeenCalled()
-        expect(deps.fileSystem.writeFile).toHaveBeenCalledWith(expect.stringMatching(/\/debian\/x86_64\/debian-x86_64-bookworm-oci-[^/]+\.tmp-[^/]+\/metadata\.json$/), expect.stringContaining('"version": "bookworm"'))
+        expect(deps.fileSystem.writeFile).toHaveBeenCalledWith(expect.stringContaining(path.join("debian", "x86_64", "debian-x86_64-bookworm-oci-")), expect.stringContaining('"version": "bookworm"'))
     })
 
     test("alpine rootfs cache resolves versioned minirootfs metadata for process architecture", async () => {
@@ -253,7 +292,7 @@ describe("sandbox utils", () => {
             if (url === metadataUrl) return { ok: true, status: 200, text: async () => alpineLatestReleasesYaml() } as Response
             return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array([4, 5, 6]).buffer } as Response
         })
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", fetch })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64", fetch })
 
         const result = await ensureSandboxRootfsCache("alpine", undefined, deps)
 
@@ -265,7 +304,7 @@ describe("sandbox utils", () => {
             const metadata = getMetadataWrite(deps, result.cache.metadata_file)
             const serializedMetadata = JSON.stringify(metadata)
             expect(metadata).toEqual(expect.objectContaining({ architecture: "x86_64", version: "3.24.0", source_url: versionedUrl, verification: expect.objectContaining({ sha256: "x86-sha256", sha512: "x86-sha512", source_url_sha256: expect.any(String) }) }))
-            expect(String(metadata.entry_path)).toContain("/alpine/x86_64/alpine-x86_64-3.24.0-gzip-")
+            expect(String(metadata.entry_path)).toContain(path.join("alpine", "x86_64", "alpine-x86_64-3.24.0-gzip-"))
             expect(serializedMetadata).not.toContain(versionlessUrl)
             expect(serializedMetadata).not.toMatch(/alpine-minirootfs-(latest|x86_64)\.tar\.gz/)
         }
@@ -277,7 +316,7 @@ describe("sandbox utils", () => {
     test("alpine rootfs cache metadata failure is structured", async () => {
         const metadataUrl = "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/latest-releases.yaml"
         const fetch = mock(async () => ({ ok: false, status: 503, text: async () => "" } as Response))
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", fetch })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64", fetch })
 
         const result = await ensureSandboxRootfsCache("alpine", undefined, deps)
 
@@ -288,7 +327,7 @@ describe("sandbox utils", () => {
     })
 
     test("Debian OCI rootfs cache reports pull errors with image source", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { skopeo: true, umoci: true }, spawnResults: { skopeo: { exitCode: 1, stdout: "pull output", stderr: "pull failed" } } })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64", commands: { skopeo: true, umoci: true }, spawnResults: { skopeo: { exitCode: 1, stdout: "pull output", stderr: "pull failed" } } })
 
         const result = await ensureSandboxRootfsCache("debian", undefined, deps)
 
@@ -299,7 +338,7 @@ describe("sandbox utils", () => {
     })
 
     test("rootfs extraction puts tar options before file operand", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { zstd: true } })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64", commands: { zstd: true } })
 
         await ensureSandboxRootfsCache("archlinux", undefined, deps)
 
@@ -308,11 +347,11 @@ describe("sandbox utils", () => {
         expect(tarArgs).toEqual(expect.arrayContaining(["--extract", "--zstd", "--strip-components=1"]))
         expect(tarArgs.indexOf("--strip-components=1")).toBeLessThan(tarArgs.findIndex((arg) => arg.startsWith("--file=")))
         expect(tarArgs.find((arg) => arg.startsWith("--file="))).toContain("rootfs.tar.zstd")
-        expect(tarArgs.find((arg) => arg.startsWith("--directory="))).toContain("/rootfs")
+        expect(tarArgs.find((arg) => arg.startsWith("--directory="))).toContain(`${path.sep}rootfs`)
     })
 
     test("alpine rootfs extraction does not strip archive paths", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64" })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64" })
 
         await ensureSandboxRootfsCache("alpine", undefined, deps)
 
@@ -324,7 +363,7 @@ describe("sandbox utils", () => {
     })
 
     test("rootfs extraction accepts /bin/sh symlink without following it", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64" })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64" })
         const originalStat = deps.fileSystem.stat
         const binShPath = path.join("rootfs", "bin", "sh")
         deps.fileSystem.stat = mock(async (filePath: string) => {
@@ -339,18 +378,18 @@ describe("sandbox utils", () => {
     })
 
     test("Debian OCI unpack reports malformed rootfs before cache metadata", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { skopeo: true, umoci: true }, umociCreatesBinSh: false })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64", commands: { skopeo: true, umoci: true }, umociCreatesBinSh: false })
 
         const result = await ensureSandboxRootfsCache("debian", undefined, deps)
 
         expect(result).toEqual(expect.objectContaining({ ok: false, source_url: "docker://docker.io/library/debian:bookworm", reason: "Debian OCI image unpack produced malformed rootfs: missing /bin/sh." }))
         expect(deps.spawn).toHaveBeenCalledWith("skopeo", expect.any(Array), expect.any(Object))
-        expect(deps.spawn).toHaveBeenCalledWith("umoci", ["unpack", "--rootless", "--image", expect.stringMatching(/:bookworm$/), expect.stringMatching(/\/bundle$/)], expect.any(Object))
+        expect(deps.spawn).toHaveBeenCalledWith("umoci", ["unpack", "--rootless", "--image", expect.stringMatching(/:bookworm$/), expect.stringMatching(/bundle$/)], expect.any(Object))
         expect(deps.fileSystem.writeFile).not.toHaveBeenCalledWith(expect.stringContaining("metadata.json"), expect.any(String))
     })
 
     test("rootfs extraction reports missing zstd before tar", async () => {
-        const deps = createDeps({ env: { HOME: "/home/user" }, arch: "x64", commands: { zstd: false } })
+        const deps = createDeps({ env: { HOME: home }, arch: "x64", commands: { zstd: false } })
 
         const result = await ensureSandboxRootfsCache("archlinux", undefined, deps)
 
@@ -362,9 +401,9 @@ describe("sandbox utils", () => {
 
     test("cache cleanup expires copy entries and protects metadata references", async () => {
         const cache: SandboxCacheEntry = {
-            entry_path: "/cache/alpine/aarch64/current",
-            rootfs_path: "/cache/alpine/aarch64/current/rootfs",
-            metadata_file: "/cache/alpine/aarch64/current/metadata.json",
+            entry_path: path.join(cacheRoot, "alpine", "aarch64", "current"),
+            rootfs_path: path.join(cacheRoot, "alpine", "aarch64", "current", "rootfs"),
+            metadata_file: path.join(cacheRoot, "alpine", "aarch64", "current", "metadata.json"),
             source_url: "https://example.invalid/rootfs.tar.gz",
             archive_format: "gzip",
             created_at: new Date().toISOString(),
@@ -373,9 +412,9 @@ describe("sandbox utils", () => {
             architecture: "aarch64",
             verification: {},
         }
-        const oldCache = { ...cache, entry_path: "/cache/alpine/aarch64/old", rootfs_path: "/cache/alpine/aarch64/old/rootfs", metadata_file: "/cache/alpine/aarch64/old/metadata.json", created_at: "2020-01-01T00:00:00.000Z" }
-        const referencedCache = { ...oldCache, entry_path: "/cache/alpine/aarch64/referenced", rootfs_path: "/cache/alpine/aarch64/referenced/rootfs", metadata_file: "/cache/alpine/aarch64/referenced/metadata.json" }
-        const owner = createSandboxOwner("/repo", "job")
+        const oldCache = { ...cache, entry_path: path.join(cacheRoot, "alpine", "aarch64", "old"), rootfs_path: path.join(cacheRoot, "alpine", "aarch64", "old", "rootfs"), metadata_file: path.join(cacheRoot, "alpine", "aarch64", "old", "metadata.json"), created_at: "2020-01-01T00:00:00.000Z" }
+        const referencedCache = { ...oldCache, entry_path: path.join(cacheRoot, "alpine", "aarch64", "referenced"), rootfs_path: path.join(cacheRoot, "alpine", "aarch64", "referenced", "rootfs"), metadata_file: path.join(cacheRoot, "alpine", "aarch64", "referenced", "metadata.json") }
+        const owner = createSandboxOwner(path.join(tmpdir(), "autocode-sandbox-repo"), "job")
         const sandboxPath = path.join(owner.jobSandboxRoot, "dev")
         const deps = createDeps({
             existing: [sandboxPath],
@@ -386,7 +425,7 @@ describe("sandbox utils", () => {
             },
         })
         deps.fileSystem.readdir = mock(async (dirPath: string, options?: { withFileTypes?: boolean }) => {
-            if (dirPath === "/cache/alpine/aarch64" && options?.withFileTypes) return [dirent("current"), dirent("old"), dirent("referenced")]
+            if (dirPath === path.join(cacheRoot, "alpine", "aarch64") && options?.withFileTypes) return [dirent("current"), dirent("old"), dirent("referenced")]
             if (dirPath === owner.jobSandboxRoot && options?.withFileTypes) return [dirent("dev")]
             return []
         })
@@ -400,12 +439,12 @@ describe("sandbox utils", () => {
     })
 
     test("guards sandbox paths and deletion targets", () => {
-        const root = "/repo/.agents/jobs/2026-08-20_10-30-00_my_job/sandboxes"
+        const root = path.join(tmpdir(), "repo", ".agents", "jobs", "2026-08-20_10-30-00_my_job", "sandboxes")
 
-        expect(assertSafeSandboxPath(`${root}/dev`, root).ok).toBe(true)
-        expect(assertSafeSandboxDeletionPath(`${root}/dev`, root).ok).toBe(true)
-        expect(assertDirectSandboxPath(`${root}/dev/nested`, root).ok).toBe(false)
-        for (const unsafe of [`${root}/../other`, "/repo/outside", root, "/repo/.agents", "/repo/.agents/jobs"]) {
+        expect(assertSafeSandboxPath(path.join(root, "dev"), root).ok).toBe(true)
+        expect(assertSafeSandboxDeletionPath(path.join(root, "dev"), root).ok).toBe(true)
+        expect(assertDirectSandboxPath(path.join(root, "dev", "nested"), root).ok).toBe(false)
+        for (const unsafe of [path.join(root, "..", "other"), path.join(tmpdir(), "repo", "outside"), root, path.join(tmpdir(), "repo", ".agents"), path.join(tmpdir(), "repo", ".agents", "jobs")]) {
             expect(assertSafeSandboxDeletionPath(unsafe, root).ok).toBe(false)
         }
     })
@@ -444,7 +483,7 @@ describe("sandbox utils", () => {
     })
 
     test("deletes sandbox paths safely and warns for legacy metadata", async () => {
-        const paths = createSandboxPaths("/repo", "my_job", "dev")
+        const paths = createSandboxPaths(path.join(tmpdir(), "autocode-sandbox-repo"), "my_job", "dev")
         const deps = createDeps({ existing: [paths.sandboxPath], commands: { "proot-distro": true }, files: { [paths.metadataFile]: JSON.stringify({ sandbox_name: "dev", job_name: "my_job", distro: "alpine", backend: "termux_proot_distro", root_path: paths.sandboxPath }) } })
 
         expect(await deleteSandboxPath(paths, deps)).toEqual({ sandbox_name: "dev", status: "warning", warning: expect.stringContaining("Recreate the sandbox under bubblewrap") })
@@ -452,7 +491,7 @@ describe("sandbox utils", () => {
         expect(await deleteSandboxPath(paths, deps)).toEqual({ sandbox_name: "dev", status: "missing" })
     })
 
-    test("deletes sandbox directory symlink without deleting external target", async () => {
+    test.skipIf(!directorySymlinksAvailable)("deletes sandbox directory symlink without deleting external target", async () => {
         const tempRoot = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-delete-"))
         const paths = createSandboxPaths(tempRoot, "my_job", "dev")
         const externalDirectory = path.join(tempRoot, "external")
@@ -461,7 +500,7 @@ describe("sandbox utils", () => {
             await mkdir(paths.jobSandboxRoot, { recursive: true })
             await mkdir(externalDirectory, { recursive: true })
             await writeFile(markerFile, "unchanged")
-            await symlink(externalDirectory, paths.sandboxPath, "dir")
+            await symlink(externalDirectory, paths.sandboxPath, process.platform === "win32" ? "junction" : "dir")
             const deps = createDeps()
             deps.fileSystem = { ...deps.fileSystem, readFile, rm, stat }
 
@@ -476,7 +515,7 @@ describe("sandbox utils", () => {
     })
 
     test("cleans only valid named sandbox children", async () => {
-        const owner = createSandboxOwner("/repo", "my_job")
+        const owner = createSandboxOwner(path.join(tmpdir(), "autocode-sandbox-repo"), "my_job")
         const sandboxPath = path.join(owner.jobSandboxRoot, "dev")
         const deps = createDeps({ existing: [sandboxPath] })
         deps.fileSystem.stat = mock(async (filePath: string) => filePath === owner.jobSandboxRoot || filePath === sandboxPath ? { mtimeMs: 1 } : Promise.reject(missingError()))
@@ -490,7 +529,7 @@ describe("sandbox utils", () => {
     })
 
     test("cleans job sandbox root after deleting all sandbox children", async () => {
-        const paths = createSandboxPaths("/repo", "my_job", "dev")
+        const paths = createSandboxPaths(path.join(tmpdir(), "autocode-sandbox-repo"), "my_job", "dev")
         const deps = createDeps({ existing: [paths.jobSandboxRoot, paths.sandboxPath] })
         let remainingEntries = [dirent("dev")]
         deps.fileSystem.readdir = mock(async (filePath: string) => {
@@ -508,7 +547,7 @@ describe("sandbox utils", () => {
     })
 
     test("removes only an empty workspace sandbox directory", async () => {
-        const owner = createSandboxOwner("/repo", "my_job")
+        const owner = createSandboxOwner(path.join(tmpdir(), "autocode-sandbox-repo"), "my_job")
         const deps = createDeps({ existing: [owner.jobSandboxRoot, owner.workspacePath] })
         deps.fileSystem.readdir = mock(async () => [])
 
@@ -517,17 +556,17 @@ describe("sandbox utils", () => {
         expect(deps.fileSystem.rm).not.toHaveBeenCalledWith(owner.workspacePath, expect.any(Object))
     })
 
-    test("file tool path guards reject malformed roots and symlink escapes", async () => {
+    test.skipIf(!fileSymlinksAvailable || !directorySymlinksAvailable)("file tool path guards reject malformed roots and symlink escapes", async () => {
         const root = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-utils-"))
         const outside = await mkdtemp(path.join(tmpdir(), "autocode-sandbox-outside-"))
         try {
             await mkdir(path.join(root, "dir"), { recursive: true })
             await writeFile(path.join(root, "dir/file.txt"), "safe")
             await writeFile(path.join(outside, "escape.txt"), "escape")
-            await symlink(path.join(outside, "escape.txt"), path.join(root, "escape"))
-            await symlink(outside, path.join(root, "escape_dir"))
+            await symlink(path.join(outside, "escape.txt"), path.join(root, "escape"), "file")
+            await symlink(outside, path.join(root, "escape_dir"), process.platform === "win32" ? "junction" : "dir")
 
-            for (const value of ["", "bad\0path", "/absolute", "../escape", "workspace/file"]) {
+            for (const value of ["", "bad\0path", path.parse(root).root, "../escape", "workspace/file"]) {
                 expect((await resolveSafeRelativePath(root, value, "path", true, true)).ok).toBe(false)
                 expect((await validateSafeWriteTarget(root, value, "target", true)).ok).toBe(false)
             }

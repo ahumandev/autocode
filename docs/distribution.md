@@ -295,16 +295,16 @@ After the package is published, verify installation with the OpenCode plugin CLI
 Install the published package globally with:
 
 ```bash
-opencode plugin @ahumandev/autocode -g
+opencode plugin add @ahumandev/autocode
 ```
 
 To update or replace an existing global install with the latest published package, run:
 
 ```bash
-opencode plugin @ahumandev/autocode@latest -g -f
+opencode plugin update @ahumandev/autocode@latest
 ```
 
-Local install is optional. Omit `-g` if you want OpenCode to write project-local `.opencode` config instead of a global install.
+The V2 plugin management commands install package plugins in global OpenCode configuration. Configure a project-local package by adding it to that project's `plugins` array instead.
 
 Expected result:
 

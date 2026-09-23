@@ -2,24 +2,23 @@ import { describe, expect, test } from "bun:test"
 import { buildAgents, type AutocodeAgentConfig } from "./index"
 import type { ExternalSkill } from "../utils/external"
 import { createPlatformCapabilities } from "../utils/platform"
+import { permissionEffect } from "../utils/permissions"
 
-function permissionRule(permission: AutocodeAgentConfig["permission"], key: string): unknown {
-    if (!permission || typeof permission === "string") return undefined
-    return (permission as Record<string, unknown>)[key]
+function permissionRule(permission: AutocodeAgentConfig["permissions"], key: string): unknown {
+    if (!permission) return undefined
+    const rules = permission.filter((rule) => rule.action === key)
+    if (rules.length === 0) return undefined
+    return rules.length === 1 && rules[0].resource === "*" ? rules[0].effect
+        : Object.fromEntries(rules.map((rule) => [rule.resource, rule.effect]))
 }
 
 function getSkillRule(agent: AutocodeAgentConfig | undefined, skillName: string): unknown {
-    if (!agent?.permission || typeof agent.permission === "string") return undefined
-    const skill = (agent.permission as Record<string, unknown>).skill
-    if (!skill || typeof skill === "string") return undefined
-    return (skill as Record<string, unknown>)[skillName]
+    return agent?.permissions?.findLast((rule) => rule.action === "skill" && rule.resource === skillName)?.effect
 }
 
 function getSkillObject(agent: AutocodeAgentConfig | undefined): Record<string, unknown> | undefined {
-    if (!agent?.permission || typeof agent.permission === "string") return undefined
-    const skill = (agent.permission as Record<string, unknown>).skill
-    if (!skill || typeof skill === "string") return undefined
-    return skill as Record<string, unknown>
+    if (!agent?.permissions?.some((rule) => rule.action === "skill")) return undefined
+    return Object.fromEntries(agent.permissions.filter((rule) => rule.action === "skill").map((rule) => [rule.resource, rule.effect]))
 }
 
 describe("buildAgents with external skills", () => {
@@ -34,7 +33,7 @@ describe("buildAgents with external skills", () => {
             "execute-sandbox": "allow",
         })
         expect(getSkillRule(agents["execute-os"], "learned-permissions*")).toBeUndefined()
-        expect(permissionRule(agents["execute-os"]?.permission, "learn")).toBe("allow")
+        expect(permissionRule(agents["execute-os"]?.permissions, "learn")).toBe("allow")
     })
 
     test("bash category → execute-os and execute-script get the rule, other agents do not", () => {
@@ -113,8 +112,9 @@ describe("buildAgents with external skills", () => {
         expect(getSkillRule(agents["execute-code"], "code*")).toBe("allow")
         // And the freshly-injected rule should also be there.
         expect(getSkillRule(agents["execute-code"], "injected-code-skill")).toBe("allow")
+        expect(permissionEffect(agents["execute-code"]?.permissions, "skill", "injected-code-skill")).toBe("allow")
         // Sanity: unrelated static entries on a different agent are untouched
         // (modulo any additions from earlier tests in this file).
-        expect(permissionRule(agents["execute-code"]?.permission, "edit")).toBe("allow")
+        expect(permissionRule(agents["execute-code"]?.permissions, "edit")).toBe("allow")
     })
 })

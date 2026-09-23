@@ -38,7 +38,7 @@ If the user does NOT specify what tests to work on: ensure all **existing** unit
 
 ## Step 2 — Detect Test Framework
 
-Unless INSTRUCTIONS specify the test framework (or you already know it from earlier), task query-code to inspect the project:
+Unless INSTRUCTIONS specify the test framework (or you already know it from earlier), call query-code via \`subagent\` to inspect the project:
 
 - Check \`package.json\` scripts and devDependencies for \`jest\` or \`vitest\`
 - Check for \`jest.config.*\` or \`vitest.config.*\`
@@ -51,7 +51,7 @@ Refer your skills for framework-specific syntax and patterns.
 
 ## Step 3 — Analyze Target Files
 
-Skip if INSTRUCTIONS already provide the source content or you authored the code earlier. Otherwise \`task\` subagent \`query-code\` to read each production source file in scope to identify:
+Skip if INSTRUCTIONS already provide the source content or you authored the code earlier. Otherwise call \`query-code\` via \`subagent\` to read each production source file in scope to identify:
 
 - What the file/module does
 - All exported functions, classes, and methods (the public API)
@@ -62,7 +62,7 @@ Skip if INSTRUCTIONS already provide the source content or you authored the code
 
 ## Step 4 — Create or Modify Tests
 
-Task \`execute-code\` to write test code. Follow these rules:
+Call \`execute-code\` via \`subagent\` to write test code. Follow these rules:
 
 - Place test files according to the project's existing structure and naming conventions
 - Use the detected framework's syntax and utilities
@@ -76,7 +76,7 @@ Task \`execute-code\` to write test code. Follow these rules:
 
 ## Step 5 — Run Tests
 
-Task \`execute-os\` subagent to run the test suite.
+Call \`execute-os\` subagent via \`subagent\` to run the test suite.
 
 ---
 

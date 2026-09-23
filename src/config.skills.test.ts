@@ -46,11 +46,13 @@ function makeFs(initialFiles: Record<string, string> = {}): {
 
 describe("skills config parsing and seeding", () => {
     let tempDir: string
+    let worktree: string
     let originalXdg: string | undefined
     let originalHome: string | undefined
 
     beforeEach(() => {
         tempDir = mkdtempSync(join(tmpdir(), "autocode-skills-test-"))
+        worktree = join(tempDir, "worktree")
         originalXdg = process.env.XDG_CONFIG_HOME
         originalHome = process.env.HOME
         process.env.XDG_CONFIG_HOME = tempDir
@@ -86,7 +88,7 @@ describe("skills config parsing and seeding", () => {
     test("file missing → mock receives ensureFileSync with freeze disabled by default", async () => {
         const { fs, files, createdPaths } = makeFs({})
 
-        await loadAutocodeConfig("/wt", "/wt", fs)
+        await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(createdPaths).toContain(globalPath())
         const ensured = files[globalPath()]
@@ -103,7 +105,7 @@ describe("skills config parsing and seeding", () => {
         }))
         const { fs, files, writtenPaths } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toEqual(DEFAULT_SKILLS)
 
@@ -121,7 +123,7 @@ describe("skills config parsing and seeding", () => {
         expect(autocodeKeys).toEqual(["sandbox", "skills"])
     })
 
-    test("JSONC missing skills → seed preserves comments, custom tiers, and permission rules", async () => {
+    test("JSONC missing skills → seed preserves comments, custom tiers, and V2 permission rules", async () => {
         const existingContent = preCreateRealFile(`{
     // named user comment
     "autocode": {
@@ -131,35 +133,31 @@ describe("skills config parsing and seeding", () => {
             },
         },
     },
-    "permission": {
-        "external_directory": {
-            "/workspace/**": "allow",
-            "*": "ask",
-        },
-    },
+    "permissions": [
+        { "action": "external_directory", "resource": "*", "effect": "ask" },
+        { "action": "external_directory", "resource": "/workspace/**", "effect": "allow" },
+    ],
 }
 `)
         const { fs, files, writtenPaths } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toEqual(DEFAULT_SKILLS)
         expect(writtenPaths).toContain(globalPath())
         const written = files[globalPath()] ?? ""
         const parsed = parseJsonc(written) as {
             autocode: { skills: unknown, tiers: unknown }
-            permission: unknown
+            permissions: unknown
         }
         expect(parsed.autocode.skills).toEqual(DEFAULT_SKILLS)
         expect(parsed.autocode.tiers).toEqual({
             custom: { fast: { model: "custom-fast" } },
         })
-        expect(parsed.permission).toEqual({
-            external_directory: {
-                "/workspace/**": "allow",
-                "*": "ask",
-            },
-        })
+        expect(parsed.permissions).toEqual([
+            { action: "external_directory", resource: "*", effect: "ask" },
+            { action: "external_directory", resource: "/workspace/**", effect: "allow" },
+        ])
         expect(written).toContain("// named user comment")
     })
 
@@ -167,7 +165,7 @@ describe("skills config parsing and seeding", () => {
         const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: {} } }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
         const written = readFileSync(globalPath(), "utf-8")
@@ -178,7 +176,7 @@ describe("skills config parsing and seeding", () => {
         const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: null } }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
         const written = readFileSync(globalPath(), "utf-8")
@@ -190,7 +188,7 @@ describe("skills config parsing and seeding", () => {
         const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: { bash: [url] } } }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
         const written = readFileSync(globalPath(), "utf-8")
@@ -199,12 +197,12 @@ describe("skills config parsing and seeding", () => {
 
     test("skills.freeze accepts exact booleans and defaults to false", async () => {
         const missing = makeFs()
-        expect((await loadAutocodeConfig("/wt", "/wt", missing.fs)).skills?.freeze).toBe(false)
+        expect((await loadAutocodeConfig(worktree, worktree, missing.fs)).skills?.freeze).toBe(false)
 
         for (const freeze of [true, false]) {
             const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: { freeze } } }))
             const { fs } = makeFs({ [globalPath()]: existingContent })
-            expect((await loadAutocodeConfig("/wt", "/wt", fs)).skills?.freeze).toBe(freeze)
+            expect((await loadAutocodeConfig(worktree, worktree, fs)).skills?.freeze).toBe(freeze)
         }
     })
 
@@ -213,19 +211,19 @@ describe("skills config parsing and seeding", () => {
             const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: { freeze } } }))
             const { fs } = makeFs({ [globalPath()]: existingContent })
 
-            expect((await loadAutocodeConfig("/wt", "/wt", fs)).skills?.freeze).toBe(false)
+            expect((await loadAutocodeConfig(worktree, worktree, fs)).skills?.freeze).toBe(false)
         }
     })
 
     test("local freeze setting overrides global config tier", async () => {
         const global = preCreateRealFile(JSON.stringify({ autocode: { skills: { freeze: false } } }))
-        const localPath = join("/wt", ".opencode", "autocode.jsonc")
+        const localPath = join(worktree, ".opencode", "autocode.jsonc")
         const { fs } = makeFs({
             [globalPath()]: global,
             [localPath]: JSON.stringify({ autocode: { skills: { freeze: true } } }),
         })
 
-        expect((await loadAutocodeConfig("/wt", "/wt", fs)).skills?.freeze).toBe(true)
+        expect((await loadAutocodeConfig(worktree, worktree, fs)).skills?.freeze).toBe(true)
     })
 
     test("idempotency: second load with skills key present does not write back", async () => {
@@ -233,14 +231,14 @@ describe("skills config parsing and seeding", () => {
         const { fs, files } = makeFs({ [globalPath()]: existingContent })
 
         // First load seeds the skills block via the fs mock.
-        await loadAutocodeConfig("/wt", "/wt", fs)
+        await loadAutocodeConfig(worktree, worktree, fs)
         const afterFirst = files[globalPath()] ?? ""
         expect(JSON.parse(afterFirst).autocode.skills).toEqual(DEFAULT_SKILLS)
 
         // Second load must not re-write the file. Re-create fs with the post-seed
         // content so the read sees the skills key already present.
         const second = makeFs({ [globalPath()]: afterFirst })
-        await loadAutocodeConfig("/wt", "/wt", second.fs)
+        await loadAutocodeConfig(worktree, worktree, second.fs)
         expect(second.writtenPaths).not.toContain(globalPath())
         expect(second.files[globalPath()]).toBe(afterFirst)
     })
@@ -249,7 +247,7 @@ describe("skills config parsing and seeding", () => {
         const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: "not-an-object" } }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
         const written = readFileSync(globalPath(), "utf-8")
@@ -260,7 +258,7 @@ describe("skills config parsing and seeding", () => {
         const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: 123 } }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
         const written = readFileSync(globalPath(), "utf-8")
@@ -271,7 +269,7 @@ describe("skills config parsing and seeding", () => {
         const existingContent = preCreateRealFile(JSON.stringify({ autocode: { skills: ["array"] } }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
         const written = readFileSync(globalPath(), "utf-8")
@@ -297,7 +295,7 @@ describe("skills config parsing and seeding", () => {
         }))
         const { fs, files, writtenPaths } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toEqual(DEFAULT_SKILLS)
 
@@ -330,7 +328,7 @@ describe("skills config parsing and seeding", () => {
         }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         // No skills returned (seeding skipped because ac is not a record).
         expect(result.skills).toBeUndefined()
@@ -346,7 +344,7 @@ describe("skills config parsing and seeding", () => {
         }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
 
@@ -360,7 +358,7 @@ describe("skills config parsing and seeding", () => {
         }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
 
@@ -374,7 +372,7 @@ describe("skills config parsing and seeding", () => {
         }))
         const { fs } = makeFs({ [globalPath()]: existingContent })
 
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
+        const result = await loadAutocodeConfig(worktree, worktree, fs)
 
         expect(result.skills).toBeUndefined()
 

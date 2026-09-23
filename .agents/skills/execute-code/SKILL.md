@@ -4,11 +4,11 @@ description: Use `execute-code` to get "Technical Design" when you must design t
 ---
 
 ## Architectural Overview
-TypeScript OpenCode plugin. Plugin registers agents, commands, skills, config, and runtime tools. OpenCode sessions own workflow and state. Job workspaces hold temp tool artifacts only.
+TypeScript OpenCode V2 plugin with temporary V1 compatibility. The V2 `Plugin.define({ id, setup })` entrypoint registers agents, commands, generated skills, tools, prompt and shell hooks, event subscriptions, and cleanup through domain APIs. Retained V1-shaped tools use adapters while OpenCode sessions own workflow and state. Job workspaces hold temp tool artifacts only.
 
 ## Technology Choices
 - **TypeScript**: Plugin source and Bun build target.
-- **OpenCode**: Hosts plugin agents, commands, config, tools, and sessions.
+- **OpenCode V2**: Hosts domain transforms, hooks, events, tools, and sessions through `@opencode/plugin` and `@opencode/client`.
 - **JSONC**: Layered user and project config.
 
 ## Key Data Models
@@ -44,13 +44,15 @@ No app auth layer. External-directory rules use last matching rule. Database too
 
 ## Special Files
 - `scripts/copy-skill-sources.ts`: Copy bundled skills into `dist/skills`.
-- `.opencode/plugin/autocode.ts`: Local shim re-exports built plugin.
+- `src/plugin.ts`: V2 setup, V1 compatibility entrypoint, and retained runtime adapters.
+- `.opencode/plugins/autocode.ts`: Local shim re-exports built plugin.
 
 ## Known Risks & Anti-Patterns
 - **Tier config**: Missing override uses agent or OpenCode default.
 - **GitHub snapshots**: Sync accepts redistribution risk; grants no rights.
 - **Sandbox support**: Unsupported hosts deny all sandbox tools.
 - **Job workspace**: Tools create or reuse per-session temp workspace on demand.
+- **V1 adapters**: V2 contexts cannot remove/list child/compact sessions or request interactive tool approval; unsupported calls fail safely or return an empty child list.
 
 ---
 

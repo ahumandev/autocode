@@ -59,7 +59,6 @@ ${planningDefinitions}
 
 - Bash is not required and is not allowed. Never use direct bash, shell, Node, or process spawning.
 - Never use \`pty*\`, sandbox CLI or tools, generic process-kill tools, \`autocode_kill\`, or \`autocode_process_kill\`.
-- \`task_external\` is not default, is denied here, and must never be called or described as sandboxing.
 - Never set or instruct \`NODE_PATH\`; use standard Node resolution only.
 
 ---

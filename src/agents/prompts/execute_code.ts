@@ -5,7 +5,7 @@ export const executeCodePrompt = `
 
 - Translate specifications into quality code.
 - NEVER invent architecture or broad improvements; implement user's requested change.
-- NEVER call bash tool.
+- NEVER call shell tool.
 
 ---
 

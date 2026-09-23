@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import {
     applyLocalMemoryXmlBudget,
     formatLocalMemoryFilename,
@@ -56,9 +57,9 @@ function createFileSystem(): LocalMemoryFileSystem & { actions: FileAction[], fi
             actions.push({ name: "readdir", path: directoryPath })
             if (!directories.has(directoryPath)) throw missingError()
             return [...files.keys()]
-                .filter((filePath: string): boolean => filePath.startsWith(`${directoryPath}/`))
+                .filter((filePath: string): boolean => filePath.startsWith(`${directoryPath}${path.sep}`))
                 .map((filePath: string): string => filePath.slice(directoryPath.length + 1))
-                .filter((name: string): boolean => !name.includes("/"))
+                .filter((name: string): boolean => !name.includes(path.sep))
         },
         async rename(oldPath: string, newPath: string): Promise<void> {
             actions.push({ name: "rename", path: oldPath, target: newPath })
@@ -78,8 +79,9 @@ function createFileSystem(): LocalMemoryFileSystem & { actions: FileAction[], fi
     }
 }
 
-const context = { directory: "/workspace/project", worktree: "/workspace/project" }
-const directory = "/workspace/project/.opencode/autocode/memories"
+const projectRoot = path.resolve("/workspace/project")
+const context = { directory: projectRoot, worktree: projectRoot }
+const directory = path.join(projectRoot, ".opencode", "autocode", "memories")
 
 function at(timestamp: string): () => Date {
     return (): Date => new Date(`${timestamp.replace(" ", "T").replace(/(\d{2})h(\d{2})s/, "$1:$2:")}Z`)
@@ -217,7 +219,7 @@ describe("local memory persistence", () => {
             "",
         ].join("\n")
         fileSystem.directories.add(directory)
-        fileSystem.files.set(`${directory}/${filename}`, body)
+        fileSystem.files.set(path.join(directory, filename), body)
 
         await expect(loadLocalMemories(fileSystem, context)).resolves.toMatchObject({
             memories: [{ id: "Legacy", aliases: ["old"], context: "migration", memory: "legacy memory" }],
@@ -228,7 +230,7 @@ describe("local memory persistence", () => {
         const fileSystem = createFileSystem()
         const filename = formatLocalMemoryFilename("2026-01-02 03h04s05", { id: "Broken" })
         fileSystem.directories.add(directory)
-        fileSystem.files.set(`${directory}/${filename}`, "<!-- autocode-local-memory:v1\n{}\n-->\n## memory\n```json\nnot-json\n```\n")
+        fileSystem.files.set(path.join(directory, filename), "<!-- autocode-local-memory:v1\n{}\n-->\n## memory\n```json\nnot-json\n```\n")
 
         await expect(loadLocalMemories(fileSystem, context)).rejects.toMatchObject({ code: "MALFORMED_MEMORY" })
     })
@@ -242,11 +244,11 @@ describe("local memory persistence", () => {
 
     test("loads a missing active store empty without reading or seeding archived and legacy skills", async () => {
         const fileSystem = createFileSystem()
-        const archiveDirectory = "/workspace/project/.opencode/autocode/memory-archive/v1/retained"
-        const legacyDirectory = "/workspace/project/.agents/skills"
+        const archiveDirectory = path.join(projectRoot, ".opencode", "autocode", "memory-archive", "v1", "retained")
+        const legacyDirectory = path.join(projectRoot, ".agents", "skills")
         const archive = await createMemoryFixture("2026-01-02 03h04s05", { id: "Archived", memory: "archive memory" })
-        const archivePath = `${archiveDirectory}/${archive.filename}`
-        const legacyPath = `${legacyDirectory}/learned-legacy.md`
+        const archivePath = path.join(archiveDirectory, archive.filename)
+        const legacyPath = path.join(legacyDirectory, "learned-legacy.md")
         const legacyContent = "# Learned legacy\n\nLegacy skill content.\n"
         fileSystem.directories.add(archiveDirectory)
         fileSystem.directories.add(legacyDirectory)
@@ -295,10 +297,10 @@ describe("local memory persistence", () => {
         const removeFileSystem = createFileSystem()
         const existing = await createMemoryFixture("2026-01-02 03h04s05", { id: "Remove", memory: "old" })
         removeFileSystem.directories.add(directory)
-        removeFileSystem.files.set(`${directory}/${existing.filename}`, existing.body)
+        removeFileSystem.files.set(path.join(directory, existing.filename), existing.body)
         const remove = removeFileSystem.rm.bind(removeFileSystem)
         removeFileSystem.rm = async (filePath: string): Promise<void> => {
-            if (filePath === `${directory}/${existing.filename}`) {
+            if (filePath === path.join(directory, existing.filename)) {
                 removeFileSystem.actions.push({ name: "rm", path: filePath })
                 throw new Error("remove failure")
             }
@@ -340,9 +342,9 @@ describe("local memory persistence", () => {
         const second = await createMemoryFixture(timestamp, { id: " api ", aliases: ["old-two"], context: "other context", memory: "old two" })
         const distinct = await createMemoryFixture(timestamp, { id: "Other", memory: "survives" })
         fileSystem.directories.add(directory)
-        fileSystem.files.set(`${directory}/${first.filename}`, first.body)
-        fileSystem.files.set(`${directory}/${second.filename}`, second.body)
-        fileSystem.files.set(`${directory}/${distinct.filename}`, distinct.body)
+        fileSystem.files.set(path.join(directory, first.filename), first.body)
+        fileSystem.files.set(path.join(directory, second.filename), second.body)
+        fileSystem.files.set(path.join(directory, distinct.filename), distinct.body)
 
         const saved = await saveLocalMemory(fileSystem, context, { id: "Api", aliases: ["new"], context: "replacement context", memory: "replacement" }, {
             now: at(timestamp),
@@ -350,10 +352,10 @@ describe("local memory persistence", () => {
         })
 
         expect(saved.trace).toEqual([{ reason: "saved", replaced_same_timestamp_versions: 2 }])
-        expect(fileSystem.files.has(`${directory}/${first.filename}`)).toBe(false)
-        expect(fileSystem.files.has(`${directory}/${second.filename}`)).toBe(false)
-        expect(fileSystem.files.has(`${directory}/${distinct.filename}`)).toBe(true)
-        expect([...fileSystem.files.keys()].filter((filePath: string): boolean => filePath.startsWith(`${directory}/`) && filePath.endsWith(".md"))).toHaveLength(2)
+        expect(fileSystem.files.has(path.join(directory, first.filename))).toBe(false)
+        expect(fileSystem.files.has(path.join(directory, second.filename))).toBe(false)
+        expect(fileSystem.files.has(path.join(directory, distinct.filename))).toBe(true)
+        expect([...fileSystem.files.keys()].filter((filePath: string): boolean => filePath.startsWith(`${directory}${path.sep}`) && filePath.endsWith(".md"))).toHaveLength(2)
     })
 
     test("classifies malformed filenames and persisted content with exact error codes", async () => {
@@ -384,7 +386,7 @@ describe("local memory persistence", () => {
         for (const malformed of cases) {
             const fileSystem = createFileSystem()
             fileSystem.directories.add(directory)
-            fileSystem.files.set(`${directory}/${malformed.filename}`, malformed.body)
+            fileSystem.files.set(path.join(directory, malformed.filename), malformed.body)
             await expectLocalMemoryError(loadLocalMemories(fileSystem, context), malformed.code)
         }
     })
@@ -402,8 +404,8 @@ describe("local memory persistence", () => {
 
         expect(saved.trace).toEqual([{ reason: "saved", replaced_same_timestamp_versions: 1 }])
         expect(fileSystem.actions.map((action: FileAction): string => action.name)).toEqual(["mkdir", "readdir", "write", "rm", "rename"])
-        expect(fileSystem.actions[2].path).toBe(`${directory}/.autocode-memory-known-temp.tmp`)
-        expect(fileSystem.actions[4].target).toBe(`${directory}/${saved.memory.filename}`)
+        expect(fileSystem.actions[2].path).toBe(path.join(directory, ".autocode-memory-known-temp.tmp"))
+        expect(fileSystem.actions[4].target).toBe(path.join(directory, saved.memory.filename))
         expect((await loadLocalMemories(fileSystem, context)).memories.map((memory) => [memory.id, memory.memory])).toEqual([["Other", "untouched"], [" api ", "replacement"]])
     })
 

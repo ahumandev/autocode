@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import path from "node:path"
 import { resetRetryCounts } from "@/utils/tools"
 import { AGENT_SKILL_MAP, createAutocodeSkillEditTool } from "./skill_edit"
 import { createToolContext } from "./test_context"
@@ -32,6 +33,11 @@ function createFakeFileSystem() {
 }
 
 describe("skill_edit", () => {
+    const workspace = path.join(path.parse(process.cwd()).root, "workspace")
+    const skillPath = (name: string, ...parts: string[]): string => path.join(workspace, ".agents", "skills", name, ...parts)
+    const relativeSkillPath = (name: string): string => path.join(".agents", "skills", name, "SKILL.md")
+    const templatePath = path.join("templates", "foo.txt")
+    const otherTemplatePath = path.join("templates", "bar.txt")
     afterEach(() => {
         resetRetryCounts()
     })
@@ -42,12 +48,12 @@ describe("skill_edit", () => {
 
         const result = await skillTool.execute(
             { name: "code-typescript", description: "Use code-typescript when writing TS.", content: "# Steps\nDo thing." } as never,
-            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+            createToolContext({ directory: workspace, worktree: workspace }),
         )
 
-        expect(result).toBe(".agents/skills/code-typescript/SKILL.md")
-        expect(fs.hasDir("/workspace/.agents/skills/code-typescript")).toBe(true)
-        const content = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
+        expect(result).toBe(relativeSkillPath("code-typescript"))
+        expect(fs.hasDir(skillPath("code-typescript"))).toBe(true)
+        const content = fs.getFile(skillPath("code-typescript", "SKILL.md"))
         expect(content).toContain("name: code-typescript")
         expect(content).toContain("description: Use code-typescript when writing TS.")
         expect(content).toContain("# Steps\nDo thing.")
@@ -109,16 +115,16 @@ describe("skill_edit", () => {
                 description: "trigger",
                 content: "body",
                 references: [
-                    { description: "Template file", path: "templates/foo.txt", content: "hello" },
+                    { description: "Template file", path: templatePath, content: "hello" },
                 ],
             } as never,
-            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+            createToolContext({ directory: workspace, worktree: workspace }),
         )
 
-        expect(fs.getFile("/workspace/.agents/skills/code-typescript/templates/foo.txt")).toBe("hello")
-        const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
+        expect(fs.getFile(skillPath("code-typescript", "templates", "foo.txt"))).toBe("hello")
+        const skillMd = fs.getFile(skillPath("code-typescript", "SKILL.md"))
         expect(skillMd).toContain("## References")
-        expect(skillMd).toContain("* [Template file](templates/foo.txt)")
+        expect(skillMd).toContain(`* [Template file](${templatePath})`)
     })
 
     test("deleting a reference removes file and entry", async () => {
@@ -131,11 +137,11 @@ describe("skill_edit", () => {
                 description: "trigger",
                 content: "body",
                 references: [
-                    { description: "Template file", path: "templates/foo.txt", content: "hello" },
-                    { description: "Other", path: "templates/bar.txt", content: "world" },
+                    { description: "Template file", path: templatePath, content: "hello" },
+                    { description: "Other", path: otherTemplatePath, content: "world" },
                 ],
             } as never,
-            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+            createToolContext({ directory: workspace, worktree: workspace }),
         )
 
         await skillTool.execute(
@@ -144,16 +150,16 @@ describe("skill_edit", () => {
                 description: "trigger",
                 content: "body",
                 references: [
-                    { description: "Template file", path: "templates/foo.txt", content: "[delete]" },
+                    { description: "Template file", path: templatePath, content: "[delete]" },
                 ],
             } as never,
-            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+            createToolContext({ directory: workspace, worktree: workspace }),
         )
 
-        expect(fs.getFile("/workspace/.agents/skills/code-typescript/templates/foo.txt")).toBeUndefined()
-        const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
-        expect(skillMd).not.toContain("templates/foo.txt")
-        expect(skillMd).toContain("templates/bar.txt")
+        expect(fs.getFile(skillPath("code-typescript", "templates", "foo.txt"))).toBeUndefined()
+        const skillMd = fs.getFile(skillPath("code-typescript", "SKILL.md"))
+        expect(skillMd).not.toContain(templatePath)
+        expect(skillMd).toContain(`* [Other](${otherTemplatePath})`)
     })
 
     test("deleting all references removes References section entirely", async () => {
@@ -166,10 +172,10 @@ describe("skill_edit", () => {
                 description: "trigger",
                 content: "body",
                 references: [
-                    { description: "Template file", path: "templates/foo.txt", content: "hello" },
+                    { description: "Template file", path: templatePath, content: "hello" },
                 ],
             } as never,
-            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+            createToolContext({ directory: workspace, worktree: workspace }),
         )
 
         await skillTool.execute(
@@ -178,13 +184,13 @@ describe("skill_edit", () => {
                 description: "trigger",
                 content: "body",
                 references: [
-                    { description: "Template file", path: "templates/foo.txt", content: "[delete]" },
+                    { description: "Template file", path: templatePath, content: "[delete]" },
                 ],
             } as never,
-            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+            createToolContext({ directory: workspace, worktree: workspace }),
         )
 
-        const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
+        const skillMd = fs.getFile(skillPath("code-typescript", "SKILL.md"))
         expect(skillMd).not.toContain("## References")
     })
 
@@ -194,10 +200,10 @@ describe("skill_edit", () => {
 
         await skillTool.execute(
             { name: "code-typescript", description: "trigger", content: "body" } as never,
-            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+            createToolContext({ directory: workspace, worktree: workspace }),
         )
 
-        const skillMd = fs.getFile("/workspace/.agents/skills/code-typescript/SKILL.md")
+        const skillMd = fs.getFile(skillPath("code-typescript", "SKILL.md"))
         expect(skillMd).not.toContain("## References")
     })
 
@@ -222,16 +228,16 @@ describe("skill_edit", () => {
 
             const result = await skillTool.execute(
                 { name: "anything", description: "trigger", content: "body" } as never,
-                createToolContext({ agent: "document-code", directory: "/workspace", worktree: "/workspace" }),
+                createToolContext({ agent: "document-code", directory: workspace, worktree: workspace }),
             )
 
-            expect(result).toBe(".agents/skills/execute-code/SKILL.md")
-            expect(fs.hasDir("/workspace/.agents/skills/execute-code")).toBe(true)
-            const content = fs.getFile("/workspace/.agents/skills/execute-code/SKILL.md")
+            expect(result).toBe(relativeSkillPath("execute-code"))
+            expect(fs.hasDir(skillPath("execute-code"))).toBe(true)
+            const content = fs.getFile(skillPath("execute-code", "SKILL.md"))
             expect(content).toContain("name: execute-code")
             expect(content).not.toContain("anything")
             // No skill dir created under the original args.name
-            expect(fs.hasDir("/workspace/.agents/skills/anything")).toBe(false)
+            expect(fs.hasDir(skillPath("anything"))).toBe(false)
         })
 
         test.each(Object.entries(expectedMappings))(
@@ -242,13 +248,13 @@ describe("skill_edit", () => {
 
                 const result = await skillTool.execute(
                     { name: "should-be-overridden", description: "trigger", content: "body" } as never,
-                    createToolContext({ agent, directory: "/workspace", worktree: "/workspace" }),
+                    createToolContext({ agent, directory: workspace, worktree: workspace }),
                 )
 
-                expect(result).toBe(`.agents/skills/${skillName}/SKILL.md`)
-                expect(fs.hasDir(`/workspace/.agents/skills/${skillName}`)).toBe(true)
-                expect(fs.hasDir("/workspace/.agents/skills/should-be-overridden")).toBe(false)
-                const content = fs.getFile(`/workspace/.agents/skills/${skillName}/SKILL.md`)
+                expect(result).toBe(relativeSkillPath(skillName))
+                expect(fs.hasDir(skillPath(skillName))).toBe(true)
+                expect(fs.hasDir(skillPath("should-be-overridden"))).toBe(false)
+                const content = fs.getFile(skillPath(skillName, "SKILL.md"))
                 expect(content).toContain(`name: ${skillName}`)
             },
         )
@@ -259,12 +265,12 @@ describe("skill_edit", () => {
 
             const result = await skillTool.execute(
                 { name: "custom-skill", description: "trigger", content: "body" } as never,
-                createToolContext({ agent: "primary", directory: "/workspace", worktree: "/workspace" }),
+                createToolContext({ agent: "primary", directory: workspace, worktree: workspace }),
             )
 
-            expect(result).toBe(".agents/skills/custom-skill/SKILL.md")
-            expect(fs.hasDir("/workspace/.agents/skills/custom-skill")).toBe(true)
-            const content = fs.getFile("/workspace/.agents/skills/custom-skill/SKILL.md")
+            expect(result).toBe(relativeSkillPath("custom-skill"))
+            expect(fs.hasDir(skillPath("custom-skill"))).toBe(true)
+            const content = fs.getFile(skillPath("custom-skill", "SKILL.md"))
             expect(content).toContain("name: custom-skill")
         })
 

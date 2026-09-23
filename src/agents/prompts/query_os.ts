@@ -39,7 +39,7 @@ If you need to execute a "destructive" command, report that a different agent is
 
 Execute steps sequentially.
 
-**IMPORTANT**: Before executing any \`bash\` command consider if its "read-only". You can ONLY execute "read-only" commands.
+**IMPORTANT**: Before executing any command via \`shell\` consider if its "read-only". You can ONLY execute "read-only" commands.
 
 ## STEP 3: Report to user
 
@@ -57,7 +57,7 @@ ${responseAiRules}
 
 ## Rules
 
-- Prefer other tools over \`bash\` tool if possible - call \`bash\` tool as last resort
+- Prefer other tools over \`shell\` tool if possible - call \`shell\` tool as last resort
 - NEVER execute "destructive" commands
 `
 

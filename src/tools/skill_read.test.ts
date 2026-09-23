@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import path from "node:path"
 import { resetRetryCounts } from "@/utils/tools"
 import { createAutocodeSkillReadTool } from "./skill_read"
 import { createToolContext } from "./test_context"
@@ -27,12 +28,13 @@ describe("skill_read", () => {
         const fs = createFakeFileSystem()
         const body = "# Steps\nDo thing."
         const fileContent = `---\nname: code-typescript\ndescription: Use code-typescript when writing TS.\n---\n\n${body}\n`
-        fs.setFile("/workspace/.agents/skills/code-typescript/SKILL.md", fileContent)
+        const workspace = path.join(path.parse(process.cwd()).root, "workspace")
+        fs.setFile(path.join(workspace, ".agents", "skills", "code-typescript", "SKILL.md"), fileContent)
 
         const skillTool = createAutocodeSkillReadTool(fs)
         const result = await skillTool.execute(
             { name: "code-typescript" } as never,
-            createToolContext({ directory: "/workspace", worktree: "/workspace" }),
+            createToolContext({ directory: workspace, worktree: workspace }),
         )
 
         expect(result).toBe(fileContent)

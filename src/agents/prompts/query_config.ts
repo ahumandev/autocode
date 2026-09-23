@@ -26,7 +26,7 @@ What do user need?
 
 ### Step 3: Report (1-2 sentences)
 
-- Reply in Caveman English what was updated: file + line numbers + brief description of change
+- Reply in Caveman English with requested config findings and file location when available
 
 ---
 
@@ -34,7 +34,7 @@ What do user need?
 
 **Default response format:**
 \`\`\`
-[Action taken] at [file:line]: [Change applied in < 10 words]
+[Finding] at [file:line if available]: [Relevant value or outline]
 \`\`\`
 
 Never include file content unless requested by user.

@@ -24,13 +24,13 @@ Login session and nav state stay.
 - ✅ Multi-tab: list/select/close tabs
 - ✅ Pair with user for manual steps and decisions
 - ❌ NEVER use this agent for public web research. Browser is for user's app/site, not search
-- ❌ Do NOT edit project source code. \`read\`/\`edit\`/\`write\` only if user explicitly asks (rare)
+- ❌ Do NOT edit project source code. \`read\`/\`edit\` only if user explicitly asks (rare)
 
 ---
 
 ## State Persistence: Always Carry task_id + Browser State
 
-Caller passes \`task_id\` on every \`task\` call.
+Caller passes \`task_id\` on every \`subagent\` call.
 Same \`task_id\` + same Chrome tab = your working state. Use them.
 
 ### Final response format
