@@ -127,6 +127,7 @@ test("V2 setup registers runtime behavior and cleans up event resources", async 
             skills: { freeze: true },
             tiers: {
                 smart: { model: "openai/smart#default", variant: "high" },
+                balanced: { model: "openai/balanced" },
                 spy: { model: "openai/spy#preview" },
             },
         },
@@ -139,6 +140,8 @@ test("V2 setup registers runtime behavior and cleans up event resources", async 
         ["explore", createAgent("explore")],
         ["general", createAgent("general")],
         ["plan", createAgent("plan")],
+        ["auto-feature", { ...createAgent("auto-feature"), model: { providerID: "opencode", id: "default" } }],
+        ["auto-research", { ...createAgent("auto-research"), model: { providerID: "anthropic", id: "override", variant: "fast" } }],
         ["spy", { ...createAgent("spy", [{ action: "learn", resource: "*", effect: "allow" }]), system: "V2 spy override" }],
         ["assist", { ...createAgent("assist", [
             { action: "*", resource: "*", effect: "allow" },
@@ -262,8 +265,10 @@ test("V2 setup registers runtime behavior and cleans up event resources", async 
         }))
         expect(agents.get("spy")?.model).toEqual({ providerID: "openai", id: "spy", variant: "preview" })
         expect(agents.get("spy")?.system).toBe("V2 spy override")
+        expect(agents.get("auto-feature")?.model).toEqual({ providerID: "openai", id: "smart", variant: "high" })
+        expect(agents.get("auto-research")?.model).toEqual({ providerID: "openai", id: "smart", variant: "high" })
         expect(agents.get("assist")).toEqual(expect.objectContaining({
-            model: { providerID: "anthropic", id: "override", variant: "fast" },
+            model: { providerID: "openai", id: "balanced", variant: "medium" },
             system: "V2 assist override",
             steps: 8,
             request: {

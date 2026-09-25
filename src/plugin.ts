@@ -509,7 +509,7 @@ function mergeV2Agent(draft: Record<string, unknown>, definition: Record<string,
         ...(typeof existing.hidden === "boolean" ? { hidden: existing.hidden } : {}),
         ...(typeof existing.color === "string" ? { color: existing.color } : {}),
         ...(typeof existing.steps === "number" ? { steps: existing.steps } : typeof existing.maxSteps === "number" ? { steps: existing.maxSteps } : {}),
-        ...(existingModel ? { model: existingModel } : {}),
+        ...(definition.model === undefined && existingModel ? { model: existingModel } : {}),
         request: {
             ...definitionRequest,
             settings: { ...(getRecord(definitionRequest.settings) ?? {}), ...(getRecord(existingRequest.settings) ?? {}) },
