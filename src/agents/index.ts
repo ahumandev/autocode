@@ -298,7 +298,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
         "assist-browser": {
             color: colorWritableInteractiveOrchestrator,
-            description: "Use assist-browser subagent with interactive browser automation tasks. It browser than can: access that can fill forms, submit, save, upload, pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls via `task_id` so tab and login session are not re-discovered.",
+            description: "Use assist-browser subagent with interactive browser automation tasks. It browser than can: access that can fill forms, submit, save, upload, pair with user for manual steps like login, captcha, and 2FA. Browser state persists across calls when resumed with returned `sessionID` so tab and login session are not re-discovered.",
             hidden: true,
             mode: "subagent",
             permission: {

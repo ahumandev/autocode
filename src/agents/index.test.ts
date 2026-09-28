@@ -138,6 +138,20 @@ describe("agent policies", () => {
         expect(assist?.some((rule) => rule.action === "task" || rule.action === "bash")).toBe(false)
     })
 
+    test("auto registers V2 new and resumed subagent guidance without changing delegation access", () => {
+        const auto = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, [], configuredManagedAgentTiers).auto
+
+        expect(auto?.prompt).toBe(autoPrompt)
+        expect(auto?.prompt).toContain("New task: call `subagent` with `agent`, `description`, and `prompt`; omit `sessionID`.")
+        expect(auto?.prompt).toContain("Save the `sessionID` returned by `subagent` for followups.")
+        expect(auto?.prompt).toContain("call `subagent` again with that returned `sessionID`.")
+        expect(auto?.prompt).not.toContain("task_id")
+        expect(permissionEffect(auto?.permissions, "subagent", "auto-feature")).toBe("allow")
+        expect(permissionEffect(auto?.permissions, "subagent", "query-code")).toBe("allow")
+        expect(permissionEffect(auto?.permissions, "subagent", "execute-code")).toBe("deny")
+        expect(auto?.permissions?.some((rule) => rule.action === "task")).toBe(false)
+    })
+
     test("query-config grants only read access under ordered V2 rules", () => {
         const agents = buildV2Agents(createPlatformCapabilities("linux"))
         const permissions = agents["query-config"]?.permissions
@@ -174,6 +188,33 @@ describe("agent policies", () => {
         expect(agents["execute-document"]?.prompt).toContain("call `document-*` subagents")
         expect(agents["query-skills"]?.prompt).not.toContain("`/docs`")
         expect(agents["query-skills"]?.prompt).not.toContain("Check if `AGENTS.md` exists")
+    })
+
+    test("auto delegation prompt uses V2 subagent arguments and returned session IDs", () => {
+        const agents = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, [], configuredManagedAgentTiers)
+        const prompt = String(agents.auto?.prompt ?? "")
+
+        expect(prompt).toContain("New task: call `subagent` with `agent`, `description`, and `prompt`; omit `sessionID`.")
+        expect(prompt).toContain("Save the `sessionID` returned by `subagent` for followups.")
+        expect(prompt).toContain("call `subagent` again with that returned `sessionID`")
+        expect(prompt).not.toContain("task_id")
+        expect(permissionEffect(agents.auto?.permissions, "subagent", "auto-feature")).toBe("allow")
+        expect(permissionEffect(agents.auto?.permissions, "subagent", "query-code")).toBe("allow")
+        expect(permissionEffect(agents.auto?.permissions, "subagent", "execute-code")).toBe("deny")
+    })
+
+    test("registered delegation prompts and browser description use returned V2 session IDs", () => {
+        const agents = buildV2Agents(createPlatformCapabilities("linux"))
+
+        for (const agent of Object.values(agents)) {
+            expect(agent.prompt ?? "").not.toContain("task_id")
+            expect(agent.description ?? "").not.toContain("task_id")
+        }
+        expect(agents["auto-research"]?.prompt).toContain("start new subagent without `sessionID`")
+        expect(agents["auto-troubleshoot"]?.prompt).toContain("call `subagent` again with returned `sessionID`")
+        expect(agents.advise?.prompt).toContain("follow up with returned `sessionID`")
+        expect(agents["assist-browser"]?.prompt).toContain("omits `sessionID` on the first `subagent` call and reuses the returned `sessionID` on followups")
+        expect(agents["assist-browser"]?.description).toContain("resumed with returned `sessionID`")
     })
 
     test("applies external-directory rules based on question permission", () => {

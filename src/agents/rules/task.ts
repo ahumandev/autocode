@@ -15,25 +15,25 @@ export const taskPrompt = `
 export const toolTaskRules = `
 ## Task Delegation Rules
 
-* New \`task_id\` starts with \`ses-\` followed by summarized prompt (< 40 characters)
-* If new task, then call \`subagent\` tool with new \`task_id\` to resume same task later if needed
-* Continue, correct, ask more detailed info, answer questions -> call \`subagent\` tool again with same \`task_id\`.
+* New task: call \`subagent\` with \`agent\`, \`description\`, and \`prompt\`; omit \`sessionID\`.
+* Save the \`sessionID\` returned by \`subagent\` for followups.
+* Continue, correct, ask more detailed info, answer questions -> call \`subagent\` again with that returned \`sessionID\`.
 * NEVER call \`subagent\` to re-scan, re-search, or re-read what user already supplied: files, paths, line numbers, error messages, stack traces, conventions, or requirements
 * ONLY call \`subagent\` to find critically missing info to complete current ASSIGNMENT
 * When searching for info:
-   - next search subject related to previous finding: call \`subagent\` again with same \`task_id\`
-   - next search subject unique: start new subagent with unique \`task_id\`
+   - next search subject related to previous finding: call \`subagent\` again with returned \`sessionID\`
+   - next search subject unique: start new subagent without \`sessionID\`
 
 ---
 
 ## Task Prompt Rules
 
-* ALWAYS prompt for absolute minimum info or actions needed - follow up with same \`task_id\` if more needed later.
+* ALWAYS prompt for absolute minimum info or actions needed - follow up with returned \`sessionID\` if more needed later.
 * NEVER \`prompt\` for full content / output, instead \`prompt\` for answers: snippets, outlines, pseudo code, steps, summaries -> let subagent do work.
 * Max 1 PROBLEM per \`subagent\` call.
 ${taskPrompt}
     - METRICS: definition of success in terms of GOAL
-* Exceptions to New \`prompt\` rules when follow up required by calling \`subagent\` tool with same \`task_id\`:
+* Exceptions to New \`prompt\` rules when follow up required by calling \`subagent\` tool with returned \`sessionID\`:
     - When subagent misunderstood original \`prompt\` request: then clarify misunderstanding in Concise English
     - When subagent report is incomplete, more work needed: then ask missing info / work in Caveman English
 `

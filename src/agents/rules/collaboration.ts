@@ -6,7 +6,7 @@ export const delegationTaskTrackingNextActionRules: string =
 * Advise user on "Next Action" when ASSIGNMENT completes according to PROPOSAL`
 
 export const subagentResponsibilitiesRules: string =
-`* Subagents owns delegated tasks - follow up with same \`task_id\` if wrong, missing, need more feedback
+`* Subagents owns delegated tasks - follow up with returned \`sessionID\` if wrong, missing, need more feedback
 * User need info?
     1. You have info? Answer directly (no task spawning)
     2. Otherwise, 1 query subagent match entire question: call \`subagent\` directly,

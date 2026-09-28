@@ -127,7 +127,7 @@ test("V2 setup registers runtime behavior and cleans up event resources", async 
             skills: { freeze: true },
             tiers: {
                 smart: { model: "openai/smart#default", variant: "high" },
-                balanced: { model: "openai/balanced" },
+                balanced: { model: "openai/balanced", variant: "medium" },
                 spy: { model: "openai/spy#preview" },
             },
         },
@@ -249,6 +249,8 @@ test("V2 setup registers runtime behavior and cleans up event resources", async 
         },
     }
 
+    const originalConfigDir = process.env.OPENCODE_CONFIG_DIR
+    process.env.OPENCODE_CONFIG_DIR = join(root, "config")
     try {
         expect((autocode as unknown as { id: string }).id).toBe("autocode")
         const cleanup = await (autocode as unknown as { setup(input: unknown): Promise<(() => Promise<void> | void) | void> }).setup(context)
@@ -263,6 +265,11 @@ test("V2 setup registers runtime behavior and cleans up event resources", async 
             system: expect.any(String),
             request: { settings: {}, headers: {}, body: { temperature: 0.4 } },
         }))
+        const autoSystem = String(agents.get("auto")?.system ?? "")
+        expect(autoSystem).toContain("New task: call `subagent` with `agent`, `description`, and `prompt`; omit `sessionID`.")
+        expect(autoSystem).toContain("Save the `sessionID` returned by `subagent` for followups.")
+        expect(autoSystem).toContain("call `subagent` again with that returned `sessionID`")
+        expect(autoSystem).not.toContain("task_id")
         expect(agents.get("spy")?.model).toEqual({ providerID: "openai", id: "spy", variant: "preview" })
         expect(agents.get("spy")?.system).toBe("V2 spy override")
         expect(agents.get("auto-feature")?.model).toEqual({ providerID: "openai", id: "smart", variant: "high" })
@@ -406,6 +413,8 @@ test("V2 setup registers runtime behavior and cleans up event resources", async 
     }
     finally {
         resolveEventHandled = undefined
+        if (originalConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
+        else process.env.OPENCODE_CONFIG_DIR = originalConfigDir
         await rm(root, { recursive: true, force: true })
     }
 })

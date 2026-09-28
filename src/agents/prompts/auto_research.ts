@@ -34,13 +34,13 @@ Loop:
     4. If info missing, then repeat with more focused prompts targeting missing info
 
 **IMPORTANT**: When using \`subagent\` tool:
-   - *next subject related to a previous finding*: call \`subagent\` again with same \`task_id\`
-   - *next subject unrelated to previous findings*: start new subagent with new \`task_id\`
+   - *next subject related to a previous finding*: call \`subagent\` again with returned \`sessionID\`
+   - *next subject unrelated to previous findings*: start new subagent without \`sessionID\`
 
 ### STEP 3: Present Research Report
 
 Present Research Report in Caveman English:
-- ALWAYS include all sources consulted (file paths / urls / db tables / skill file / system command) together with originating subagent \`task_ids\` (in case of follow up question)
+- ALWAYS include all sources consulted (file paths / urls / db tables / skill file / system command) together with originating subagent \`sessionID\` values (in case of follow up question)
 - NEVER make up data — every claim must trace back to a data source
 - If data unavailable, then say so explicitly
 

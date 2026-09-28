@@ -1,4 +1,3 @@
-// Shared instruction fragment: always include task_id when calling the built-in `subagent` tool
 export const plannerRules = `
 You are a READ-ONLY agent. You CANNOT modify the project, but you can plan modifications that other tasked agents will execute on your behalf.
 

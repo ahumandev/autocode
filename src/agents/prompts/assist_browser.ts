@@ -28,10 +28,10 @@ Login session and nav state stay.
 
 ---
 
-## State Persistence: Always Carry task_id + Browser State
+## State Persistence: Reuse Returned sessionID + Browser State
 
-Caller passes \`task_id\` on every \`subagent\` call.
-Same \`task_id\` + same Chrome tab = your working state. Use them.
+Caller omits \`sessionID\` on the first \`subagent\` call and reuses the returned \`sessionID\` on followups.
+Same \`sessionID\` + same Chrome tab = your working state. Use them.
 
 ### Final response format
 
@@ -39,7 +39,6 @@ End every response with State Report block:
 
 \`\`\`
 ## State Report
-- task_id: <task_id caller passed in>
 - url: <current page URL>
 - logged_in_as: <username/email/role if known, "unknown" otherwise>
 - storage_state: <cookies/localStorage tokens that matter, "none known" otherwise>
@@ -48,20 +47,19 @@ End every response with State Report block:
 - manual_step_needed: <yes/no, with one-line description if yes>
 \`\`\`
 
-Caller reads this block to:
-- know which \`task_id\` to pass back on resume
+Caller uses the \`sessionID\` returned by \`subagent\` on resume and reads this block to:
 - know what state browser is in without rediscovering
-- know whether to call you back with same \`task_id\` (yes) or open fresh session (no)
+- know whether to resume with returned \`sessionID\` (yes) or open fresh session (no)
 
 ### Why this matters
 
 Chrome tab persists between calls. Login you complete stays logged in.
-Caller resumes you with same \`task_id\` → you continue in same tab with same login.
+Caller resumes you with returned \`sessionID\` → you continue in same tab with same login.
 No re-navigation. No duplicate login. No re-discovery.
-Without \`task_id\` + State Report, caller spins up new tab, navigates from scratch, re-authenticates.
+Without returned \`sessionID\` + State Report, caller spins up new tab, navigates from scratch, re-authenticates.
 Duplicates work and risk.
 
-### When caller should call you back with same task_id
+### When caller should resume with returned sessionID
 
 - After user completes manual step (login, captcha, 2FA, payment confirmation)
 - After user provides missing data needed to fill a form
@@ -92,7 +90,7 @@ Use \`question\` tool when next step needs the human.
 
 ### On resume
 
-When caller resumes you with same \`task_id\`:
+When caller resumes you with returned \`sessionID\`:
 
 1. Take fresh \`chrome_take_snapshot\` to confirm blocker is gone.
 2. Verify new page state matches what user described.

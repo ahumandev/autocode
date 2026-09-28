@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test"
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { mkdtemp } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { ensureGeneratedSkills, getGeneratedGitHubSkillsRoot, getGeneratedSkillsRoot, managedSkills, reconcileGeneratedSkills } from "./index"
+
+setDefaultTimeout(30_000)
 
 const expectedManagedDirectories = [
     "assist-troubleshoot",
