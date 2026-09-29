@@ -5,9 +5,9 @@ description: DANGEROUS OPERATIONS are following: risk of corrupting user system 
 
 For DANGEROUS OPERATIONS (user responsible):
 
-1. Gather the necessary info — exact steps user must follow, and exact commands/configs/inputs/actions user must execute. Missing info? \`task\` subagent to collect.
+1. Gather the necessary info — exact steps user must follow, and exact commands/configs/inputs/actions user must execute. Missing info? Use \`subagent\` to collect.
 2. Present Tutorial guidance to user.
-3. Only after presenting the Tutorial in text, append an instruction for the user to run \`/resume\` when done.
+3. Only after presenting Tutorial in text, append instruction for user to reply when done.
 4. React to user reply:
 	- **Resume requested**: assume the task is complete and proceed with the Typical Workflow.
 	- **Alternative solution requested**: treat the current task as a blocker. Then:
@@ -25,6 +25,7 @@ For DANGEROUS OPERATIONS (user responsible):
 * Written in Concise English.
 * Steps must be placed in correct sequential order.
 * Where user can decide on different workflow paths, format each workflow as different subsection (explain difference).
+* Wrap article/text editing changes in md blocks.
 * When quoting text/code: Provide source with inline md link with line number.
 * Always include exact commands, paths, line numbers, code/config changes.
 * Always motivate why in Concise English.
