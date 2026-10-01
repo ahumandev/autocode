@@ -866,7 +866,6 @@ describe("tool registrations", () => {
                     "autocode_script_project",
                     "autocode_script_run",
                     "autocode_script_service",
-                    "autocode_session_context",
                     "autocode_session_create",
                     "autocode_youtube_transcribe",
                     "skill_edit",
@@ -914,8 +913,6 @@ describe("tool registrations", () => {
                 expect(plugin.tool?.autocode_act_prompt).toBeUndefined()
                 expect(plugin.tool?.autocode_act).toBeUndefined()
                 expect(plugin.tool?.autocode_agent_execute).toBeUndefined()
-                expect(plugin.tool?.autocode_session_context).toBeDefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_session_context)).toContain("Read sanitized current session context and token usage metadata.")
                 expect(plugin.tool?.autocode_session_create).toBeDefined()
                 expect(plugin.tool?.learn).toBeDefined()
                 expect(plugin.tool?.skill_learn).toBeUndefined()

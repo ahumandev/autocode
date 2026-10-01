@@ -40,7 +40,6 @@ import { createAutocodeScriptInstallTool } from "./autocode_script_install"
 import { createAutocodeScriptProjectTool } from "./autocode_script_project"
 import { createAutocodeScriptRunTool } from "./autocode_script_run"
 import { createAutocodeScriptServiceTool } from "./autocode_script_service"
-import { createAutocodeSessionContextTool } from "./autocode_session_context"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
 import { createAutocodeSkillEditTool } from "./skill_edit"
 import { createAutocodeSkillReadTool } from "./skill_read"
@@ -112,7 +111,6 @@ export function createTools(
         autocode_script_project: createAutocodeScriptProjectTool(client),
         autocode_script_run: createAutocodeScriptRunTool(client),
         autocode_script_service: createAutocodeScriptServiceTool(client, {}, undefined, runtime?.managedScriptLifecycle),
-        autocode_session_context: createAutocodeSessionContextTool(client),
         autocode_session_create: createAutocodeSessionCreateTool(client, runtime?.restartCoordinator, runtime?.serverUrl, runtime?.getServerUrl, runtime?.getWebUrl),
         autocode_ssh_command: createAutocodeSshCommandTool(),
         autocode_ssh_config_edit: createAutocodeSshConfigEditTool(),

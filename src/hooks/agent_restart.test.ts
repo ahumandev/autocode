@@ -707,23 +707,50 @@ describe("PendingAgentRestartCoordinator handoffs", () => {
             expect(promptAsyncMock).toHaveBeenCalledTimes(1)
             expect(coordinator.pendingCount()).toBe(0)
         })
+
+        test(`dispatches matching ${shape} tool-calls step ended once before later stop or idle`, async () => {
+            coordinator.registerHandoff(handoff())
+
+            await Promise.all([
+                coordinator.handleEvent(stepEndedEvent("tool-calls", shape)),
+                coordinator.handleEvent(stepEndedEvent("tool-calls", shape)),
+            ])
+
+            expect(sessionUpdateMock).toHaveBeenCalledTimes(1)
+            expect(promptAsyncMock).toHaveBeenCalledTimes(1)
+            expect(promptAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ path: { id: DESTINATION_SESSION_ID } }))
+            expect(coordinator.pendingCount()).toBe(0)
+
+            await Promise.all([
+                coordinator.handleEvent(stepEndedEvent("stop", shape)),
+                coordinator.handleEvent(handoffStatusIdleEvent()),
+                coordinator.handleEvent(sdkHandoffIdleEvent()),
+            ])
+
+            expect(sessionUpdateMock).toHaveBeenCalledTimes(1)
+            expect(promptAsyncMock).toHaveBeenCalledTimes(1)
+        })
+
+        test.each([
+            ["wrong directory", "/other-repo", SESSION_ID, SOURCE_MESSAGE_ID],
+            ["wrong source session", DIRECTORY, "other-source-session", SOURCE_MESSAGE_ID],
+            ["wrong stored message", DIRECTORY, SESSION_ID, "other-source-message"],
+            ["missing message ID", DIRECTORY, SESSION_ID, undefined],
+            ["blank message ID", DIRECTORY, SESSION_ID, " "],
+        ])(`keeps handoff pending after %s ${shape} tool-calls step ended`, async (_label, directory, sessionID, assistantMessageID) => {
+            coordinator.registerHandoff(handoff())
+
+            await coordinator.handleEvent({
+                type: "session.next.step.ended",
+                directory,
+                [shape]: { sessionID, assistantMessageID, finish: "tool-calls" },
+            } as unknown as Event)
+
+            expect(sessionUpdateMock).not.toHaveBeenCalled()
+            expect(promptAsyncMock).not.toHaveBeenCalled()
+            expect(coordinator.pendingCount()).toBe(1)
+        })
     }
-
-    test("keeps handoff pending after tool-call step until terminal step ended event", async () => {
-        coordinator.registerHandoff(handoff())
-
-        await coordinator.handleEvent(stepEndedEvent("tool-calls"))
-
-        expect(sessionUpdateMock).not.toHaveBeenCalled()
-        expect(promptAsyncMock).not.toHaveBeenCalled()
-        expect(coordinator.pendingCount()).toBe(1)
-
-        await coordinator.handleEvent(stepEndedEvent("stop"))
-
-        expect(sessionUpdateMock).toHaveBeenCalledTimes(1)
-        expect(promptAsyncMock).toHaveBeenCalledTimes(1)
-        expect(coordinator.pendingCount()).toBe(0)
-    })
 
     test("ignores malformed step ended event", async () => {
         coordinator.registerHandoff(handoff())

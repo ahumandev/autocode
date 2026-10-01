@@ -91,8 +91,6 @@ describe("commands", () => {
         for (const [commandName, agent] of [["new-auto", "auto"], ["new-assist", "assist"]] as const) {
             const template = commands[commandName]?.template ?? ""
 
-            expect(template).toContain("Call `autocode_session_context` first")
-            expect(template.indexOf("autocode_session_context")).toBeLessThan(template.indexOf("autocode_session_create"))
             expect(template).toContain("GOALS")
             expect(template).toContain("IMPACT")
             expect(template).toContain("CONSTRAINTS")

@@ -163,6 +163,15 @@ function getTerminalMessagePartTurn(event: Event): HandoffTurn | undefined {
 }
 
 function getToolCallsStepFinish(event: Event): HandoffTurn | undefined {
+    if (getRecordString(event, "type") === "session.next.step.ended") {
+        for (const step of [getRecord(event, "data"), getRecord(event, "properties")]) {
+            if (getRecordString(step, "finish") !== "tool-calls") continue
+            const sessionID = getValidRecordString(step, "sessionID")
+            const messageID = getValidRecordString(step, "messageID") ?? getValidRecordString(step, "assistantMessageID")
+            if (sessionID !== undefined && messageID !== undefined) return { sessionID, messageID }
+        }
+        return undefined
+    }
     if (getRecordString(event, "type") !== "message.part.updated") return undefined
     const properties = getRecord(event, "properties")
     const sessionID = getValidRecordString(properties, "sessionID")

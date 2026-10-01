@@ -5,6 +5,9 @@ import { homedir } from "node:os"
 import { posix, win32 } from "node:path"
 import { join } from "node:path"
 import { z } from "zod"
+import { Session } from "@opencode/schema/session"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
+import { Schema } from "effect"
 // V1 types remain for the legacy server entry and tool implementations without V2 equivalents.
 import type { Hooks, PluginModule as LegacyPluginModule, PluginInput, ToolContext as LegacyToolContext, ToolDefinition } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
@@ -125,7 +128,7 @@ async function mergeConfig(
         cfg.small_model = tiers.cheap.model
     }
 
-    cfg.subagent_depth = Math.max(cfg.subagent_depth ?? 0, 4)
+    cfg.subagent_depth = Math.max(cfg.subagent_depth ?? 0, 5)
 
     cfg.agent = cfg.agent ?? {}
     if (capabilities.isWindows) delete (cfg.agent as Record<string, unknown>)["execute-sandbox"]
@@ -482,7 +485,8 @@ function toV2Agent(name: string, agent: Omit<PluginAgentConfig, "tier">): Record
         id: name,
         name,
         mode: source.mode ?? "primary",
-        hidden: source.hidden ?? false,
+        // V2 hides workers from delegation discovery, not just the primary agent menu.
+        hidden: source.mode === "subagent" ? false : source.hidden ?? false,
         request: { settings: {}, headers: {}, body: v2RequestBody(source) },
         permissions: agent.permissions ?? [],
         ...(typeof source.prompt === "string" ? { system: source.prompt } : {}),
@@ -640,20 +644,28 @@ function prependPathEntry(current: string | undefined, entry: string, delimiter:
     return [entry, ...entries].join(delimiter)
 }
 
-function normalizeV2Event(event: unknown): unknown {
+function normalizeV2Event(event: unknown): Record<string, unknown> | undefined {
     const record = getRecord(event)
-    if (record === undefined) return event
+    if (record === undefined || typeof record.type !== "string" || !record.type.trim()) return undefined
     const location = getRecord(record.location)
-    const data = getRecord(record.data) ?? {}
+    const data = getRecord(record.data)
+    if (data === undefined) return undefined
+    if ((record.type === "session.deleted" && !Schema.is(Session.Event.Deleted.data)(data))
+        || (record.type === "session.execution.failed" && !Schema.is(Session.Event.Execution.Failed.data)(data))
+        || (record.type === "session.status" && !Schema.is(SessionStatusEvent.Status.data)(data))
+        || (record.type === "session.idle" && !Schema.is(SessionStatusEvent.Idle.data)(data))) return undefined
     const directory = typeof location?.directory === "string" ? location.directory : undefined
+    // Retained error consumers use sessionID; native errors must not gain invented V1 classifications.
     const type = record.type === "session.step.ended"
         ? "session.next.step.ended"
-        : record.type === "session.step.failed" ? "session.next.step.failed" : record.type
+        : record.type === "session.step.failed" ? "session.next.step.failed"
+        : record.type === "session.execution.failed" ? "session.error" : record.type
     return {
         ...record,
         type,
         ...(directory ? { directory } : {}),
-        properties: { ...data, ...(directory ? { directory } : {}) },
+        // V2 deletion carries only sessionID; legacy cancellation expects info.id.
+        properties: { ...data, ...(record.type === "session.deleted" ? { info: { id: data.sessionID } } : {}), ...(directory ? { directory } : {}) },
     }
 }
 
@@ -785,6 +797,8 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
                 name,
                 description: definition.description,
                 input: z.object(definition.args),
+                // Prompts address these tools directly; restrictive agents deny CodeMode execute.
+                options: { codemode: false },
                 async execute(args, toolContext) {
                     // Retained V1 tools need a shaped context; V2 tool.transform owns registration.
                     const legacyContext: LegacyToolContext & { externalDirectoryPermissions?: V2PermissionRule[] } = {
@@ -844,7 +858,9 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
     const eventController = new AbortController()
     const eventLoop = (async (): Promise<void> => {
         for await (const event of context.event.subscribe({ signal: eventController.signal })) {
-            const normalized = normalizeV2Event(event) as never
+            const normalizedEvent = normalizeV2Event(event)
+            if (normalizedEvent === undefined) continue
+            const normalized = normalizedEvent as never
             await localMemoryRecallHook.event?.({ event: normalized })
             await managedScriptLifecycle.handleEvent(normalized)
             try {

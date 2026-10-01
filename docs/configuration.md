@@ -27,6 +27,22 @@ OpenCode applies a last-matching-rule-wins model to permissions. Place broad def
 
 See the [OpenCode V2 models guide](https://opencode.ai/v2/docs/models/) for model selection and identifiers.
 
+### Nested delegation
+
+Legacy OpenCode retains AutoCode's automatic depth floor. On OpenCode v2, native `experimental.subagent_depth` defaults to `1`, and the plugin API cannot apply the legacy configuration hook. Set `5` or higher for nested workflows.
+
+Merge this fragment into existing OpenCode configuration; do not overwrite other settings:
+
+```json
+{
+  "experimental": {
+    "subagent_depth": 5
+  }
+}
+```
+
+Preserve deliberate higher or stricter limits; stricter values limit nested workflows. Restart the OpenCode host after configuration changes.
+
 ### Web session links
 
 AutoCode resolves server URL in this order:

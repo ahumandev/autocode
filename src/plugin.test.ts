@@ -244,6 +244,31 @@ afterEach(async () => {
 });
 
 describe("autocode plugin config", () => {
+	test("legacy retains hidden worker defaults, tool shapes, and nesting depth floor", async () => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: true } } }));
+		await withEnv({ OPENCODE_CONFIG_DIR: join(root, "config"), PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL }, async () => {
+			const input: PluginInputWithSandboxSupportOverride = { ...createInput(worktree), homeOverride: root };
+			const hooks = await autocode.server(input);
+			try {
+				for (const [configuredDepth, expectedDepth] of [[1, 5], [8, 8]]) {
+					const cfg: PluginConfig = { subagent_depth: configuredDepth };
+					await (hooks as unknown as PluginConfigHook).config?.(cfg);
+					expect(cfg.subagent_depth).toBe(expectedDepth);
+					expect(cfg.agent?.["query-code"]).toEqual(expect.objectContaining({ mode: "subagent", hidden: true }));
+					expect(permissionEffect(cfg.agent?.assist?.permissions as PermissionRule[], "execute", "*")).toBe("deny");
+				}
+				expect(hooks.tool?.autocode_md_read?.args).toBeDefined();
+				expect(hooks.tool?.autocode_md_read).not.toHaveProperty("options");
+				expect(hooks.tool?.skill?.args).toBeDefined();
+			} finally {
+				await hooks.dispose?.();
+			}
+		});
+	});
+
 	test("runtime exposes create and restart session tools", async () => {
 		const root = await createTempRoot();
 		const hooks = (await autocode.server(
