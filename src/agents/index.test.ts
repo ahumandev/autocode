@@ -519,7 +519,7 @@ describe("agent policies", () => {
         expect(permissionRule(permission, "task")).toBeUndefined()
         expect(permissionRule(permission, "autocode_agent_execute")).toBeUndefined()
         expect(permissionRule(permission, "autocode_session_create")).toBeUndefined()
-        for (const toolName of ["autocode_ssh_command", "bash", "edit", "execute", "git_commit", "write"]) {
+        for (const toolName of ["autocode_ssh_command", "bash", "edit", "execute", "git-commit", "write"]) {
             expect(resolvePermissionRule(rules, toolName)).toBe("deny")
         }
     })

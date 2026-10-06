@@ -210,7 +210,7 @@ describe("autocode git tools", () => {
         await expectFinalArgs("git_add", { files: ["file"] }, ["add", "--", "file"])
     })
 
-    test("git_commit validates messages and builds commit args", async () => {
+    test("git-commit validates messages and builds commit args", async () => {
         const realRepo = await createRealRepoPath()
         expectRetry(await runGitTool("git_commit", { repo_path: realRepo, message: "   " }, createSuccessfulDeps(realRepo).deps))
         expectRetry(await runGitTool("git_commit", { repo_path: realRepo, message: "bad\u0000message" }, createSuccessfulDeps(realRepo).deps))

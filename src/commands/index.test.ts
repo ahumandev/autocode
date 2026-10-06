@@ -183,7 +183,7 @@ describe("commands", () => {
     test("keeps key command template substrings stable", () => {
         expect(commands.commit?.subtask).toBe(false)
         expect(commands.commit?.template).toContain("$ARGUMENTS")
-        expect(commands.commit?.template).toContain("git_commit")
+        expect(commands.commit?.template).toContain("git-commit")
         expect(commands.commit?.template).toContain("NEVER any other tool")
         expect(commands.resume?.subtask).toBe(false)
         expect(commands.resume?.template).toContain("You were interrupted. Resume your own work.")

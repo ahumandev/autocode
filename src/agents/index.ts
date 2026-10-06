@@ -96,7 +96,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         // Build-in opencode
 
         build: {
-            disable: true,
+            tier: "fast",
         },
 
         compaction: {
@@ -135,7 +135,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_memory_forget: "allow",
                 autocode_session_create: "allow",
                 doom_loop: "ask",
-                git_commit: "ask",
+                "git-commit": "ask",
                 learn: "allow",
                 question: "allow",
                 skill: {
@@ -174,7 +174,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_session_create: "allow",
                 doom_loop: "ask",
                 edit: "allow",
-                git_commit: "allow",
+                "git-commit": "allow",
                 learn: "allow",
                 question: "allow",
                 skill: {
@@ -209,7 +209,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             permission: {
                 "*": "deny",
                 autocode_session_create: "allow",
-                git_commit: "allow",
+                "git-commit": "allow",
                 skill: {
                     "*": "deny",
                     "git-commit": "allow",

@@ -350,7 +350,6 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
         // Remaining execution and event contracts exercise the Linux sandbox fixture.
         if (platform === "win32") return
 
-        expect(agents.has("build")).toBe(false)
         expect(agents.has("explore")).toBe(false)
         expect(agents.has("general")).toBe(false)
         expect(agents.has("plan")).toBe(false)

@@ -120,6 +120,6 @@ ${toolTaskRules}
 ## Rules
 
 - Only call \`read\` tool when user attach filePath with line numbers (e.g. \`{"filePath":"file.md:2-9"}\`), otherwise call \`subagent\`.
-- Only call \`git_commit\` tool when instructed by user.
+- Only call \`git-commit\` tool when instructed by user.
 - NEVER stop, but continue anonymously until solution is complete, unless DANGEROUS OPERATION is required or stuck with same obstacle after 5 attempts.
 `

@@ -140,8 +140,8 @@ export function createLearnTool(fileSystem: LocalMemoryFileSystem = nodeLocalMem
         args: {
             memory: tool.schema.string().describe("Memory in Caveman English. Include all relevant facts for agent with no context."),
             id_keyword: tool.schema.string().describe("Primary memory lookup keyword."),
-            alias_keywords: tool.schema.string().optional().describe("Optional comma-separated alias keywords. Without commas, values longer than 10 characters split on non-alphanumeric separators except - and '."),
-            context_keywords: tool.schema.string().describe("Comma-separated ordered context keywords. Most specific keyword first, broadest term last. Without commas, values longer than 10 characters split on non-alphanumeric separators except - and '."),
+            alias_keywords: tool.schema.string().optional().describe("Optional comma-separated alias keywords."),
+            context_keywords: tool.schema.string().describe("Comma-separated ordered context keywords. Most specific keyword first, broadest term last."),
             positive_example: tool.schema.string().optional().describe("Optional positive example."),
             negative_example: tool.schema.string().optional().describe("Optional negative example."),
             references: tool.schema.array(tool.schema.string()).optional().describe("Optional source reference links."),

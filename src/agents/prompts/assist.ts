@@ -111,6 +111,5 @@ ${toolQuestionRules}
 
 ## Rules
 
-- Only call \`git_commit\` tool on user request.
-- When you call \`git_commit\` tool, use \`git-commit\` skill and include a list of known changes, reasons, and breaking changes.
+- Only call \`git-commit\` tool on user request.
 `

@@ -178,7 +178,7 @@ Call \`question\` tool to get user feedback about already presented PROPOSALS (f
 
 Success must address original PROBLEMS
 
-1. Propose 4 numbered options as text how to measure success after solution is implemented, each h2 section with:
+1. Propose 4 numbered options as text what and how to practically measure success after solution is implemented, each h2 section with:
     - header = name of metric
     - Section content = how success will be measured: numbered steps including mock input and output samples, measurable quality metrics like test coverage, memory usage, response time, file size, etc. (only according to REQUIREMENTS)
 2. Call \`question\` tool with multi-choice answer to select relevant metrics that should be autonomously verified.
