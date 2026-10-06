@@ -176,6 +176,84 @@ describe("learn tool", () => {
         })
     })
 
+    test("splits long no-comma keywords on non-alphanumeric separators", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "chrome firefox; edge/safari|opera" })).toMatchObject({
+            memory: { aliases: ["chrome", "firefox", "edge", "safari", "opera"], context: "UI tests" },
+        })
+    })
+
+    test("applies separator fallback to alias and context keywords", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "chrome firefox edge", context_keywords: "ui tests;browser/web" })).toMatchObject({
+            memory: { aliases: ["chrome", "firefox", "edge"], context: "ui,tests,browser,web" },
+        })
+    })
+
+    test("keeps hyphen and apostrophe inside fallback keywords", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "windows-11 don't-stop deploy" })).toMatchObject({
+            memory: { aliases: ["windows-11", "don't-stop", "deploy"] },
+        })
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "a-b'c-d'e-f-g" })).toMatchObject({
+            memory: { aliases: ["a-b'c-d'e-f-g"] },
+        })
+    })
+
+    test("uses separator fallback only above 10 characters", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "alpha beta" })).toMatchObject({
+            memory: { aliases: ["alpha beta"] },
+        })
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "alpha beta1" })).toMatchObject({
+            memory: { aliases: ["alpha", "beta1"] },
+        })
+    })
+
+    test("keeps long no-separator keywords as one keyword", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "abcdefghijklmnop" })).toMatchObject({
+            memory: { aliases: ["abcdefghijklmnop"] },
+        })
+    })
+
+    test("keeps comma splitting and empty token validation when commas are present", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "alpha beta, gamma delta" })).toMatchObject({
+            memory: { aliases: ["alpha beta", "gamma delta"] },
+        })
+        for (const aliasKeywords of ["alpha beta,, gamma delta", "alpha beta, gamma delta,", ",alpha beta gamma"]) {
+            expect(validateLearnArgs({ ...validArgs, alias_keywords: aliasKeywords })).toMatchObject({
+                error: "Invalid alias_keywords. Keywords must be non-empty after trimming.",
+            })
+        }
+    })
+
+    test("keeps Unicode letters and numbers in fallback keywords and splits on marks", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "café 東京 naïve Ωmega 123" })).toMatchObject({
+            memory: { aliases: ["café", "東京", "naïve", "Ωmega", "123"] },
+        })
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "cafe\u0301 münchen" })).toMatchObject({
+            memory: { aliases: ["cafe", "münchen"] },
+        })
+    })
+
+    test("ignores repeated and boundary separators in fallback", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "  ;;alpha!!  beta__gamma;; " })).toMatchObject({
+            memory: { aliases: ["alpha", "beta", "gamma"] },
+        })
+    })
+
+    test("dedupes fallback keywords across id, alias, and context", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "Chrome chrome CHROME firefox", context_keywords: "firefox ui tests ui" })).toMatchObject({
+            memory: { aliases: ["Chrome", "firefox"], context: "ui,tests" },
+            removedDuplicates: ["chrome", "CHROME", "firefox", "ui"],
+        })
+    })
+
+    test("rejects separator-only fallback keywords", () => {
+        expect(validateLearnArgs({ ...validArgs, alias_keywords: "!!! ;;; ???" })).toMatchObject({
+            error: "Invalid alias_keywords. Keywords must be non-empty after trimming.",
+        })
+        expect(validateLearnArgs({ ...validArgs, context_keywords: "_ _ _ _ _ _" })).toMatchObject({
+            error: "Invalid context_keywords. Keywords must be non-empty after trimming.",
+        })
+    })
+
     test("returns retry envelopes for unsafe, missing, empty, and invalid values", async () => {
         const memoryFileSystem = createMemoryFileSystem()
         const invalidArgs = [

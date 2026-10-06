@@ -140,8 +140,8 @@ export function createLearnTool(fileSystem: LocalMemoryFileSystem = nodeLocalMem
         args: {
             memory: tool.schema.string().describe("Memory in Caveman English. Include all relevant facts for agent with no context."),
             id_keyword: tool.schema.string().describe("Primary memory lookup keyword."),
-            alias_keywords: tool.schema.string().optional().describe("Optional comma-separated alias keywords."),
-            context_keywords: tool.schema.string().describe("Comma-separated ordered context keywords. Most specific keyword first, boardest term last."),
+            alias_keywords: tool.schema.string().optional().describe("Optional comma-separated alias keywords. Without commas, values longer than 10 characters split on non-alphanumeric separators except - and '."),
+            context_keywords: tool.schema.string().describe("Comma-separated ordered context keywords. Most specific keyword first, broadest term last. Without commas, values longer than 10 characters split on non-alphanumeric separators except - and '."),
             positive_example: tool.schema.string().optional().describe("Optional positive example."),
             negative_example: tool.schema.string().optional().describe("Optional negative example."),
             references: tool.schema.array(tool.schema.string()).optional().describe("Optional source reference links."),
@@ -164,6 +164,19 @@ export function createLearnTool(fileSystem: LocalMemoryFileSystem = nodeLocalMem
     })
 }
 
+// "-" and "'" stay inside keywords.
+const keywordFallbackSeparatorPattern = /[^\p{L}\p{N}\-']+/u
+const keywordFallbackMinimumLength = 11
+
+function splitKeywords(value: string): string[] {
+    if (value.includes(",") || value.length < keywordFallbackMinimumLength || !keywordFallbackSeparatorPattern.test(value)) {
+        return value.split(",")
+    }
+    const keywords = value.split(keywordFallbackSeparatorPattern).filter((keyword: string): boolean => keyword.length > 0)
+    // Separator-only input yields an empty token so the caller reports it as invalid.
+    return keywords.length > 0 ? keywords : [""]
+}
+
 function parseKeywordList(value: unknown, field: "alias_keywords" | "context_keywords", seen: Set<string>): KeywordList | LearnValidationFailure {
     if (typeof value !== "string") {
         return {
@@ -175,7 +188,7 @@ function parseKeywordList(value: unknown, field: "alias_keywords" | "context_key
     if (!value.trim()) return { values: [], removedDuplicates: [] }
     const values: string[] = []
     const removedDuplicates: string[] = []
-    for (const rawKeyword of value.split(",")) {
+    for (const rawKeyword of splitKeywords(value)) {
         const keyword = rawKeyword.trim()
         const normalizedKeyword = normalizeLocalMemoryMatchValue(keyword)
         if (!keyword || !normalizedKeyword) {
