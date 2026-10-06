@@ -138,4 +138,72 @@ describe("autocode_md_h1", () => {
         expect(f).toMatch(/^# New Title$/m)
         expect(f).toContain("intro")
     })
+
+    describe("title hash normalization", () => {
+        test.each([1, 2, 3, 4, 5, 6])("existing H1 renamed with %d-hash prefix stays single H1", async (n) => {
+            const p = write(`prefix-existing-${n}.md`, ["# Old", "intro", "", "## Sub", "body"])
+            const r = await call(p, { title: `${"#".repeat(n)} New Title` })
+            const f = readFileSync(p, "utf8")
+            expect(f).toBe("# New Title\n\nintro\n\n## Sub\n\nbody\n")
+            expect(r.outline["new-title"]).toBeDefined()
+        })
+
+        test.each([1, 2, 3, 4, 5, 6])("new H1 with %d-hash prefix created without duplicated hashes", async (n) => {
+            const p = write(`prefix-new-${n}.md`, [""])
+            const r = await call(p, { title: `${"#".repeat(n)} Fresh Title` })
+            expect(readFileSync(p, "utf8")).toBe("# Fresh Title\n")
+            expect(r.outline["fresh-title"]).toBeDefined()
+        })
+
+        test("new prefixed H1 prepended before existing H2 sections", async () => {
+            const p = write("prefix-no-h1.md", ["## Sub1", "body1"])
+            await call(p, { title: "## Article" })
+            const f = readFileSync(p, "utf8")
+            expect(f).toMatch(/^# Article$/m)
+            expect(f).not.toMatch(/^#+ #+ /m)
+            expect(f.indexOf("# Article")).toBeLessThan(f.indexOf("## Sub1"))
+        })
+
+        test("surrounding and delimiter whitespace trimmed", async () => {
+            const p = write("prefix-ws.md", [""])
+            await call(p, { title: "  ##  \t Spaced Title  " })
+            expect(readFileSync(p, "utf8")).toBe("# Spaced Title\n")
+        })
+
+        test("plain, hashtag and C# titles preserved", async () => {
+            const p = write("prefix-preserve.md", [""])
+            await call(p, { title: "Plain Title" })
+            expect(readFileSync(p, "utf8")).toBe("# Plain Title\n")
+            await call(p, { title: "#hashtag" })
+            expect(readFileSync(p, "utf8")).toBe("# #hashtag\n")
+            await call(p, { title: "C#" })
+            expect(readFileSync(p, "utf8")).toBe("# C#\n")
+        })
+
+        test("hash-only title returns error and does not modify file", async () => {
+            const p = write("prefix-blank.md", ["# Existing", "intro"])
+            const before = readFileSync(p, "utf8")
+            for (const title of ["#", "  ##  ", "######"]) {
+                const r = await call(p, { title, intro: "changed", preamble: "pre" })
+                expect(r.failedAction).toBe("autocode_md_h1")
+                expect(r.instruction).toContain("title")
+            }
+            expect(readFileSync(p, "utf8")).toBe(before)
+        })
+
+        test("hash-only title does not create H1 in empty file", async () => {
+            const p = write("prefix-blank-empty.md", [""])
+            const before = readFileSync(p, "utf8")
+            const r = await call(p, { title: "###" })
+            expect(r.failedAction).toBe("autocode_md_h1")
+            expect(readFileSync(p, "utf8")).toBe(before)
+        })
+
+        test("preamble, intro and subsections unaffected by prefixed title", async () => {
+            const p = write("prefix-keep.md", ["pre #tag", "", "# Old", "intro #1", "", "## Sub", "body"])
+            await call(p, { title: "# New" })
+            const f = readFileSync(p, "utf8")
+            expect(f).toBe("pre #tag\n\n# New\n\nintro #1\n\n## Sub\n\nbody\n")
+        })
+    })
 })

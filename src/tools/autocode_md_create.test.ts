@@ -358,4 +358,72 @@ describe("autocode_md_create", () => {
         expect(idxC).toBeGreaterThan(idxBBody)
         expect(idxCBody).toBeGreaterThan(idxC)
     })
+
+    describe("heading hash normalization", () => {
+        test.each([1, 2, 3, 4, 5, 6])("strips %d-hash prefix; level stays tool-defined (H2 under H1)", async (n) => {
+            const p = write(`prefix-${n}.md`, ["# Article", "intro"])
+            const r = await call(p, { heading: `${"#".repeat(n)} Prefixed Title`, content: "body" })
+            const f = readFileSync(p, "utf8")
+            expect(f).toBe("# Article\n\nintro\n\n## Prefixed Title\n\nbody\n")
+            expect(f).not.toMatch(/^#{3,} /m)
+            expect(r.outline.article["prefixed-title"]).toBeDefined()
+        })
+
+        test("prefixed heading under parent_anchor gets parent level + 1", async () => {
+            const p = write("prefix-parent.md", ["# Article", "", "## Existing Sub", "body"])
+            const r = await call(p, { heading: "# Nested", parent_anchor: "existing-sub" })
+            const f = readFileSync(p, "utf8")
+            expect(f).toMatch(/^### Nested$/m)
+            expect(f).not.toMatch(/^### # Nested$/m)
+            expect(r.outline.article["existing-sub"].nested).toBeDefined()
+        })
+
+        test("prefixed heading in file without H1 becomes root H2", async () => {
+            const p = write("prefix-no-h1.md", ["## Sub1", "body1"])
+            await call(p, { heading: "###### Added" })
+            const f = readFileSync(p, "utf8")
+            expect(f).toMatch(/^## Added$/m)
+            expect(f).not.toMatch(/^#{3,}/m)
+        })
+
+        test("surrounding and delimiter whitespace trimmed", async () => {
+            const p = write("prefix-ws.md", ["# Article", "intro"])
+            const r = await call(p, { heading: "  ##   \t Spaced Title  " })
+            const f = readFileSync(p, "utf8")
+            expect(f).toMatch(/^## Spaced Title$/m)
+            expect(r.outline.article["spaced-title"]).toBeDefined()
+        })
+
+        test("plain, hashtag and C# headings preserved", async () => {
+            const p = write("prefix-preserve.md", ["# Article", "intro"])
+            await call(p, { heading: "Plain Title" })
+            await call(p, { heading: "#hashtag" })
+            await call(p, { heading: "C#" })
+            const f = readFileSync(p, "utf8")
+            expect(f).toMatch(/^## Plain Title$/m)
+            expect(f).toMatch(/^## #hashtag$/m)
+            expect(f).toMatch(/^## C#$/m)
+        })
+
+        test("hash-only heading returns error and does not modify file", async () => {
+            const p = write("prefix-blank.md", ["# Article", "intro"])
+            const before = readFileSync(p, "utf8")
+            for (const heading of ["#", "  ##  ", "######"]) {
+                const r = await call(p, { heading, content: "x" })
+                expect(r.failedAction).toBe("autocode_md_create")
+                expect(r.instruction).toContain("heading is required")
+            }
+            expect(readFileSync(p, "utf8")).toBe(before)
+        })
+
+        test("existing document content unaffected", async () => {
+            const p = write("prefix-existing.md", ["# Article", "intro", "", "## Keep #1", "body #tag", "", "### Inner", "code"])
+            await call(p, { heading: "## Added" })
+            const f = readFileSync(p, "utf8")
+            expect(f).toContain("## Keep #1")
+            expect(f).toContain("body #tag")
+            expect(f).toContain("### Inner")
+            expect(f).toContain("## Added")
+        })
+    })
 })

@@ -35,6 +35,11 @@ export function slugifyHeading(text: string): string {
         .replace(/\s+/g, "-")
 }
 
+// Tools choose heading level; drop one ATX opening marker (1-6 hashes + whitespace/end) agents may include.
+export function normalizeHeadingText(text: string): string {
+    return text.trim().replace(/^#{1,6}(?:\s+|$)/, "").trim()
+}
+
 export function splitFrontmatter(raw: string, newline: string): { block: string; bodyStartLine: number } {
     const lines = raw.split(newline)
     if (lines.length === 0 || lines[0] !== "---") {

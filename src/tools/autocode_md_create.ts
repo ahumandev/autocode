@@ -2,7 +2,7 @@ import { tool } from "@opencode-ai/plugin"
 import { readFileSync, writeFileSync } from "node:fs"
 import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection, slugifyHeading } from "./md/markdown"
 import type { MdHeading } from "./md/markdown"
-import { clampIndex, parseContentBlocks, serializeTree } from "./md/transform"
+import { clampIndex, normalizeHeadingText, parseContentBlocks, serializeTree } from "./md/transform"
 import { validateMdPath } from "./md/validate"
 import { createErrorResponse } from "@/utils/tools"
 
@@ -11,7 +11,7 @@ export function createAutocodeMdCreateTool(): ReturnType<typeof tool> {
         description: `Add Markdown section (heading + content text) in md file.`,
         args: {
             file_path: tool.schema.string().describe("Path to md file."),
-            heading: tool.schema.string().describe("Heading text for new section."),
+            heading: tool.schema.string().describe("Heading text for new section. Optional leading heading hashes (e.g. '## ') are ignored; level is controlled by tool from parent_anchor."),
             content: tool.schema.string().optional().describe("Content below the heading. May include own paragraphs and/or subsections (any heading level inside content is rebased so the topmost content heading becomes a direct subsection at this section's level + 1). Do NOT wrap content in XML tags."),
             parent_anchor: tool.schema.string().optional().describe("Anchor of parent section. Omit/empty = last H1 if any, else root level. Must resolve to existing anchor. Unsure about anchors? Then call autocode_md_read first."),
             index: tool.schema.number().int().optional().describe("Section position under parent. 0 = first; -1 = last; N = Nth (shifts siblings down)."),
@@ -31,8 +31,8 @@ export function createAutocodeMdCreateTool(): ReturnType<typeof tool> {
                 if (args.index !== undefined && args.index !== null && args.index < -1) {
                     return createErrorResponse("autocode_md_create", new Error("invalid index"), `index must be >= -1, got ${args.index}`)
                 }
-                const hasHeading = args.heading !== undefined && args.heading !== ""
-                if (!hasHeading) {
+                const heading = normalizeHeadingText(args.heading ?? "")
+                if (heading === "") {
                     return createErrorResponse("autocode_md_create", new Error("missing heading"), "heading is required to create a new section.")
                 }
                 const hasContent = args.content !== undefined && args.content !== ""
@@ -52,14 +52,14 @@ export function createAutocodeMdCreateTool(): ReturnType<typeof tool> {
                 }
                 const level = newParentHeading ? newParentHeading.level + 1 : 2
                 const S: MdHeading = {
-                    title: args.heading ?? "",
+                    title: heading,
                     level,
                     start: 0,
                     headerEnd: 0,
                     spanEnd: 0,
                     children: [],
                     parent: newParentHeading,
-                    referenceId: slugifyHeading(args.heading ?? ""),
+                    referenceId: slugifyHeading(heading),
                     marker: "atx",
                 }
                 const overrides = new Map<MdHeading, string>()

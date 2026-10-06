@@ -37,7 +37,7 @@ Follow these instructions before reviewing/writing professional articles/reports
 ## Credibility Rules
 
 - Rephrase confusing explanations, contradictions or fallacies
-- Clearly mark facts and opinions.
+- Honestly say when statement is unproven opinion.
 - Check Bible verse quotes and references. Fix wrong quotes. Replace wrong references with correct scripture. Example: `Jesus said love your enemies (Genesis 1:1)` is wrong. Genesis 1:1 does not say this.
 - Add known evidence, such as Bible scripture or Markdown links to external sites.
 - Remove contradictions against the author's own content

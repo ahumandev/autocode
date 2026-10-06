@@ -23,11 +23,19 @@ const scriptDir = dirname(fileURLToPath(import.meta.url))
 const projectRoot = resolve(scriptDir, "..")
 const packageJsonPath = resolve(projectRoot, "package.json")
 
+/**
+ * Windows needs a shell for `.cmd` shims such as `npm`, but a shell re-joins args and splits
+ * spaced values like commit messages. Git is a real executable, so it is spawned directly.
+ */
+export function shouldUseShell(command: string, platform: NodeJS.Platform = process.platform): boolean {
+  return platform === "win32" && command !== "git"
+}
+
 function runCommand(command: string, args: string[]): void {
   const result = spawnSync(command, args, {
     cwd: projectRoot,
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: shouldUseShell(command),
   })
 
   if (result.error !== undefined) {
@@ -59,7 +67,7 @@ function getCommandOutput(command: string, args: string[]): string {
   const result = spawnSync(command, args, {
     cwd: projectRoot,
     encoding: "utf8",
-    shell: process.platform === "win32",
+    shell: shouldUseShell(command),
   })
 
   if (result.error !== undefined) {

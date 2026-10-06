@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import type { Config as PluginConfig } from "@opencode-ai/sdk/v2"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
@@ -55,6 +55,21 @@ function createMessagesClient(messages: ReturnType<typeof createSessionMessage>[
 }
 
 describe("agent swap utilities", () => {
+    let configRoot: string
+    let originalConfigDir: string | undefined
+
+    beforeEach((): void => {
+        configRoot = mkdtempSync(join(tmpdir(), "autocode-agent-global-config-"))
+        originalConfigDir = process.env.OPENCODE_CONFIG_DIR
+        process.env.OPENCODE_CONFIG_DIR = configRoot
+    })
+
+    afterEach((): void => {
+        if (originalConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
+        else process.env.OPENCODE_CONFIG_DIR = originalConfigDir
+        rmSync(configRoot, { recursive: true, force: true })
+    })
+
     test("derives session titles from the first sixty prompt characters", () => {
         expect(deriveAutocodeAgentSwapTitle("short prompt")).toBe("short prompt")
         expect(deriveAutocodeAgentSwapTitle("x".repeat(80))).toBe("x".repeat(60))

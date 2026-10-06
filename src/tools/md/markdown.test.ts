@@ -1,6 +1,39 @@
 import { describe, expect, test } from "bun:test"
-import { buildOutline, parseMarkdown, rebuildFile } from "./markdown"
+import { buildOutline, normalizeHeadingText, parseMarkdown, rebuildFile, slugifyHeading } from "./markdown"
 import { serializeTree } from "./transform"
+
+describe("normalizeHeadingText", () => {
+    test.each([1, 2, 3, 4, 5, 6])("strips %d-hash opening marker", (n) => {
+        const hashes = "#".repeat(n)
+        expect(normalizeHeadingText(`${hashes} My Title`)).toBe("My Title")
+        expect(slugifyHeading(normalizeHeadingText(`${hashes} My Title`))).toBe("my-title")
+    })
+
+    test("strips surrounding and delimiter whitespace", () => {
+        expect(normalizeHeadingText("  ##\t  My Title  ")).toBe("My Title")
+    })
+
+    test("preserves plain titles, hashtags, C# and non-heading hash runs", () => {
+        expect(normalizeHeadingText("My Title")).toBe("My Title")
+        expect(normalizeHeadingText("#hashtag")).toBe("#hashtag")
+        expect(normalizeHeadingText("##hashtag")).toBe("##hashtag")
+        expect(normalizeHeadingText("C#")).toBe("C#")
+        expect(normalizeHeadingText("C# Guide")).toBe("C# Guide")
+        expect(normalizeHeadingText("####### Seven")).toBe("####### Seven")
+    })
+
+    test("strips only one marker and keeps trailing hashes", () => {
+        expect(normalizeHeadingText("## # Title")).toBe("# Title")
+        expect(normalizeHeadingText("## Title ##")).toBe("Title ##")
+    })
+
+    test("marker-only or blank input becomes empty", () => {
+        expect(normalizeHeadingText("#")).toBe("")
+        expect(normalizeHeadingText("  ######  ")).toBe("")
+        expect(normalizeHeadingText("   ")).toBe("")
+        expect(normalizeHeadingText("")).toBe("")
+    })
+})
 
 describe("rebuildFile blank-line boundary", () => {
     test("frontmatter and single heading have exactly 1 blank line between", () => {

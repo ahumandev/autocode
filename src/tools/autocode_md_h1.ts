@@ -2,7 +2,7 @@ import { tool } from "@opencode-ai/plugin"
 import { readFileSync, writeFileSync } from "node:fs"
 import { buildOutline, ownText, parseMarkdown, rebuildFile, slugifyHeading } from "./md/markdown"
 import type { MdHeading } from "./md/markdown"
-import { normalizeContentBlock, serializeTree } from "./md/transform"
+import { normalizeContentBlock, normalizeHeadingText, serializeTree } from "./md/transform"
 import { validateMdPath } from "./md/validate"
 import { createErrorResponse } from "@/utils/tools"
 
@@ -12,7 +12,7 @@ export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
         args: {
             file_path: tool.schema.string().describe("Path to md file."),
             preamble: tool.schema.string().optional().describe("Text before H1 heading (file preamble). Omit = preserve existing preamble. Do NOT wrap in XML tags."),
-            title: tool.schema.string().optional().describe("First H1 heading in md. Omit = preserve existing H1 heading."),
+            title: tool.schema.string().optional().describe("First H1 heading in md. Optional leading heading hashes (e.g. '# ') are ignored; level is always H1. Omit = preserve existing H1 heading."),
             intro: tool.schema.string().optional().describe("Intro text directly after H1 heading, before any subsections. Omit = preserve existing intro. Do NOT wrap in XML tags."),
         },
         execute: async (args, context) => {
@@ -27,7 +27,11 @@ export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
                     raw = ""
                 }
                 const model = parseMarkdown(raw)
-                const hasTitle = args.title !== undefined && args.title !== ""
+                const title = normalizeHeadingText(args.title ?? "")
+                if (args.title !== undefined && args.title !== "" && title === "") {
+                    return createErrorResponse("autocode_md_h1", new Error("missing title"), "title has no text after heading hashes. Provide title text, or omit title to preserve the existing H1.")
+                }
+                const hasTitle = title !== ""
                 const hasIntro = args.intro !== undefined && args.intro !== ""
                 const hasPreamble = args.preamble !== undefined && args.preamble !== ""
                 if (!hasTitle && !hasIntro && !hasPreamble) {
@@ -45,7 +49,7 @@ export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
                 }
                 let newTitle: string
                 if (hasTitle) {
-                    newTitle = args.title ?? ""
+                    newTitle = title
                 } else if (existingH1) {
                     newTitle = existingH1.title
                 } else {

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,6 +65,12 @@ afterAll(() => {
 });
 
 const tempRoots: string[] = [];
+let originalConfigDir: string | undefined;
+
+beforeEach(async (): Promise<void> => {
+	originalConfigDir = process.env.OPENCODE_CONFIG_DIR;
+	process.env.OPENCODE_CONFIG_DIR = await createTempRoot();
+});
 
 type PluginConfigHook = { config?: (input: PluginConfig) => Promise<void> };
 type CreateTool = {
@@ -230,17 +236,22 @@ function skillPermissions(
 }
 
 afterEach(async () => {
-	await Promise.all([
-		...actualManagedScriptLifecycles.splice(0).map((lifecycle) => lifecycle.dispose()),
-		...actualRestartCoordinators.splice(0).map((coordinator) => coordinator.dispose()),
-	]);
-	managedScriptLifecycleFactoryOverride = undefined;
-	restartCoordinatorFactoryOverride = undefined;
-	await Promise.all(
-		tempRoots
-			.splice(0)
-			.map((root) => rm(root, { recursive: true, force: true })),
-	);
+	try {
+		await Promise.all([
+			...actualManagedScriptLifecycles.splice(0).map((lifecycle) => lifecycle.dispose()),
+			...actualRestartCoordinators.splice(0).map((coordinator) => coordinator.dispose()),
+		]);
+		managedScriptLifecycleFactoryOverride = undefined;
+		restartCoordinatorFactoryOverride = undefined;
+		await Promise.all(
+			tempRoots
+				.splice(0)
+				.map((root) => rm(root, { recursive: true, force: true })),
+		);
+	} finally {
+		if (originalConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR;
+		else process.env.OPENCODE_CONFIG_DIR = originalConfigDir;
+	}
 });
 
 describe("autocode plugin config", () => {
@@ -768,6 +779,7 @@ describe("autocode plugin config", () => {
 		await withEnv(
 			{
 				XDG_CONFIG_HOME: configHome,
+				OPENCODE_CONFIG_DIR: join(configHome, "opencode"),
 				HOME: root,
 				AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1",
 			},
@@ -1183,7 +1195,7 @@ describe("autocode plugin config", () => {
 		);
 
 		try {
-			await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+			await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root }, async () => {
 				const input = { ...createInput(worktree), homeOverride: root };
 				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				const cfg: PluginConfig = {};
@@ -1232,7 +1244,7 @@ describe("autocode plugin config", () => {
 		);
 
 		try {
-			await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+			await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root }, async () => {
 				const input = { ...createInput(worktree), homeOverride: root };
 				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				const cfg: PluginConfig = {};
@@ -1268,7 +1280,7 @@ describe("autocode plugin config", () => {
 			JSON.stringify({ autocode: { skills: { freeze: true } } }),
 		);
 
-		await withEnv({ XDG_CONFIG_HOME: configHome, HOME: root }, async () => {
+		await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root }, async () => {
 			const input: PluginInputWithSandboxSupportOverride = {
 				...createInput(worktree),
 				homeOverride: root,

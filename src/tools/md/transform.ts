@@ -2,7 +2,7 @@ import type { MdHeading, MdModel, OwnTextOverrides } from "./markdown"
 import { ownText } from "./markdown"
 
 // Re-export parser-adjacent helpers (now defined in markdown.ts for co-location with parseMarkdown).
-export { normalizeContentBlock, adjustLevels, parseContentBlocks } from "./markdown"
+export { normalizeContentBlock, normalizeHeadingText, adjustLevels, parseContentBlocks } from "./markdown"
 export type { OwnTextOverrides, ContentBlocks } from "./markdown"
 
 export function makeHeadingLine(title: string, level: number): string {

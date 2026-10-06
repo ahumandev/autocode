@@ -35,10 +35,13 @@ const primaryAgents: Array<"assist" | "advise" | "auto" | "design" | "spy"> = [
 
 describe("autocode_session_create tool", () => {
 	let worktree: string;
+	let originalConfigDir: string | undefined;
 
 	beforeEach(() => {
 		resetRetryCounts();
 		worktree = mkdtempSync(join(tmpdir(), "autocode-session-create-"));
+		originalConfigDir = process.env.OPENCODE_CONFIG_DIR;
+		process.env.OPENCODE_CONFIG_DIR = join(worktree, "config");
 		mkdirSync(join(worktree, ".opencode"), { recursive: true });
 		writeFileSync(
 			join(worktree, ".opencode", "autocode.jsonc"),
@@ -55,6 +58,8 @@ describe("autocode_session_create tool", () => {
 
 	afterEach(() => {
 		resetRetryCounts();
+		if (originalConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR;
+		else process.env.OPENCODE_CONFIG_DIR = originalConfigDir;
 		rmSync(worktree, { recursive: true, force: true });
 	});
 

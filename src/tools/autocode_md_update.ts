@@ -2,7 +2,7 @@ import { tool } from "@opencode-ai/plugin"
 import { readFileSync, writeFileSync } from "node:fs"
 import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection, slugifyHeading } from "./md/markdown"
 import type { MdHeading } from "./md/markdown"
-import { adjustLevels, clampIndex, isDescendant, parseContentBlocks, serializeTree } from "./md/transform"
+import { adjustLevels, clampIndex, isDescendant, normalizeHeadingText, parseContentBlocks, serializeTree } from "./md/transform"
 import { validateMdPath } from "./md/validate"
 import { createErrorResponse, createRetryResponse } from "@/utils/tools"
 
@@ -12,7 +12,7 @@ export function createAutocodeMdUpdateTool(): ReturnType<typeof tool> {
         args: {
             file_path: tool.schema.string().describe("Path to md file."),
             anchor: tool.schema.string().describe("Anchor of existing section to update. Run autocode_md_read first to find anchors if unsure. Unsure about anchors? Then call autocode_md_read first."),
-            heading: tool.schema.string().optional().describe("New heading text. Omit = preserve heading."),
+            heading: tool.schema.string().optional().describe("New heading text. Optional leading heading hashes (e.g. '## ') are ignored; level is controlled by tool from tree placement. Omit = preserve heading."),
             content: tool.schema.string().optional().describe(`New content text below heading. Omit to preserve content.
 MD CONTENT RULES:
 * May include paragraphs and new subsections.
@@ -35,7 +35,11 @@ MD CONTENT RULES:
                 if (args.index !== undefined && args.index !== null && args.index < -1) {
                     return createErrorResponse("autocode_md_update", new Error("invalid index"), `index must be >= -1, got ${args.index}`)
                 }
-                const hasHeading = args.heading !== undefined && args.heading !== ""
+                const heading = normalizeHeadingText(args.heading ?? "")
+                if (args.heading !== undefined && args.heading !== "" && heading === "") {
+                    return createErrorResponse("autocode_md_update", new Error("missing heading"), "heading has no text after heading hashes. Provide heading text, or omit heading to preserve the current heading.")
+                }
+                const hasHeading = heading !== ""
                 const hasContent = args.content !== undefined && args.content !== ""
                 const hasParent = args.parent_anchor !== undefined && args.parent_anchor !== ""
                 const hasIndex = args.index !== undefined && args.index !== null
@@ -71,8 +75,8 @@ MD CONTENT RULES:
                 const oldIndex = oldList.indexOf(S)
                 if (oldIndex >= 0) oldList.splice(oldIndex, 1)
                 if (hasHeading) {
-                    S.title = args.heading ?? ""
-                    S.referenceId = slugifyHeading(args.heading ?? "")
+                    S.title = heading
+                    S.referenceId = slugifyHeading(heading)
                 }
                 let targetList: MdHeading[]
                 if (newParentHeading !== undefined) {
