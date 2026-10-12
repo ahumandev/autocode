@@ -29,7 +29,6 @@ TypeScript OpenCode V2 plugin with temporary V1 compatibility. The V2 `Plugin.de
 No app auth layer. External-directory rules use last matching rule. Database tools read only. REST and SSH credentials use environment variables. Sandbox tools deny on unsupported hosts.
 
 ## External Integrations
-- **GitHub** (`src/skills/github.jsonc`): Sync tracked skill snapshots — GitHub.
 - **REST services** (`src/tools/`): Request and cached response tools — HTTP.
 - **Databases** (`src/tools/`): Discover and read configured tables — DB connection.
 - **SSH targets** (`src/tools/`): Remote command and file tools — SSH.
@@ -38,7 +37,7 @@ No app auth layer. External-directory rules use last matching rule. Database too
 - **Agents** (`src/agents/`): Managed agents and prompts.
 - **Commands** (`src/commands/`): Slash-command registration.
 - **Tools** (`src/tools/`): Runtime tool implementations.
-- **Skills** (`src/skills/`): Bundled guidance and GitHub snapshots.
+- **Skills** (`src/skills/`): Bundled AutoCode local guidance only; preserve external/user skill folders.
 - **Temp workspaces** (`.agents/jobs/`): Tool artifacts only; no workflow state.
 - **Memory store** (`.opencode/autocode/memories/`): Active local-memory Markdown `.md` files only.
 
@@ -49,7 +48,6 @@ No app auth layer. External-directory rules use last matching rule. Database too
 
 ## Known Risks & Anti-Patterns
 - **Tier config**: Missing override uses agent or OpenCode default.
-- **GitHub snapshots**: Sync accepts redistribution risk; grants no rights.
 - **Sandbox support**: Unsupported hosts deny all sandbox tools.
 - **Job workspace**: Tools create or reuse per-session temp workspace on demand.
 - **V1 adapters**: V2 contexts cannot remove/list child/compact sessions or request interactive tool approval; unsupported calls fail safely or return an empty child list.

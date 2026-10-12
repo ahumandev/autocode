@@ -1,8 +1,16 @@
 import { describe, expect, mock, test } from "bun:test"
+import { join } from "node:path"
 import type { ManagedScriptLifecycle } from "@/hooks/managed_script_lifecycle"
-import type { ManagedScriptRuntime } from "@/utils/managed_script_runtime"
+import { createManagedScriptProjectPaths, type ManagedScriptProject, type ManagedScriptProjectOwnerResolution, type ManagedScriptProjectResult, type ManagedScriptProjectVerifyResult } from "@/utils/managed_script_project"
+import type { ManagedScriptLaunchOwner, ManagedScriptRuntime, ManagedScriptServiceStartResult } from "@/utils/managed_script_runtime"
+import { ManagedScriptWindowsError, windowsServiceMessage } from "@/utils/managed_script_windows"
 import { createAutocodeScriptServiceTool, type ManagedScriptServiceRuntimeFactory } from "./autocode_script_service"
 import { createToolContext } from "./test_context"
+
+const directory = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode\\script-service-wrapper"
+const paths = createManagedScriptProjectPaths(directory, "job_1")
+const launchOwner: ManagedScriptLaunchOwner = Object.freeze({ jobName: paths.jobName, directory, sessionID: "owned-session" })
+const serviceLogs = { stdout_log_path: join(paths.logsRoot, "stdout.log"), stderr_log_path: join(paths.logsRoot, "stderr.log") }
 
 function parse(result: string | { output: string }): Record<string, unknown> {
     return JSON.parse(typeof result === "string" ? result : result.output) as Record<string, unknown>
@@ -10,9 +18,9 @@ function parse(result: string | { output: string }): Record<string, unknown> {
 
 function createRuntime(overrides: Partial<ManagedScriptRuntime> = {}): ManagedScriptRuntime {
     return {
-        run: mock(async () => ({ exit_code: 0, stdout: "", stderr: "", duration_ms: 1, log_path: "/logs/run.log", timed_out: false, stdout_truncated: false, stderr_truncated: false })),
-        start: mock(async () => ({ run_id: "run-1", stdout_log_path: "/logs/stdout.log", stderr_log_path: "/logs/stderr.log" })),
-        status: mock(async () => ({ run_id: "run-1", running: true as const, entry: "server.mjs", argv: ["--port", "3000"], started_at: "2026-08-22T00:00:00.000Z", stdout_log_path: "/logs/stdout.log", stderr_log_path: "/logs/stderr.log" })),
+        run: mock(async (): ReturnType<ManagedScriptRuntime["run"]> => ({ exit_code: 0, stdout: "", stderr: "", duration_ms: 1, log_path: join(paths.logsRoot, "run.log"), timed_out: false, stdout_truncated: false, stderr_truncated: false })),
+        start: mock(async (): Promise<ManagedScriptServiceStartResult> => ({ owner: launchOwner, run_id: "run-1", ...serviceLogs })),
+        status: mock(async (): ReturnType<ManagedScriptRuntime["status"]> => ({ run_id: "run-1", running: true, entry: "server.mjs", argv: ["--port", "3000"], started_at: "2026-08-22T00:00:00.000Z", ...serviceLogs })),
         stop: mock(async () => ({ run_id: "run-1", stopped: true as const })),
         cleanup: mock(async () => ({ stopped_run_ids: [], finalized_run_ids: [] })),
         ...overrides,
@@ -28,7 +36,7 @@ function createLifecycle(): ManagedScriptLifecycle {
 }
 
 describe("autocode_script_service tool", () => {
-    test("defines managed script service schema", () => {
+    test("preserves only action, entry, argv, and run_id in managed script service schema", (): void => {
         const tool = createAutocodeScriptServiceTool() as unknown as { args: Record<string, unknown> }
 
         expect(Object.keys(tool.args)).toEqual(["action", "entry", "argv", "run_id"])
@@ -55,11 +63,12 @@ describe("autocode_script_service tool", () => {
         expect(runtime.stop).toHaveBeenCalledWith({ run_id: runId })
     })
 
-    test("dispatches start, status, and stop to runtime methods", async () => {
+    test("dispatches start, status, and stop with immutable launch owner registration", async (): Promise<void> => {
         const order: string[] = []
-        const startResult = { run_id: "run-1", stdout_log_path: "/logs/stdout.log", stderr_log_path: "/logs/stderr.log" }
+        const publicStartResult = { run_id: "run-1", ...serviceLogs, observed_ports: [3000] }
+        const startResult: ManagedScriptServiceStartResult = { owner: launchOwner, ...publicStartResult }
         const runtime = createRuntime({
-            start: mock(async () => {
+            start: mock(async (): Promise<ManagedScriptServiceStartResult> => {
                 order.push("start")
                 return startResult
             }),
@@ -71,8 +80,8 @@ describe("autocode_script_service tool", () => {
         })
         const tool = createAutocodeScriptServiceTool(undefined, {}, factory, lifecycle)
         const context = createToolContext({
-            sessionID: "owned-session",
-            directory: "/workspace/owned",
+            sessionID: launchOwner.sessionID,
+            directory,
             worktree: "/workspace",
         })
         const start = await tool.execute({ action: "start", entry: "task.mjs", argv: ["--port", "3000"] }, context)
@@ -80,13 +89,15 @@ describe("autocode_script_service tool", () => {
         const status = await tool.execute({ action: "status", run_id: "run-1" }, createToolContext())
         const stop = await tool.execute({ action: "stop", run_id: "run-1" }, createToolContext())
 
-        expect(parse(start)).toEqual(startResult)
+        expect(parse(start)).toEqual(publicStartResult)
         expect(parse(status)).toMatchObject({ run_id: "run-1", running: true })
         expect(parse(stop)).toEqual({ run_id: "run-1", stopped: true })
         expect(runtime.start).toHaveBeenNthCalledWith(1, { entry: "task.mjs", argv: ["--port", "3000"] })
         expect(runtime.start).toHaveBeenNthCalledWith(2, { entry: "nested/task.mjs" })
         expect(runtime.status).toHaveBeenCalledWith({ run_id: "run-1" })
         expect(runtime.stop).toHaveBeenCalledWith({ run_id: "run-1" })
+        expect(factory).toHaveBeenCalledWith(expect.objectContaining({ context }))
+        expect(Object.isFrozen(startResult.owner)).toBe(true)
         expect(lifecycle.registerStart).toHaveBeenCalledTimes(2)
         expect(lifecycle.registerStart).toHaveBeenCalledWith(
             context,
@@ -94,6 +105,42 @@ describe("autocode_script_service tool", () => {
             context.abort,
         )
         expect(order).toEqual(["start", "register-start", "start", "register-start"])
+    })
+
+    test.each(["linux", "win32", "darwin"] as const)("keeps service actions Linux-only with read-only start verification on %s", async (platform: NodeJS.Platform): Promise<void> => {
+        const project: ManagedScriptProject = {
+            setup: mock(async (): Promise<ManagedScriptProjectResult> => { throw new Error("must not setup") }),
+            install: mock(async (): Promise<ManagedScriptProjectResult> => { throw new Error("must not install") }),
+            verify: mock(async (): Promise<ManagedScriptProjectVerifyResult> => ({ ok: false, paths, blocker: { code: "project_not_initialized", message: "Prepare shared project." } })),
+        }
+        const spawn = mock((): never => { throw new Error("must not spawn") })
+        const lifecycle = createLifecycle()
+        const tool = createAutocodeScriptServiceTool(undefined, {
+            project,
+            resolveOwner: async (): Promise<ManagedScriptProjectOwnerResolution> => ({ ok: true, owner: { jobName: paths.jobName, directory } }),
+            process: { execPath: "node", env: {}, platform, spawn, kill: mock((): void => {}) },
+        }, undefined, lifecycle)
+        const actions = platform === "linux" ? ["start"] as const : ["start", "status", "stop"] as const
+        for (const action of actions) {
+            const response = parse(await tool.execute(
+                action === "start" ? { action, entry: "server.mjs" } : { action, run_id: "run-1" },
+                createToolContext({ directory }),
+            ))
+
+            expect(response).toMatchObject({ ok: false, status: "failed", failedAction: "manage managed script service" })
+            if (platform === "linux") {
+                expect(String(response.error)).toContain("Prepare shared project.")
+                expect(project.verify).toHaveBeenCalledWith()
+            }
+            else {
+                expect(response.error).toBe("Managed script services are supported only on Linux.")
+                expect(project.verify).not.toHaveBeenCalled()
+            }
+        }
+        expect(project.setup).not.toHaveBeenCalled()
+        expect(project.install).not.toHaveBeenCalled()
+        expect(spawn).not.toHaveBeenCalled()
+        expect(lifecycle.registerStart).not.toHaveBeenCalled()
     })
 
     test("requires and isolates action-specific fields without creating runtime", async () => {
@@ -124,6 +171,28 @@ describe("autocode_script_service tool", () => {
         }
         expect(factory).not.toHaveBeenCalled()
         expect(lifecycle.registerStart).not.toHaveBeenCalled()
+    })
+
+    test("preserves Windows policy and forced cleanup metadata without changing caller parameters", async (): Promise<void> => {
+        const windows_cleanup = { termination: "forced" as const, tree_cleanup: "best_effort" as const, descendants: "unknown" as const, root_exited: true }
+        const runtime = createRuntime({
+            start: mock(async (): Promise<ManagedScriptServiceStartResult> => ({ owner: launchOwner, run_id: "run-1", ...serviceLogs, message: windowsServiceMessage })),
+            stop: mock(async (): ReturnType<ManagedScriptRuntime["stop"]> => ({ run_id: "run-1", stopped: true, windows_cleanup })),
+        })
+        const tool = createAutocodeScriptServiceTool(undefined, {}, mock(() => runtime))
+        expect(parse(await tool.execute({ action: "start", entry: "server.mjs" }, createToolContext()))).toMatchObject({ run_id: "run-1", message: windowsServiceMessage })
+        expect(parse(await tool.execute({ action: "stop", run_id: "run-1" }, createToolContext()))).toEqual({ run_id: "run-1", stopped: true, windows_cleanup })
+    })
+
+    test("returns structured safe refusal instead of stopped for a missing Windows root", async (): Promise<void> => {
+        const windows_cleanup = { termination: "none" as const, tree_cleanup: "not_attempted" as const, descendants: "unknown" as const, root_exited: true }
+        const runtime = createRuntime({ stop: mock(async (): Promise<never> => { throw new ManagedScriptWindowsError("windows_root_missing", "Root exited; live descendants may remain.", windows_cleanup) }) })
+        const tool = createAutocodeScriptServiceTool(undefined, {}, mock(() => runtime))
+        const result = parse(await tool.execute({ action: "stop", run_id: "run-1" }, createToolContext()))
+        expect(result).toMatchObject({ ok: false, status: "failed", failedAction: "manage managed script service", code: "windows_root_missing", windows_cleanup })
+        expect(result).not.toHaveProperty("stopped")
+        expect(typeof result.error).toBe("string")
+        expect(typeof result.instruction).toBe("string")
     })
 
     test("returns service failure when factory or runtime throws", async () => {

@@ -26,11 +26,11 @@ If user request vague -> ask user clarify.
 ### STEP 2: Research Technical Details
 
 Loop:
-    1. Call \`subagent\` to gather facts:
-        - Ask 1 simple question per subagent
-        - Include links to sources (previously reported) that may contain answer
+    1. Ask subagents to gather facts:
+       - limit sources per subagent (avoid context overflow)
+       - Include links to sources (previously reported) as proof
     2. Compare gathered facts with original user request
-    3. If all info found to answer user request, then exit Loop
+    3. If enough info found to answer user request, then exit Loop
     4. If info missing, then repeat with more focused prompts targeting missing info
 
 **IMPORTANT**: When using \`subagent\` tool:

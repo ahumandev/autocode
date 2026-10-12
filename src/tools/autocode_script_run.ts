@@ -72,9 +72,9 @@ export function createAutocodeScriptRunTool(
     runtimeFactory: ManagedScriptRuntimeFactory = createManagedScriptRuntime,
 ): ReturnType<typeof tool> {
     return tool({
-        description: "Run managed source-relative .mjs script by direct Node execution with cwd set to session scripts sub-project. Inline stdout and stderr are bounded; log_path contains full output.",
+        description: "Run finite .mjs script. Inline stdout and stderr are bounded; log_path contains full output.",
         args: {
-            entry: tool.schema.string().describe("Required source-relative .mjs entry filename, such as task.mjs or nested/task.mjs; omit src/ prefix."),
+            entry: tool.schema.string().describe("Required job-source-relative .mjs filename, such as task.mjs or nested/task.mjs."),
             argv: tool.schema.array(tool.schema.string()).optional().describe("Optional string arguments passed to entry."),
             timeout_ms: tool.schema.number().int().min(1).max(1_800_000).optional().describe("Optional execution timeout in milliseconds; runtime default is 300000."),
         },

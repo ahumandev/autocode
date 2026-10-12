@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
+import { describe, expect, mock, test } from "bun:test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { homedir, tmpdir } from "node:os"
@@ -204,50 +204,30 @@ function injectedPromptText(cfg: ConfigWithRuntimeSections) {
 describe("auto resume wiring", () => {
     test("allows assist to call dependency checks", async () => {
         await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode.server(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
+            const plugin = await autocode.server(createPluginInput(createMockClient()))
+            const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
 
-                await configurePlugin(plugin, cfg)
+            await configurePlugin(plugin, cfg)
 
-                expect(getPermissionRule(cfg.agent["execute-document"]?.permission, "autocode_dependencies")).toBeUndefined()
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
+            expect(getPermissionRule(cfg.agent["execute-document"]?.permission, "autocode_dependencies")).toBeUndefined()
         })
     })
 
     test("applies native external_directory rules before agent-specific fallback", async () => {
         await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode.server(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = {
-                    agent: {},
-                    command: {},
-                    permissions: [{ action: "external_directory", resource: "/home/me/CarData/*", effect: "allow" }],
-                }
+            const plugin = await autocode.server(createPluginInput(createMockClient()))
+            const cfg: ConfigWithRuntimeSections = {
+                agent: {},
+                command: {},
+                permissions: [{ action: "external_directory", resource: "/home/me/CarData/*", effect: "allow" }],
+            }
 
-                await configurePlugin(plugin, cfg)
+            await configurePlugin(plugin, cfg)
 
-                for (const [name, fallback, allowed] of [["design", "ask", "allow"], ["execute-os", "allow", "allow"], ["assist", "ask", "allow"], ["query-code", "ask", "allow"], ["auto-general", "deny", "deny"]] as const) {
-                    const rules = cfg.agent[name]?.permissions as V2PermissionRule[] | undefined
-                    expect(permissionEffect(rules, "external_directory", "/unconfigured/file")).toBe(fallback)
-                    expect(permissionEffect(rules, "external_directory", "/home/me/CarData/file")).toBe(allowed)
-                }
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
+            for (const [name, fallback, allowed] of [["design", "ask", "allow"], ["execute-os", "allow", "allow"], ["assist", "ask", "allow"], ["query-code", "ask", "allow"], ["auto-general", "deny", "deny"]] as const) {
+                const rules = cfg.agent[name]?.permissions as V2PermissionRule[] | undefined
+                expect(permissionEffect(rules, "external_directory", "/unconfigured/file")).toBe(fallback)
+                expect(permissionEffect(rules, "external_directory", "/home/me/CarData/file")).toBe(allowed)
             }
         })
     })
@@ -437,57 +417,37 @@ describe("auto resume wiring", () => {
 
     test("registers git_conflict for the assist_git_conflict agent", async () => {
         await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode.server(createPluginInput(createMockClient()))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
+            const plugin = await autocode.server(createPluginInput(createMockClient()))
+            const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
 
-                await configurePlugin(plugin, cfg)
+            await configurePlugin(plugin, cfg)
 
-                expect(cfg.command["git-conflict"]?.agent).toBe("assist-git-conflict")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
+            expect(cfg.command["git-conflict"]?.agent).toBe("assist-git-conflict")
         })
     })
 
     test("omits removed legacy public tool names from injected prompts", async () => {
         await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode.server(createPluginInput(createMockClient()))
-                const cfg = createConfig()
+            const plugin = await autocode.server(createPluginInput(createMockClient()))
+            const cfg = createConfig()
 
-                await configurePlugin(plugin, cfg)
+            await configurePlugin(plugin, cfg)
 
-                const promptText = injectedPromptText(cfg)
-                const legacyToolPatterns = [
-                    /(^|[^A-Za-z0-9_])autocode_draft_job_/,
-                    /(^|[^A-Za-z0-9_])autocode_plan_load_/,
-                    /(^|[^A-Za-z0-9_])autocode_logo(?![A-Za-z0-9_])/,
-                    /(^|[^A-Za-z0-9_])autocode_act(?![A-Za-z0-9_])/,
-                    /(^|[^A-Za-z0-9_])autocode_plan_start(?![A-Za-z0-9_])/,
-                    /(^|[^A-Za-z0-9_])autocode_revise_job(?![A-Za-z0-9_])/,
-                    /(^|[^A-Za-z0-9_])autocode_feedback(?![A-Za-z0-9_])/,
-                    /(^|[^A-Za-z0-9_])autocode_review(?![A-Za-z0-9_])/,
-                    /(^|[^A-Za-z0-9_])autocode_archive(?![A-Za-z0-9_])/,
-                ]
+            const promptText = injectedPromptText(cfg)
+            const legacyToolPatterns = [
+                /(^|[^A-Za-z0-9_])autocode_draft_job_/,
+                /(^|[^A-Za-z0-9_])autocode_plan_load_/,
+                /(^|[^A-Za-z0-9_])autocode_logo(?![A-Za-z0-9_])/,
+                /(^|[^A-Za-z0-9_])autocode_act(?![A-Za-z0-9_])/,
+                /(^|[^A-Za-z0-9_])autocode_plan_start(?![A-Za-z0-9_])/,
+                /(^|[^A-Za-z0-9_])autocode_revise_job(?![A-Za-z0-9_])/,
+                /(^|[^A-Za-z0-9_])autocode_feedback(?![A-Za-z0-9_])/,
+                /(^|[^A-Za-z0-9_])autocode_review(?![A-Za-z0-9_])/,
+                /(^|[^A-Za-z0-9_])autocode_archive(?![A-Za-z0-9_])/,
+            ]
 
-                for (const legacyToolPattern of legacyToolPatterns) {
-                    expect(promptText).not.toMatch(legacyToolPattern)
-                }
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
+            for (const legacyToolPattern of legacyToolPatterns) {
+                expect(promptText).not.toMatch(legacyToolPattern)
             }
         })
     })
@@ -496,39 +456,29 @@ describe("auto resume wiring", () => {
 describe("autocode_concept_list tool", () => {
     test("registers the tool on the plugin without restoring the removed autocode agent", async () => {
         await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode.server(createPluginInput({
-                    session: {
-                        async get() {
-                            return { data: createSession("session-1", workspace) }
-                        },
-                        async children() {
-                            return { data: [] }
-                        },
-                        async messages() {
-                            return { data: [] }
-                        },
-                        async promptAsync() {
-                            return {}
-                        },
+            const plugin = await autocode.server(createPluginInput({
+                session: {
+                    async get() {
+                        return { data: createSession("session-1", workspace) }
                     },
-                } as unknown as OpencodeClient))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
+                    async children() {
+                        return { data: [] }
+                    },
+                    async messages() {
+                        return { data: [] }
+                    },
+                    async promptAsync() {
+                        return {}
+                    },
+                },
+            } as unknown as OpencodeClient))
+            const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
 
-                await configurePlugin(plugin, cfg)
+            await configurePlugin(plugin, cfg)
 
-                expect(plugin.tool?.autocode_concept_list).toBeDefined()
-                expect(cfg.agent.autocode).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent["auto-general"], "*")).toBe("allow")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
+            expect(plugin.tool?.autocode_concept_list).toBeDefined()
+            expect(cfg.agent.autocode).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent["auto-general"], "*")).toBe("allow")
         })
     })
 
@@ -622,39 +572,29 @@ describe("autocode_concept_list tool", () => {
 describe("autocode_concept_read tool", () => {
     test("registers the tool on the plugin with design concept-read permission", async () => {
         await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const plugin = await autocode.server(createPluginInput({
-                    session: {
-                        async get() {
-                            return { data: createSession("session-1", workspace) }
-                        },
-                        async children() {
-                            return { data: [] }
-                        },
-                        async messages() {
-                            return { data: [] }
-                        },
-                        async promptAsync() {
-                            return {}
-                        },
+            const plugin = await autocode.server(createPluginInput({
+                session: {
+                    async get() {
+                        return { data: createSession("session-1", workspace) }
                     },
-                } as unknown as OpencodeClient))
-                const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
+                    async children() {
+                        return { data: [] }
+                    },
+                    async messages() {
+                        return { data: [] }
+                    },
+                    async promptAsync() {
+                        return {}
+                    },
+                },
+            } as unknown as OpencodeClient))
+            const cfg: ConfigWithRuntimeSections = { agent: {}, command: {} }
 
-                await configurePlugin(plugin, cfg)
+            await configurePlugin(plugin, cfg)
 
-                expect(plugin.tool?.autocode_concept_read).toBeDefined()
-                expect(getPermissionRule(cfg.agent.general?.permission, "autocode_concept_read")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_read")).toBe("allow")
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
-            }
+            expect(plugin.tool?.autocode_concept_read).toBeDefined()
+            expect(getPermissionRule(cfg.agent.general?.permission, "autocode_concept_read")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_read")).toBe("allow")
         })
     })
 
@@ -819,194 +759,184 @@ describe("autocode_concept_create tool", () => {
 describe("tool registrations", () => {
     test("registers design tools and grants design permission", async () => {
         await withIsolatedConfigHome(async () => {
-            const previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-            try {
-                const client = createMockClient()
-                const plugin = await autocode.server(createPluginInput(client))
-                const cfg = createConfig()
-                await configurePlugin(plugin, cfg)
-                const manualMemoryToolKeys: readonly string[] = ["autocode_memory_forget", "autocode_memory_recall"]
-                expect(Object.keys(plugin.tool ?? {}).filter((toolName: string): boolean => !manualMemoryToolKeys.includes(toolName)).sort()).toEqual([
-                    "autocode_concept_create",
-                    "autocode_concept_list",
-                    "autocode_concept_read",
-                    "autocode_config_read",
-                    "autocode_config_edit",
-                    "autocode_config_remove",
-                    "autocode_md_create",
-                    "autocode_md_h1",
-                    "autocode_md_read",
-                    "autocode_md_remove",
-                    "autocode_md_update",
-                    "autocode_md_frontmatter_read",
-                    "autocode_md_frontmatter_edit",
-                    "autocode_process_kill",
-                    "autocode_db_table",
-                    "autocode_db_table_read",
-                    "autocode_db_tables",
-                    "autocode_job_list",
-                    "autocode_kill",
-                    "autocode_logo_find",
-                    "autocode_db_schemas",
-                    "autocode_dependencies",
-                    "autocode_rest",
-                    "autocode_sandbox_cli",
-                    "autocode_sandbox_config_edit",
-                    "autocode_sandbox_config_read",
-                    "autocode_sandbox_config_remove",
-                    "autocode_sandbox_copy",
-                    "autocode_sandbox_create",
-                    "autocode_sandbox_delete",
-                    "autocode_sandbox_edit",
-                    "autocode_sandbox_glob",
-                    "autocode_sandbox_grep",
-                    "autocode_sandbox_read",
-                    "autocode_script_install",
-                    "autocode_script_project",
-                    "autocode_script_run",
-                    "autocode_script_service",
-                    "autocode_session_create",
-                    "autocode_youtube_transcribe",
-                    "skill_edit",
-                    "autocode_ssh_command",
-                    "autocode_ssh_config_read",
-                    "autocode_ssh_config_edit",
-                    "autocode_ssh_config_remove",
-                    "autocode_ssh_edit_file",
-                    "autocode_ssh_glob",
-                    "autocode_ssh_grep_file",
-                    "autocode_ssh_list",
-                    "autocode_ssh_patch_file",
-                    "autocode_ssh_read_attributes",
-                    "autocode_ssh_read_file",
-                    "autocode_ssh_write_attributes",
-                    "autocode_ssh_write_file",
-                    "learn",
-                    "skill_read",
-                    "git_add",
-                    "git_branch",
-                    "git_checkout",
-                    "git_commit",
-                    "git_create_branch",
-                    "git_diff",
-                    "git_diff_staged",
-                    "git_diff_unstaged",
-                    "git_log",
-                    "git_reset",
-                    "git_show",
-                    "git_status",
-                    "skill",
-                ].sort())
-                expect(Object.keys(plugin.tool ?? {}).filter((toolName: string): boolean => toolName.startsWith("autocode_memory_")).sort()).toEqual([...manualMemoryToolKeys])
-                expect(plugin.tool?.autocode_draft_job_create).toBeUndefined()
-                expect(plugin.tool?.autocode_draft_job_update).toBeUndefined()
-                expect(plugin.tool?.autocode_job_draft).toBeUndefined()
-                expect(plugin.tool?.autocode_plan_read).toBeUndefined()
-                expect(plugin.tool?.autocode_plan_load_problem).toBeUndefined()
-                expect(plugin.tool?.autocode_plan_load_risks).toBeUndefined()
-                expect(plugin.tool?.autocode_draft_job_read).toBeUndefined()
-                expect(plugin.tool?.autocode_job_list).toBeDefined()
-                expect(plugin.tool?.autocode_logo_find).toBeDefined()
-                expect(plugin.tool?.autocode_logo).toBeUndefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("List timestamped job workspaces.")
-                expect(plugin.tool?.autocode_act_prompt).toBeUndefined()
-                expect(plugin.tool?.autocode_act).toBeUndefined()
-                expect(plugin.tool?.autocode_agent_execute).toBeUndefined()
-                expect(plugin.tool?.autocode_session_create).toBeDefined()
-                expect(plugin.tool?.learn).toBeDefined()
-                expect(plugin.tool?.skill_learn).toBeUndefined()
-                expect(plugin.tool?.skill).toBeDefined()
-                expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
-                expect(plugin.tool?.autocode_job_execute).toBeUndefined()
-                expect(plugin.tool?.autocode_execute_job).toBeUndefined()
-                const sessionCreateToolText = toolSurfaceText(plugin.tool?.autocode_session_create)
-                expect(sessionCreateToolText).toContain("Only call when requested by user.")
-                expect(plugin.tool?.autocode_concept_create).toBeDefined()
-                expect(plugin.tool?.autocode_plan_start).toBeUndefined()
-                expect(plugin.tool?.autocode_db_table).toBeDefined()
-                expect(plugin.tool?.autocode_db_table_read).toBeDefined()
-                expect(plugin.tool?.autocode_db_tables).toBeDefined()
-                expect(plugin.tool?.autocode_dependencies).toBeDefined()
-                expect(plugin.tool?.autocode_rest).toBeDefined()
-                expect(toolSurfaceText(plugin.tool?.autocode_dependencies)).toContain("Detect Autocode runtime dependencies")
-                expect(plugin.tool?.autocode_revise_job).toBeUndefined()
-                expect(plugin.tool?.autocode_feedback).toBeUndefined()
-                expect(plugin.tool?.autocode_review).toBeUndefined()
-                expect(plugin.tool?.autocode_archive).toBeUndefined()
-                expect(cfg.agent.act).toBeUndefined()
-                expect(cfg.agent.ask).toBeUndefined()
-                expect(cfg.agent.autocode).toBeUndefined()
-                expect(cfg.agent.plan?.disable).toBe(true)
-                expect(getV2PermissionRule(cfg.agent.plan, "external_directory")).toBe("ask")
-                expect(getV2PermissionRule(cfg.agent.design, "autocode_agent_execute")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_list")).toBe("allow")
-                expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_read")).toBe("allow")
-                expect(getV2PermissionRule(cfg.agent.design, "autocode_job_execute")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.design, "autocode_session_create")).toBe("allow")
-                expect(getV2PermissionRule(cfg.agent["execute-author"], "autocode_logo_find")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent["execute-author"], "autocode_logo")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.assist, "autocode_dependencies")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent["execute-document"], "autocode_dependencies")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent["auto-general"], "*")).toBe("allow")
-                expect(getV2PermissionRule(cfg.agent["auto-general"], "doom_loop")).toBeUndefined()
-                expect(permissionEffect(cfg.agent["auto-general"]?.permissions as V2PermissionRule[], "subagent", "design")).toBe("deny")
-                expect(cfg.agent["auto-general"]?.prompt).toContain("fallback auto orchestrator")
-                expect(getV2PermissionRule(cfg.agent.auto, "autocode_session_create")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.auto, "autocode_feedback")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.auto, "autocode_review")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.auto, "autocode_job_list")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.auto, "autocode_draft_job_create")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.assist, "autocode_session_create")).toBe("allow")
-                expect(getV2PermissionRule(cfg.agent.assist, "autocode_job_list")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent.assist, "autocode_auto_start")).toBeUndefined()
-                for (const legacyAgentId of [
-                    "assist_browser", "auto_author", "auto_design", "auto_feature", "auto_general", "auto_refactor", "auto_research", "auto_test", "auto_troubleshoot",
-                    "document_agents", "document_conventions", "document_code", "document_env", "document_install", "document_prd", "document_ux",
-                    "execute_author", "execute_code", "execute_config", "execute_debug", "execute_document", "execute_excel", "execute_opencode", "execute_os", "execute_rest", "execute_sandbox", "execute_script", "execute_ssh",
-                    "query_autocode", "query_browser", "query_code", "query_config", "query_db", "query_excel", "query_git", "query_os", "query_skills", "query_ssh", "query_text", "query_web", "query_youtube",
-                ]) expect(cfg.agent[legacyAgentId]).toBeUndefined()
-                expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
-                expect(cfg.agent.design?.prompt).toContain("autocode_session_create")
-                expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
-                expect(cfg.agent.advise?.prompt).toContain("`subagent` to discover solution facts")
-                const queryDbAgent = (cfg.agent as Record<string, Record<string, unknown>>)["query-db"]
-                expect(queryDbAgent.mode).toBe("subagent")
-                expect(queryDbAgent.hidden).toBe(true)
-                expect(String(queryDbAgent.prompt)).toContain("Use only `autocode_db_tables`, `autocode_db_table`, and `autocode_db_table_read`")
-                expect(String(queryDbAgent.prompt)).toContain("AUTOCODE_DB_<UPPERCASE_KEY>_CONNECTION")
-                expect(getV2PermissionRule(cfg.agent["query-db"], "*")).toBe("deny")
-                for (const action of ["autocode_db_table", "autocode_db_table_read", "autocode_db_tables"]) {
-                    expect(getV2PermissionRule(cfg.agent["query-db"], action)).toBe("allow")
-                }
-                expect(permissionEffect(queryDbAgent.permissions as V2PermissionRule[], "external_directory", "/outside/file")).toBe("ask")
-                const executeRestAgent = (cfg.agent as Record<string, Record<string, unknown>>)["execute-rest"]
-                expect(getAgentField(cfg, "execute-rest", "mode")).toBe("subagent")
-                expect(getAgentField(cfg, "execute-rest", "hidden")).toBe(true)
-                expect(executeRestAgent.tier).toBeUndefined()
-                expect(getAgentField(cfg, "execute-rest", "temperature")).toBe(0.1)
-                expect(String(executeRestAgent.prompt)).toContain("autocode_rest")
-                expect(String(executeRestAgent.prompt)).toContain("GET, POST, PUT, PATCH, DELETE")
-                expect(String(executeRestAgent.prompt)).toContain("Never dump full raw REST result unless user specifically asks")
-                expect(String(executeRestAgent.prompt)).toContain("Do not leak sensitive headers or body unless user explicitly requested")
-                expect(String(executeRestAgent.prompt)).toContain("ask user confirmation")
-                expect(String(executeRestAgent.prompt)).toContain("Caveman English")
-                expect(String(executeRestAgent.prompt)).not.toContain("`query`")
-                expect(String(executeRestAgent.prompt)).not.toContain("rest_key")
-                expect(getV2PermissionRule(cfg.agent["execute-rest"], "*")).toBe("deny")
-                expect(getV2PermissionRule(cfg.agent["execute-rest"], "autocode_rest")).toBe("allow")
-                expect(permissionEffect(executeRestAgent.permissions as V2PermissionRule[], "external_directory", "/outside/file")).toBe("ask")
-                expect(getV2PermissionRule(cfg.agent["execute-rest"], "session")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent["execute-rest"], "agent")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent["execute-rest"], "previous_session")).toBeUndefined()
-                expect(getV2PermissionRule(cfg.agent["execute-rest"], "previous_agent")).toBeUndefined()
-            } finally {
-                if (previousSkipBootstrap === undefined) {
-                    delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-                } else {
-                    process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-                }
+            const client = createMockClient()
+            const plugin = await autocode.server(createPluginInput(client))
+            const cfg = createConfig()
+            await configurePlugin(plugin, cfg)
+            const manualMemoryToolKeys: readonly string[] = ["autocode_memory_forget", "autocode_memory_recall"]
+            expect(Object.keys(plugin.tool ?? {}).filter((toolName: string): boolean => !manualMemoryToolKeys.includes(toolName)).sort()).toEqual([
+                "autocode_concept_create",
+                "autocode_concept_list",
+                "autocode_concept_read",
+                "autocode_config_read",
+                "autocode_config_edit",
+                "autocode_config_remove",
+                "autocode_md_create",
+                "autocode_md_h1",
+                "autocode_md_read",
+                "autocode_md_remove",
+                "autocode_md_update",
+                "autocode_md_frontmatter_read",
+                "autocode_md_frontmatter_edit",
+                "autocode_process_kill",
+                "autocode_db_table",
+                "autocode_db_table_read",
+                "autocode_db_tables",
+                "autocode_job_list",
+                "autocode_kill",
+                "autocode_logo_find",
+                "autocode_db_schemas",
+                "autocode_dependencies",
+                "autocode_rest",
+                "autocode_sandbox_cli",
+                "autocode_sandbox_config_edit",
+                "autocode_sandbox_config_read",
+                "autocode_sandbox_config_remove",
+                "autocode_sandbox_copy",
+                "autocode_sandbox_create",
+                "autocode_sandbox_delete",
+                "autocode_sandbox_edit",
+                "autocode_sandbox_glob",
+                "autocode_sandbox_grep",
+                "autocode_sandbox_read",
+                "autocode_script_install",
+                "autocode_script_project",
+                "autocode_script_run",
+                "autocode_script_service",
+                "autocode_session_create",
+                "autocode_youtube_transcribe",
+                "skill_edit",
+                "autocode_ssh_command",
+                "autocode_ssh_config_read",
+                "autocode_ssh_config_edit",
+                "autocode_ssh_config_remove",
+                "autocode_ssh_edit_file",
+                "autocode_ssh_glob",
+                "autocode_ssh_grep_file",
+                "autocode_ssh_list",
+                "autocode_ssh_patch_file",
+                "autocode_ssh_read_attributes",
+                "autocode_ssh_read_file",
+                "autocode_ssh_write_attributes",
+                "autocode_ssh_write_file",
+                "learn",
+                "skill_read",
+                "git_add",
+                "git_branch",
+                "git_checkout",
+                "git_commit",
+                "git_create_branch",
+                "git_diff",
+                "git_diff_staged",
+                "git_diff_unstaged",
+                "git_log",
+                "git_reset",
+                "git_show",
+                "git_status",
+                "skill",
+            ].sort())
+            expect(Object.keys(plugin.tool ?? {}).filter((toolName: string): boolean => toolName.startsWith("autocode_memory_")).sort()).toEqual([...manualMemoryToolKeys])
+            expect(plugin.tool?.autocode_draft_job_create).toBeUndefined()
+            expect(plugin.tool?.autocode_draft_job_update).toBeUndefined()
+            expect(plugin.tool?.autocode_job_draft).toBeUndefined()
+            expect(plugin.tool?.autocode_plan_read).toBeUndefined()
+            expect(plugin.tool?.autocode_plan_load_problem).toBeUndefined()
+            expect(plugin.tool?.autocode_plan_load_risks).toBeUndefined()
+            expect(plugin.tool?.autocode_draft_job_read).toBeUndefined()
+            expect(plugin.tool?.autocode_job_list).toBeDefined()
+            expect(plugin.tool?.autocode_logo_find).toBeDefined()
+            expect(plugin.tool?.autocode_logo).toBeUndefined()
+            expect(toolSurfaceText(plugin.tool?.autocode_job_list)).toContain("List timestamped job workspaces.")
+            expect(plugin.tool?.autocode_act_prompt).toBeUndefined()
+            expect(plugin.tool?.autocode_act).toBeUndefined()
+            expect(plugin.tool?.autocode_agent_execute).toBeUndefined()
+            expect(plugin.tool?.autocode_session_create).toBeDefined()
+            expect(plugin.tool?.learn).toBeDefined()
+            expect(plugin.tool?.skill_learn).toBeUndefined()
+            expect(plugin.tool?.skill).toBeDefined()
+            expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
+            expect(plugin.tool?.autocode_job_execute).toBeUndefined()
+            expect(plugin.tool?.autocode_execute_job).toBeUndefined()
+            const sessionCreateToolText = toolSurfaceText(plugin.tool?.autocode_session_create)
+            expect(sessionCreateToolText).toContain("Only call when requested by user.")
+            expect(plugin.tool?.autocode_concept_create).toBeDefined()
+            expect(plugin.tool?.autocode_plan_start).toBeUndefined()
+            expect(plugin.tool?.autocode_db_table).toBeDefined()
+            expect(plugin.tool?.autocode_db_table_read).toBeDefined()
+            expect(plugin.tool?.autocode_db_tables).toBeDefined()
+            expect(plugin.tool?.autocode_dependencies).toBeDefined()
+            expect(plugin.tool?.autocode_rest).toBeDefined()
+            expect(toolSurfaceText(plugin.tool?.autocode_dependencies)).toContain("Detect Autocode runtime dependencies")
+            expect(plugin.tool?.autocode_revise_job).toBeUndefined()
+            expect(plugin.tool?.autocode_feedback).toBeUndefined()
+            expect(plugin.tool?.autocode_review).toBeUndefined()
+            expect(plugin.tool?.autocode_archive).toBeUndefined()
+            expect(cfg.agent.act).toBeUndefined()
+            expect(cfg.agent.ask).toBeUndefined()
+            expect(cfg.agent.autocode).toBeUndefined()
+            expect(cfg.agent.plan?.disable).toBe(true)
+            expect(getV2PermissionRule(cfg.agent.plan, "external_directory")).toBe("ask")
+            expect(getV2PermissionRule(cfg.agent.design, "autocode_agent_execute")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_list")).toBe("allow")
+            expect(getV2PermissionRule(cfg.agent.design, "autocode_concept_read")).toBe("allow")
+            expect(getV2PermissionRule(cfg.agent.design, "autocode_job_execute")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.design, "autocode_session_create")).toBe("allow")
+            expect(getV2PermissionRule(cfg.agent["execute-author"], "autocode_logo_find")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent["execute-author"], "autocode_logo")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.assist, "autocode_dependencies")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent["execute-document"], "autocode_dependencies")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent["auto-general"], "*")).toBe("allow")
+            expect(getV2PermissionRule(cfg.agent["auto-general"], "doom_loop")).toBeUndefined()
+            expect(permissionEffect(cfg.agent["auto-general"]?.permissions as V2PermissionRule[], "subagent", "design")).toBe("deny")
+            expect(cfg.agent["auto-general"]?.prompt).toContain("fallback auto orchestrator")
+            expect(getV2PermissionRule(cfg.agent.auto, "autocode_session_create")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.auto, "autocode_feedback")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.auto, "autocode_review")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.auto, "autocode_job_list")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.auto, "autocode_draft_job_create")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.assist, "autocode_session_create")).toBe("allow")
+            expect(getV2PermissionRule(cfg.agent.assist, "autocode_job_list")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent.assist, "autocode_auto_start")).toBeUndefined()
+            for (const legacyAgentId of [
+                "assist_browser", "auto_author", "auto_design", "auto_feature", "auto_general", "auto_refactor", "auto_research", "auto_test", "auto_troubleshoot",
+                "document_agents", "document_conventions", "document_code", "document_env", "document_install", "document_prd", "document_ux",
+                "execute_author", "execute_code", "execute_config", "execute_debug", "execute_document", "execute_excel", "execute_opencode", "execute_os", "execute_rest", "execute_sandbox", "execute_script", "execute_ssh",
+                "query_autocode", "query_browser", "query_code", "query_config", "query_db", "query_excel", "query_git", "query_os", "query_skills", "query_ssh", "query_text", "query_web", "query_youtube",
+            ]) expect(cfg.agent[legacyAgentId]).toBeUndefined()
+            expect(cfg.agent.design?.prompt).toContain("PROPOSAL")
+            expect(cfg.agent.design?.prompt).toContain("autocode_session_create")
+            expect(cfg.agent.advise?.prompt).toContain("# Teaching Guide")
+            expect(cfg.agent.advise?.prompt).toContain("`subagent` to discover solution facts")
+            const queryDbAgent = (cfg.agent as Record<string, Record<string, unknown>>)["query-db"]
+            expect(queryDbAgent.mode).toBe("subagent")
+            expect(queryDbAgent.hidden).toBe(true)
+            expect(String(queryDbAgent.prompt)).toContain("Use only `autocode_db_tables`, `autocode_db_table`, and `autocode_db_table_read`")
+            expect(String(queryDbAgent.prompt)).toContain("AUTOCODE_DB_<UPPERCASE_KEY>_CONNECTION")
+            expect(getV2PermissionRule(cfg.agent["query-db"], "*")).toBe("deny")
+            for (const action of ["autocode_db_table", "autocode_db_table_read", "autocode_db_tables"]) {
+                expect(getV2PermissionRule(cfg.agent["query-db"], action)).toBe("allow")
             }
+            expect(permissionEffect(queryDbAgent.permissions as V2PermissionRule[], "external_directory", "/outside/file")).toBe("ask")
+            const executeRestAgent = (cfg.agent as Record<string, Record<string, unknown>>)["execute-rest"]
+            expect(getAgentField(cfg, "execute-rest", "mode")).toBe("subagent")
+            expect(getAgentField(cfg, "execute-rest", "hidden")).toBe(true)
+            expect(executeRestAgent.tier).toBeUndefined()
+            expect(getAgentField(cfg, "execute-rest", "temperature")).toBe(0.1)
+            expect(String(executeRestAgent.prompt)).toContain("autocode_rest")
+            expect(String(executeRestAgent.prompt)).toContain("GET, POST, PUT, PATCH, DELETE")
+            expect(String(executeRestAgent.prompt)).toContain("Never dump full raw REST result unless user specifically asks")
+            expect(String(executeRestAgent.prompt)).toContain("Do not leak sensitive headers or body unless user explicitly requested")
+            expect(String(executeRestAgent.prompt)).toContain("ask user confirmation")
+            expect(String(executeRestAgent.prompt)).toContain("Caveman English")
+            expect(String(executeRestAgent.prompt)).not.toContain("`query`")
+            expect(String(executeRestAgent.prompt)).not.toContain("rest_key")
+            expect(getV2PermissionRule(cfg.agent["execute-rest"], "*")).toBe("deny")
+            expect(getV2PermissionRule(cfg.agent["execute-rest"], "autocode_rest")).toBe("allow")
+            expect(permissionEffect(executeRestAgent.permissions as V2PermissionRule[], "external_directory", "/outside/file")).toBe("ask")
+            expect(getV2PermissionRule(cfg.agent["execute-rest"], "session")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent["execute-rest"], "agent")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent["execute-rest"], "previous_session")).toBeUndefined()
+            expect(getV2PermissionRule(cfg.agent["execute-rest"], "previous_agent")).toBeUndefined()
         })
     })
 })
@@ -1552,21 +1482,6 @@ describe("loadAutocodeConfig", () => {
 // ── plugin.config end-to-end tier tests ──────────────────────────────────────
 
 describe("plugin.config tier wiring", () => {
-    let previousSkipBootstrap: string | undefined
-
-    beforeAll(() => {
-        previousSkipBootstrap = process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-        process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = "1"
-    })
-
-    afterAll(() => {
-        if (previousSkipBootstrap === undefined) {
-            delete process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP
-        } else {
-            process.env.AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP = previousSkipBootstrap
-        }
-    })
-
     function createTierClient(): OpencodeClient {
         return {
             session: {

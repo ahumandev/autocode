@@ -1,7 +1,6 @@
 import type { AgentConfig } from "@opencode-ai/sdk/v2"
-import type { ExternalDirectoryRules, ModelTier, PermissionAction, SkillCategory, TierConfig } from "@/config"
+import type { ExternalDirectoryRules, ModelTier, PermissionAction, TierConfig } from "@/config"
 import type { PlatformCapabilities } from "@/utils/platform"
-import type { ExternalSkill } from "../utils/external"
 import type { PermissionRule } from "@/utils/permissions"
 import { assistBrowserPrompt } from "./prompts/assist_browser";
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
@@ -83,13 +82,6 @@ const colorWritableWorker = "#AA8300"
 const colorReadOnlyWorker = "#00AAAA"
 const colorDocumentWorker = "#AA00AA"
 
-const CATEGORY_AGENTS: Record<SkillCategory, string[]> = {
-    bash: ["execute-os", "execute-script"],
-    code: ["execute-code"],
-    design: ["assist", "auto", "design"],
-    test: ["auto-test"],
-}
-
 function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
     return {
 
@@ -142,10 +134,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "*": "deny",
                     "assist-*": "allow",
                     "author-*": "allow",
-                    "codebase-design": "allow", // From mattpocock/skills
                     "git-commit": "allow",
                     "primary-manual*": "allow",
-                    "ui-craft": "allow",
                 },
                 subagent: {
                     "*": "deny",
@@ -181,10 +171,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "*": "deny",
                     "assist-*": "allow",
                     "author-*": "allow",
-                    "codebase-design": "allow", // From mattpocock/skills
                     "git-commit": "allow",
                     "primary-manual*": "allow",
-                    "ui-craft": "allow",
                 },
                 subagent: {
                     "*": "allow",
@@ -250,7 +238,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 question: "allow",
                 skill: {
                     "*": "deny",
-                    "codebase-design": "allow", // From mattpocock/skills
                 },
                 subagent: {
                     "*": "deny",
@@ -370,6 +357,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "document-*": "allow",
                     "execute-author": "allow",
                     "execute-document": "allow",
+                    "execute-script": "allow",
                     "query-text": "allow",
                     "query-web": "allow",
                     "query-youtube": "allow",
@@ -412,10 +400,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill: {
                     "*": "deny",
                     "code*": "allow",
-                    "codebase-design": "allow", // From mattpocock/skills
                     "execute*": "allow",
-                    "vue-best-practices": "allow",
-                    "ui-craft": "allow",
                 },
                 subagent: {
                     "*": "deny",
@@ -457,6 +442,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     plan: "deny",
                     report: "deny",
                     session: "deny",
+                    spy: "deny",
                     "temp*": "deny"
                 },
             },
@@ -476,14 +462,12 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 skill: {
                     "*": "deny",
                     "code*": "allow",
-                    "codebase-design": "allow", // From mattpocock/skills
                     "execute*": "allow",
                 },
                 subagent: {
                     "*": "deny",
                     "auto-troubleshoot": "allow",
                     "execute-code": "allow",
-                    "execute-script": "allow",
                     "execute-os": "allow",
                     "query-code": "allow",
                     "query-git": "allow",
@@ -550,7 +534,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "*": "deny",
                     "execute-code": "allow",
                     "execute-sandbox": "allow",
-                    "execute-script": "allow",
                     "execute-os": "allow",
                     "query-browser": "allow",
                     "query-code": "allow",
@@ -613,10 +596,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-code": "allow",
                     "execute-config": "allow",
                     "execute-debug": "allow",
+                    "execute-os": "allow",
                     "execute-rest": "allow",
                     "execute-sandbox": "allow",
-                    "execute-script": "allow",
-                    "execute-os": "allow",
                     "execute-ssh": "allow",
                     "query*": "allow",
                 },
@@ -825,15 +807,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 read: "allow",
                 skill: {
                     "*": "deny",
-                    "angular-developer": "allow",
                     "code*": "allow",
                     "design*": "allow",
-                    "java-junit": "allow",
-                    "javascript-typescript-jest": "allow",
-                    "nitro": "allow",
-                    "nuxt": "allow",
-                    "tailwindcss": "allow",
-                    "vitest": "allow"
                 },
             },
             prompt: executeCodePrompt,
@@ -957,6 +932,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_dependencies: "allow",
                 autocode_process_kill: "allow",
                 edit: "allow",
+                "execute-script": "allow",
                 external_directory: "allow",
                 "filesystem*": "allow",
                 glob: "allow",
@@ -966,7 +942,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 shell: "allow",
                 skill: {
                     "*": "deny",
-                    "angular-new-app": "allow",
                     "execute-install": "allow",
                     "execute-sandbox": "allow",
                 },
@@ -1238,8 +1213,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "customize-opencode": "allow", // Build-in to OpenCode
                     "design*": "allow",
                     "execute*": "allow",
-                    "vue-best-practices": "allow",
-                    "ui-craft": "allow",
                 },
                 "todo*": "allow"
             },
@@ -1546,48 +1519,16 @@ function applyManagedAgentTierRegistration(
     }))
 }
 
-export function injectExternalSkillPermissions(agents: AgentMap, externalSkills: ExternalSkill[]): void {
-    const granted = new Set<string>()
-    for (const { category, skillName } of externalSkills) {
-        const targetAgentNames = CATEGORY_AGENTS[category]
-        if (targetAgentNames === undefined) {
-            continue
-        }
-
-        for (const agentName of targetAgentNames) {
-            const grantKey = `${agentName}\0${skillName}`
-            if (granted.has(grantKey)) continue
-            granted.add(grantKey)
-            const agent = agents[agentName]
-            if (agent === undefined) {
-                continue
-            }
-
-            agent.permission = agent.permission ?? {}
-            const permission = agent.permission
-            if (typeof permission !== "string") {
-                if (typeof permission.skill === "string" || permission.skill === undefined) {
-                    permission.skill = { [skillName]: "allow" }
-                } else {
-                    permission.skill = { ...permission.skill, [skillName]: "allow" }
-                }
-            }
-        }
-    }
-}
-
 export function buildAgents(
     capabilities: PlatformCapabilities,
     externalDirectories: ExternalDirectoryRules | PermissionRule[] = {},
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
-    externalSkills: ExternalSkill[] = [],
     tiers: Partial<Record<ModelTier, TierConfig>> = {},
 ): V2AgentMap {
     const agents = applyManagedAgentTierRegistration(
         applyBundledAgentPolicy(createBaseAgents(capabilities), externalDirectories, sandboxSupportOverride),
         tiers,
     )
-    injectExternalSkillPermissions(agents, externalSkills)
     return Object.fromEntries(Object.entries(applyWindowsSandboxPolicy(agents, capabilities)).map(([name, agent]) => {
         const { permission, ...definition } = agent
         return [name, { ...definition, permissions: toV2Permissions(permission) }]

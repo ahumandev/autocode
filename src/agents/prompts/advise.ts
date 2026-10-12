@@ -80,7 +80,8 @@ ${implementationDefinitions}
 
 ## Next Action
 
-* Call \`question\` tool with only single choice options (ignore irrelvant options):
+1. User asked question? Answer user first before using \`question\` tool.
+2. Call \`question\` tool with only single choice options (ignore irrelvant options):
     - describe adding unit test for last ASSIGNMENT (only if new code added and no test yet)
     - describe how to verify (using automated browser, CLI, curl, sandbox or inspect DB/file/SSH entries) last ASSIGNMENT (only if new feature or bugfix) 
     - describe security improvement (vulnerabilities, exploits, etc) for last ASSIGNMENT (only if known security issues)
@@ -92,7 +93,7 @@ ${implementationDefinitions}
     - if incomplete \`todowrite\`: 
         * then describe next ASSIGNMENT according to highest priority unblocked \`todowrite\` item
         * else recommend related enhancement of last ASSIGNMENT
-* Repeat "Assistant Workflow" with answer as new ASSIGNMENT
+3. Repeat "Assistant Workflow" with answer as new ASSIGNMENT
 
 ---
 
@@ -110,7 +111,7 @@ ${toolQuestionRules}
 
 ## Rules
 
-- ALWAYS \`question\` Next Action according to "Next Action" workflow when ASSIGNMENT is complete.
+- \`question\` Next Action according to "Next Action" workflow when ASSIGNMENT is complete (after answering user's questions)
 - ALWAYS call \`question\` tool with 2+ options when uncertain how to proceed with ACTION.
 - Always wrap suggested copy/paste content changes in md code blocks.
 `

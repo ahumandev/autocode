@@ -26,6 +26,7 @@ import { createLocalMemoryRecallHook, createOpenCodeLocalMemorySessionContextLoa
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 import { isSandboxPlatformSupported } from "@/utils/sandbox"
 import { permissionEffect, type PermissionRule } from "./utils/permissions"
+import { initializeAutocodeGitExclude } from "./utils/git_exclude"
 
 type PluginAgentConfig = AutocodeAgentConfig
 type ConfigWithSubagentDepth = Config & { subagent_depth?: number }
@@ -91,7 +92,6 @@ function preparePluginAgentsAfterOverrides(
     agents: Record<string, PluginAgentConfig>,
     _externalDirectories: ExternalDirectoryRules,
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
-    _externalSkills: Parameters<typeof buildAgents>[3] = [],
     capabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" },
 ): Record<string, Omit<PluginAgentConfig, "tier">> {
     const sandboxSupported = isSandboxPlatformSupported(sandboxSupportOverride ?? {})
@@ -113,7 +113,6 @@ async function mergeConfig(
     cfg: ConfigWithSubagentDepth,
     input: PluginInputWithSandboxSupportOverride,
     autocodeConfig: Awaited<ReturnType<typeof loadAutocodeConfig>>,
-    generatedSkills: Awaited<ReturnType<typeof reconcileGeneratedSkills>>,
     capabilities: PlatformCapabilities,
     commandDefinitions: CommandMap,
     refreshSmartAgentNames: (agents: ReturnType<typeof buildAgents>) => void,
@@ -132,7 +131,7 @@ async function mergeConfig(
 
     cfg.agent = cfg.agent ?? {}
     if (capabilities.isWindows) delete (cfg.agent as Record<string, unknown>)["execute-sandbox"]
-    const agents = buildAgents(capabilities, agentExternalDirectories, input.sandboxSupportOverride, generatedSkills.externalSkills, tiers)
+    const agents = buildAgents(capabilities, agentExternalDirectories, input.sandboxSupportOverride, tiers)
     refreshSmartAgentNames(agents)
     for (const agentName of ["spy", "auto"] as const) {
         if (agents[agentName] === undefined) {
@@ -149,7 +148,6 @@ async function mergeConfig(
         mergedAgents,
         agentExternalDirectories,
         input.sandboxSupportOverride,
-        generatedSkills.externalSkills,
         capabilities,
     ))
     for (const [name, agent] of Object.entries(finalAgents)) {
@@ -214,7 +212,7 @@ async function createPluginHooks(
     const bunRoot = path.join(home, ".bun")
     const bunBin = path.join(bunRoot, "bin")
 
-    const { autocodeConfig, generatedSkills } = await preparePluginSkills(input, home, registerSkills)
+    const { autocodeConfig } = await preparePluginSkills(input, home, registerSkills)
     const commandDefinitions = createCommands(
         capabilities,
         autocodeConfig.tiers.spy !== undefined,
@@ -248,7 +246,7 @@ async function createPluginHooks(
             const originalPath = process.env.PATH
             process.env.BUN_INSTALL = bunRoot
             process.env.PATH = originalPath ? `${bunBin}${path.delimiter}${originalPath}` : bunBin
-            await mergeConfig(cfg, input, autocodeConfig, generatedSkills, capabilities, commandDefinitions, (agents: ReturnType<typeof buildAgents>): void => {
+            await mergeConfig(cfg, input, autocodeConfig, capabilities, commandDefinitions, (agents: ReturnType<typeof buildAgents>): void => {
                 smartAgentNames.clear()
                 for (const [name, agent] of Object.entries(agents)) {
                     if (agent.tier === "smart") smartAgentNames.add(name)
@@ -687,6 +685,7 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
     const runtimeContext = context as V2ContextWithRuntimeOverrides
     const directory = String(context.location.directory)
     const worktree = String(context.location.project.directory)
+    await initializeAutocodeGitExclude(directory)
     const capabilities = createPlatformCapabilities(runtimeContext.platformOverride ?? process.platform, process.env)
     const home = runtimeContext.homeOverride ?? homedir()
     const path = capabilities.isWindows ? win32 : posix
@@ -727,7 +726,7 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
         },
     })
 
-    const builtAgents = buildAgents(capabilities, autocodeConfig.externalDirectoryPermissions, runtimeContext.sandboxSupportOverride, generatedSkills.externalSkills, autocodeConfig.tiers)
+    const builtAgents = buildAgents(capabilities, autocodeConfig.externalDirectoryPermissions, runtimeContext.sandboxSupportOverride, autocodeConfig.tiers)
     smartAgentNames.clear()
     for (const [name, agent] of Object.entries(builtAgents)) if (agent.tier === "smart") smartAgentNames.add(name)
     const finalAgents = enforceSpyLearnDenial(preparePluginAgentsAfterOverrides(
@@ -737,7 +736,6 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
         ])),
         autocodeConfig.externalDirectories,
         runtimeContext.sandboxSupportOverride,
-        generatedSkills.externalSkills,
         capabilities,
     ))
 
@@ -899,6 +897,7 @@ const autocode = {
     ...plugin,
     // V1 hosts still require the server hook; V2 hosts use setup instead.
     async server(input: PluginInput): Promise<Hooks> {
+        await initializeAutocodeGitExclude(input.directory)
         return createPluginHooks(input as PluginInputWithSandboxSupportOverride)
     },
 } satisfies LegacyPluginModule & OpenCodePlugin.Plugin

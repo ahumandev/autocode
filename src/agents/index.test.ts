@@ -139,7 +139,7 @@ describe("agent policies", () => {
     })
 
     test("auto registers V2 new and resumed subagent guidance without changing delegation access", () => {
-        const auto = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, [], configuredManagedAgentTiers).auto
+        const auto = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, configuredManagedAgentTiers).auto
 
         expect(auto?.prompt).toBe(autoPrompt)
         expect(auto?.prompt).toContain("New task: call `subagent` with `agent`, `description`, and `prompt`; omit `sessionID`.")
@@ -191,7 +191,7 @@ describe("agent policies", () => {
     })
 
     test("auto delegation prompt uses V2 subagent arguments and returned session IDs", () => {
-        const agents = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, [], configuredManagedAgentTiers)
+        const agents = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, configuredManagedAgentTiers)
         const prompt = String(agents.auto?.prompt ?? "")
 
         expect(prompt).toContain("New task: call `subagent` with `agent`, `description`, and `prompt`; omit `sessionID`.")
@@ -341,7 +341,7 @@ describe("agent policies", () => {
     test("buildAgents returns policy-applied definitions with current internal tier metadata", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {
             "/configured/*": "allow",
-        }, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        }, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
 
         expect(agents.assist?.mode).toBe("primary")
         expect(agents.auto?.mode).toBe("primary")
@@ -360,7 +360,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents registers the exact current agent ID contract", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
         const expectedAgentIds = [
             ...unaffectedAgentIds,
             "assist-browser", "assist-git-conflict", "auto-author", "auto-design", "auto-feature", "auto-general", "auto-refactor", "auto-research", "auto-review-api", "auto-review-ui", "auto-test", "auto-troubleshoot",
@@ -375,7 +375,7 @@ describe("agent policies", () => {
     })
 
     test("document-env allows skill_edit without broader permission grants", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
         const permission = agents["document-env"]?.permission
 
         expect(permissionRule(permission, "skill_edit")).toBe("allow")
@@ -430,7 +430,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents keeps sandbox registrations and guidance on Linux", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
 
         expect(agents["execute-sandbox"]).toBeDefined()
         for (const toolName of ["autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read"]) {
@@ -446,7 +446,7 @@ describe("agent policies", () => {
     })
 
     test("allows only primary agents to create sessions", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
 
         for (const agentName of ["assist", "advise", "auto", "design"] as const) {
             expect(agents[agentName]?.mode).toBe("primary")
@@ -501,7 +501,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents exposes spy as visible read-only direct-use primary", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
         const spy = agents.spy
         const permission = spy?.permission
         const rules = permissionObject(permission)
@@ -526,7 +526,7 @@ describe("agent policies", () => {
 
     test("getAgentPermission restricts direct auto execution to assist and auto", () => {
         const capabilities = createPlatformCapabilities("linux")
-        const agents = buildAgents(capabilities, {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        const agents = buildAgents(capabilities, {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
         const advisePermission = getAgentPermission("advise", capabilities)
         const assistTaskPermission = getV2AgentPermission("assist", capabilities)
         const autoTaskPermission = agents.auto?.permissions
@@ -752,7 +752,7 @@ describe("agent policies", () => {
     })
 
     test("buildAgents assigns every managed agent its current tier", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], configuredManagedAgentTiers)
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
 
         for (const [agentName, tier] of Object.entries(managedAgentTiers)) {
             expect((agents as Record<string, { tier?: string }>)[agentName]?.tier).toBe(tier)
@@ -761,7 +761,7 @@ describe("agent policies", () => {
 
     test("buildAgents registers spy and auto only for their configured tiers", () => {
         const capabilities = createPlatformCapabilities("linux")
-        const build = (tiers: Parameters<typeof buildAgents>[4]) => buildAgents(capabilities, {}, undefined, [], tiers)
+        const build = (tiers: Parameters<typeof buildAgents>[3]): ReturnType<typeof buildAgents> => buildAgents(capabilities, {}, undefined, tiers)
 
         const noTiers = build({})
         expect(noTiers.spy).toBeUndefined()

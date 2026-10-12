@@ -566,6 +566,7 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
             })).toBe("registered")
             lifecycle.registerStart({ sessionID, directory: worktree, worktree }, {
                 run_id: `run-${sessionID}`,
+                owner: { jobName: "session", directory: worktree, sessionID },
                 stdout_log_path: join(root, `${sessionID}.out`),
                 stderr_log_path: join(root, `${sessionID}.err`),
             }, new AbortController().signal)

@@ -22,6 +22,7 @@ import {
 	type ManagedScriptLifecycle,
 } from "./hooks/managed_script_lifecycle";
 import { createNoopAsk } from "./tools/test_context";
+import { managedSkills } from "./skills";
 import { createPlatformCapabilities } from "./utils/platform";
 import { permissionEffect, type PermissionRule } from "./utils/permissions";
 
@@ -36,6 +37,11 @@ const actualRestartCoordinators: PendingAgentRestartCoordinator[] = [];
 const actualCreateManagedScriptLifecycle = createActualManagedScriptLifecycle;
 const actualCreatePendingAgentRestartCoordinator =
 	createActualPendingAgentRestartCoordinator;
+const initializeGitExclude = mock(async (_directory: string): Promise<void> => {});
+
+mock.module("./utils/git_exclude", () => ({
+	initializeAutocodeGitExclude: initializeGitExclude,
+}));
 
 mock.module("./hooks/managed_script_lifecycle", () => ({
 	createManagedScriptLifecycle: (...args: Parameters<typeof createActualManagedScriptLifecycle>): ManagedScriptLifecycle => {
@@ -68,6 +74,7 @@ const tempRoots: string[] = [];
 let originalConfigDir: string | undefined;
 
 beforeEach(async (): Promise<void> => {
+	initializeGitExclude.mockClear();
 	originalConfigDir = process.env.OPENCODE_CONFIG_DIR;
 	process.env.OPENCODE_CONFIG_DIR = await createTempRoot();
 });
@@ -255,6 +262,31 @@ afterEach(async () => {
 });
 
 describe("autocode plugin config", () => {
+	test.each(["V1", "V2"])("%s initializes Git exclude once using cwd, not project root", async (version: string): Promise<void> => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		const directory = join(worktree, "nested");
+		await mkdir(directory, { recursive: true });
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: true } } }));
+		await withEnv({ OPENCODE_CONFIG_DIR: join(root, "config"), PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL }, async (): Promise<void> => {
+			const input: PluginInputWithSandboxSupportOverride = { ...createInput(worktree), directory, homeOverride: root };
+			if (version === "V2") {
+				await registerGeneratedSkills(input);
+			} else {
+				const hooks = await autocode.server(input);
+				try {
+					await (hooks as unknown as PluginConfigHook).config?.({});
+					await hooks.event?.({ event: { type: "session.idle", properties: { sessionID: "session-1" } } });
+				} finally {
+					await hooks.dispose?.();
+				}
+			}
+			expect(initializeGitExclude).toHaveBeenCalledTimes(1);
+			expect(initializeGitExclude).toHaveBeenCalledWith(directory);
+		});
+	});
+
 	test("legacy retains hidden worker defaults, tool shapes, and nesting depth floor", async () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");
@@ -781,7 +813,6 @@ describe("autocode plugin config", () => {
 				XDG_CONFIG_HOME: configHome,
 				OPENCODE_CONFIG_DIR: join(configHome, "opencode"),
 				HOME: root,
-				AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1",
 			},
 			async () => {
 				const cfg: PluginConfig & { permissions?: PermissionRule[] } = {
@@ -900,7 +931,7 @@ describe("autocode plugin config", () => {
 		await writeFile(join(unrelatedSkillDir, "SKILL.md"), "unrelated skill");
 
 		await withEnv(
-			{ AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1" },
+			{},
 			async () => {
 				const input = { ...createInput(worktree), homeOverride: root };
 				const sources = await registerGeneratedSkills(input);
@@ -923,7 +954,7 @@ describe("autocode plugin config", () => {
 		);
 
 		await withEnv(
-			{ AUTOCODE_SKIP_EXTERNAL_SKILLS_BOOTSTRAP: "1" },
+			{},
 			async () => {
 				const hooks = (await autocode.server(createInput(worktree))) as unknown as PluginConfigHook;
 				const baseConfig: PluginConfig = {};
@@ -1265,7 +1296,7 @@ describe("autocode plugin config", () => {
 		).toEqual([]);
 	});
 
-	test("manifest skills grant matching category agents without duplicate grants", async () => {
+	test.each([false, true])("registers only bundled skills while retaining static grants with freeze=%s", async (freeze: boolean): Promise<void> => {
 		const root = await createTempRoot();
 		const configHome = join(root, "xdg");
 		const worktree = join(root, "worktree");
@@ -1277,7 +1308,7 @@ describe("autocode plugin config", () => {
 		);
 		await writeFile(
 			join(worktree, ".opencode", "autocode.jsonc"),
-			JSON.stringify({ autocode: { skills: { freeze: true } } }),
+			JSON.stringify({ autocode: { skills: { freeze } } }),
 		);
 
 		await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root }, async () => {
@@ -1289,22 +1320,23 @@ describe("autocode plugin config", () => {
 			const cfg: PluginConfig = {};
 			await hooks.config?.(cfg);
 
-			expect(skillPermissions(cfg, "execute-code")?.["angular-developer"]).toBe(
-				"allow",
-			);
+			expect(skillPermissions(cfg, "execute-code")?.["angular-developer"]).toBeUndefined();
+			expect(skillPermissions(cfg, "execute-code")?.["code*"]).toBe("allow");
 			expect(
 				skillPermissions(cfg, "execute-os")?.["angular-developer"],
 			).toBeUndefined();
-			expect(skillPermissions(cfg, "auto-test")?.vitest).toBe("allow");
-			expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBe(
-				"allow",
-			);
+			expect(skillPermissions(cfg, "auto-test")?.vitest).toBeUndefined();
+			expect(skillPermissions(cfg, "auto-test")?.["test*"]).toBe("allow");
+			expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBeUndefined();
 			expect(skillPermissions(cfg, "auto")?.["codebase-design"]).toBeUndefined();
-			expect(skillPermissions(cfg, "design")?.["codebase-design"]).toBe(
-				"allow",
-			);
+			expect(skillPermissions(cfg, "design")?.["codebase-design"]).toBeUndefined();
 			const grants = Object.keys(skillPermissions(cfg, "execute-code") ?? {});
 			expect(new Set(grants).size).toBe(grants.length);
+			const registeredSkills = await registerGeneratedSkills(input);
+			expect(registeredSkills.map((skill) => skill.id).sort()).toEqual(
+				freeze ? [] : managedSkills.map((skill) => skill.name).sort(),
+			);
+			expect(await readdir(join(root, ".agents", "skills")).catch(() => [])).toEqual(freeze ? [] : ["autocode"]);
 		});
 	});
 

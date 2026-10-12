@@ -1,12 +1,10 @@
 import { afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { createHash } from "node:crypto"
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, unlink } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import {
     createSkillBundleManifest,
     loadSkillBundleManifest,
     verifySkillBundleManifest,
-    writeSkillBundleManifest,
 } from "../../scripts/skill-bundle"
 
 setDefaultTimeout(30_000)
@@ -14,6 +12,7 @@ setDefaultTimeout(30_000)
 const repositoryRoot = join(import.meta.dir, "..", "..")
 const temporaryRoots: string[] = []
 const temporaryRootPrefix = ".autocode-package-artifacts-"
+const fixtureSkillContent = "# Fixture skill\n"
 
 type CommandResult = {
     exitCode: number
@@ -47,10 +46,6 @@ const packageMetadataCases: PackageMetadataCase[] = [
     ["inconsistent files", (metadata): void => { metadata.files = ["src"] }, "Expected package files to include dist"],
 ]
 
-function sha256(content: string): string {
-    return createHash("sha256").update(content).digest("hex")
-}
-
 async function createTemporaryRoot(): Promise<string> {
     const root = await mkdtemp(join(repositoryRoot, temporaryRootPrefix))
     temporaryRoots.push(root)
@@ -82,18 +77,11 @@ async function createScriptFixture(): Promise<string> {
     const root = await createTemporaryRoot()
     await cp(join(repositoryRoot, "scripts"), join(root, "scripts"), { recursive: true })
     await mkdir(join(root, "node_modules"), { recursive: true })
-    await mkdir(join(root, "src", "skills"), { recursive: true })
-    await mkdir(join(root, "src", "utils"), { recursive: true })
-    await cp(join(repositoryRoot, "src", "skills", "github.ts"), join(root, "src", "skills", "github.ts"))
-    await cp(join(repositoryRoot, "src", "utils", "github.ts"), join(root, "src", "utils", "github.ts"))
-    await writeFixtureFile(root, "tsconfig.json", JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["src/*"] } } }))
     return root
 }
 
 async function createArtifactFixture(): Promise<string> {
     const root = await createScriptFixture()
-    const skillContent = "# Fixture skill\n"
-    const legalContent = "Fixture license\n"
     await writeFixtureFile(root, "package.json", JSON.stringify({
         main: "./dist/plugin.js",
         types: "./dist/plugin.d.ts",
@@ -101,18 +89,7 @@ async function createArtifactFixture(): Promise<string> {
         publishConfig: { access: "public" },
         files: ["dist"],
     }))
-    await writeFixtureFile(root, "src/skills/github.jsonc", JSON.stringify({
-        skills: [{
-            sourceUrl: "https://github.com/acme/widgets",
-            resolvedCommit: "a".repeat(40),
-            relativeInstallPath: "github/acme/widgets/example",
-            category: "code",
-            sha256: sha256(skillContent),
-            legalFiles: [{ relativePath: "LICENSE", sha256: sha256(legalContent) }],
-        }],
-    }))
-    await writeFixtureFile(root, "src/skills/github/acme/widgets/example/SKILL.md", skillContent)
-    await writeFixtureFile(root, "src/skills/github/acme/widgets/LICENSE", legalContent)
+    await writeFixtureFile(root, "src/skills/builtin/SKILL.md", fixtureSkillContent)
     await writeFixtureFile(root, "src/skills/builtin/references/support.md", "Built-in support asset\n")
     await writeFixtureFile(root, "src/skills/builtin/ignored.test.ts", "export {}\n")
     await writeFixtureFile(root, "dist/plugin.js", "export {}\n")
@@ -142,11 +119,13 @@ describe("package skill artifacts", () => {
         await expect(verifySkillBundleManifest(join(root, "dist", "skills"))).resolves.toEqual(await createSkillBundleManifest(join(root, "dist", "skills")))
     })
 
-    test("accepts GitHub provenance and required legal layout in package artifacts", async () => {
+    test("accepts package artifacts containing only built-in skills", async () => {
         const root = await createArtifactFixture()
         const verified = await runScript(root, "verify-package-artifacts.ts")
 
         expect(verified.exitCode).toBe(0)
+        expect((await readdir(join(root, "dist", "skills"))).sort()).toEqual([".bundle-manifest.json", "builtin"])
+        expect(await Bun.file(join(root, "dist", "skills", "builtin", "SKILL.md")).text()).toBe(fixtureSkillContent)
     })
 
     test.each(packageMetadataCases)("rejects %s package metadata", async (_name, update, expectedOutput) => {
@@ -162,26 +141,13 @@ describe("package skill artifacts", () => {
         expect(verified.output).toContain(expectedOutput)
     })
 
-    test("rejects a missing GitHub skill tree", async () => {
-        const root = await createArtifactFixture()
-        await writeFixtureFile(root, "dist/skills/github.jsonc", JSON.stringify({ skills: [] }))
-        await rm(join(root, "dist", "skills", "github"), { recursive: true, force: true })
-        await writeSkillBundleManifest(join(root, "dist", "skills"))
+    test("rejects missing and changed built-in bundle files", async () => {
+        const missingFileRoot = await createArtifactFixture()
+        await unlink(join(missingFileRoot, "dist", "skills", "builtin", "references", "support.md"))
+        const missingFile = await runScript(missingFileRoot, "verify-package-artifacts.ts")
 
-        const verified = await runScript(root, "verify-package-artifacts.ts")
-
-        expect(verified.exitCode).not.toBe(0)
-        expect(verified.output).toContain("Missing GitHub skill tree")
-    })
-
-    test("rejects missing legal notices and changed bundle files", async () => {
-        const missingLegalRoot = await createArtifactFixture()
-        await unlink(join(missingLegalRoot, "dist", "skills", "github", "acme", "widgets", "LICENSE"))
-        await writeSkillBundleManifest(join(missingLegalRoot, "dist", "skills"))
-        const missingLegal = await runScript(missingLegalRoot, "verify-package-artifacts.ts")
-
-        expect(missingLegal.exitCode).not.toBe(0)
-        expect(missingLegal.output).toContain("cannot read legal file")
+        expect(missingFile.exitCode).not.toBe(0)
+        expect(missingFile.output).toContain("file inventory or SHA-256 digest does not match bundle")
 
         const changedFileRoot = await createArtifactFixture()
         await writeFixtureFile(changedFileRoot, "dist/skills/builtin/references/support.md", "Changed asset\n")

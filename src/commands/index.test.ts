@@ -104,7 +104,7 @@ describe("commands", () => {
     })
 
     test("every explicit command target resolves in the current agent registry", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, [], { balanced: {}, smart: {}, spy: {} })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, { balanced: {}, smart: {}, spy: {} })
         const targets = Object.entries(commands)
             .flatMap(([commandName, command]) => "agent" in command && typeof command.agent === "string" ? [[commandName, command.agent] as const] : [])
 

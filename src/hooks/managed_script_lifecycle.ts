@@ -1,7 +1,9 @@
 import type { Event, OpencodeClient } from "@opencode-ai/sdk"
-import { resolveManagedScriptProjectOwner } from "@/utils/managed_script_project"
-import { cleanupManagedScriptServices, createManagedScriptRuntime, type ManagedScriptRuntime, type ManagedScriptRuntimeDependencies, type ManagedScriptServiceStartResult } from "@/utils/managed_script_runtime"
+import type { ManagedScriptProjectOwnerResolution } from "@/utils/managed_script_project"
+import { cleanupManagedScriptServices, createManagedScriptRuntime, type ManagedScriptLaunchOwner, type ManagedScriptRuntime, type ManagedScriptRuntimeDependencies, type ManagedScriptServiceStartResult } from "@/utils/managed_script_runtime"
 import type { SessionJobContext } from "@/utils/jobs"
+
+const maximumCleanupAttempts = 3
 
 export type ManagedScriptLifecycle = {
     registerStart(context: SessionJobContext, startResult: ManagedScriptServiceStartResult, abort: AbortSignal): void
@@ -12,11 +14,18 @@ export type ManagedScriptLifecycle = {
 export type ManagedScriptLifecycleDependencies = {
     client?: OpencodeClient
     runtimeFactory?: (dependencies: ManagedScriptRuntimeDependencies) => ManagedScriptRuntime
+    createRuntime?: (context: SessionJobContext, owner: ManagedScriptLaunchOwner) => ManagedScriptRuntime
+}
+
+type ManagedScriptRegisteredLaunch = {
+    context: SessionJobContext
+    owner: ManagedScriptLaunchOwner
+    cleanupAttempts: number
 }
 
 type ManagedScriptSessionEntry = {
     context: SessionJobContext
-    runIDs: Set<string>
+    launches: Map<string, ManagedScriptRegisteredLaunch>
     abortListeners: Map<AbortSignal, () => void>
     cleanup?: Promise<void>
 }
@@ -72,10 +81,47 @@ function reportCleanupFailure(error: unknown): void {
     console.warn(`autocode: cleanup managed script services failed: ${cleanupErrorMessage(error)}`)
 }
 
+function getCleanupResultFailure(result: unknown): Error | undefined {
+    if (typeof result !== "object" || result === null || Array.isArray(result)) return undefined
+    const record = result as Record<string, unknown>
+    const error = record.error
+    const hasError = (typeof error === "string" && error.trim().length > 0)
+        || (typeof error === "object" && error !== null && !Array.isArray(error))
+    const hasFailures = [record.failed_run_ids, record.failures, record.errors]
+        .some((value: unknown): boolean => Array.isArray(value) && value.length > 0)
+    if (record.ok !== false && record.success !== false && !hasError && !hasFailures) return undefined
+    const details: unknown[] = [
+        error,
+        record,
+        ...(Array.isArray(record.failures) ? record.failures : []),
+        ...(Array.isArray(record.errors) ? record.errors : []),
+    ]
+    const message = details.map((value: unknown): string | undefined => {
+        if (typeof value === "string") return value.trim() ? value : undefined
+        return getRecordString(value, "message")
+    }).find((value: string | undefined): boolean => value !== undefined)
+    return new Error(message ?? "Managed script service cleanup reported failure.")
+}
+
+function hasRetryableLaunches(entry: ManagedScriptSessionEntry): boolean {
+    for (const launch of entry.launches.values()) {
+        if (launch.cleanupAttempts < maximumCleanupAttempts) return true
+    }
+    return false
+}
+
 export function createManagedScriptLifecycle(dependencies: ManagedScriptLifecycleDependencies = {}): ManagedScriptLifecycle {
     const entries = new Map<string, ManagedScriptSessionEntry>()
     const activeCleanups = new Set<Promise<void>>()
     const runtimeFactory = dependencies.runtimeFactory ?? createManagedScriptRuntime
+    const createRuntime = dependencies.createRuntime ?? ((context: SessionJobContext, owner: ManagedScriptLaunchOwner): ManagedScriptRuntime => runtimeFactory({
+        context,
+        ...(dependencies.client ? { client: dependencies.client } : {}),
+        resolveOwner: async (): Promise<ManagedScriptProjectOwnerResolution> => ({
+            ok: true,
+            owner: { jobName: owner.jobName, directory: owner.directory },
+        }),
+    }))
     let disposing = false
     let disposed = false
     let disposePromise: Promise<void> | undefined
@@ -89,28 +135,39 @@ export function createManagedScriptLifecycle(dependencies: ManagedScriptLifecycl
 
     function createSessionEntry(context: SessionJobContext): ManagedScriptSessionEntry {
         return {
-            context: { sessionID: context.sessionID, directory: context.directory, worktree: context.worktree },
-            runIDs: new Set<string>(),
+            context,
+            launches: new Map<string, ManagedScriptRegisteredLaunch>(),
             abortListeners: new Map<AbortSignal, () => void>(),
         }
     }
 
     async function cleanupEntry(sessionID: string, entry: ManagedScriptSessionEntry): Promise<void> {
-        try {
-            const context: SessionJobContext = { ...entry.context }
-            const runtime = runtimeFactory({
-                context,
-                ...(dependencies.client ? { client: dependencies.client } : {}),
-                resolveOwner: async () => await resolveManagedScriptProjectOwner({
-                    context,
-                    ...(dependencies.client ? { client: dependencies.client } : {}),
-                }),
-            })
-            await cleanupManagedScriptServices(runtime)
+        const owners = new Map<string, Map<string, ManagedScriptRegisteredLaunch>>()
+        for (const [runID, launch] of entry.launches) {
+            const key = JSON.stringify([launch.owner.directory, launch.owner.jobName, launch.owner.sessionID])
+            const launches = owners.get(key) ?? new Map<string, ManagedScriptRegisteredLaunch>()
+            launches.set(runID, launch)
+            owners.set(key, launches)
         }
-        finally {
+        const results = await Promise.allSettled(Array.from(owners.values(), async (launches: Map<string, ManagedScriptRegisteredLaunch>): Promise<void> => {
+            const launch = Array.from(launches.values()).find((candidate: ManagedScriptRegisteredLaunch): boolean => candidate.cleanupAttempts < maximumCleanupAttempts)
+            if (launch === undefined) return
+            for (const candidate of launches.values()) {
+                if (candidate.cleanupAttempts < maximumCleanupAttempts) candidate.cleanupAttempts += 1
+            }
+            const runtime = createRuntime(launch.context, launch.owner)
+            const failure = getCleanupResultFailure(await cleanupManagedScriptServices(runtime))
+            if (failure !== undefined) throw failure
+            for (const [runID, candidate] of launches) {
+                if (entry.launches.get(runID) === candidate) entry.launches.delete(runID)
+            }
+        }))
+        if (entry.launches.size === 0) {
             removeAbortListeners(entry)
             if (entries.get(sessionID) === entry) entries.delete(sessionID)
+        }
+        for (const result of results) {
+            if (result.status === "rejected") reportCleanupFailure(result.reason)
         }
     }
 
@@ -118,13 +175,16 @@ export function createManagedScriptLifecycle(dependencies: ManagedScriptLifecycl
         const entry = entries.get(sessionID)
         if (entry === undefined) return Promise.resolve()
         if (entry.cleanup !== undefined) return entry.cleanup
-        const cleanup = cleanupEntry(sessionID, entry)
+        if (!hasRetryableLaunches(entry)) return Promise.resolve()
+        // Publish cleanup before factories can synchronously register another launch.
+        const cleanup = Promise.resolve().then((): Promise<void> => cleanupEntry(sessionID, entry))
         entry.cleanup = cleanup
         activeCleanups.add(cleanup)
-        void cleanup.then(
-            (): void => { activeCleanups.delete(cleanup) },
-            (): void => { activeCleanups.delete(cleanup) },
-        )
+        const clearCleanup = (): void => {
+            if (entry.cleanup === cleanup) delete entry.cleanup
+            activeCleanups.delete(cleanup)
+        }
+        void cleanup.then(clearCleanup, clearCleanup)
         return cleanup
     }
 
@@ -143,11 +203,12 @@ export function createManagedScriptLifecycle(dependencies: ManagedScriptLifecycl
     }
 
     async function drainDisposal(): Promise<void> {
-        while (entries.size > 0 || activeCleanups.size > 0) {
+        while (true) {
             const cleanups = new Set<Promise<void>>(activeCleanups)
-            for (const sessionID of entries.keys()) {
-                cleanups.add(cleanupSession(sessionID))
+            for (const [sessionID, entry] of entries) {
+                if (entry.cleanup !== undefined || hasRetryableLaunches(entry)) cleanups.add(cleanupSession(sessionID))
             }
+            if (cleanups.size === 0) return
             const results = await Promise.allSettled(cleanups)
             for (const result of results) {
                 if (result.status === "rejected") reportCleanupFailure(result.reason)
@@ -159,13 +220,14 @@ export function createManagedScriptLifecycle(dependencies: ManagedScriptLifecycl
         try {
             while (true) {
                 await drainDisposal()
-                if (entries.size === 0 && activeCleanups.size === 0) return
+                if (activeCleanups.size === 0 && !Array.from(entries.values()).some(hasRetryableLaunches)) return
             }
         }
         catch (error) {
             reportCleanupFailure(error)
         }
         finally {
+            for (const entry of entries.values()) removeAbortListeners(entry)
             disposing = false
             disposed = true
         }
@@ -173,16 +235,21 @@ export function createManagedScriptLifecycle(dependencies: ManagedScriptLifecycl
 
     return {
         registerStart(context: SessionJobContext, startResult: ManagedScriptServiceStartResult, abort: AbortSignal): void {
-            const sessionID = context.sessionID
+            const owner: ManagedScriptLaunchOwner = Object.freeze({
+                jobName: startResult.owner.jobName,
+                directory: startResult.owner.directory,
+                sessionID: startResult.owner.sessionID,
+            })
+            const launchContext: SessionJobContext = Object.freeze({ sessionID: owner.sessionID, directory: owner.directory, worktree: context.worktree })
+            const sessionID = owner.sessionID
             const mustCleanup = disposing || disposed
             if (disposed) {
                 disposed = false
                 disposePromise = undefined
             }
-            const existing = entries.get(sessionID)
-            const entry = existing?.cleanup === undefined ? existing ?? createSessionEntry(context) : createSessionEntry(context)
+            const entry = entries.get(sessionID) ?? createSessionEntry(launchContext)
             entries.set(sessionID, entry)
-            entry.runIDs.add(startResult.run_id)
+            entry.launches.set(startResult.run_id, { context: launchContext, owner, cleanupAttempts: 0 })
             registerAbort(entry, abort)
             if (abort.aborted) {
                 void cleanupSession(sessionID).catch(reportCleanupFailure)

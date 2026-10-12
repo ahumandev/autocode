@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from "bun:test"
+import { createHash } from "node:crypto"
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { mkdtemp } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { ensureGeneratedSkills, getGeneratedGitHubSkillsRoot, getGeneratedSkillsRoot, managedSkills, reconcileGeneratedSkills } from "./index"
+import { pathToFileURL } from "node:url"
+import { ensureGeneratedSkills, getGeneratedSkillsRoot, managedSkills, reconcileGeneratedSkills } from "./index"
 
 setDefaultTimeout(30_000)
 
@@ -43,9 +45,41 @@ const sourceSkillPathExpectations = [
 const originalHome = process.env.HOME
 const originalXdgConfigHome = process.env.XDG_CONFIG_HOME
 const tempRoots: string[] = []
+const legacyGitHubSkillsRelativePath = path.join(".agents", "skills", "github")
 
 function sourceSkillsRoot(): string {
     return path.join(import.meta.dir, "..", "skills")
+}
+
+async function loadBundledSkillFixture(home: string): Promise<typeof import("./index")> {
+    const root = path.join(home, "bundle", "skills")
+    mkdirSync(root, { recursive: true })
+    for (const directory of expectedManagedDirectories) {
+        mkdirSync(path.join(root, directory), { recursive: true })
+        writeFileSync(path.join(root, directory, "SKILL.md"), `---\nname: ${directory}\ndescription: Builtin fixture\n---\nBuiltin ${directory}\n`)
+    }
+    const referencesRoot = path.join(root, "author-agent", "references")
+    mkdirSync(referencesRoot)
+    writeFileSync(path.join(referencesRoot, "support.txt"), "builtin support")
+
+    const relativeInstallPath = "github/antfu/skills/vitest"
+    const snapshot = "---\nname: vitest\ndescription: GitHub fixture\n---\nGitHub snapshot\n"
+    mkdirSync(path.join(root, relativeInstallPath), { recursive: true })
+    writeFileSync(path.join(root, relativeInstallPath, "SKILL.md"), snapshot)
+    writeFileSync(path.join(root, "github.jsonc"), JSON.stringify({ skills: [{
+        sourceUrl: "https://github.com/antfu/skills/tree/main/skills/vitest",
+        resolvedCommit: "a".repeat(40),
+        relativeInstallPath,
+        category: "test",
+        sha256: createHash("sha256").update(snapshot).digest("hex"),
+    }] }))
+
+    const pathsModuleUrl = pathToFileURL(path.join(import.meta.dir, "..", "utils", "paths.ts")).href
+    const source = readFileSync(path.join(import.meta.dir, "index.ts"), "utf8")
+        .replace('from "@/utils/paths"', `from "${pathsModuleUrl}"`)
+    const modulePath = path.join(root, "index.ts")
+    writeFileSync(modulePath, source)
+    return await import(pathToFileURL(modulePath).href)
 }
 
 async function withIsolatedSkillConfigHome<T>(fn: (home: string, xdgConfigHome: string) => Promise<T>): Promise<T> {
@@ -137,11 +171,9 @@ describe("generated skill reconciliation", () => {
     test("uses HOME agents root regardless of XDG config", async () => {
         await withIsolatedSkillConfigHome(async (home, xdgConfigHome) => {
             expect(getGeneratedSkillsRoot({ home })).toBe(path.join(home, ".agents", "skills", "autocode"))
-            expect(getGeneratedGitHubSkillsRoot({ home })).toBe(path.join(home, ".agents", "skills", "github"))
             expect(getGeneratedSkillsRoot({ home })).not.toContain(xdgConfigHome)
             delete process.env.XDG_CONFIG_HOME
             expect(getGeneratedSkillsRoot({ home })).toBe(path.join(home, ".agents", "skills", "autocode"))
-            expect(getGeneratedGitHubSkillsRoot({ home })).toBe(path.join(home, ".agents", "skills", "github"))
         })
     })
 
@@ -159,19 +191,56 @@ describe("generated skill reconciliation", () => {
         })
     })
 
-    test("extracts each missing GitHub skill root independently", async () => {
+    test("extracts only builtins from a mixed bundle without touching GitHub or user skills", async () => {
         await withIsolatedSkillConfigHome(async (home) => {
-            const root = getGeneratedGitHubSkillsRoot({ home })
+            const fixture = await loadBundledSkillFixture(home)
+            const builtinRoot = getGeneratedSkillsRoot({ home })
+            const root = path.join(home, legacyGitHubSkillsRelativePath)
             const present = path.join(root, "angular", "skills", "angular-developer")
-            const missing = path.join(root, "angular", "skills", "angular-new-app")
+            const userSkill = path.join(home, ".agents", "skills", "user", "SKILL.md")
             mkdirSync(present, { recursive: true })
             writeFileSync(path.join(present, "SKILL.md"), "user skill")
+            mkdirSync(path.dirname(userSkill), { recursive: true })
+            writeFileSync(userSkill, "keep user skill")
+            const warning = spyOn(console, "warn").mockImplementation((): void => {})
 
-            const result = await reconcileGeneratedSkills({ home })
+            try {
+                const result = await fixture.reconcileGeneratedSkills({ home })
 
-            expect(result.changedPaths).toContain(missing)
-            expect(readFileSync(path.join(missing, "SKILL.md"), "utf8")).toContain("angular-new-app")
-            expect(readFileSync(path.join(present, "SKILL.md"), "utf8")).toBe("user skill")
+                expect(result).toEqual({
+                    root: builtinRoot,
+                    changedPaths: expectedManagedDirectories.map((directory) => path.join(builtinRoot, directory)),
+                })
+                expect(fixture.managedSkills.map((skill) => skill.directory)).toEqual(expectedManagedDirectories)
+                for (const directory of expectedManagedDirectories) {
+                    expect(readFileSync(path.join(builtinRoot, directory, "SKILL.md"), "utf8"))
+                        .toBe(readFileSync(path.join(home, "bundle", "skills", directory, "SKILL.md"), "utf8"))
+                }
+                expect(readFileSync(path.join(builtinRoot, "author-agent", "references", "support.txt"), "utf8")).toBe("builtin support")
+                expect(existsSync(path.join(builtinRoot, "github"))).toBe(false)
+                expect(readdirSync(root)).toEqual(["angular"])
+                expect(existsSync(path.join(root, "antfu", "skills", "vitest"))).toBe(false)
+                expect(readFileSync(path.join(present, "SKILL.md"), "utf8")).toBe("user skill")
+                expect(readFileSync(userSkill, "utf8")).toBe("keep user skill")
+                expect(warning).not.toHaveBeenCalled()
+            } finally {
+                warning.mockRestore()
+            }
+        })
+    })
+
+    test.each([false, true])("ignores a missing GitHub inventory with skipExtraction=%s", async (skipExtraction: boolean): Promise<void> => {
+        await withIsolatedSkillConfigHome(async (home) => {
+            const fixture = await loadBundledSkillFixture(home)
+            rmSync(path.join(home, "bundle", "skills", "github.jsonc"))
+
+            const result = await fixture.reconcileGeneratedSkills({ home, skipExtraction })
+
+            expect(result).toEqual({
+                root: getGeneratedSkillsRoot({ home }),
+                changedPaths: skipExtraction ? [] : expectedManagedDirectories.map((directory) => path.join(result.root, directory)),
+            })
+            expect(existsSync(path.join(home, legacyGitHubSkillsRelativePath))).toBe(false)
         })
     })
 

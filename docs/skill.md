@@ -6,11 +6,12 @@
 
 - Active local-memory store: `.opencode/autocode/memories/`. A fresh transition starts empty; runtime creates Markdown `.md` memory files only through `learn`.
 - Reusable skills: each skill directory contains `SKILL.md` and may contain supporting files.
-- Managed built-in skills: `$XDG_CONFIG_HOME/skills/autocode` when `XDG_CONFIG_HOME` is set; otherwise `~/.agents/skills/autocode`.
-- Managed GitHub skills: `$XDG_CONFIG_HOME/skills/autocode/github/<owner>/<project>/<skill>/` when `XDG_CONFIG_HOME` is set; otherwise `~/.agents/skills/autocode/github/<owner>/<project>/<skill>/`.
+- Bundled AutoCode sources: local `src/skills/<skill>/` only; no remote skill acquisition, third-party packaging, or snapshots.
+- Managed built-in skills: `~/.agents/skills/autocode/`, independent of `XDG_CONFIG_HOME`.
 - Recommended global manual skill path: `~/.config/opencode/skills/<skill-name>/`.
-- Do not put custom skills in managed `autocode` directories; AutoCode reconciles them.
-- GitHub is the only supported provider. Its primary cache is `~/.cache/autocode/github/<owner>/<project>/`; the fallback is `.opencode/autocode/cache/github/<owner>/<project>/` only after primary access returns `EACCES` or `EPERM`. Both cache trees are disposable. `bun run skill:sync` refreshes tracked snapshots; `bun run skill:sync -- --force-refresh` bypasses cached repositories.
+- Do not put custom skills in managed `autocode` directories; AutoCode extracts only missing bundled directories.
+- Existing bundled directories and external/user skill folders remain untouched.
+- `skills.freeze: true` skips extraction, not registration of existing bundled skills.
 
 Automatic local-memory recall considers only an eligible user message: `output.message.role` is exactly `user`, it has at least one text part, and authoritative runtime agent tier is `smart`. Only the first eligible user-role text message for each `[sessionID, agentName]` triggers automatic recall.
 
@@ -68,6 +69,8 @@ description: Use this skill when [TRIGGER] to [BENEFIT]. NEVER for [EXCLUSIONS].
 Use `skill_edit` to create or update reusable skills and their `references[]`. Keep reusable instructions, templates, and references in the skill directory; do not use `learn` as a skill-authoring path.
 
 ## Skill discovery and loading
+
+AutoCode source allowlist lives in `src/skills/index.ts`; `src/plugin.ts` registers generated bundled skills with OpenCode. Loading existing reusable user/external skills remains separate from bundling.
 
 The agent system prompt instructs: check skill list before work; load a matching skill through `skill`.
 

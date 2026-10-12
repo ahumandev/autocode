@@ -4,6 +4,7 @@ import { isAbsolute, win32 } from "node:path"
 import type { ManagedScriptLifecycle } from "@/hooks/managed_script_lifecycle"
 import { createManagedScriptRuntime, type ManagedScriptRuntime, type ManagedScriptRuntimeDependencies } from "@/utils/managed_script_runtime"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
+import { ManagedScriptWindowsError } from "@/utils/managed_script_windows"
 
 export type AutocodeScriptServiceToolDependencies = Omit<ManagedScriptRuntimeDependencies, "client" | "context">
 
@@ -40,7 +41,7 @@ function createRetryFailureResponse(issue: ScriptServiceToolIssue): string {
     return JSON.stringify({
         ok: false,
         status: "blocked",
-        ...readFailureResponse(createRetryResponse(serviceAction, issue.message, "Provide source-relative .mjs entry, such as task.mjs or nested/task.mjs, and string argv values when starting; otherwise provide run_id.")),
+        ...readFailureResponse(createRetryResponse(serviceAction, issue.message, "Provide job-source-relative .mjs entry, such as task.mjs or nested/task.mjs, in prepared shared scratch root and string argv values when starting; otherwise provide run_id.")),
         blocker: issue,
     })
 }
@@ -50,6 +51,7 @@ function createUnexpectedFailureResponse(error: unknown): string {
         ok: false,
         status: "failed",
         ...readFailureResponse(createAbortResponse(serviceAction, error)),
+        ...(error instanceof ManagedScriptWindowsError ? { code: error.code, windows_cleanup: error.windows_cleanup } : {}),
     })
 }
 
@@ -107,12 +109,12 @@ export function createAutocodeScriptServiceTool(
     lifecycle?: ManagedScriptLifecycle,
 ): ReturnType<typeof tool> {
     return tool({
-        description: "Start source-relative .mjs scripted services, or inspect or stop managed services.",
+        description: "Start, inspect, or stop long-lived .mjs services.",
         args: {
             action: tool.schema.enum(serviceActions).describe("Required service action: start, status, or stop."),
-            entry: tool.schema.string().optional().describe("Required source-relative .mjs entry filename only when action is start, such as task.mjs or nested/task.mjs; omit src/ prefix."),
+            entry: tool.schema.string().optional().describe("Required job-source-relative .mjs filename only for start, such as task.mjs or nested/task.mjs."),
             argv: tool.schema.array(tool.schema.string()).optional().describe("Optional string arguments only when action is start."),
-            run_id: tool.schema.string().optional().describe("Required opaque job-owned run ID only when action is status or stop."),
+            run_id: tool.schema.string().optional().describe("Required opaque run ID returned by start for status or stop; ports are diagnostics, not IDs."),
         },
         async execute(args, context): Promise<string> {
             const validationError = validateInput(args)
@@ -126,7 +128,13 @@ export function createAutocodeScriptServiceTool(
                         ...(args.argv !== undefined ? { argv: args.argv } : {}),
                     })
                     lifecycle?.registerStart(context, startResult, context.abort)
-                    return JSON.stringify(startResult)
+                    return JSON.stringify({
+                        run_id: startResult.run_id,
+                        stdout_log_path: startResult.stdout_log_path,
+                        stderr_log_path: startResult.stderr_log_path,
+                        observed_ports: startResult.observed_ports,
+                        message: startResult.message,
+                    })
                 }
                 return await executeServiceAction(runtime, args)
             }

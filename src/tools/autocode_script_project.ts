@@ -43,11 +43,11 @@ function createProjectDetails(result: ManagedScriptProjectResult): Record<string
     return {
         ...(result.paths
             ? {
-                workspace_path: result.paths.workspacePath,
+                workspace_path: result.paths.directory,
                 project_path: result.paths.scriptsRoot,
                 source_path: result.paths.sourceRoot,
-                logs_path: result.paths.logsPath,
-                services_path: result.paths.servicesPath,
+                logs_path: result.paths.logsRoot,
+                services_path: result.paths.servicesRoot,
             }
             : {}),
         ...(result.dependencies ? { dependency_provenance: result.dependencies } : {}),
@@ -88,7 +88,7 @@ function createSuccessResponse(result: Extract<ManagedScriptProjectResult, { ok:
         ok: true,
         status: "ready",
         ...createProjectDetails(result),
-        instruction: "Managed scripts project is ready. Write scripts in src/; this tool does not run scripts or services.",
+        instruction: "Shared managed scripts project is ready. Write scripts in the returned source_path; this tool does not run scripts or services.",
     })
 }
 
@@ -119,7 +119,7 @@ export function createAutocodeScriptProjectTool(
     projectFactory: ManagedScriptProjectFactory = createManagedScriptProject,
 ): ReturnType<typeof tool> {
     return tool({
-        description: "ALWAYS call autocode_script_project BEFORE creating temporary session scripts. This tool sets up sub-project to contain scripts.",
+        description: "Call autocode_script_project to get source_path for managed scripts.",
         args: {
             dependencies: tool.schema.record(tool.schema.string(), tool.schema.string()).optional().describe("Optional npm dependency package names and version ranges."),
         },

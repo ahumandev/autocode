@@ -3,8 +3,6 @@ import { cp, mkdir, mkdtemp, rename, rm } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { resolveOpenCodePaths, type OpenCodePathResolverDependencies } from "@/utils/paths"
-import { loadGitHubSkillInventory } from "./github"
-import type { ExternalSkill } from "../utils/external"
 
 export type ManagedSkillDefinition = {
     name: string
@@ -20,7 +18,6 @@ export type GeneratedSkillsOptions = OpenCodePathResolverDependencies & {
 export type GeneratedSkillsResult = {
     root: string
     changedPaths: string[]
-    externalSkills: ExternalSkill[]
 }
 
 type ManagedBundleItem = {
@@ -116,17 +113,6 @@ export function getGeneratedSkillsRoot(dependencies: OpenCodePathResolverDepende
     return resolveOpenCodePaths(dependencies).generatedSkillsRoot
 }
 
-export function getGeneratedGitHubSkillsRoot(dependencies: OpenCodePathResolverDependencies = {}): string {
-    return resolveOpenCodePaths(dependencies).generatedGitHubSkillsRoot
-}
-
-function assertSafeRelativePath(relativePath: string): void {
-    const segments = relativePath.split("/")
-    if (path.isAbsolute(relativePath) || relativePath.includes("\\") || segments.some((segment) => !segment || segment === "." || segment === "..")) {
-        throw new Error(`Unsafe bundled skill path: ${relativePath}`)
-    }
-}
-
 function skillRootExists(destination: string): boolean {
     try {
         return statSync(destination).isDirectory()
@@ -149,52 +135,24 @@ async function extractMissingSkill(source: ManagedBundleItem, destination: strin
     await rm(stagingRoot, { recursive: true, force: true })
 }
 
-async function managedBundleItems(): Promise<{ items: ManagedBundleItem[]; externalSkills: ExternalSkill[] }> {
-    const items: ManagedBundleItem[] = []
-    for (const directory of managedSkillDirectories) {
-        const sourcePath = path.join(skillSourceRoot, directory)
-        items.push({ relativePath: directory, sourcePath })
-    }
-
-    const inventoryPath = path.join(skillSourceRoot, "github.jsonc")
-    const inventory = await loadGitHubSkillInventory(inventoryPath, skillSourceRoot)
-    for (const skill of inventory.skills) {
-        assertSafeRelativePath(skill.relativeInstallPath)
-        items.push({ relativePath: skill.relativeInstallPath, sourcePath: path.join(skillSourceRoot, skill.relativeInstallPath) })
-    }
-
-    const externalSkills = inventory.skills.map((skill) => {
-        const [, owner, project, skillName] = skill.relativeInstallPath.split("/")
-        if (!owner || !project || !skillName) throw new Error(`Invalid GitHub skill path: ${skill.relativeInstallPath}`)
-        return { category: skill.category, skillName, owner, project }
-    })
-    return { items, externalSkills: dedupeExternalSkills(externalSkills) }
-}
-
-function dedupeExternalSkills(skills: ExternalSkill[]): ExternalSkill[] {
-    const seen = new Set<string>()
-    return skills.filter((skill) => {
-        const key = `${skill.category}\0${skill.skillName}`
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-    })
+function managedBundleItems(): ManagedBundleItem[] {
+    return managedSkillDirectories.map((directory) => ({
+        relativePath: directory,
+        sourcePath: path.join(skillSourceRoot, directory),
+    }))
 }
 
 export async function reconcileGeneratedSkills(options: GeneratedSkillsOptions = {}): Promise<GeneratedSkillsResult> {
     const paths = resolveOpenCodePaths(options)
     const root = paths.generatedSkillsRoot
-    const bundle = await managedBundleItems()
-    if (options.skipExtraction) return { root, changedPaths: [], externalSkills: bundle.externalSkills }
+    const items = managedBundleItems()
+    if (options.skipExtraction) return { root, changedPaths: [] }
 
     await mkdir(root, { recursive: true })
     const changedPaths: string[] = []
 
-    for (const item of bundle.items) {
-        const isGitHubSkill = item.relativePath.startsWith("github/")
-        const destination = isGitHubSkill
-            ? path.join(paths.generatedGitHubSkillsRoot, item.relativePath.slice("github/".length))
-            : path.join(root, item.relativePath)
+    for (const item of items) {
+        const destination = path.join(root, item.relativePath)
         if (skillRootExists(destination)) continue
         try {
             await extractMissingSkill(item, destination)
@@ -203,7 +161,7 @@ export async function reconcileGeneratedSkills(options: GeneratedSkillsOptions =
             console.warn(`autocode: skill extraction failed for ${item.relativePath}: ${error instanceof Error ? error.message : String(error)}`)
         }
     }
-    return { root, changedPaths, externalSkills: bundle.externalSkills }
+    return { root, changedPaths }
 }
 
 export async function ensureGeneratedSkills(options: GeneratedSkillsOptions = {}): Promise<string> {

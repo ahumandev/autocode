@@ -9,6 +9,7 @@ export type ManagedScriptProjectFactory = (dependencies: ManagedScriptProjectDep
 
 type ScriptInstallToolInput = {
     dependencies?: Record<string, string>
+    upgrade?: boolean
 }
 
 type ScriptInstallToolIssue = {
@@ -45,14 +46,14 @@ function createProjectDetails(result: ManagedScriptProjectResult): Record<string
     return {
         ...(result.paths
             ? {
-                workspace_path: result.paths.workspacePath,
+                workspace_path: result.paths.directory,
                 project_path: result.paths.scriptsRoot,
                 source_path: result.paths.sourceRoot,
                 manifest_path: result.paths.manifestPath,
-                lock_path: result.paths.lockPath,
+                lock_path: result.paths.lockfilePath,
                 node_modules_path: result.paths.nodeModulesPath,
-                logs_path: result.paths.logsPath,
-                npm_log_path: result.npm?.logPath,
+                logs_path: result.paths.logsRoot,
+                ...(result.npm ? { npm_log_path: result.npm.logPath } : {}),
             }
             : {}),
         ...(result.dependencies ? { dependency_provenance: result.dependencies } : {}),
@@ -101,7 +102,7 @@ function createInstallResponse(result: ManagedScriptProjectResult): string {
     if (result.ok) return createSuccessResponse(result)
     if (result.blocker) {
         const instruction = result.blocker.code === "job_workspace_required"
-            ? "Start or select one timestamped job workspace for current session, then retry install."
+            ? "Set current session title to produce a valid job name, then retry install."
             : result.blocker.code === "runtime_unavailable"
                 ? "Install Node.js 20+ and npm in current runtime, then retry install."
                 : "Correct managed-script install input or project state, then retry install."
@@ -115,6 +116,9 @@ function validateInput(args: ScriptInstallToolInput): ScriptInstallToolIssue | u
     if (args.dependencies !== undefined && (typeof args.dependencies !== "object" || args.dependencies === null || Array.isArray(args.dependencies) || Object.values(args.dependencies).some((range: string): boolean => typeof range !== "string"))) {
         return { code: "validation_error", message: "dependencies must be a record of npm package names to version ranges." }
     }
+    if (args.upgrade !== undefined && typeof args.upgrade !== "boolean") {
+        return { code: "validation_error", message: "upgrade must be a boolean." }
+    }
     return undefined
 }
 
@@ -124,20 +128,22 @@ export function createAutocodeScriptInstallTool(
     projectFactory: ManagedScriptProjectFactory = createManagedScriptProject,
 ): ReturnType<typeof tool> {
     return tool({
-        description: "Install session script dependencies for managed scripts project. This installs only; It does not run scripts or services.",
+        description: "Add or repair managed-script dependencies. Healthy declared environment is a no-op.",
         args: {
-            dependencies: tool.schema.record(tool.schema.string(), tool.schema.string()).optional().describe("Optional npm package names mapped to requested version ranges."),
+            dependencies: tool.schema.record(tool.schema.string(), tool.schema.string()).optional().describe("Optional npm registry package names mapped to version ranges or tags; no URL, Git, or archive sources. Omit for declared-environment repair."),
+            upgrade: tool.schema.boolean().optional().default(false).describe("Incompatible requested dependencies require explicit upgrade:true; default false. Requested dependencies only; never blanket latest or upgrade-all updates."),
         },
         async execute(args, context): Promise<string> {
             const validationError = validateInput(args)
             if (validationError) {
-                return createRetryFailureResponse(validationError, "Provide dependencies as npm package-to-range strings.")
+                return createRetryFailureResponse(validationError, "Provide dependencies as npm package-to-range strings and upgrade as a boolean.")
             }
 
             try {
                 const project = projectFactory({ ...dependencies, ...(client ? { client } : {}), context })
                 return createInstallResponse(await project.install({
                     ...(args.dependencies ? { dependencies: args.dependencies } : {}),
+                    upgrade: args.upgrade ?? false,
                 }))
             }
             catch (error) {

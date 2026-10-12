@@ -569,7 +569,7 @@ describe("agent workflow wiring", () => {
     ] as const
 
     test("keeps canonical auto and assist agents without removed workflow variants", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [], { balanced: {}, smart: {} })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, { balanced: {}, smart: {} })
 
         expect(agents.auto).toBeDefined()
         expect(agents.assist).toBeDefined()
@@ -577,7 +577,7 @@ describe("agent workflow wiring", () => {
     })
 
     test("keeps current canonical permissions on primary workflow agents", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, [], { balanced: {}, smart: {} })
+        const agents = buildAgents(createPlatformCapabilities("linux"), {}, undefined, { balanced: {}, smart: {} })
 
         expect(getTaskPermissionRule(agents.assist?.permissions, "auto*")).toBe("deny")
         expect(getTaskPermissionRule(agents.auto?.permissions, "auto-*")).toBe("allow")

@@ -1,19 +1,24 @@
 import { spawn as spawnChild } from "node:child_process"
 import { randomBytes } from "node:crypto"
-import { appendFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
+import { appendFile, link, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, stat, truncate, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { isMissingFile, type SessionJobContext } from "./jobs"
 import { createManagedScriptProject, createManagedScriptProjectPaths, resolveManagedScriptProjectOwner, type ManagedScriptProject, type ManagedScriptProjectFileSystem, type ManagedScriptProjectOwner, type ManagedScriptProjectOwnerResolution, type ManagedScriptProjectSpawn } from "./managed_script_project"
 import { flattenError } from "./tools"
+import { createManagedScriptWindows, isWindowsServiceIdentity, ManagedScriptWindowsError, windowsServiceMessage, type WindowsServiceCleanup, type WindowsServiceIdentity } from "./managed_script_windows"
 
 const defaultTimeoutMs = 300_000
 const maximumTimeoutMs = 1_800_000
 const inlineOutputCapBytes = 65_536
+const logOutputCapBytes = 1_048_576
 const terminateGraceMs = 5_000
+const forcedSignalWaitMs = 250
+const logFlushTimeoutMs = 1_000
 const pollMs = 100
 
 export type ManagedScriptRuntimeStats = {
+    size?: number
     isDirectory: () => boolean
     isFile: () => boolean
     isSymbolicLink: () => boolean
@@ -24,17 +29,25 @@ export type ManagedScriptRuntimeFileSystem = Omit<ManagedScriptProjectFileSystem
     lstat: (filePath: string) => Promise<ManagedScriptRuntimeStats>
     realpath: (filePath: string) => Promise<string>
     stat: (filePath: string) => Promise<ManagedScriptRuntimeStats>
+    truncate?: (filePath: string, length: number) => Promise<void>
+    open?: (filePath: string, flags: "a") => Promise<Pick<Awaited<ReturnType<typeof open>>, "fd" | "close">>
 }
 
 export type ManagedScriptRuntimeOutput = {
     on: (event: "data", listener: (chunk: Buffer) => void) => unknown
+    destroy?: () => unknown
 }
 
 export type ManagedScriptRuntimeChild = {
     pid?: number
-    stdout?: ManagedScriptRuntimeOutput
-    stderr?: ManagedScriptRuntimeOutput
+    stdout?: ManagedScriptRuntimeOutput | null
+    stderr?: ManagedScriptRuntimeOutput | null
+    stdin?: { end: (content: string) => unknown, on?: (event: "error", listener: (error: Error) => void) => unknown, destroy?: () => unknown } | null
+    kill?: (signal: NodeJS.Signals) => boolean
+    unref?: () => void
     on: {
+        (event: "spawn", listener: () => void): unknown
+        (event: "exit", listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void): unknown
         (event: "error", listener: (error: Error) => void): unknown
         (event: "close", listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void): unknown
     }
@@ -45,7 +58,8 @@ export type ManagedScriptRuntimeSpawnOptions = {
     env: NodeJS.ProcessEnv
     detached: boolean
     shell: false
-    stdio: "pipe"
+    stdio: "pipe" | ["ignore", number, number]
+    windowsHide?: boolean
 }
 
 export type ManagedScriptRuntimeProcess = {
@@ -69,11 +83,19 @@ export type ManagedScriptRunResult = {
     stderr_truncated: boolean
 }
 
+export type ManagedScriptLaunchOwner = {
+    readonly jobName: string
+    readonly directory: string
+    readonly sessionID: string
+}
+
 export type ManagedScriptServiceStartResult = {
+    owner: ManagedScriptLaunchOwner
     run_id: string
     stdout_log_path: string
     stderr_log_path: string
     observed_ports?: number[]
+    message?: string
 }
 
 export type ManagedScriptServiceActionInput = { run_id: string }
@@ -87,10 +109,11 @@ export type ManagedScriptServiceStatus = {
     stdout_log_path: string
     stderr_log_path: string
     observed_ports?: number[]
+    message?: string
 }
 
-export type ManagedScriptServiceStopResult = { run_id: string, stopped: true }
-export type ManagedScriptServiceCleanupResult = { stopped_run_ids: string[], finalized_run_ids: string[] }
+export type ManagedScriptServiceStopResult = { run_id: string, stopped: true, windows_cleanup?: WindowsServiceCleanup, message?: string }
+export type ManagedScriptServiceCleanupResult = { stopped_run_ids: string[], finalized_run_ids: string[], windows_cleanup?: ({ run_id: string } & WindowsServiceCleanup)[] }
 
 export type ManagedScriptRuntimeDependencies = {
     context: SessionJobContext
@@ -113,13 +136,19 @@ export type ManagedScriptRuntime = {
     cleanup: () => Promise<ManagedScriptServiceCleanupResult>
 }
 
-type ServiceState = {
-    version: 1
+export class ManagedScriptRuntimeError extends Error {
+    readonly code: string
+
+    constructor(code: string, message: string) {
+        super(message)
+        this.name = "ManagedScriptRuntimeError"
+        this.code = code
+    }
+}
+
+type ServiceStateFields = {
     ownership: { job_name: string, workspace_path: string, session_id: string }
     run_id: string
-    pid: number
-    pgid: number
-    process_start_time: string
     command: string
     entry: string
     argv: string[]
@@ -128,13 +157,17 @@ type ServiceState = {
     stderr_log_path: string
 }
 
+type LinuxServiceState = ServiceStateFields & { version: 1, pid: number, pgid: number, process_start_time: string }
+type WindowsServiceState = ServiceStateFields & { version: 2, identity: WindowsServiceIdentity }
+type ServiceState = LinuxServiceState | WindowsServiceState
+
 type ProcessIdentity = { startTime: string, processGroup: number, state: string, command: string[] }
 
 async function defaultReadDirectory(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | import("node:fs").Dirent[]> {
     return options?.withFileTypes ? await readdir(dirPath, { withFileTypes: true }) : await readdir(dirPath)
 }
 
-const defaultFileSystem: ManagedScriptRuntimeFileSystem = { appendFile, lstat, mkdir, readFile, readdir: defaultReadDirectory, realpath, rename, rm, stat, writeFile }
+const defaultFileSystem: ManagedScriptRuntimeFileSystem = { appendFile, link, lstat, mkdir, open, readFile, readdir: defaultReadDirectory, realpath, rename, rm, stat, truncate, writeFile }
 const defaultProcess: ManagedScriptRuntimeProcess = {
     execPath: "node",
     env: process.env,
@@ -148,18 +181,18 @@ function isInside(candidatePath: string, rootPath: string): boolean {
     return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
 }
 
-function serviceDirectory(workspacePath: string): string {
-    return path.join(createManagedScriptProjectPaths(workspacePath).scriptsRoot, "services")
+function serviceDirectory(owner: ManagedScriptProjectOwner): string {
+    return createManagedScriptProjectPaths(owner.directory, owner.jobName).servicesRoot
 }
 
-function statePath(workspacePath: string, runId: string): string {
-    return path.join(serviceDirectory(workspacePath), `${runId}.json`)
+function statePath(owner: ManagedScriptProjectOwner, runId: string): string {
+    return path.join(serviceDirectory(owner), `${runId}.json`)
 }
 
 function validateEntry(entry: string): void {
     if (typeof entry !== "string" || !entry) throw new Error("Managed script entry must be a source-relative .mjs file without traversal.")
     const segments = entry.split("/")
-    if (path.isAbsolute(entry) || path.win32.isAbsolute(entry) || entry.includes("\\") || segments.includes("..") || segments[0] === "src" || !entry.endsWith(".mjs")) {
+    if (path.isAbsolute(entry) || path.win32.isAbsolute(entry) || entry.includes("\\") || segments.includes("..") || !entry.endsWith(".mjs")) {
         throw new Error("Managed script entry must be a source-relative .mjs file without traversal.")
     }
 }
@@ -178,10 +211,94 @@ function validateRunId(runId: string): void {
     if (!/^[a-f0-9]{48}$/.test(runId)) throw new Error("Invalid managed script service run ID.")
 }
 
-function truncateOutput(value: Buffer): { value: string, truncated: boolean } {
-    if (value.length <= inlineOutputCapBytes) return { value: value.toString("utf8"), truncated: false }
-    const head = Math.floor(inlineOutputCapBytes / 2)
-    return { value: Buffer.concat([value.subarray(0, head), value.subarray(value.length - (inlineOutputCapBytes - head))]).toString("utf8"), truncated: true }
+function createOutputCollector(): { append: (chunk: Buffer) => void, result: () => { value: string, truncated: boolean, bytes: number } } {
+    const storage = Buffer.alloc(inlineOutputCapBytes)
+    const head = storage.subarray(0, Math.floor(inlineOutputCapBytes / 2))
+    const tail = storage.subarray(head.length)
+    let headLength = 0
+    let tailLength = 0
+    let tailOffset = 0
+    let bytes = 0
+    return {
+        append: (chunk: Buffer): void => {
+            bytes += chunk.length
+            const headBytes = Math.min(chunk.length, head.length - headLength)
+            chunk.copy(head, headLength, 0, headBytes)
+            headLength += headBytes
+            const remaining = chunk.subarray(headBytes)
+            if (remaining.length >= tail.length) {
+                remaining.copy(tail, 0, remaining.length - tail.length)
+                tailLength = tail.length
+                tailOffset = 0
+                return
+            }
+            const firstBytes = Math.min(remaining.length, tail.length - tailOffset)
+            remaining.copy(tail, tailOffset, 0, firstBytes)
+            remaining.copy(tail, 0, firstBytes)
+            tailOffset = (tailOffset + remaining.length) % tail.length
+            tailLength = Math.min(tail.length, tailLength + remaining.length)
+        },
+        result: (): { value: string, truncated: boolean, bytes: number } => {
+            const start = tailLength === tail.length ? tailOffset : 0
+            const value = Buffer.concat([head.subarray(0, headLength), tail.subarray(start, tailLength), tail.subarray(0, start)])
+            return { value: value.toString("utf8"), truncated: bytes > inlineOutputCapBytes, bytes }
+        },
+    }
+}
+
+function boundedErrorMessage(error: unknown): string {
+    try { return flattenError(error).slice(0, inlineOutputCapBytes) || "Unknown error" }
+    catch { return "Unable to format managed script error." }
+}
+
+function waitWithin<T>(pending: Promise<T>, milliseconds: number): Promise<{ completed: false } | { completed: true, value: T } | { completed: true, error: unknown }> {
+    return new Promise((resolve): void => {
+        let settled = false
+        const finish = (result: { completed: false } | { completed: true, value: T } | { completed: true, error: unknown }): void => {
+            if (settled) return
+            settled = true
+            clearTimeout(timeout)
+            resolve(result)
+        }
+        const timeout = setTimeout((): void => { finish({ completed: false }) }, milliseconds)
+        void pending.then((value: T): void => { finish({ completed: true, value }) }, (error: unknown): void => { finish({ completed: true, error }) })
+    })
+}
+
+function createCappedLogAppender(append: (content: Buffer) => Promise<void>, initialBytes = 0): { append: (chunk: Buffer) => void, flush: () => Promise<string | undefined> } {
+    const storage = Buffer.alloc(logOutputCapBytes - initialBytes)
+    let reserved = 0
+    let written = 0
+    let active = false
+    let failure: string | undefined
+    let pending = Promise.resolve<string | undefined>(undefined)
+    const drain = async (): Promise<string | undefined> => {
+        try {
+            while (written < reserved) {
+                const end = reserved
+                await append(storage.subarray(written, end))
+                written = end
+            }
+        }
+        catch (error) { failure = boundedErrorMessage(error) }
+        active = false
+        return failure
+    }
+    return {
+        append: (chunk: Buffer): void => {
+            if (failure !== undefined) return
+            const length = Math.min(chunk.length, storage.length - reserved)
+            if (!length) return
+            chunk.copy(storage, reserved, 0, length)
+            // Reserve before scheduling so concurrent data events cannot exceed the disk budget.
+            reserved += length
+            if (!active) {
+                active = true
+                pending = Promise.resolve().then(drain)
+            }
+        },
+        flush: (): Promise<string | undefined> => pending,
+    }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -189,22 +306,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseState(value: unknown): ServiceState | undefined {
-    if (!isRecord(value) || value.version !== 1 || !isRecord(value.ownership)) return undefined
+    if (!isRecord(value) || (value.version !== 1 && value.version !== 2) || !isRecord(value.ownership)) return undefined
     const owner = value.ownership
     if (
         typeof owner.job_name !== "string" || typeof owner.workspace_path !== "string" || typeof owner.session_id !== "string"
-        || typeof value.run_id !== "string" || typeof value.pid !== "number" || !Number.isInteger(value.pid) || typeof value.pgid !== "number" || !Number.isInteger(value.pgid)
-        || typeof value.process_start_time !== "string" || typeof value.command !== "string" || typeof value.entry !== "string"
+        || typeof value.run_id !== "string" || typeof value.command !== "string" || typeof value.entry !== "string"
         || !Array.isArray(value.argv) || !value.argv.every((argument: unknown): boolean => typeof argument === "string")
         || typeof value.started_at !== "string" || typeof value.stdout_log_path !== "string" || typeof value.stderr_log_path !== "string"
     ) return undefined
-    return {
-        version: 1,
+    if (value.version === 2 && (!owner.job_name || !owner.workspace_path || !owner.session_id || !/^[a-f0-9]{48}$/.test(value.run_id) || !isWindowsServiceIdentity(value.identity))) return undefined
+    if (value.version === 1 && (typeof value.pid !== "number" || !Number.isInteger(value.pid) || typeof value.pgid !== "number" || !Number.isInteger(value.pgid) || typeof value.process_start_time !== "string")) return undefined
+    const fields: ServiceStateFields = {
         ownership: { job_name: owner.job_name, workspace_path: owner.workspace_path, session_id: owner.session_id },
         run_id: value.run_id,
-        pid: value.pid,
-        pgid: value.pgid,
-        process_start_time: value.process_start_time,
         command: value.command,
         entry: value.entry,
         argv: value.argv,
@@ -212,10 +326,15 @@ function parseState(value: unknown): ServiceState | undefined {
         stdout_log_path: value.stdout_log_path,
         stderr_log_path: value.stderr_log_path,
     }
+    if (value.version === 2) {
+        const identity = value.identity as WindowsServiceIdentity
+        return { ...fields, version: 2, identity: { kind: "windows", pid: identity.pid, creation_time_ticks: identity.creation_time_ticks } }
+    }
+    return { ...fields, version: 1, pid: value.pid as number, pgid: value.pgid as number, process_start_time: value.process_start_time as string }
 }
 
 function belongsToOwner(state: ServiceState, owner: ManagedScriptProjectOwner, sessionId: string): boolean {
-    return state.ownership.job_name === owner.jobName && state.ownership.workspace_path === owner.workspacePath && state.ownership.session_id === sessionId
+    return state.ownership.job_name === owner.jobName && state.ownership.workspace_path === owner.directory && state.ownership.session_id === sessionId
 }
 
 function parseProcStat(content: string): { startTime: string, processGroup: number, state: string } | undefined {
@@ -245,37 +364,43 @@ async function writeAtomically(fileSystem: Pick<ManagedScriptRuntimeFileSystem, 
 
 async function resolveEntry(fileSystem: Pick<ManagedScriptRuntimeFileSystem, "lstat" | "realpath">, owner: ManagedScriptProjectOwner, entry: string): Promise<string> {
     validateEntry(entry)
-    const paths = createManagedScriptProjectPaths(owner.workspacePath)
+    const paths = createManagedScriptProjectPaths(owner.directory, owner.jobName)
     const candidate = path.resolve(paths.sourceRoot, entry)
     if (!isInside(candidate, paths.sourceRoot)) throw new Error("Managed script entry must stay inside current job source root.")
+    let directory: string
+    let scriptsRoot: string
     let root: string
     let resolved: string
     try {
-        [root, resolved] = await Promise.all([fileSystem.realpath(paths.sourceRoot), fileSystem.realpath(candidate)])
+        [directory, scriptsRoot, root, resolved] = await Promise.all([fileSystem.realpath(owner.directory), fileSystem.realpath(paths.scriptsRoot), fileSystem.realpath(paths.sourceRoot), fileSystem.realpath(candidate)])
     }
     catch (error) {
         if (isMissingFile(error)) throw new Error("Managed script entry must be an existing regular file.")
         throw error
     }
-    if (!isInside(resolved, root)) throw new Error("Managed script entry symlink resolves outside current job source root.")
+    if (
+        path.relative(path.resolve(directory, ".opencode", "autocode", "scripts"), scriptsRoot) !== ""
+        || path.relative(path.resolve(scriptsRoot, path.basename(paths.sourceRoot)), root) !== ""
+        || !isInside(resolved, root)
+    ) throw new ManagedScriptRuntimeError("invalid_entry", "Managed script entry must remain confined to the current job source root under the real project directory; managed root and job-source symlink aliases are not allowed.")
     if (!(await fileSystem.lstat(resolved)).isFile()) throw new Error("Managed script entry must be an existing regular file.")
     return resolved
 }
 
 function createEnvironment(runtimeProcess: ManagedScriptRuntimeProcess, owner: ManagedScriptProjectOwner): NodeJS.ProcessEnv {
-    const paths = createManagedScriptProjectPaths(owner.workspacePath)
+    const paths = createManagedScriptProjectPaths(owner.directory, owner.jobName)
     const environment = { ...runtimeProcess.env }
     for (const key of Object.keys(environment)) {
         if (key.toUpperCase() === "NODE_OPTIONS" || key.toUpperCase() === "NODE_PATH") delete environment[key]
     }
     environment.AUTOCODE_SCRIPT_ROOT = paths.scriptsRoot
-    environment.AUTOCODE_WORKSPACE_ROOT = owner.workspacePath
+    environment.AUTOCODE_WORKSPACE_ROOT = owner.directory
     return environment
 }
 
-function serviceLogs(workspacePath: string, runId: string): { stdout: string, stderr: string } {
-    const paths = createManagedScriptProjectPaths(workspacePath)
-    return { stdout: path.join(paths.logsPath, `service-${runId}.stdout.log`), stderr: path.join(paths.logsPath, `service-${runId}.stderr.log`) }
+function serviceLogs(owner: ManagedScriptProjectOwner, runId: string): { stdout: string, stderr: string } {
+    const paths = createManagedScriptProjectPaths(owner.directory, owner.jobName)
+    return { stdout: path.join(paths.logsRoot, `service-${runId}.stdout.log`), stderr: path.join(paths.logsRoot, `service-${runId}.stderr.log`) }
 }
 
 export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDependencies): ManagedScriptRuntime {
@@ -284,6 +409,7 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
     const now = dependencies.now ?? Date.now
     const random = dependencies.randomBytes ?? randomBytes
     const sleep = dependencies.sleep ?? defaultSleep
+    const windows = createManagedScriptWindows(runtimeProcess, fileSystem.open)
     const resolveOwner = dependencies.resolveOwner ?? (async (): Promise<ManagedScriptProjectOwnerResolution> => await resolveManagedScriptProjectOwner({ context: dependencies.context, client: dependencies.client, fileSystem }))
     const project = dependencies.project ?? createManagedScriptProject({ context: dependencies.context, client: dependencies.client, fileSystem, ...(dependencies.projectSpawn ? { spawn: dependencies.projectSpawn } : {}), runtime: { env: runtimeProcess.env }, resolveOwner })
 
@@ -293,21 +419,22 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
             resolution = await resolveOwner()
         }
         catch (error) {
-            throw new Error(`Unable to resolve current job workspace: ${flattenError(error)}`)
+            throw new Error(`Unable to resolve current managed script job: ${flattenError(error)}`)
         }
         if (!resolution.ok) throw new Error(resolution.reason)
-        return resolution.owner
+        const owner = { jobName: resolution.owner.jobName, directory: resolution.owner.directory }
+        if (owner.directory !== dependencies.context.directory) throw new Error("Managed script owner directory must equal context.directory.")
+        return owner
     }
 
-    const reconcile = async (owner: ManagedScriptProjectOwner): Promise<void> => {
-        const result = await project.reconcile()
-        if (!result.ok) throw new Error(result.blocker?.message ?? result.error?.message ?? "Managed script dependency reconciliation failed.")
-        if (result.paths.workspacePath !== owner.workspacePath) throw new Error("Managed script ownership changed during dependency reconciliation.")
+    const verifyProject = async (): Promise<void> => {
+        const result = await project.verify()
+        if (!result.ok) throw new ManagedScriptRuntimeError("project_not_ready", `Managed script project is not ready: ${result.blocker?.message || result.error?.message || "Project readiness verification failed."} Call autocode_script_project to prepare the project and autocode_script_install for explicit dependency install or repair.`)
     }
 
     const readOwnedState = async (owner: ManagedScriptProjectOwner, runId: string): Promise<{ state: ServiceState, filePath: string }> => {
         validateRunId(runId)
-        const filePath = statePath(owner.workspacePath, runId)
+        const filePath = statePath(owner, runId)
         let content: string
         try {
             content = await fileSystem.readFile(filePath, "utf8")
@@ -332,7 +459,8 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
         try {
             const [statContent, cmdline] = await Promise.all([fileSystem.readFile(`/proc/${pid}/stat`, "utf8"), fileSystem.readFile(`/proc/${pid}/cmdline`, "utf8")])
             const parsed = parseProcStat(statContent)
-            return parsed ? { ...parsed, command: cmdline.split("\0").filter((part: string): boolean => Boolean(part)) } : undefined
+            // Remove only the proc terminator; empty fields are real argv elements.
+            return parsed ? { ...parsed, command: cmdline === "" ? [] : (cmdline.endsWith("\0") ? cmdline.slice(0, -1) : cmdline).split("\0") } : undefined
         }
         catch (error) {
             if (isMissingFile(error)) return undefined
@@ -340,11 +468,27 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
         }
     }
 
-    const validateProcess = async (state: ServiceState): Promise<boolean> => {
+    const requireServicePlatform = (): void => {
+        if (runtimeProcess.platform !== "linux") throw new Error("Managed script services are supported only on Linux.")
+    }
+
+    const prepareServiceLog = async (filePath: string): Promise<number> => {
+        await fileSystem.appendFile(filePath, "")
+        const size = (await fileSystem.stat(filePath)).size
+        if (size === undefined || !Number.isSafeInteger(size) || size < 0) throw new Error("Unable to inspect managed script log size.")
+        if (size > logOutputCapBytes) await (fileSystem.truncate ?? truncate)(filePath, logOutputCapBytes)
+        return Math.min(size, logOutputCapBytes)
+    }
+
+    const requireStatePlatform = (state: ServiceState): void => {
+        if ((state.version === 1 && runtimeProcess.platform !== "linux") || (state.version === 2 && runtimeProcess.platform !== "win32")) throw new Error("Managed script service state belongs to a different operating system; refusing process management.")
+    }
+
+    const validateProcess = async (state: LinuxServiceState): Promise<boolean> => {
         const processIdentity = await readProcess(state.pid)
         if (!processIdentity || processIdentity.state === "Z") return false
         if (processIdentity.startTime !== state.process_start_time || processIdentity.processGroup !== state.pgid) throw new Error("Managed script service process identity changed; refusing to signal it.")
-        if (processIdentity.command[0] !== state.command || processIdentity.command[1] !== state.entry || processIdentity.command.slice(2).join("\0") !== state.argv.join("\0")) throw new Error("Managed script service command does not match owned state; refusing to signal it.")
+        if (processIdentity.command[0] !== state.command || processIdentity.command[1] !== state.entry || JSON.stringify(processIdentity.command.slice(2)) !== JSON.stringify(state.argv)) throw new Error("Managed script service command does not match owned state; refusing to signal it.")
         return true
     }
 
@@ -379,7 +523,18 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
         return true
     }
 
-    const stopState = async (state: ServiceState, filePath: string): Promise<void> => {
+    const stopState = async (state: ServiceState, filePath: string): Promise<WindowsServiceCleanup | undefined> => {
+        requireStatePlatform(state)
+        if (state.version === 2) {
+            let result: WindowsServiceCleanup
+            try { result = await windows.stop(state.identity) }
+            catch (error) {
+                if (error instanceof ManagedScriptWindowsError && error.code === "windows_root_missing") await fileSystem.rm(filePath, { force: true })
+                throw error
+            }
+            await fileSystem.rm(filePath, { force: true })
+            return result
+        }
         if (!await validateProcess(state)) {
             await fileSystem.rm(filePath, { force: true })
             throw new Error("Managed script service has already exited.")
@@ -393,74 +548,196 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
     }
 
     const run = async (input: ManagedScriptRunInput): Promise<ManagedScriptRunResult> => {
-        const owner = await requireOwner()
+        validateEntry(input.entry)
         const argv = input.argv ?? []
         validateArgv(argv)
         const timeoutMs = validateTimeout(input.timeoutMs)
-        await reconcile(owner)
+        const owner = await requireOwner()
+        await verifyProject()
         const entry = await resolveEntry(fileSystem, owner, input.entry)
-        const paths = createManagedScriptProjectPaths(owner.workspacePath)
-        const logPath = path.join(paths.logsPath, `run-${new Date().toISOString().replace(/[:.]/g, "-")}-${random(8).toString("hex")}.log`)
+        const paths = createManagedScriptProjectPaths(owner.directory, owner.jobName)
+        const logPath = path.join(paths.logsRoot, `run-${new Date().toISOString().replace(/[:.]/g, "-")}-${random(8).toString("hex")}.log`)
+        await fileSystem.mkdir(paths.logsRoot, { recursive: true })
+        await fileSystem.writeFile(logPath, "stdout/stderr (interleaved):\n")
+        const appendLog = (content: Buffer): Promise<void> => fileSystem.appendFile(logPath, content)
+        const stdoutLog = createCappedLogAppender(appendLog)
+        const stderrLog = createCappedLogAppender(appendLog)
+        const stdout = createOutputCollector()
+        const stderr = createOutputCollector()
         const started = now()
-        const execution = await new Promise<{ exitCode: number | null, stdout: Buffer, stderr: Buffer, timedOut: boolean }>((resolve: (result: { exitCode: number | null, stdout: Buffer, stderr: Buffer, timedOut: boolean }) => void): void => {
-            const stdout: Buffer[] = []
-            const stderr: Buffer[] = []
+        const execution = await new Promise<{ exitCode: number | null, timedOut: boolean }>((resolve: (result: { exitCode: number | null, timedOut: boolean }) => void): void => {
             let timedOut = false
             let settled = false
+            let rootExited = false
+            let rootIdentity: ProcessIdentity | undefined
+            let terminationGeneration = 0
             let timeout: ReturnType<typeof setTimeout> | undefined
             let forceKill: ReturnType<typeof setTimeout> | undefined
+            let forceSignalTimeout: ReturnType<typeof setTimeout> | undefined
+            const capture = (collector: typeof stdout, log: typeof stdoutLog, chunk: Buffer): void => {
+                if (settled) return
+                collector.append(chunk)
+                log.append(chunk)
+            }
+            const captureError = (error: unknown): void => {
+                if (!settled) capture(stderr, stderrLog, Buffer.from(boundedErrorMessage(error)))
+            }
             const finish = (exitCode: number | null): void => {
                 if (settled) return
                 settled = true
+                terminationGeneration += 1
                 if (timeout) clearTimeout(timeout)
                 if (forceKill) clearTimeout(forceKill)
-                resolve({ exitCode: timedOut ? null : exitCode, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr), timedOut })
+                if (forceSignalTimeout) clearTimeout(forceSignalTimeout)
+                resolve({ exitCode: timedOut ? null : exitCode, timedOut })
             }
             let child: ManagedScriptRuntimeChild
             try {
                 child = runtimeProcess.spawn(runtimeProcess.execPath, [entry, ...argv], { cwd: paths.scriptsRoot, env: createEnvironment(runtimeProcess, owner), detached: true, shell: false, stdio: "pipe" })
             }
             catch (error) {
-                stderr.push(Buffer.from(flattenError(error)))
+                captureError(error)
                 finish(null)
                 return
             }
+            const destroyOutput = (): void => {
+                for (const stream of [child.stdout, child.stderr]) {
+                    try { void Promise.resolve(stream?.destroy?.()).catch(captureError) }
+                    catch (error) { captureError(error) }
+                }
+            }
+            const signalChild = (signal: NodeJS.Signals): void => {
+                if (settled || rootExited || runtimeProcess.platform === "linux") return
+                try {
+                    if (!child.kill) { captureError("Managed script process handle does not support termination."); return }
+                    if (!child.kill(signal)) captureError("Managed script owned process handle declined termination.")
+                }
+                catch (error) { captureError(error) }
+            }
+            const terminate = async (signal: NodeJS.Signals, generation: number): Promise<void> => {
+                if (settled || generation !== terminationGeneration) return
+                if (rootExited) { captureError("Managed script root has exited; descendant cleanup was not attempted."); return }
+                if (runtimeProcess.platform !== "linux") { signalChild(signal); return }
+                const ownedIdentity = rootIdentity
+                const pid = child.pid
+                if (!ownedIdentity || !pid) { captureError("Managed script Linux cleanup declined: root ownership could not be verified."); return }
+                try {
+                    const identity = await readProcess(pid)
+                    if (settled || rootExited || generation !== terminationGeneration) return
+                    if (!identity || identity.state === "Z" || identity.startTime !== ownedIdentity.startTime || identity.processGroup !== ownedIdentity.processGroup || identity.processGroup !== pid) {
+                        captureError("Managed script Linux cleanup declined: root identity no longer matches launched process.")
+                        return
+                    }
+                    if (settled || rootExited || generation !== terminationGeneration) return
+                    if (!signalGroup(identity.processGroup, signal)) captureError("Managed script process group no longer exists; cleanup was not attempted.")
+                }
+                catch (error) {
+                    if (!settled && !rootExited && generation === terminationGeneration) captureError(`Managed script Linux cleanup declined: ${boundedErrorMessage(error)}`)
+                }
+            }
+            child.stdout?.on("data", (chunk: Buffer): void => { capture(stdout, stdoutLog, chunk) })
+            child.stderr?.on("data", (chunk: Buffer): void => { capture(stderr, stderrLog, chunk) })
+            child.on("exit", (): void => { rootExited = true; terminationGeneration += 1 })
+            child.on("error", (error: Error): void => {
+                if (settled) return
+                captureError(error.message)
+                if (!timedOut) { destroyOutput(); finish(null) }
+            })
+            child.on("close", (exitCode: number | null, signal: NodeJS.Signals | null): void => {
+                rootExited = true
+                finish(signal ? null : exitCode)
+            })
             if (!child.pid || child.pid < 1) {
-                stderr.push(Buffer.from("Managed script process did not provide a PID."))
+                captureError("Managed script process did not provide a PID.")
+                destroyOutput()
                 finish(null)
                 return
             }
-            child.stdout?.on("data", (chunk: Buffer): void => { stdout.push(Buffer.from(chunk)) })
-            child.stderr?.on("data", (chunk: Buffer): void => { stderr.push(Buffer.from(chunk)) })
-            const pgid = child.pid
-            child.on("error", (error: Error): void => { stderr.push(Buffer.from(error.message)); finish(null) })
-            child.on("close", (exitCode: number | null, signal: NodeJS.Signals | null): void => finish(signal ? null : exitCode))
+            if (runtimeProcess.platform === "linux") {
+                void readProcess(child.pid).then((identity: ProcessIdentity | undefined): void => {
+                    if (settled || rootExited) return
+                    if (identity && identity.state !== "Z" && identity.processGroup === child.pid) rootIdentity = identity
+                }).catch(captureError)
+            }
             timeout = setTimeout((): void => {
+                if (settled) return
                 timedOut = true
-                signalGroup(pgid, "SIGTERM")
-                forceKill = setTimeout((): void => { if (!settled) signalGroup(pgid, "SIGKILL") }, terminateGraceMs)
+                // Reserve identity-check time inside the existing termination grace period.
+                forceKill = setTimeout((): void => {
+                    if (settled) return
+                    const generation = ++terminationGeneration
+                    const complete = (): void => {
+                        if (settled) return
+                        terminationGeneration += 1
+                        if (forceSignalTimeout) clearTimeout(forceSignalTimeout)
+                        destroyOutput()
+                        finish(null)
+                    }
+                    forceSignalTimeout = setTimeout((): void => {
+                        captureError(`Managed script forced cleanup did not finish within ${forcedSignalWaitMs} milliseconds; late signals were cancelled.`)
+                        complete()
+                    }, forcedSignalWaitMs)
+                    void terminate("SIGKILL", generation).then(complete, (error: unknown): void => { captureError(error); complete() })
+                }, terminateGraceMs - forcedSignalWaitMs)
+                void terminate("SIGTERM", ++terminationGeneration).catch(captureError)
             }, timeoutMs)
         })
-        const stdout = truncateOutput(execution.stdout)
-        const stderr = truncateOutput(execution.stderr)
+        const stdoutResult = stdout.result()
         const durationMs = Math.max(0, now() - started)
-        await fileSystem.writeFile(logPath, `${JSON.stringify({ exit_code: execution.exitCode, duration_ms: durationMs, timed_out: execution.timedOut, stdout_bytes: execution.stdout.length, stderr_bytes: execution.stderr.length }, undefined, 2)}\n\nstdout:\n${execution.stdout.toString("utf8")}\n\nstderr:\n${execution.stderr.toString("utf8")}\n`)
-        return { exit_code: execution.exitCode, stdout: stdout.value, stderr: stderr.value, duration_ms: durationMs, log_path: logPath, timed_out: execution.timedOut, stdout_truncated: stdout.truncated, stderr_truncated: stderr.truncated }
+        let flushCancelled = false
+        const pendingLogs = (async (): Promise<string | undefined> => {
+            const failures = await Promise.all([stdoutLog.flush(), stderrLog.flush()])
+            if (flushCancelled) return undefined
+            const failure = failures.filter((value: string | undefined): boolean => value !== undefined).join("\n")
+            if (failure) return failure
+            await fileSystem.appendFile(logPath, `\n\n${JSON.stringify({ exit_code: execution.exitCode, duration_ms: durationMs, timed_out: execution.timedOut, stdout_bytes: stdoutResult.bytes, stderr_bytes: stderr.result().bytes }, undefined, 2)}\n`)
+            return undefined
+        })()
+        const flushed = await waitWithin(pendingLogs, logFlushTimeoutMs)
+        if (!flushed.completed) {
+            flushCancelled = true
+            stderr.append(Buffer.from(`Managed script logging did not finish within ${logFlushTimeoutMs} milliseconds; logs may be incomplete.`))
+        }
+        else if ("error" in flushed) stderr.append(Buffer.from(`Managed script logging failed: ${boundedErrorMessage(flushed.error)}`))
+        else if (flushed.value !== undefined) stderr.append(Buffer.from(`Managed script logging failed: ${boundedErrorMessage(flushed.value)}`))
+        const stderrResult = stderr.result()
+        return { exit_code: execution.exitCode, stdout: stdoutResult.value, stderr: stderrResult.value, duration_ms: durationMs, log_path: logPath, timed_out: execution.timedOut, stdout_truncated: stdoutResult.truncated, stderr_truncated: stderrResult.truncated }
     }
 
     const start = async (input: Omit<ManagedScriptRunInput, "timeoutMs">): Promise<ManagedScriptServiceStartResult> => {
-        const owner = await requireOwner()
-        if (runtimeProcess.platform !== "linux") throw new Error("Managed script services are supported only on Linux.")
+        requireServicePlatform()
+        validateEntry(input.entry)
         const argv = input.argv ?? []
         validateArgv(argv)
-        await reconcile(owner)
+        const owner = await requireOwner()
+        const launchOwner: ManagedScriptLaunchOwner = Object.freeze({ jobName: owner.jobName, directory: owner.directory, sessionID: dependencies.context.sessionID })
+        await verifyProject()
         const entry = await resolveEntry(fileSystem, owner, input.entry)
         const runId = random(24).toString("hex")
-        const paths = createManagedScriptProjectPaths(owner.workspacePath)
-        const logs = serviceLogs(owner.workspacePath, runId)
-        await fileSystem.mkdir(paths.logsPath, { recursive: true })
-        await fileSystem.writeFile(logs.stdout, "")
-        await fileSystem.writeFile(logs.stderr, "")
+        const paths = createManagedScriptProjectPaths(owner.directory, owner.jobName)
+        const logs = serviceLogs(owner, runId)
+        await fileSystem.mkdir(paths.logsRoot, { recursive: true })
+        if (runtimeProcess.platform === "win32") {
+            await windows.launch({ entry, argv, cwd: paths.scriptsRoot, env: createEnvironment(runtimeProcess, owner), stdout: logs.stdout, stderr: logs.stderr }, async (identity: WindowsServiceIdentity): Promise<void> => {
+                const state: WindowsServiceState = {
+                    version: 2,
+                    identity,
+                    ownership: { job_name: launchOwner.jobName, workspace_path: launchOwner.directory, session_id: launchOwner.sessionID },
+                    run_id: runId,
+                    command: runtimeProcess.execPath,
+                    entry,
+                    argv: [...argv],
+                    started_at: new Date(now()).toISOString(),
+                    stdout_log_path: logs.stdout,
+                    stderr_log_path: logs.stderr,
+                }
+                await writeAtomically(fileSystem, statePath(launchOwner, runId), `${JSON.stringify(state, undefined, 2)}\n`, random)
+            })
+            return { owner: launchOwner, run_id: runId, stdout_log_path: logs.stdout, stderr_log_path: logs.stderr, message: windowsServiceMessage }
+        }
+        const [stdoutBytes, stderrBytes] = await Promise.all([prepareServiceLog(logs.stdout), prepareServiceLog(logs.stderr)])
+        const stdoutLog = createCappedLogAppender((content: Buffer): Promise<void> => fileSystem.appendFile(logs.stdout, content), stdoutBytes)
+        const stderrLog = createCappedLogAppender((content: Buffer): Promise<void> => fileSystem.appendFile(logs.stderr, content), stderrBytes)
         let child: ManagedScriptRuntimeChild
         try {
             child = runtimeProcess.spawn(runtimeProcess.execPath, [entry, ...argv], { cwd: paths.scriptsRoot, env: createEnvironment(runtimeProcess, owner), detached: true, shell: false, stdio: "pipe" })
@@ -469,16 +746,16 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
             throw new Error(`Unable to start managed script service: ${flattenError(error)}`)
         }
         if (!child.pid || child.pid < 1) throw new Error("Managed script service did not provide a PID.")
-        child.stdout?.on("data", (chunk: Buffer): void => { void fileSystem.appendFile(logs.stdout, chunk) })
-        child.stderr?.on("data", (chunk: Buffer): void => { void fileSystem.appendFile(logs.stderr, chunk) })
+        child.stdout?.on("data", stdoutLog.append)
+        child.stderr?.on("data", stderrLog.append)
         const identity = await readProcess(child.pid)
-        if (!identity || identity.state === "Z" || identity.processGroup !== child.pid || identity.command[0] !== runtimeProcess.execPath || identity.command[1] !== entry || identity.command.slice(2).join("\0") !== argv.join("\0")) {
+        if (!identity || identity.state === "Z" || identity.processGroup !== child.pid || identity.command[0] !== runtimeProcess.execPath || identity.command[1] !== entry || JSON.stringify(identity.command.slice(2)) !== JSON.stringify(argv)) {
             signalGroup(child.pid, "SIGKILL")
             throw new Error("Managed script service process identity could not be verified.")
         }
         const state: ServiceState = {
             version: 1,
-            ownership: { job_name: owner.jobName, workspace_path: owner.workspacePath, session_id: dependencies.context.sessionID },
+            ownership: { job_name: launchOwner.jobName, workspace_path: launchOwner.directory, session_id: launchOwner.sessionID },
             run_id: runId,
             pid: child.pid,
             pgid: identity.processGroup,
@@ -491,40 +768,46 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
             stderr_log_path: logs.stderr,
         }
         try {
-            await writeAtomically(fileSystem, statePath(owner.workspacePath, runId), `${JSON.stringify(state, undefined, 2)}\n`, random)
+            await writeAtomically(fileSystem, statePath(launchOwner, runId), `${JSON.stringify(state, undefined, 2)}\n`, random)
+            const flushed = await waitWithin(Promise.all([stdoutLog.flush(), stderrLog.flush()]), logFlushTimeoutMs)
+            if (!flushed.completed) throw new Error(`Managed script service logging did not finish within ${logFlushTimeoutMs} milliseconds.`)
+            if ("error" in flushed) throw flushed.error
+            for (const failure of flushed.value) if (failure !== undefined) throw new Error(`Unable to write managed script log: ${failure}`)
         }
         catch (error) {
             signalGroup(child.pid, "SIGKILL")
             throw new Error(`Unable to persist managed script service state: ${flattenError(error)}`)
         }
-        return { run_id: runId, stdout_log_path: logs.stdout, stderr_log_path: logs.stderr }
+        return { owner: launchOwner, run_id: runId, stdout_log_path: logs.stdout, stderr_log_path: logs.stderr }
     }
 
     const status = async (input: ManagedScriptServiceActionInput): Promise<ManagedScriptServiceStatus> => {
+        requireServicePlatform()
         const owner = await requireOwner()
-        if (runtimeProcess.platform !== "linux") throw new Error("Managed script services are supported only on Linux.")
         const { state, filePath } = await readOwnedState(owner, input.run_id)
-        if (!await validateProcess(state)) {
+        requireStatePlatform(state)
+        if (!(state.version === 2 ? await windows.inspect(state.identity) : await validateProcess(state))) {
             await fileSystem.rm(filePath, { force: true })
+            if (state.version === 2) throw new ManagedScriptWindowsError("windows_root_missing", "Managed script service root has already exited; tree cleanup was not attempted and live descendants may remain.", { termination: "none", tree_cleanup: "not_attempted", descendants: "unknown", root_exited: true })
             throw new Error("Managed script service has already exited.")
         }
-        return { run_id: state.run_id, running: true, entry: state.entry, argv: state.argv, started_at: state.started_at, stdout_log_path: state.stdout_log_path, stderr_log_path: state.stderr_log_path }
+        return { run_id: state.run_id, running: true, entry: state.entry, argv: state.argv, started_at: state.started_at, stdout_log_path: state.stdout_log_path, stderr_log_path: state.stderr_log_path, ...(state.version === 2 ? { message: windowsServiceMessage } : {}) }
     }
 
     const stop = async (input: ManagedScriptServiceActionInput): Promise<ManagedScriptServiceStopResult> => {
+        requireServicePlatform()
         const owner = await requireOwner()
-        if (runtimeProcess.platform !== "linux") throw new Error("Managed script services are supported only on Linux.")
         const { state, filePath } = await readOwnedState(owner, input.run_id)
-        await stopState(state, filePath)
-        return { run_id: state.run_id, stopped: true }
+        const windowsCleanup = await stopState(state, filePath)
+        return { run_id: state.run_id, stopped: true, ...(windowsCleanup ? { windows_cleanup: windowsCleanup, message: "Root exit confirmed. Forced tree cleanup was best-effort; descendant exit is unknown." } : {}) }
     }
 
     const cleanup = async (): Promise<ManagedScriptServiceCleanupResult> => {
+        requireServicePlatform()
         const owner = await requireOwner()
-        if (runtimeProcess.platform !== "linux") throw new Error("Managed script services are supported only on Linux.")
         let entries: string[]
         try {
-            entries = await fileSystem.readdir(serviceDirectory(owner.workspacePath)) as string[]
+            entries = await fileSystem.readdir(serviceDirectory(owner)) as string[]
         }
         catch (error) {
             if (isMissingFile(error)) return { stopped_run_ids: [], finalized_run_ids: [] }
@@ -532,18 +815,34 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
         }
         const stoppedRunIds: string[] = []
         const finalizedRunIds: string[] = []
+        const windowsCleanup: ({ run_id: string } & WindowsServiceCleanup)[] = []
         for (const entry of entries) {
             const runId = entry.endsWith(".json") ? entry.slice(0, -5) : ""
             if (!/^[a-f0-9]{48}$/.test(runId)) continue
             let state: ServiceState | undefined
-            const filePath = statePath(owner.workspacePath, runId)
+            const filePath = statePath(owner, runId)
             try {
                 state = parseState(JSON.parse(await fileSystem.readFile(filePath, "utf8")) as unknown)
             }
             catch {
                 continue
             }
-            if (!state || !belongsToOwner(state, owner, dependencies.context.sessionID)) continue
+            if (!state || (state.version === 2 && state.run_id !== runId) || !belongsToOwner(state, owner, dependencies.context.sessionID)) continue
+            requireStatePlatform(state)
+            if (state.version === 2) {
+                try {
+                    const result = await stopState(state, filePath)
+                    if (result) windowsCleanup.push({ run_id: runId, ...result })
+                    stoppedRunIds.push(runId)
+                }
+                catch (error) {
+                    if (!(error instanceof ManagedScriptWindowsError) || (error.code !== "windows_root_missing" && error.code !== "windows_identity_mismatch")) throw error
+                    await fileSystem.rm(filePath, { force: true })
+                    finalizedRunIds.push(runId)
+                    if (error.windows_cleanup) windowsCleanup.push({ run_id: runId, ...error.windows_cleanup })
+                }
+                continue
+            }
             let running: boolean
             try {
                 running = await validateProcess(state)
@@ -562,12 +861,16 @@ export function createManagedScriptRuntime(dependencies: ManagedScriptRuntimeDep
             await stopState(state, filePath)
             stoppedRunIds.push(runId)
         }
-        return { stopped_run_ids: stoppedRunIds, finalized_run_ids: finalizedRunIds }
+        return { stopped_run_ids: stoppedRunIds, finalized_run_ids: finalizedRunIds, ...(runtimeProcess.platform === "win32" ? { windows_cleanup: windowsCleanup } : {}) }
     }
 
     return { run, start, status, stop, cleanup }
 }
 
 export async function cleanupManagedScriptServices(runtime: Pick<ManagedScriptRuntime, "cleanup">): Promise<ManagedScriptServiceCleanupResult> {
-    return await runtime.cleanup()
+    const result = await runtime.cleanup()
+    const unconfirmed = result.windows_cleanup?.filter((cleanup): boolean => cleanup.tree_cleanup === "not_attempted")
+    // Lifecycle callers discard results, so finalized Windows roots must surface descendant uncertainty as a failure.
+    if (unconfirmed?.length) throw new ManagedScriptWindowsError("windows_cleanup_incomplete", `Windows service records finalized without tree cleanup: ${unconfirmed.map((cleanup): string => cleanup.run_id).join(", ")}. Live descendants may remain.`, { termination: "none", tree_cleanup: "not_attempted", descendants: "unknown" })
+    return result
 }

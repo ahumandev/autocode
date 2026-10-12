@@ -24,42 +24,27 @@ ${planningDefinitions}
 
 ### STEP 2: Set Up Script Project
 
-1. Before authoring a script, call \`autocode_script_project\` with requested npm package names mapped to version ranges.
-2. Dependency specs must not use URL, Git, or archive sources.
-3. \`autocode_script_project\` and \`autocode_script_install\` manage package setup; use returned paths to set up scripts.
+1. Call \`autocode_script_project\` before authoring.
+2. After setup, read \`<context.directory>/.opencode/autocode/scripts/AGENTS.md\` before managed work; follow its authoritative shared rules.
+3. Use returned \`source_path\` for job sources; final job directory is \`YY-MM-DD_hh-mm-ss_{job_name}\` with zero-padded 24-hour UTC timestamp and one underscore before sanitized job name; never build an unprefixed job path.
+4. Tool descriptions define arguments.
 
-### STEP 3: Install Dependencies
+### STEP 3: Add or Repair Dependencies When Needed
 
-1. After any \`package.json\` or dependency manifest edit, call \`autocode_script_install\` before execution.
-2. \`autocode_script_install\` installs dependencies only. It does not run scripts or services.
+1. If needed, call \`autocode_script_install\`; skip routine installs.
 
 ### STEP 4: Reuse or Author Script
 
 1. Prefer existing script enhancing over reinvention.
-2. Built-in file tools author scripts only under \`source_path\` provided by \`autocode_script_project\` output.
-3. Never manually edit \`node_modules\` or lock files.
 
 ### STEP 5: Run Managed Work
 
-1. Use \`autocode_script_run\` to execute finite scripts only.
-2. Use \`autocode_script_service\` to manage long-lived processes; use \`action=start\` only to start them.
-3. Retain returned opaque \`run_id\`; use it with \`autocode_script_service\` \`action=status\` or \`action=stop\`.
-4. Service ports are diagnostics only, never service identity. Stop services by \`run_id\` only.
-5. Run and service-start entries are filenames relative to fixed sourceRoot, such as \`task.mjs\` or \`nested/task.mjs\`, never \`src/task.mjs\`.
-6. Entries reject absolute paths, backslashes, traversal, symlink escape or broken symlinks, non-files, and wrong extensions.
+1. Call \`autocode_script_run\` or \`autocode_script_service\`.
 
 ### STEP 6: Report and Clean Up
 
 1. Report result paths, log paths, and run IDs.
-2. Explicitly stop an owned service when no longer needed.
-
----
-
-## Restrictions
-
-- Bash is not required and is not allowed. Never use direct bash, shell, Node, or process spawning.
-- Never use \`pty*\`, sandbox CLI or tools, generic process-kill tools, \`autocode_kill\`, or \`autocode_process_kill\`.
-- Never set or instruct \`NODE_PATH\`; use standard Node resolution only.
+2. Explicitly stop owned services when done or no longer needed.
 
 ---
 
@@ -68,8 +53,9 @@ ${planningDefinitions}
 1. Use returned tool errors.
 2. Determine expected result, actual result, and cause by reviewing returned error output, logs, and permitted filesystem reads.
 3. When OBSTACLE resolves: call \`learn\` to avoid future mistakes.
-4. If failure is understood, fix recently created script when applicable, correct tool inputs, reuse or run another managed script, then retry from STEP 5.
-5. If failure is unclear, return a guidance-needed blocker with recent actions, errors, learning, and attempts.
+4. For repair-needed errors, return to STEP 3 before retrying.
+5. If failure is understood, fix recently created script when applicable, correct tool inputs, reuse or run another managed script, then retry from STEP 5.
+6. If failure is unclear, return a guidance-needed blocker with recent actions, errors, learning, and attempts.
 
 ---
 

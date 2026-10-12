@@ -1,39 +1,19 @@
 import { describe, expect, mock, test } from "bun:test"
-import type { ManagedScriptProject, ManagedScriptProjectDependencies, ManagedScriptProjectResult } from "@/utils/managed_script_project"
+import { basename, join } from "node:path"
+import { createManagedScriptProjectPaths, type ManagedScriptProject, type ManagedScriptProjectDependencies, type ManagedScriptProjectResult, type ManagedScriptProjectVerifyResult } from "@/utils/managed_script_project"
 import { createAutocodeScriptProjectTool, type ManagedScriptProjectFactory } from "./autocode_script_project"
 import { createToolContext } from "./test_context"
 
-const paths = {
-    workspacePath: "/jobs/job-1",
-    projectPath: "/jobs/job-1/scripts",
-    sourcePath: "/jobs/job-1/scripts/src",
-    logsPath: "/jobs/job-1/scripts/logs",
-    npmLogPath: "/jobs/job-1/scripts/logs/npm.log",
-    manifestPath: "/jobs/job-1/scripts/package.json",
-    lockPath: "/jobs/job-1/scripts/package-lock.json",
-    nodeModulesPath: "/jobs/job-1/scripts/node_modules",
-    servicesPath: "/jobs/job-1/scripts/services",
-    agentsPath: "/jobs/job-1/scripts/AGENTS.md",
-}
+const directory = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode\\script-project-wrapper"
+const paths = createManagedScriptProjectPaths(directory, "job_1")
+const npmLogPath = join(paths.logsRoot, "npm.log")
 
 const publicPaths = {
-    workspace_path: paths.workspacePath,
-    project_path: paths.projectPath,
-    source_path: paths.sourcePath,
-    logs_path: paths.logsPath,
-    services_path: paths.servicesPath,
-}
-
-const managedPaths = {
-    workspacePath: paths.workspacePath,
-    scriptsRoot: paths.projectPath,
-    sourceRoot: paths.sourcePath,
-    manifestPath: paths.manifestPath,
-    lockPath: paths.lockPath,
-    nodeModulesPath: paths.nodeModulesPath,
-    logsPath: paths.logsPath,
-    servicesPath: paths.servicesPath,
-    agentsPath: paths.agentsPath,
+    workspace_path: paths.directory,
+    project_path: paths.scriptsRoot,
+    source_path: paths.sourceRoot,
+    logs_path: paths.logsRoot,
+    services_path: paths.servicesRoot,
 }
 
 function parse(result: string | { output: string }): Record<string, unknown> {
@@ -45,23 +25,23 @@ function expectPublicPathKeys(response: Record<string, unknown>): void {
 }
 
 function successfulResult(): Extract<ManagedScriptProjectResult, { ok: true }> {
-    return { ok: true, paths: managedPaths, dependencies: [], npm: { exitCode: 0, stdout: "installed", stderr: "", command: ["install"], logPath: paths.npmLogPath } }
+    return { ok: true, paths, dependencies: [], npm: { exitCode: 0, stdout: "installed", stderr: "", command: ["install"], logPath: npmLogPath } }
 }
 
 function createFactory(result: ManagedScriptProjectResult): { factory: ManagedScriptProjectFactory, project: ManagedScriptProject } {
     const project: ManagedScriptProject = {
-        setup: mock(async () => result),
-        install: mock(async () => result),
-        reconcile: mock(async () => result),
+        setup: mock(async (): Promise<ManagedScriptProjectResult> => result),
+        install: mock(async (): Promise<ManagedScriptProjectResult> => result),
+        verify: mock(async (): Promise<ManagedScriptProjectVerifyResult> => ({ ok: true })),
     }
     return { factory: mock((_dependencies: ManagedScriptProjectDependencies) => project), project }
 }
 
 describe("autocode_script_project tool", () => {
-    test("omits timeout from managed project schema", () => {
+    test("exposes only dependencies in managed project schema", (): void => {
         const tool = createAutocodeScriptProjectTool() as unknown as { args: Record<string, unknown> }
 
-        expect(tool.args).not.toHaveProperty("timeout")
+        expect(Object.keys(tool.args)).toEqual(["dependencies"])
     })
 
     test("returns standard validation failure without creating project", async () => {
@@ -74,10 +54,13 @@ describe("autocode_script_project tool", () => {
         expect(factory).not.toHaveBeenCalled()
     })
 
-    test("omits script_file and forwards only dependencies to setup", async () => {
+    test("omits script_file and forwards optional dependencies to setup", async (): Promise<void> => {
         const { factory, project } = createFactory(successfulResult())
         const tool = createAutocodeScriptProjectTool(undefined, {}, factory) as unknown as { args: Record<string, unknown>, execute: (args: never, context: ReturnType<typeof createToolContext>) => Promise<string | { output: string }> }
-        const response = parse(await tool.execute({ dependencies: { lodash: "^4.17.0" }, script_file: "/caller/controlled-source.mjs" } as never, createToolContext({ agent: "execute-script" })))
+        const context = createToolContext({ agent: "execute-script", directory })
+        const response = parse(await tool.execute({ dependencies: { lodash: "^4.17.0" }, script_file: "/caller/controlled-source.mjs" } as never, context))
+        await tool.execute({} as never, context)
+        await tool.execute({ dependencies: {} } as never, context)
 
         expect(response).toMatchObject({
             ok: true,
@@ -89,20 +72,28 @@ describe("autocode_script_project tool", () => {
                 exit_code: 0,
                 stdout: "installed",
                 stderr: "",
-                log_path: paths.npmLogPath,
+                log_path: npmLogPath,
             },
         })
         expectPublicPathKeys(response)
         expect(tool.args).not.toHaveProperty("script_file")
-        expect(project.setup).toHaveBeenCalledWith({ dependencies: { lodash: "^4.17.0" } })
-        expect(factory).toHaveBeenCalledWith(expect.objectContaining({ context: expect.objectContaining({ agent: "execute-script" }) }))
+        expect(paths.scriptsRoot).toBe(join(directory, ".opencode", "autocode", "scripts"))
+        expect(basename(paths.sourceRoot)).toMatch(/^\d{2}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_job_1$/)
+        expect(paths.logsRoot).toBe(join(paths.scriptsRoot, ".meta", "logs"))
+        expect(paths.servicesRoot).toBe(join(paths.scriptsRoot, ".meta", "services"))
+        expect(project.setup).toHaveBeenNthCalledWith(1, { dependencies: { lodash: "^4.17.0" } })
+        expect(project.setup).toHaveBeenNthCalledWith(2, {})
+        expect(project.setup).toHaveBeenNthCalledWith(3, { dependencies: {} })
+        expect(project.install).not.toHaveBeenCalled()
+        expect(project.verify).not.toHaveBeenCalled()
+        expect(factory).toHaveBeenCalledWith(expect.objectContaining({ context }))
     })
 
     test("maps core blockers and failures to retry JSON", async () => {
-        const blocked = createFactory({ ok: false, paths: managedPaths, dependencies: [], npm: successfulResult().npm, blocker: { code: "job_workspace_required", message: "Select one job." } })
-        const failed = createFactory({ ok: false, paths: managedPaths, dependencies: [], npm: successfulResult().npm, error: { code: "filesystem_error", message: "disk denied" } })
-        const blockedResponse = parse(await createAutocodeScriptProjectTool(undefined, {}, blocked.factory).execute({}, createToolContext()))
-        const failedResponse = parse(await createAutocodeScriptProjectTool(undefined, {}, failed.factory).execute({}, createToolContext()))
+        const blocked = createFactory({ ok: false, paths, dependencies: [], npm: successfulResult().npm, blocker: { code: "job_workspace_required", message: "Select one job." } })
+        const failed = createFactory({ ok: false, paths, dependencies: [], npm: successfulResult().npm, error: { code: "filesystem_error", message: "disk denied" } })
+        const blockedResponse = parse(await createAutocodeScriptProjectTool(undefined, {}, blocked.factory).execute({}, createToolContext({ directory })))
+        const failedResponse = parse(await createAutocodeScriptProjectTool(undefined, {}, failed.factory).execute({}, createToolContext({ directory })))
 
         expect(blockedResponse).toMatchObject({
             ok: false,
@@ -118,7 +109,7 @@ describe("autocode_script_project tool", () => {
                 exit_code: 0,
                 stdout: "installed",
                 stderr: "",
-                log_path: paths.npmLogPath,
+                log_path: npmLogPath,
             },
         })
         expect(failedResponse).toMatchObject({
@@ -135,7 +126,7 @@ describe("autocode_script_project tool", () => {
                 exit_code: 0,
                 stdout: "installed",
                 stderr: "",
-                log_path: paths.npmLogPath,
+                log_path: npmLogPath,
             },
         })
         expectPublicPathKeys(blockedResponse)
@@ -145,9 +136,9 @@ describe("autocode_script_project tool", () => {
     test("aborts JSON response when factory or setup throws", async () => {
         const factoryThrowing = mock((_dependencies: ManagedScriptProjectDependencies) => { throw new Error("factory denied") })
         const setupThrowing: ManagedScriptProject = {
-            setup: mock(async () => { throw new Error("setup denied") }),
-            install: mock(async () => successfulResult()),
-            reconcile: mock(async () => successfulResult()),
+            setup: mock(async (): Promise<ManagedScriptProjectResult> => { throw new Error("setup denied") }),
+            install: mock(async (): Promise<ManagedScriptProjectResult> => successfulResult()),
+            verify: mock(async (): Promise<ManagedScriptProjectVerifyResult> => ({ ok: true })),
         }
         const setupFactory = mock((_dependencies: ManagedScriptProjectDependencies) => setupThrowing)
         const factoryResponse = parse(await createAutocodeScriptProjectTool(undefined, {}, factoryThrowing).execute({}, createToolContext()))

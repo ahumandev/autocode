@@ -1,5 +1,5 @@
 {
   "files": {
-    "includes": ["src/**/*", "scripts/**/*", "!src/skills/github/**"]
+    "includes": ["src/**/*", "scripts/**/*"]
   }
 }

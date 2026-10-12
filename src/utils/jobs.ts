@@ -69,7 +69,7 @@ function isExistingDirectory(error: unknown): boolean {
     return typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST"
 }
 
-function createWorkspaceTimestamp(now: () => Date): string {
+export function createWorkspaceTimestamp(now: () => Date): string {
     return now().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-")
 }
 

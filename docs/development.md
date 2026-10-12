@@ -30,17 +30,43 @@ The active local-memory store is `.opencode/autocode/memories/`; it starts empty
 
 ## Generated skills
 
-Builds copy bundled skills and tracked GitHub snapshots into `dist/skills`, and the plugin can install the generated output for OpenCode under `~/.agents/skills/autocode/` or the equivalent [XDG](https://specifications.freedesktop.org/basedir/latest/) configuration location. Skills are knowledge files that OpenCode loads into AI context so agents and workflows can follow project-specific instructions; users do not need to invoke these files directly.
+Only bundled AutoCode skills from `src/skills` ship with plugin. No remote skill acquisition or snapshot packaging. OpenCode loads `SKILL.md` guidance into agent context.
 
-### GitHub skill snapshots
+Runtime extracts missing builtin skills into `~/.agents/skills/autocode/`; existing builtin directories stay untouched. Do not delete or modify external/user skill folders.
 
-Run `bun run skill:sync` to refresh GitHub skill snapshots. It uses the primary cache at `~/.cache/autocode/github/<owner>/<project>/` and may falls back to `.opencode/autocode/cache/github/<owner>/<project>/` on failure. Both cache trees are disposable and safe to delete. Sync reads [`src/skills/github.jsonc`](../src/skills/github.jsonc) and writes tracked snapshots to `src/skills/github/{owner}/{project}/{skill}`. Review every sync change in Git before commit.
+### Local skill build and package validation
 
-Run `bun run skill:sync -- --force-refresh` to bypass cached repositories and refresh them remotely.
+1. Edit builtin `src/skills/<skill>/SKILL.md` and supporting local assets; retain `name` and `description` frontmatter for skill loading.
 
-Run `bun run build` to copy committed skill snapshots from `src/skills` into `dist` (the package directory shipped to users). Autocode plugin startup extracts only these local bundled files and never clones, symlinks, or fetches skills.
+2. Build plugin and bundled skills together:
 
-Legal files retain their original names in `github/{owner}/{project}/`. Projects under one owner can have different legal files. Sync warns when a repository-root license is missing. Syncing accepts redistribution risk and grants no rights.
+   ```bash
+   bun run build
+   ```
+
+   [`scripts/copy-skill-sources.ts`](../scripts/copy-skill-sources.ts) copies local release assets into `dist/skills`, excluding TypeScript and test/spec files. [`scripts/skill-bundle.ts`](../scripts/skill-bundle.ts) writes `dist/skills/.bundle-manifest.json` with directory paths, file paths, and SHA-256 digests.
+
+   For asset-only changes after initial build, refresh skills and manifest without rebuilding plugin:
+
+   ```bash
+   bun run copy:skills
+   ```
+
+3. Validate existing build before local loading or packaging:
+
+   ```bash
+   bun run verify:package
+   ```
+
+   [`scripts/verify-package-artifacts.ts`](../scripts/verify-package-artifacts.ts) checks `dist/plugin.js`, `dist/plugin.d.ts`, package metadata, and exact skill manifest paths/digests. Expected result: exit code `0`, no errors. Validation does not build missing artifacts.
+
+4. Use watch mode for bundle/declaration rebuilds:
+
+   ```bash
+   bun run watch
+   ```
+
+   Skills copy once at watch startup, not on later asset edits. After skill edits, rerun `bun run copy:skills` or restart watch; rerun `bun run verify:package` after output completes.
 
 ## Managed script execution
 
@@ -82,77 +108,94 @@ Unsupported hosts include macOS, Windows, Android or Termux, non-Linux systems, 
 
 ## Local setup
 
-Local setup is for repository development only. It is not the public npm installation flow.
+Local setup targets repository development, not public npm installation.
 
-1. Install dependencies from the repository root.
+1. Install repository dependencies needed for build:
 
    ```bash
    bun install
    ```
 
-   Bun installs the dependencies declared in [`package.json`](../package.json).
+   Dependency versions come from [`package.json`](../package.json).
 
-2. Build the plugin.
+2. Build and validate local plugin before loading:
 
    ```bash
    bun run build
+   bun run verify:package
    ```
 
-   The build removes `dist`, bundles [`src/plugin.ts`](../src/plugin.ts), emits TypeScript declarations, and copies generated skills and GitHub snapshots into `dist/`. It does not install the local shim.
+   Build clears `dist`, bundles [`src/plugin.ts`](../src/plugin.ts), emits declarations, and copies bundled local skills into `dist/skills` with `.bundle-manifest.json`. Expected outputs: `dist/plugin.js`, `dist/plugin.d.ts`, and validated skill assets. Build does not install shim.
 
-3. Install the local shim when you want OpenCode to load the repository build.
+3. Install local shim so OpenCode loads repository build:
 
    ```bash
    bun run install:shim
    ```
 
-   This writes the local development shim to `~/.config/opencode/plugins/autocode.js`.
+   Shim path: `~/.config/opencode/plugins/autocode.js`.
 
-4. Load the plugin in OpenCode.
-
-   For local development in this repository, [`.opencode/plugins/autocode.ts`](../.opencode/plugins/autocode.ts) re-exports the built plugin from `dist/plugin.js`.
+4. Load plugin in OpenCode. Repository-local [`.opencode/plugins/autocode.ts`](../.opencode/plugins/autocode.ts) re-exports `dist/plugin.js`; build must exist first.
 
 ## Development commands
 
-| Command                         | Purpose                                                                                                                          |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run skill:sync`            | Refreshes tracked GitHub skill snapshots; review Git changes before commit.                                                      |
-| `bun run build`                 | Clears `dist`, bundles `src/plugin.ts`, emits declarations, and copies skill into `dist/skills`.                                 |
-| `bun run install:shim`          | Installs the local development shim at `~/.config/opencode/plugins/autocode.js`.                                                 |
-| `bun run watch`                 | Copies generated skills once, then watches source files. When they change, it automatically rebuilds the Bun bundle and declarations. |
-| `bun test`                      | Runs the Bun test suite under `src`.                                                                                             |
-| `bun run typecheck`             | Runs TypeScript type checking without emitting files.                                                                            |
-| `bun run verify:sandbox-online` | Runs the sandbox verification script.                                                                                            |
+| Command | Purpose |
+| --- | --- |
+| `bun run build` | Clears `dist`, bundles plugin, emits declarations, copies bundled local skills, writes manifest. |
+| `bun run copy:skills` | Refreshes `dist/skills` and `.bundle-manifest.json` from local sources only. |
+| `bun run verify:package` | Validates plugin artifacts, package metadata, and skill manifest paths/SHA-256 digests. |
+| `bun run install:shim` | Installs local development shim at `~/.config/opencode/plugins/autocode.js`. |
+| `bun run watch` | Copies skills/manifest once; watches plugin bundle and declarations. Skill edits require recopy or restart. |
+| `bun run test` | Runs TypeScript checking, then isolated Bun tests under `src`. |
+| `bun run tests` | Runs isolated Bun tests under `src` without TypeScript checking. |
+| `bun run typecheck` | Runs TypeScript checking without emitting files. |
+| `bun run verify:sandbox-online` | Runs sandbox verification script. |
 
 There is no `lint` script in the current `package.json`.
 
 ## Testing
 
-The repository includes Bun tests for tools and generated skills under `src/**/*.test.ts`.
+1. Check types and local runtime/bundled-skill tests together before committing:
 
-```bash
-bun test
-```
+   ```bash
+   bun run test
+   ```
 
-Review the Bun test summary in your terminal to confirm whether the suite passed.
+   Uses `bun run typecheck` followed by `bun test src --isolate --reporter=dots`. Expected result: no type diagnostics, passing Bun summary.
 
-Run TypeScript type checking separately.
+2. Run tests alone when type checking already completed:
 
-```bash
-bun run typecheck
-```
+   ```bash
+   bun run tests
+   ```
 
-TypeScript reports diagnostics if type checking fails, and exits successfully when no diagnostics are emitted.
+3. Check types alone for quick diagnostics:
+
+   ```bash
+   bun run typecheck
+   ```
+
+   Success exits `0` with no diagnostics. Built skill assets require separate `bun run build` and `bun run verify:package` checks above.
 
 ## Local Plugin Deployment
 
-Build the distributable plugin only for the local source workflow in this repository, when you are building AutoCode yourself and deploying or testing it locally through the local shim. This is not the npm publish or npm install workflow.
+Local source workflow only; not npm publish or public npm installation.
 
-```bash
-bun run build
-bun run install:shim
-```
+1. Build and validate distributable output before local deployment:
 
-The build output is written to `dist/`, including `dist/plugin.js`, declarations, and copied generated skills under `dist/skills`, matching the `main`, `types`, and `exports` fields in `package.json`. Run `bun run install:shim` separately when you need the local OpenCode shim.
+   ```bash
+   bun run build
+   bun run verify:package
+   ```
 
-See [Distribution Guide](distribution.md) for more information about distributing AutoCode on public registries.
+   Outputs: `dist/plugin.js`, declarations, bundled local skills under `dist/skills`, and `dist/skills/.bundle-manifest.json`. Package entry points match `main`, `types`, and `exports` in `package.json`.
+
+2. Install shim separately so OpenCode loads local build:
+
+   ```bash
+   bun run install:shim
+   ```
+
+   Shim path: `~/.config/opencode/plugins/autocode.js`.
+
+See [Distribution Guide](distribution.md) for public registry distribution.
