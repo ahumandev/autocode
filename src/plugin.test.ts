@@ -23,6 +23,7 @@ import {
 } from "./hooks/managed_script_lifecycle";
 import { createNoopAsk } from "./tools/test_context";
 import { managedSkills } from "./skills";
+import { initializeAutocodeGitExclude as initializeActualAutocodeGitExclude } from "./utils/git_exclude";
 import { createPlatformCapabilities } from "./utils/platform";
 import { permissionEffect, type PermissionRule } from "./utils/permissions";
 
@@ -34,6 +35,7 @@ let restartCoordinatorFactoryOverride:
 	| undefined;
 const actualManagedScriptLifecycles: ManagedScriptLifecycle[] = [];
 const actualRestartCoordinators: PendingAgentRestartCoordinator[] = [];
+const actualInitializeAutocodeGitExclude = initializeActualAutocodeGitExclude;
 const actualCreateManagedScriptLifecycle = createActualManagedScriptLifecycle;
 const actualCreatePendingAgentRestartCoordinator =
 	createActualPendingAgentRestartCoordinator;
@@ -66,8 +68,17 @@ mock.module("./hooks/agent_restart_coordinator", () => ({
 
 const { default: autocode } = await import("./plugin");
 
-afterAll(() => {
+afterAll((): void => {
 	mock.restore();
+	mock.module("./utils/git_exclude", () => ({
+		initializeAutocodeGitExclude: actualInitializeAutocodeGitExclude,
+	}));
+	mock.module("./hooks/managed_script_lifecycle", () => ({
+		createManagedScriptLifecycle: actualCreateManagedScriptLifecycle,
+	}));
+	mock.module("./hooks/agent_restart_coordinator", () => ({
+		createPendingAgentRestartCoordinator: actualCreatePendingAgentRestartCoordinator,
+	}));
 });
 
 const tempRoots: string[] = [];

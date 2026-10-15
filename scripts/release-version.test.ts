@@ -1,9 +1,40 @@
 import { expect, test } from "bun:test"
 import { spawnSync } from "node:child_process"
+import { resolve } from "node:path"
 import { shouldUseShell } from "./release-version"
 
 const commitMessage = "chore: release v0.18.3"
 const tagMessage = "@ahumandev/autocode v0.18.3"
+const releaseScriptPath = resolve(import.meta.dir, "release-version.ts")
+const subprocessTimeout = 5_000
+
+test("importing the release script does not validate CLI arguments", (): void => {
+    const importMarker = "release-script-imported"
+    const result = spawnSync(
+        process.execPath,
+        ["-e", `process.argv = [process.execPath, ${JSON.stringify(releaseScriptPath)}]; await import(${JSON.stringify(releaseScriptPath)}); console.log(${JSON.stringify(importMarker)})`],
+        { encoding: "utf8", timeout: subprocessTimeout },
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(0)
+    expect(result.stdout.trim()).toBe(importMarker)
+    expect(result.stderr).toBe("")
+})
+
+test.each([undefined, "invalid"])("direct execution rejects version %s with usage", (versionArg: string | undefined): void => {
+    const args = versionArg === undefined ? [] : [versionArg]
+    const result = spawnSync(
+        process.execPath,
+        [releaseScriptPath, ...args],
+        { encoding: "utf8", timeout: subprocessTimeout },
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(1)
+    expect(result.stderr.trim()).toBe("Usage: bun run release:version -- <patch|minor|major|x.y.z>")
+    expect(result.stdout).toBe("")
+})
 
 test("git is spawned directly on Windows", () => {
     expect(shouldUseShell("git", "win32")).toBe(false)

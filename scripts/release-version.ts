@@ -17,7 +17,6 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
 
-const versionArg = process.argv[2]
 const validVersionArgPattern = /^(patch|minor|major|(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)$/
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const projectRoot = resolve(scriptDir, "..")
@@ -86,23 +85,31 @@ function readPackageVersion(): string {
   return packageJson.version
 }
 
-if (process.argv.length !== 3 || !validVersionArgPattern.test(versionArg)) {
-  console.error("Usage: bun run release:version -- <patch|minor|major|x.y.z>")
-  process.exit(1)
+function main(): void {
+  const versionArg = process.argv[2]
+
+  if (process.argv.length !== 3 || !validVersionArgPattern.test(versionArg)) {
+    console.error("Usage: bun run release:version -- <patch|minor|major|x.y.z>")
+    process.exit(1)
+  }
+
+  runCommand("npm", ["version", versionArg, "--no-git-tag-version"])
+  runShellCommand("bun run typecheck && bun run build && bun run verify:package")
+
+  const version = readPackageVersion()
+  const branch = getCommandOutput("git", ["rev-parse", "--abbrev-ref", "HEAD"])
+
+  runCommand("git", ["add", "package.json", "bun.lock"])
+  runCommand("git", ["commit", "-m", `chore: release v${version}`])
+  runCommand("git", ["tag", "-a", `v${version}`, "-m", `@ahumandev/autocode v${version}`])
+
+  console.log(`\nPushing branch '${branch}' and tag 'v${version}' to origin...`)
+  runCommand("git", ["push", "origin", branch])
+  runCommand("git", ["push", "origin", `v${version}`])
+
+  console.log("\nDone. Pushing the tag triggered the npm publish workflow.")
 }
 
-runCommand("npm", ["version", versionArg, "--no-git-tag-version"])
-runShellCommand("bun run typecheck && bun run build && bun run verify:package")
-
-const version = readPackageVersion()
-const branch = getCommandOutput("git", ["rev-parse", "--abbrev-ref", "HEAD"])
-
-runCommand("git", ["add", "package.json", "bun.lock"])
-runCommand("git", ["commit", "-m", `chore: release v${version}`])
-runCommand("git", ["tag", "-a", `v${version}`, "-m", `@ahumandev/autocode v${version}`])
-
-console.log(`\nPushing branch '${branch}' and tag 'v${version}' to origin...`)
-runCommand("git", ["push", "origin", branch])
-runCommand("git", ["push", "origin", `v${version}`])
-
-console.log("\nDone. Pushing the tag triggered the npm publish workflow.")
+if (import.meta.main) {
+  main()
+}

@@ -99,6 +99,12 @@ const { default: autocode } = await import("./plugin")
 
 afterAll(() => {
     mock.restore()
+    mock.module("./hooks/managed_script_lifecycle", () => ({
+        createManagedScriptLifecycle: actualCreateManagedScriptLifecycle,
+    }))
+    mock.module("./hooks/agent_restart_coordinator", () => ({
+        createPendingAgentRestartCoordinator: actualCreateRestartCoordinator,
+    }))
 })
 
 class TestEventStream {

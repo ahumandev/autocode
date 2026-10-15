@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test"
 import { spawn as spawnChild, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { link, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
+import { tmpdir } from "node:os"
 import { basename, join } from "node:path"
 import { createManagedScriptProject, createManagedScriptProjectPaths, isManagedScriptDependencySpec, resolveManagedScriptProjectOwner, satisfiesManagedScriptRange, type ManagedScriptProject, type ManagedScriptProjectCommandResult, type ManagedScriptProjectDependencies, type ManagedScriptProjectFileSystem, type ManagedScriptProjectInstallInput, type ManagedScriptProjectResult, type ManagedScriptProjectSpawn } from "./managed_script_project"
 import { acquireInstallerLock, inspectInstallerLock } from "./managed_script_install_lock"
@@ -24,9 +25,10 @@ const managedAgentsContent = [
     "- `.opencode/autocode/scripts/.meta/` holds shared logs, service records, installer lock, recovery journal; never job sources.",
 ].join("\n")
 
-const scratchRoot = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const scratchRoot = join(tmpdir(), "opencode")
 
 async function createTemporaryRoot(prefix: string): Promise<string> {
+    await mkdir(scratchRoot, { recursive: true })
     return await mkdtemp(join(scratchRoot, prefix))
 }
 
