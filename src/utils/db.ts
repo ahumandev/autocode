@@ -1,22 +1,22 @@
 import { SQL } from "bun"
-import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
+import { createRuntimeCredentialResolver } from "@/credentials/runtime"
+import type { CredentialResolver, DbCredentialProfile } from "@/credentials/types"
+import { normalizeCredentialId, resolveCredentialProfile } from "@/credentials/lookup"
 
 export const DB_KEY_PATTERN = /^[A-Za-z0-9_]+$/
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const BINARY_TYPE = "Buffer"
+const REDACTED_CONNECTION = "[REDACTED_CONNECTION]"
 
 export type DbAdapter = "postgres" | "mysql" | "mariadb" | "sqlite"
 
 export type DbConfig = {
     adapter: DbAdapter
     connection: string
-    connectionEnvVar: string
     dbKey: string
     normalizedDbKey: string
     password?: string
-    passwordEnvVar: string
     username?: string
-    usernameEnvVar: string
 }
 
 export type DbClient = {
@@ -78,22 +78,10 @@ type BunSqlClient = {
 }
 
 export function normalizeDbKey(dbKey: string): string {
-    return normalizeEnvKey(dbKey, {
+    return normalizeCredentialId("db", dbKey, {
         errorMessage: "Invalid db_key. Use only ASCII letters, digits, and underscores.",
         label: "db_key",
     })
-}
-
-export function getDbEnvVarNames(normalizedDbKey: string): {
-    connectionEnvVar: string
-    passwordEnvVar: string
-    usernameEnvVar: string
-} {
-    return {
-        connectionEnvVar: buildEnvVarName("AUTOCODE_DB", normalizedDbKey, "CONNECTION"),
-        passwordEnvVar: buildEnvVarName("AUTOCODE_DB", normalizedDbKey, "PASSWORD"),
-        usernameEnvVar: buildEnvVarName("AUTOCODE_DB", normalizedDbKey, "USERNAME"),
-    }
 }
 
 export function normalizeConnectionString(connection: string): string {
@@ -124,29 +112,34 @@ export function detectDbAdapter(connection: string): DbAdapter {
     throw new Error("Unsupported database protocol. Use PostgreSQL, MySQL, MariaDB, or SQLite connection formats.")
 }
 
-export function loadDbConfig(dbKey: string, env: NodeJS.ProcessEnv = process.env): DbConfig {
+export async function loadDbConfig(dbKey: string, credentialResolver: CredentialResolver = createRuntimeCredentialResolver()): Promise<DbConfig> {
     const normalizedDbKey = normalizeDbKey(dbKey)
-    const { connectionEnvVar, passwordEnvVar, usernameEnvVar } = getDbEnvVarNames(normalizedDbKey)
-    const rawConnection = env[connectionEnvVar]?.trim()
+    let profile: DbCredentialProfile
+
+    try {
+        profile = (await resolveCredentialProfile("db", normalizedDbKey, credentialResolver)).profile
+    }
+    catch {
+        throw new Error("Credential read failed.")
+    }
+
+    const rawConnection = profile.connection?.trim()
 
     if (!rawConnection) {
-        throw new Error(`Missing required environment variable: ${connectionEnvVar}`)
+        throw new Error("Invalid database credential profile. Connection is required.")
     }
 
     const connection = normalizeConnectionString(rawConnection)
-    const username = env[usernameEnvVar]?.trim() || undefined
-    const password = env[passwordEnvVar]?.trim() || undefined
+    const username = profile.username?.trim() || undefined
+    const password = profile.password?.trim() || undefined
 
     return {
         adapter: detectDbAdapter(connection),
         connection,
-        connectionEnvVar,
         dbKey: dbKey.trim(),
         normalizedDbKey,
         password,
-        passwordEnvVar,
         username,
-        usernameEnvVar,
     }
 }
 
@@ -505,14 +498,30 @@ export function normalizeJsonRows(rows: Record<string, unknown>[]): Record<strin
 export function sanitizeDbError(error: unknown, config?: Pick<DbConfig, "connection" | "password" | "username">): unknown {
     const secrets = [config?.connection, config?.password, config?.username].filter((value): value is string => Boolean(value))
 
+    if (config?.connection) {
+        try {
+            const url = new URL(normalizeConnectionString(config.connection))
+            secrets.push(url.username, url.password)
+
+            for (const [key, value] of url.searchParams) {
+                if (/^(?:user(?:name)?|pass(?:word)?|pwd)$/i.test(key)) {
+                    secrets.push(value)
+                }
+            }
+        }
+        catch {
+            // SQLite filenames need not be valid URLs.
+        }
+    }
+
     if (error instanceof Error) {
-        const sanitized = new Error(sanitizeString(error.message, secrets))
-        sanitized.name = error.name
+        const sanitized = new Error(sanitizeString(error.message, secrets, config?.connection))
+        sanitized.name = sanitizeString(error.name, secrets, config?.connection)
         return sanitized
     }
 
     if (typeof error === "string") {
-        return sanitizeString(error, secrets)
+        return sanitizeString(error, secrets, config?.connection)
     }
 
     if (Array.isArray(error)) {
@@ -520,22 +529,44 @@ export function sanitizeDbError(error: unknown, config?: Pick<DbConfig, "connect
     }
 
     if (error && typeof error === "object") {
-        return Object.entries(error as Record<string, unknown>).reduce<Record<string, unknown>>((result, [key, value]) => {
-            result[key] = sanitizeDbError(value, config)
-            return result
-        }, {})
+        const message = (error as { message?: unknown }).message
+        return new Error(typeof message === "string"
+            ? sanitizeString(message, secrets, config?.connection)
+            : "Database operation failed.")
     }
 
     return error
 }
 
-function sanitizeString(value: string, secrets: string[]): string {
-    let sanitized = value.replace(/\b(?:postgres(?:ql)?|mysql|mariadb|sqlite|file):[^\s'"`]+/gi, "[REDACTED_CONNECTION]")
+function sanitizeString(value: string, secrets: string[], connection?: string): string {
+    const connectionVariants = new Set<string>()
+    const variants = new Set<string>()
 
     for (const secret of secrets) {
         if (secret) {
-            sanitized = sanitized.split(secret).join("[REDACTED]")
+            const target = secret === connection ? connectionVariants : variants
+            target.add(secret)
+
+            try {
+                target.add(encodeURIComponent(secret))
+                target.add(decodeURIComponent(secret))
+            }
+            catch {
+                // Literal percent signs and unpaired surrogates still redact verbatim.
+            }
         }
+    }
+
+    let sanitized = value
+
+    for (const secret of [...connectionVariants].sort((left, right): number => right.length - left.length)) {
+        sanitized = sanitized.split(secret).join(REDACTED_CONNECTION)
+    }
+
+    sanitized = sanitized.replace(/\b(?:postgres(?:ql)?|mysql|mariadb|sqlite|file):[^\s'"`]+/gi, REDACTED_CONNECTION)
+
+    for (const secret of [...variants].sort((left, right): number => right.length - left.length)) {
+        sanitized = sanitized.split(secret).join("[REDACTED]")
     }
 
     return sanitized

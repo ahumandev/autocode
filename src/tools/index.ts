@@ -1,6 +1,8 @@
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import type { ToolDefinition } from "@opencode-ai/plugin"
 import type { AutocodeSandboxConfig } from "../config"
+import { createRuntimeCredentialResolver } from "../credentials/runtime"
+import type { CredentialResolver } from "../credentials/types"
 import type { PlatformCapabilities } from "../utils/platform"
 import type { PendingAgentRestartCoordinator } from "../hooks/agent_restart_coordinator"
 import type { ManagedScriptLifecycle } from "../hooks/managed_script_lifecycle"
@@ -10,6 +12,7 @@ import { createAutocodeConceptReadTool } from "./autocode_concept_read"
 import { createAutocodeConfigReadTool } from "./autocode_config_read"
 import { createAutocodeConfigEditTool } from "./autocode_config_edit"
 import { createAutocodeConfigRemoveTool } from "./autocode_config_remove"
+import { createAutocodeCredentialsListTool } from "./autocode_credentials_list"
 import { createAutocodeMdReadTool } from "./autocode_md_read"
 import { createAutocodeMdCreateTool } from "./autocode_md_create"
 import { createAutocodeMdH1Tool } from "./autocode_md_h1"
@@ -55,6 +58,7 @@ type ToolRuntime = {
     restartCoordinator?: PendingAgentRestartCoordinator
     managedScriptLifecycle?: ManagedScriptLifecycle
     activeSessionContext?: ActiveSessionContext
+    credentialResolver?: CredentialResolver
 }
 
 type ToolMap = Record<string, ToolDefinition>
@@ -65,6 +69,7 @@ export function createTools(
     runtime?: ToolRuntime,
     capabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" },
 ): ToolMap {
+    const credentialResolver = runtime?.credentialResolver ?? createRuntimeCredentialResolver()
     const sandboxTools: ToolMap = capabilities.isWindows ? {} : {
         autocode_sandbox_cli: createAutocodeSandboxCliTool(client),
         autocode_sandbox_config_edit: createAutocodeSandboxConfigEditTool(client),
@@ -88,10 +93,11 @@ export function createTools(
         autocode_config_edit: createAutocodeConfigEditTool(),
         autocode_config_read: createAutocodeConfigReadTool(),
         autocode_config_remove: createAutocodeConfigRemoveTool(),
-        autocode_db_schemas: createAutocodeDbSchemasTool(),
-        autocode_db_table: createAutocodeDbTableTool(),
-        autocode_db_table_read: createAutocodeDbTableReadTool(),
-        autocode_db_tables: createAutocodeDbTablesTool(),
+        autocode_credentials_list: createAutocodeCredentialsListTool(credentialResolver),
+        autocode_db_schemas: createAutocodeDbSchemasTool({ credentialResolver }),
+        autocode_db_table: createAutocodeDbTableTool({ credentialResolver }),
+        autocode_db_table_read: createAutocodeDbTableReadTool({ credentialResolver }),
+        autocode_db_tables: createAutocodeDbTablesTool({ credentialResolver }),
         autocode_dependencies: createAutocodeDependenciesTool(undefined, capabilities),
         autocode_job_list: createAutocodeJobListTool(),
         autocode_kill: createAutocodeKillTool(client),
@@ -106,25 +112,25 @@ export function createTools(
         autocode_md_update: createAutocodeMdUpdateTool(),
         autocode_memory_forget: createAutocodeMemoryForgetTool(),
         autocode_memory_recall: createAutocodeMemoryRecallTool(),
-        autocode_rest: createAutocodeRestTool(client),
+        autocode_rest: createAutocodeRestTool(client, undefined, credentialResolver),
         autocode_script_install: createAutocodeScriptInstallTool(client),
         autocode_script_project: createAutocodeScriptProjectTool(client),
         autocode_script_run: createAutocodeScriptRunTool(client),
         autocode_script_service: createAutocodeScriptServiceTool(client, {}, undefined, runtime?.managedScriptLifecycle),
         autocode_session_create: createAutocodeSessionCreateTool(client, runtime?.restartCoordinator, runtime?.serverUrl, runtime?.getServerUrl, runtime?.getWebUrl),
-        autocode_ssh_command: createAutocodeSshCommandTool(),
-        autocode_ssh_config_edit: createAutocodeSshConfigEditTool(),
-        autocode_ssh_config_read: createAutocodeSshConfigReadTool(),
-        autocode_ssh_config_remove: createAutocodeSshConfigRemoveTool(),
-        autocode_ssh_edit_file: createAutocodeSshEditFileTool(),
-        autocode_ssh_glob: createAutocodeSshGlobTool(),
-        autocode_ssh_grep_file: createAutocodeSshGrepFileTool(),
-        autocode_ssh_list: createAutocodeSshListTool(),
-        autocode_ssh_patch_file: createAutocodeSshPatchFileTool(),
-        autocode_ssh_read_attributes: createAutocodeSshReadAttributesTool(),
-        autocode_ssh_read_file: createAutocodeSshReadFileTool(),
-        autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool(),
-        autocode_ssh_write_file: createAutocodeSshWriteFileTool(),
+        autocode_ssh_command: createAutocodeSshCommandTool({ credentialResolver }),
+        autocode_ssh_config_edit: createAutocodeSshConfigEditTool({ credentialResolver }),
+        autocode_ssh_config_read: createAutocodeSshConfigReadTool({ credentialResolver }),
+        autocode_ssh_config_remove: createAutocodeSshConfigRemoveTool({ credentialResolver }),
+        autocode_ssh_edit_file: createAutocodeSshEditFileTool({ credentialResolver }),
+        autocode_ssh_glob: createAutocodeSshGlobTool({ credentialResolver }),
+        autocode_ssh_grep_file: createAutocodeSshGrepFileTool({ credentialResolver }),
+        autocode_ssh_list: createAutocodeSshListTool({ credentialResolver }),
+        autocode_ssh_patch_file: createAutocodeSshPatchFileTool({ credentialResolver }),
+        autocode_ssh_read_attributes: createAutocodeSshReadAttributesTool({ credentialResolver }),
+        autocode_ssh_read_file: createAutocodeSshReadFileTool({ credentialResolver }),
+        autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool({ credentialResolver }),
+        autocode_ssh_write_file: createAutocodeSshWriteFileTool({ credentialResolver }),
         autocode_youtube_transcribe: createAutocodeYoutubeTranscribeTool(),
         learn: createLearnTool(),
         skill: createSkillTool(client, undefined, runtime, undefined, runtime?.activeSessionContext),

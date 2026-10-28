@@ -1,16 +1,31 @@
 import { EventEmitter } from "node:events"
 import { describe, expect, test } from "bun:test"
 import type { ConnectConfig, FileEntryWithStats, Stats } from "ssh2"
+import type { CredentialKind, CredentialResolver, ResolvedCredentialProfile, SshCredentialProfile } from "../credentials/types"
 import type { SftpLike, SshChannelLike, SshClientLike, SshConnectionPool, SshResolvedConfig } from "../utils/ssh"
 import { createToolContext } from "./test_context"
 import { createRemoteConfigExecute } from "./config/ssh/adapter"
 import { createAutocodeSshConfigRemoveTool } from "./autocode_ssh_config_remove"
 
-const envWithPassword = {
-    AUTOCODE_SSH_DEV_HOST: "ssh.example:2200",
-    AUTOCODE_SSH_DEV_USERNAME: "devuser",
-    AUTOCODE_SSH_DEV_PASSWORD: "secret",
-} satisfies NodeJS.ProcessEnv
+const profileWithPassword = {
+    host: "ssh.example:2200",
+    username: "devuser",
+    password: "secret",
+} satisfies SshCredentialProfile
+
+class FakeCredentialResolver implements CredentialResolver {
+    readonly calls: Array<{ kind: CredentialKind; id: string }> = []
+
+    constructor(private readonly profile: SshCredentialProfile = profileWithPassword) {
+    }
+
+    async resolve<K extends CredentialKind>(kind: K, id: string): Promise<ResolvedCredentialProfile<K>> {
+        this.calls.push({ kind, id })
+        if (kind !== "ssh") throw new Error("Expected SSH credentials")
+        if (id !== "DEV") throw new Error("Unknown SSH profile")
+        return { kind: "ssh", provider: "plaintext", profile: this.profile } as ResolvedCredentialProfile<K>
+    }
+}
 
 class MemorySftp implements SftpLike {
     readonly files = new Map<string, string>()
@@ -76,11 +91,14 @@ class MemorySftp implements SftpLike {
 }
 
 class FakeClient extends EventEmitter implements SshClientLike {
+    readonly connectConfigs: ConnectConfig[] = []
+
     constructor(private readonly sftpInstance: SftpLike) {
         super()
     }
 
-    connect(_config: ConnectConfig): void {
+    connect(config: ConnectConfig): void {
+        this.connectConfigs.push(config)
     }
 
     exec(_command: string, _callback: (err: Error | undefined, channel: SshChannelLike) => void): void {
@@ -107,8 +125,9 @@ function createFakePool(client: SshClientLike): { configs: SshResolvedConfig[]; 
     return { configs, pool: pool as unknown as SshConnectionPool }
 }
 
-function buildDeps(sftp: MemorySftp) {
-    return { env: envWithPassword, pool: createFakePool(new FakeClient(sftp)).pool }
+function buildDeps(sftp: MemorySftp): { credentialResolver: FakeCredentialResolver; configs: SshResolvedConfig[]; pool: SshConnectionPool; client: FakeClient } {
+    const client = new FakeClient(sftp)
+    return { credentialResolver: new FakeCredentialResolver(), ...createFakePool(client), client }
 }
 
 function stored(sftp: MemorySftp, path: string): unknown {
@@ -123,13 +142,20 @@ function parseOut(result: unknown) {
 describe("ssh config remove tool", () => {
     test("removes leaf key, writes file atomically, returns parent state", async () => {
         const sftp = new MemorySftp({ "/etc/app.json": JSON.stringify({ server: { host: "h", port: 8080 }, debug: true }) })
-        const tool = createAutocodeSshConfigRemoveTool(buildDeps(sftp))
+        const deps = buildDeps(sftp)
+        const tool = createAutocodeSshConfigRemoveTool(deps)
         const result = await tool.execute({ ssh_key: "dev", path: "/etc/app.json", key_path: "server.port" }, createToolContext())
         const out = parseOut(result)
         expect(out.removed).toEqual(["server", "port"])
         expect(out.parent_now).toEqual({ server: "{1 keys}" })
         expect(stored(sftp, "/etc/app.json")).toEqual({ server: { host: "h" }, debug: true })
         expect(sftp.renameCalls).toHaveLength(1)
+        expect(deps.credentialResolver.calls).toEqual([{ kind: "ssh", id: "DEV" }])
+        expect(deps.configs).toHaveLength(1)
+        expect(deps.configs[0]).toMatchObject({
+            host: "ssh.example", port: 2200, username: "devuser", auth: { method: "password", password: "secret" },
+            connectConfig: { host: "ssh.example", port: 2200, username: "devuser", password: "secret" },
+        })
     })
 
     test("refuses to remove root key and leaves file unchanged", async () => {
@@ -161,22 +187,33 @@ describe("ssh config remove tool", () => {
 
     test("returns error for unknown ssh_key", async () => {
         const sftp = new MemorySftp({ "/etc/app.json": "{}" })
-        const tool = createAutocodeSshConfigRemoveTool(buildDeps(sftp))
+        const deps = buildDeps(sftp)
+        const tool = createAutocodeSshConfigRemoveTool(deps)
         const result = await tool.execute({ ssh_key: "missing", path: "/etc/app.json", key_path: "a" }, createToolContext())
         const out = parseOut(result)
         expect(out.failedAction).toBe("resolve SSH config")
+        expect(out.error).toBe("SSH credential resolution failed")
+        expect(Object.keys(out)).toEqual(["failedAction", "error", "instruction"])
+        expect(out.instruction.trim().length).toBeGreaterThan(0)
+        expect(deps.credentialResolver.calls).toEqual([{ kind: "ssh", id: "MISSING" }])
+        expect(deps.configs).toEqual([])
+        expect(deps.client.connectConfigs).toEqual([])
+        expect(sftp.readFileCalls).toEqual([])
     })
 
     test("wires ssh_key and remaps path to file_path", async () => {
         const sftp = new MemorySftp()
         const { configs, pool } = createFakePool(new FakeClient(sftp))
+        const credentialResolver = new FakeCredentialResolver()
         const seen: Array<Record<string, unknown>> = []
-        const execute = createRemoteConfigExecute({ env: envWithPassword, pool }, "remove SSH config file key", async (_adapter, args) => {
+        const execute = createRemoteConfigExecute({ credentialResolver, pool }, "remove SSH config file key", async (_adapter, args) => {
             seen.push(args)
             return "R"
         })
         await execute({ ssh_key: "dev", path: "/etc/app.json", key_path: "a" })
         expect(configs[0].key).toBe("dev")
+        expect(configs).toHaveLength(1)
+        expect(credentialResolver.calls).toEqual([{ kind: "ssh", id: "DEV" }])
         expect(seen[0].file_path).toBe("/etc/app.json")
     })
 })

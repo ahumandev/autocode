@@ -1,7 +1,8 @@
-import { constants as fsConstants } from "node:fs"
-import { access } from "node:fs/promises"
 import { tool } from "@opencode-ai/plugin"
 import type { Stats } from "ssh2"
+import { canReadCredentialFile } from "../credentials/file-access"
+import { createRuntimeCredentialResolver } from "../credentials/runtime"
+import type { CredentialResolver, SshCredentialProfile } from "../credentials/types"
 import {
     createSshToolAbortResponse,
     createSshToolErrorResponse,
@@ -21,7 +22,9 @@ import {
     type SftpLike,
 } from "@/utils/ssh"
 import { createRetryResponse } from "@/utils/tools"
-import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
+import { normalizeCredentialId, resolveCredentialProfile } from "../credentials/lookup"
+
+export { canReadCredentialFile as canReadFile } from "../credentials/file-access"
 
 const entities = ["owner", "group", "other"] as const
 
@@ -33,8 +36,14 @@ type Permission = {
     execute: Entity[]
 }
 
+type SftpReadCallback = Parameters<SftpLike["readFile"]>[2]
+
+type SafeSftpError = Error & {
+    code?: number | "ENOENT" | "NO_SUCH_FILE" | "EEXIST"
+}
+
 export type SshToolDeps = SshDeps & {
-    env?: NodeJS.ProcessEnv
+    credentialResolver?: CredentialResolver
     pool?: SshConnectionPool
 }
 
@@ -89,6 +98,34 @@ const readFileMaxCharacters = 4000
 const defaultFileToolLimit = 100
 const maximumFileToolLimit = 1000
 const defaultSshPool = new SshConnectionPool()
+const sshOperationFailureMessage = "SSH operation failed"
+const sshMissingPathMessage = "SSH file or directory not found"
+const sshDirectoryExistsMessage = "SSH directory already exists"
+const credentialResolvers = new WeakMap<SshToolDeps, CredentialResolver>()
+const safeSshConfigDiagnostics = [
+    "SSH host is required",
+    "SSH port must be an integer",
+    "SSH port must be between 1 and 65535",
+    "SSH URL must not include username or password",
+    "SSH bracketed IPv6 host is missing closing bracket",
+    "SSH bracketed host may only be followed by a port",
+    "SSH password auth requires password",
+    "SSH agent auth requires agent",
+    "SSH private key auth requires privateKey or privateKeyPath",
+    "SSH connection closed before ready",
+    sshMissingPathMessage,
+] as const
+const sshFailureDiagnostics: ReadonlyArray<readonly [RegExp, string]> = [
+    [/bad passphrase|incorrect passphrase|no passphrase given|passphrase.*(?:required|missing|invalid)/i, "SSH private key requires a valid passphrase"],
+    [/cannot parse privatekey|invalid private key|unsupported key format/i, "SSH private key could not be parsed"],
+    [/all configured authentication methods failed|authentication failed|permission denied.*(?:publickey|password)/i, "SSH authentication failed"],
+    [/ECONNREFUSED/i, "SSH connection refused"],
+    [/ENOTFOUND|EAI_AGAIN/i, "SSH host lookup failed"],
+    [/ETIMEDOUT|timed out/i, "SSH operation timed out"],
+    [/ECONNRESET/i, "SSH connection reset"],
+    [/EACCES|EPERM|permission denied/i, "SSH permission denied"],
+    [/ENOENT|no such file/i, sshMissingPathMessage],
+]
 
 export function createAutocodeSshCommandTool(deps: SshToolDeps = {}): ReturnType<typeof tool> {
     return tool({
@@ -157,7 +194,7 @@ export function createAutocodeSshReadAttributesTool(deps: SshToolDeps = {}): Ret
         },
         async execute(args): Promise<string> {
             return withSshConnection(args.ssh_key, deps, "read SSH attributes", async ({ client, host, port }) => {
-                const sftp = await openSftp(client)
+                const sftp = createSafeSftp(await openSftp(client))
                 const attrs = await readAttributes(client, sftp, args.path)
                 return JSON.stringify({ host, port, ...attrs })
             })
@@ -184,7 +221,7 @@ export function createAutocodeSshWriteAttributesTool(deps: SshToolDeps = {}): Re
             if (permissionError) return createSshToolErrorResponse("write SSH attributes", permissionError)
 
             return withSshConnection(args.ssh_key, deps, "write SSH attributes", async ({ client, host, port }) => {
-                const sftp = await openSftp(client)
+                const sftp = createSafeSftp(await openSftp(client))
                 await readAttributes(client, sftp, args.path)
                 await writeAttributes(client, args.path, args)
                 const updated = await readAttributes(client, sftp, args.path)
@@ -323,7 +360,7 @@ export function createAutocodeSshPatchFileTool(deps: SshToolDeps = {}): ReturnTy
             return withSftp(args.ssh_key, deps, "patch SSH file", async ({ sftp }) => {
                 const current = String(await sftpReadFile(sftp, args.path, "utf8"))
                 const result = applyUnifiedPatch(current, args.patch)
-                if (!result.ok) return createSshToolErrorResponse("patch SSH file", new Error(result.reason))
+                if (!result.ok) return createSshToolErrorResponse("patch SSH file", safeSshError(result.reason, "SSH patch could not be applied"))
                 await sftpWriteFile(sftp, args.path, result.value.content)
                 return JSON.stringify({ operation: "patch", path: args.path, hunks: result.value.hunks, additions: result.value.additions, removals: result.value.removals, bytes: Buffer.byteLength(result.value.content, "utf8") })
             })
@@ -401,21 +438,113 @@ export function createAutocodeSshGrepFileTool(deps: SshToolDeps = {}): ReturnTyp
 }
 
 export async function withSftp(sshKey: string, deps: SshToolDeps, failedAction: string, operation: (context: SshConnectionContext & { sftp: SftpLike }) => Promise<string>): Promise<string> {
-    return withSshConnection(sshKey, deps, failedAction, async (context) => {
-        const sftp = await openSftp(context.client)
+    return withSshConnection(sshKey, deps, failedAction, async (context: SshConnectionContext): Promise<string> => {
+        const sftp = createSafeSftp(await openSftp(context.client))
         return operation({ ...context, sftp })
     })
 }
 
+function createSafeSftp(sftp: SftpLike): SftpLike {
+    const safeSftp: SftpLike = {
+        readFile(path: string, encodingOrCallback: BufferEncoding | SftpReadCallback, callback?: SftpReadCallback): void {
+            const onRead = typeof encodingOrCallback === "function" ? encodingOrCallback : callback
+            if (!onRead) throw new Error(sshOperationFailureMessage)
+            invokeSafeSftp((safeCallback: SftpReadCallback): void => {
+                if (typeof encodingOrCallback === "function") sftp.readFile(path, safeCallback)
+                else sftp.readFile(path, encodingOrCallback, safeCallback)
+            }, onRead)
+        },
+        writeFile(path: string, data: string | Buffer, callback: Parameters<SftpLike["writeFile"]>[2]): void {
+            invokeSafeSftp((safeCallback: typeof callback): void => sftp.writeFile(path, data, safeCallback), callback)
+        },
+        stat(path: string, callback: Parameters<SftpLike["stat"]>[1]): void {
+            invokeSafeSftp((safeCallback: typeof callback): void => sftp.stat(path, safeCallback), callback)
+        },
+        mkdir(path: string, callback: Parameters<SftpLike["mkdir"]>[1]): void {
+            invokeSafeSftp((safeCallback: typeof callback): void => sftp.mkdir(path, safeCallback), callback, true)
+        },
+        readdir(path: string, callback: Parameters<SftpLike["readdir"]>[1]): void {
+            invokeSafeSftp((safeCallback: typeof callback): void => sftp.readdir(path, safeCallback), callback)
+        },
+        unlink(path: string, callback: Parameters<SftpLike["unlink"]>[1]): void {
+            invokeSafeSftp((safeCallback: typeof callback): void => sftp.unlink(path, safeCallback), callback)
+        },
+    }
+    const rename = sftp.rename
+    if (rename) {
+        safeSftp.rename = (oldPath: string, newPath: string, callback: Parameters<NonNullable<SftpLike["rename"]>>[2]): void => {
+            invokeSafeSftp((safeCallback: typeof callback): void => rename.call(sftp, oldPath, newPath, safeCallback), callback)
+        }
+    }
+    return safeSftp
+}
+
+function invokeSafeSftp<T extends unknown[]>(operation: (callback: (error: Error | undefined, ...data: T) => void) => void, callback: (error: Error | undefined, ...data: T) => void, mkdir: boolean = false): void {
+    try {
+        operation((error: unknown, ...data: T): void => {
+            callback(error ? safeSftpError(error, mkdir) : undefined, ...data)
+        })
+    }
+    catch (error: unknown) {
+        throw safeSftpError(error, mkdir)
+    }
+}
+
+function safeSftpError(error: unknown, mkdir: boolean = false): SafeSftpError {
+    const safeError: SafeSftpError = new Error(sshOperationFailureMessage)
+    try {
+        let code: unknown
+        if ((typeof error === "object" && error !== null) || typeof error === "function") {
+            const descriptor = Object.getOwnPropertyDescriptor(error, "code")
+            if (descriptor && "value" in descriptor) code = descriptor.value
+        }
+        if ((typeof code === "number" && Number.isInteger(code) && code >= 0 && code <= 8) || code === "ENOENT" || code === "NO_SUCH_FILE" || code === "EEXIST") {
+            safeError.code = code
+            if (code === 2 || code === "ENOENT" || code === "NO_SUCH_FILE") safeError.message = sshMissingPathMessage
+            else if (mkdir && code === "EEXIST") safeError.message = sshDirectoryExistsMessage
+            // Preserve mkdir callers' tolerance for the generic SFTP FAILURE status.
+            else if (mkdir && code === 4) safeError.message = "SSH directory creation failure"
+            return safeError
+        }
+        if (error instanceof Error) {
+            const message: unknown = error.message
+            if (typeof message === "string") {
+                if (/no such file|not found|enoent/i.test(message)) {
+                    safeError.code = "ENOENT"
+                    safeError.message = sshMissingPathMessage
+                }
+                else if (mkdir && /exists|failure/i.test(message)) {
+                    safeError.code = "EEXIST"
+                    safeError.message = sshDirectoryExistsMessage
+                }
+            }
+        }
+    }
+    catch {
+        return safeError
+    }
+    return safeError
+}
+
 async function withSshConnection(sshKey: string, deps: SshToolDeps, failedAction: string, operation: (context: SshConnectionContext) => Promise<string>): Promise<string> {
+    let profile: SshCredentialProfile
+
+    try {
+        const credential = await resolveCredentialProfile("ssh", normalizeSshKey(sshKey), getSshCredentialResolver(deps))
+        profile = credential.profile
+    }
+    catch {
+        return createSshToolErrorResponse("resolve SSH config", new Error("SSH credential resolution failed"))
+    }
+
     let resolved: Awaited<ReturnType<typeof resolveSshConfig>>
 
     try {
-        const configs = await createEnvConfigMap(sshKey, deps)
+        const configs = await createCredentialConfigMap(sshKey, profile)
         resolved = await resolveSshConfig(configs, sshKey, deps)
     }
-    catch (error) {
-        return createSshToolErrorResponse("resolve SSH config", error)
+    catch (error: unknown) {
+        return createSshToolErrorResponse("resolve SSH config", safeSshError(error, "SSH configuration could not be resolved"))
     }
 
     try {
@@ -429,9 +558,27 @@ async function withSshConnection(sshKey: string, deps: SshToolDeps, failedAction
             pool.release(resolved)
         }
     }
-    catch (error) {
-        return createSshToolAbortResponse(failedAction, error)
+    catch (error: unknown) {
+        return createSshToolAbortResponse(failedAction, safeSshError(error, sshOperationFailureMessage))
     }
+}
+
+function safeSshError(error: unknown, fallbackMessage: string): Error {
+    // Untrusted errors can embed profiles, private keys, or encoded credentials; emit only fixed diagnostics.
+    try {
+        const detail: unknown = typeof error === "string" ? error : error instanceof Error ? error.message : undefined
+        if (typeof detail !== "string") return new Error(fallbackMessage)
+        for (const diagnostic of safeSshConfigDiagnostics) {
+            if (detail === diagnostic) return new Error(diagnostic)
+        }
+        for (const [pattern, diagnostic] of sshFailureDiagnostics) {
+            if (pattern.test(detail)) return new Error(diagnostic)
+        }
+    }
+    catch {
+        return new Error(fallbackMessage)
+    }
+    return new Error(fallbackMessage)
 }
 
 export function validateRemotePath(value: string, name: string): Error | undefined {
@@ -772,28 +919,30 @@ function sortMatches(left: RemoteMatch, right: RemoteMatch): number {
     return left.path.localeCompare(right.path) || left.line - right.line || left.column - right.column
 }
 
-async function createEnvConfigMap(sshKey: string, deps: SshToolDeps): Promise<SshConfigMap> {
-    const suffix = normalizeEnvSuffix(sshKey)
-    const env = deps.env ?? process.env
-    const hostEnvVar = buildEnvVarName("AUTOCODE_SSH", suffix, "HOST")
-    const host = env[hostEnvVar]
+function getSshCredentialResolver(deps: SshToolDeps): CredentialResolver {
+    if (deps.credentialResolver) return deps.credentialResolver
+    const existing = credentialResolvers.get(deps)
+    if (existing) return existing
+    const resolver = createRuntimeCredentialResolver()
+    credentialResolvers.set(deps, resolver)
+    return resolver
+}
 
-    if (!host) throw new Error(`Wrong ssh_key or missing ${hostEnvVar} var`)
+async function createCredentialConfigMap(sshKey: string, profile: SshCredentialProfile): Promise<SshConfigMap> {
+    const { host, keyfile, password, keypass, agent } = profile
+    if (!host) throw new Error("SSH host is required")
 
-    const username = env[buildEnvVarName("AUTOCODE_SSH", suffix, "USERNAME")] || "root"
-    const keyfile = env[buildEnvVarName("AUTOCODE_SSH", suffix, "KEYFILE")]
-    const password = env[buildEnvVarName("AUTOCODE_SSH", suffix, "PASSWORD")]
-    const keypass = env[buildEnvVarName("AUTOCODE_SSH", suffix, "KEYPASS")]
-    const agent = env[buildEnvVarName("AUTOCODE_SSH", suffix, "AGENT")]
-    const port = parseEnvPort(env[buildEnvVarName("AUTOCODE_SSH", suffix, "PORT")])
+    const username = profile.username || "root"
+    const port = parseCredentialPort(profile.port)
     const config: SshConfigInput = { host, username }
 
     if (port !== undefined) config.port = port
 
-    if (keyfile && await canReadFile(keyfile)) {
+    if (keyfile && await canReadCredentialFile(keyfile)) {
         config.privateKeyPath = keyfile
         if (keypass?.trim()) config.passphrase = keypass
         if (password) config.password = password
+        if (agent) config.agent = agent
     }
     else if (password) {
         config.password = password
@@ -805,7 +954,7 @@ async function createEnvConfigMap(sshKey: string, deps: SshToolDeps): Promise<Ss
     return { [sshKey]: config }
 }
 
-function parseEnvPort(value: string | undefined): number | undefined {
+function parseCredentialPort(value: string | undefined): number | undefined {
     if (value === undefined) return undefined
     const trimmed = value.trim()
     if (!/^\d+$/.test(trimmed)) throw new Error("SSH port must be an integer")
@@ -815,22 +964,11 @@ function parseEnvPort(value: string | undefined): number | undefined {
     return port
 }
 
-function normalizeEnvSuffix(sshKey: string): string {
-    return normalizeEnvKey(sshKey, {
-        allowHyphen: true,
+function normalizeSshKey(sshKey: string): string {
+    return normalizeCredentialId("ssh", sshKey, {
         errorMessage: "ssh_key must contain only letters, digits, underscore, or hyphen",
         label: "ssh_key",
     })
-}
-
-async function canReadFile(filePath: string): Promise<boolean> {
-    try {
-        await access(filePath, fsConstants.R_OK)
-        return true
-    }
-    catch {
-        return false
-    }
 }
 
 function combineCommandOutput(stdout: string, stderr: string): string {

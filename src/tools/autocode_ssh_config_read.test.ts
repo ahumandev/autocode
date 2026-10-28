@@ -1,18 +1,36 @@
 import { EventEmitter } from "node:events"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import type { ConnectConfig, FileEntryWithStats, Stats } from "ssh2"
+import type { CredentialKind, CredentialResolver, ResolvedCredentialProfile, SshCredentialProfile } from "../credentials/types"
 import type { SftpLike, SshChannelLike, SshClientLike, SshConnectionPool, SshResolvedConfig } from "../utils/ssh"
+import { resetRetryCounts } from "../utils/tools"
 import { createToolContext } from "./test_context"
 import { configReadFlow } from "./config/core"
 import type { ConfigMode } from "./config/types"
 import { createRemoteConfigAdapter, createRemoteConfigExecute } from "./config/ssh/adapter"
 import { createAutocodeSshConfigReadTool } from "./autocode_ssh_config_read"
 
-const envWithPassword = {
-    AUTOCODE_SSH_DEV_HOST: "ssh.example:2200",
-    AUTOCODE_SSH_DEV_USERNAME: "devuser",
-    AUTOCODE_SSH_DEV_PASSWORD: "secret",
-} satisfies NodeJS.ProcessEnv
+const profileWithPassword = {
+    host: "ssh.example:2200",
+    username: "devuser",
+    password: "secret",
+} satisfies SshCredentialProfile
+
+class FakeCredentialResolver implements CredentialResolver {
+    readonly calls: Array<{ kind: CredentialKind; id: string }> = []
+
+    constructor(private readonly profile: SshCredentialProfile = profileWithPassword) {
+    }
+
+    async resolve<K extends CredentialKind>(kind: K, id: string): Promise<ResolvedCredentialProfile<K>> {
+        this.calls.push({ kind, id })
+        if (kind !== "ssh") throw new Error("Expected SSH credentials")
+        if (id !== "DEV") throw new Error("Unknown SSH profile")
+        return { kind: "ssh", provider: "plaintext", profile: this.profile } as ResolvedCredentialProfile<K>
+    }
+}
 
 class MemorySftp implements SftpLike {
     readonly files = new Map<string, string>()
@@ -21,6 +39,8 @@ class MemorySftp implements SftpLike {
     readonly renameCalls: Array<{ oldPath: string; newPath: string }> = []
     readonly unlinkCalls: string[] = []
     readonly missing = new Set<string>()
+    readError?: unknown
+    readdirError?: Error
 
     constructor(initial: Record<string, string> = {}) {
         for (const [key, value] of Object.entries(initial)) this.files.set(key, value)
@@ -38,6 +58,11 @@ class MemorySftp implements SftpLike {
         this.readFileCalls.push(path)
         const callback = typeof encodingOrCallback === "function" ? encodingOrCallback : maybeCallback
         if (!callback) throw new Error("Expected read callback")
+        if (this.readError !== undefined) {
+            // Malformed config-file read payload must reach the runtime unchanged.
+            callback(this.readError as Error, Buffer.alloc(0))
+            return
+        }
         if (this.missing.has(path)) {
             callback(new Error("No such file"), Buffer.alloc(0))
             return
@@ -112,6 +137,10 @@ class MemorySftp implements SftpLike {
     }
 
     readdir(path: string, callback: (err: Error | undefined, list: FileEntryWithStats[]) => void): void {
+        if (this.readdirError) {
+            callback(this.readdirError, [])
+            return
+        }
         const originalPath = path
         path = this.mockPath(path)
         if (this.missing.has(originalPath)) {
@@ -162,11 +191,14 @@ class MemorySftp implements SftpLike {
 }
 
 class FakeClient extends EventEmitter implements SshClientLike {
+    readonly connectConfigs: ConnectConfig[] = []
+
     constructor(private readonly sftpInstance: SftpLike) {
         super()
     }
 
-    connect(_config: ConnectConfig): void {
+    connect(config: ConnectConfig): void {
+        this.connectConfigs.push(config)
     }
 
     exec(_command: string, _callback: (err: Error | undefined, channel: SshChannelLike) => void): void {
@@ -193,8 +225,9 @@ function createFakePool(client: SshClientLike): { configs: SshResolvedConfig[]; 
     return { configs, pool: pool as unknown as SshConnectionPool }
 }
 
-function buildDeps(sftp: MemorySftp) {
-    return { env: envWithPassword, pool: createFakePool(new FakeClient(sftp)).pool }
+function buildDeps(sftp: MemorySftp, profile: SshCredentialProfile = profileWithPassword): { credentialResolver: FakeCredentialResolver; configs: SshResolvedConfig[]; pool: SshConnectionPool; client: FakeClient } {
+    const client = new FakeClient(sftp)
+    return { credentialResolver: new FakeCredentialResolver(profile), ...createFakePool(client), client }
 }
 
 function parseOut(result: unknown) {
@@ -274,12 +307,19 @@ describe("ssh config read adapter", () => {
 describe("ssh config read tool", () => {
     test("reads config over SFTP and returns nodes", async () => {
         const sftp = new MemorySftp({ "/etc/app.json": JSON.stringify({ host: "localhost", port: 3000 }) })
-        const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
+        const deps = buildDeps(sftp)
+        const tool = createAutocodeSshConfigReadTool(deps)
         const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(out.file_paths["/etc/app.json"].nodes_total).toBe(2)
         expect(out.file_paths["/etc/app.json"].nodes_shown).toBe(2)
         expect(sftp.readFileCalls).toContain("/etc/app.json")
+        expect(deps.credentialResolver.calls).toEqual([{ kind: "ssh", id: "DEV" }])
+        expect(deps.configs).toHaveLength(1)
+        expect(deps.configs[0]).toMatchObject({
+            host: "ssh.example", port: 2200, username: "devuser", auth: { method: "password", password: "secret" },
+            connectConfig: { host: "ssh.example", port: 2200, username: "devuser", password: "secret" },
+        })
     })
 
     test("drills into key_path over SFTP", async () => {
@@ -301,11 +341,18 @@ describe("ssh config read tool", () => {
 
     test("returns error for unknown ssh_key", async () => {
         const sftp = new MemorySftp({ "/etc/app.json": "{}" })
-        const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
+        const deps = buildDeps(sftp)
+        const tool = createAutocodeSshConfigReadTool(deps)
         const result = await tool.execute({ ssh_key: "missing", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(out.failedAction).toBe("resolve SSH config")
-        expect(out.error).toContain("AUTOCODE_SSH_MISSING_HOST")
+        expect(out.error).toBe("SSH credential resolution failed")
+        expect(Object.keys(out)).toEqual(["failedAction", "error", "instruction"])
+        expect(out.instruction.trim().length).toBeGreaterThan(0)
+        expect(deps.credentialResolver.calls).toEqual([{ kind: "ssh", id: "MISSING" }])
+        expect(deps.configs).toEqual([])
+        expect(deps.client.connectConfigs).toEqual([])
+        expect(sftp.readFileCalls).toEqual([])
     })
 
     test("returns multiple matches keyed by absolute path", async () => {
@@ -313,12 +360,15 @@ describe("ssh config read tool", () => {
             "/etc/a.json": JSON.stringify({ a: 1 }),
             "/etc/b.json": JSON.stringify({ b: 2 }),
         })
-        const tool = createAutocodeSshConfigReadTool(buildDeps(sftp))
+        const deps = buildDeps(sftp)
+        const tool = createAutocodeSshConfigReadTool(deps)
         const result = await tool.execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
         const out = parseOut(result)
         expect(Object.keys(out.file_paths).sort()).toEqual(["/etc/a.json", "/etc/b.json"])
         expect(out.file_paths["/etc/a.json"].nodes_total).toBe(1)
         expect(out.file_paths["/etc/b.json"].nodes_total).toBe(1)
+        expect(deps.credentialResolver.calls).toEqual([{ kind: "ssh", id: "DEV" }])
+        expect(deps.configs).toHaveLength(1)
     })
 
     test("handles literal file pattern with relative key", async () => {
@@ -441,8 +491,9 @@ describe("ssh config read tool", () => {
     test("wires ssh_key through withSftp and remaps path to file_path", async () => {
         const sftp = new MemorySftp()
         const { configs, pool } = createFakePool(new FakeClient(sftp))
+        const credentialResolver = new FakeCredentialResolver()
         const seen: Array<Record<string, unknown>> = []
-        const execute = createRemoteConfigExecute({ env: envWithPassword, pool }, "read SSH config file", async (_adapter, args) => {
+        const execute = createRemoteConfigExecute({ credentialResolver, pool }, "read SSH config file", async (_adapter, args) => {
             seen.push(args)
             return "FLOW_OK"
         })
@@ -450,6 +501,92 @@ describe("ssh config read tool", () => {
         expect(out).toBe("FLOW_OK")
         expect(configs).toHaveLength(1)
         expect(configs[0].key).toBe("dev")
+        expect(credentialResolver.calls).toEqual([{ kind: "ssh", id: "DEV" }])
         expect(seen[0].file_path).toBe("/etc/app.json")
+    })
+
+    test("SFTP listing failure returns structured errors without credential markers", async () => {
+        const directory = await mkdtemp(join("C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode", "autocode-ssh-"))
+        try {
+            const markers = { password: "read-password-marker", keypass: "read-keypass-marker", privateKey: "read-private-key-marker" }
+            const keyfile = join(directory, "id_ed25519")
+            await writeFile(keyfile, markers.privateKey)
+            const sftp = new MemorySftp({ "/etc/app.json": "{}" })
+            sftp.readdirError = new Error(`opaque listing failure ${Object.values(markers).join(" ")}`)
+            const deps = buildDeps(sftp, { ...profileWithPassword, password: markers.password, keypass: markers.keypass, keyfile })
+            const result = await createAutocodeSshConfigReadTool(deps).execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
+
+            expect(typeof result).toBe("string")
+            const out = parseOut(result)
+            expect(Object.keys(out)).toEqual(["failedAction", "error", "instruction"])
+            expect(out).toEqual({ failedAction: "Read SSH configuration file", error: "SSH operation failed", instruction: expect.any(String) })
+            expect(out.instruction.trim().length).toBeGreaterThan(0)
+            for (const marker of Object.values(markers)) expect(result as string).not.toContain(marker)
+            expect(deps.credentialResolver.calls).toEqual([{ kind: "ssh", id: "DEV" }])
+            expect(deps.configs).toHaveLength(1)
+            expect(deps.configs[0].connectConfig).toMatchObject({ privateKey: markers.privateKey, passphrase: markers.keypass, password: markers.password })
+        }
+        finally {
+            await rm(directory, { recursive: true, force: true })
+        }
+    })
+
+    test.each(["string", "object"] as const)("serialized config read %s failure never evaluates hostile payloads", async (form) => {
+        const directory = await mkdtemp(join("C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode", "autocode-ssh-"))
+        resetRetryCounts()
+
+        try {
+            const markers = { password: "serialized-read-password-marker", keypass: "serialized-read-keypass-marker", privateKey: "serialized-read-private-key-marker" }
+            const failure = `opaque read failure ${Object.values(markers).join(" ")}`
+            const counters = { message: 0, custom: 0, cause: 0, toJSON: 0, toString: 0, toPrimitive: 0 }
+            const hostile = {
+                get message(): string {
+                    counters.message += 1
+                    return failure
+                },
+                get custom(): string {
+                    counters.custom += 1
+                    return failure
+                },
+                get cause(): string {
+                    counters.cause += 1
+                    return failure
+                },
+                toJSON(): string {
+                    counters.toJSON += 1
+                    return failure
+                },
+                toString(): string {
+                    counters.toString += 1
+                    return failure
+                },
+                [Symbol.toPrimitive](): string {
+                    counters.toPrimitive += 1
+                    return failure
+                },
+            }
+            const keyfile = join(directory, "id_ed25519")
+            await writeFile(keyfile, markers.privateKey)
+            const sftp = new MemorySftp({ "/etc/app.json": "{}" })
+            sftp.readError = form === "string" ? failure : hostile
+            const deps = buildDeps(sftp, { ...profileWithPassword, password: markers.password, keypass: markers.keypass, keyfile })
+            const result = await createAutocodeSshConfigReadTool(deps).execute({ ssh_key: "dev", file_path_glob: "/etc/*.json" }, createToolContext())
+
+            expect(typeof result).toBe("string")
+            const out = JSON.parse(result as string) as Record<string, unknown>
+            expect(Object.keys(out)).toEqual(["failedAction", "error", "instruction"])
+            expect(out).toEqual({ failedAction: "Read SSH configuration file", error: "no readable config files for glob: /etc/*.json", instruction: "Check the glob pattern and file formats." })
+            for (const marker of Object.values(markers)) expect(result as string).not.toContain(marker)
+            expect(counters).toEqual({ message: 0, custom: 0, cause: 0, toJSON: 0, toString: 0, toPrimitive: 0 })
+            expect(deps.credentialResolver.calls).toEqual([{ kind: "ssh", id: "DEV" }])
+            expect(deps.configs).toHaveLength(1)
+            expect(deps.configs[0].connectConfig).toMatchObject({ password: markers.password, passphrase: markers.keypass, privateKey: markers.privateKey })
+            expect(sftp.readFileCalls).toEqual(["/etc/app.json"])
+            expect(sftp.writeFileCalls).toEqual([])
+        }
+        finally {
+            resetRetryCounts()
+            await rm(directory, { recursive: true, force: true })
+        }
     })
 })

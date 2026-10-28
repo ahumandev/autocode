@@ -214,10 +214,6 @@ function isHighPriorityBulkOrder(order: Order): boolean {
 
 ---
 
-
-
-
-
 ## Async/Await Common Mistakes
 
 ```typescript

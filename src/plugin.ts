@@ -16,6 +16,7 @@ import { buildAgents, type AutocodeAgentConfig } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig, mergeExternalDirectoryRules } from "./config"
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { createCommands } from "./commands"
+import { createRuntimeCredentialResolver } from "./credentials/runtime"
 import { reconcileGeneratedSkills } from "./skills"
 import { createTools } from "./tools"
 import { createPlatformCapabilities, type PlatformCapabilities } from "./utils/platform"
@@ -127,7 +128,7 @@ async function mergeConfig(
         cfg.small_model = tiers.cheap.model
     }
 
-    cfg.subagent_depth = Math.max(cfg.subagent_depth ?? 0, 5)
+    cfg.subagent_depth = Math.min(Math.max(cfg.subagent_depth ?? 0, 5), 7)
 
     cfg.agent = cfg.agent ?? {}
     if (capabilities.isWindows) delete (cfg.agent as Record<string, unknown>)["execute-sandbox"]
@@ -255,6 +256,7 @@ async function createPluginHooks(
         },
         tool: createTools(input.client, autocodeConfig.sandbox, {
             home,
+            credentialResolver: createRuntimeCredentialResolver({ provider: autocodeConfig.credentials.provider }),
             serverUrl: input.serverUrl,
             getWebUrl: () => process.env.AUTOCODE_WEB_URL,
             restartCoordinator,
@@ -783,6 +785,7 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
 
     const tools = createTools(client, autocodeConfig.sandbox, {
         home,
+        credentialResolver: createRuntimeCredentialResolver({ provider: autocodeConfig.credentials.provider }),
         serverUrl: runtimeContext.serverUrl,
         activeSessionContext: ({ sessionID }) => context.session.context({ sessionID }),
         getWebUrl: () => process.env.AUTOCODE_WEB_URL,

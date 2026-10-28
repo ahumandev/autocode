@@ -33,6 +33,7 @@ const managedSkillDirectories = [
     "author-fallacies",
     "author-readme",
     "author-rules",
+    "code-angular",
     "code-java",
     "code-rest",
     "code-typescript",

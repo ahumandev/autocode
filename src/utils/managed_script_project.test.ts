@@ -1,9 +1,10 @@
 import { describe, expect, mock, test } from "bun:test"
 import { spawn as spawnChild, type ChildProcessWithoutNullStreams } from "node:child_process"
-import { link, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
+import { link, lstat, mkdtemp, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
-import { basename, join } from "node:path"
+import { basename, join, sep } from "node:path"
 import { createManagedScriptProject, createManagedScriptProjectPaths, isManagedScriptDependencySpec, resolveManagedScriptProjectOwner, satisfiesManagedScriptRange, type ManagedScriptProject, type ManagedScriptProjectCommandResult, type ManagedScriptProjectDependencies, type ManagedScriptProjectFileSystem, type ManagedScriptProjectInstallInput, type ManagedScriptProjectResult, type ManagedScriptProjectSpawn } from "./managed_script_project"
 import { acquireInstallerLock, inspectInstallerLock } from "./managed_script_install_lock"
 
@@ -224,6 +225,377 @@ async function cleanupEsmTasks(cwd: string, directory: string = cwd): Promise<vo
         }
     }
     await rm(directory, esmTaskDirectoryRemovalOptions)
+}
+
+type IncrementalWorkBudget = {
+    check: () => void
+    remainingMs: () => number
+    taskTimeoutMs: () => number
+}
+
+type IncrementalRenameObservation = {
+    sequence: number
+    oldPath: string
+    newPath: string
+    outcome: { ok: true } | { ok: false, name: string, code?: string }
+}
+
+type IncrementalWriteObservation = {
+    sequence: number
+    filePath: string
+    content: string
+    exclusive: boolean
+}
+
+class IncrementalManifestDenial extends Error {
+    constructor(operation: string, evidence: readonly IncrementalRenameObservation[]) {
+        super(`Qualified Windows manifest publish/restore denial during ${operation}: ${JSON.stringify(evidence)}`)
+        this.name = "IncrementalManifestDenial"
+    }
+}
+
+type IncrementalFixtureScenario = {
+    sharingDenial: boolean
+    firstDirectory?: string
+    initialDenial?: IncrementalManifestDenial
+    groups?: { source: string, destination: string, calls: number, codes: string[] }[]
+    retryRemainingWorkMs?: number
+}
+
+function withIncrementalFixtureRetry(attempt: (budget: IncrementalWorkBudget, attemptNumber: number, scenario: IncrementalFixtureScenario) => Promise<void>): (name: string, sharingDenial: boolean) => Promise<void> {
+    return async (_name: string, sharingDenial: boolean): Promise<void> => {
+        const windows = process.platform === "win32"
+        const scenario: IncrementalFixtureScenario = { sharingDenial }
+        const startedAt = performance.now()
+        // Leave 10 seconds of the unchanged 60-second Windows timeout for awaited cleanup.
+        const workBudgetMs = 50_000
+        const retryMinimumWorkMs = 25_000
+        const remainingMs = (): number => windows ? workBudgetMs - (performance.now() - startedAt) : Infinity
+        const check = (): void => {
+            if (remainingMs() <= 0) throw new Error("Incremental fixture work budget exhausted; cleanup reserve retained")
+        }
+        const budget: IncrementalWorkBudget = {
+            check,
+            remainingMs,
+            taskTimeoutMs: (): number => {
+                const remaining = remainingMs()
+                check()
+                return Math.min(esmTaskTimeoutMs, remaining)
+            },
+        }
+        let originalDenial: IncrementalManifestDenial | undefined
+        let completedAttempts = 0
+        const maximumAttempts = windows ? 2 : 1
+        for (let attemptNumber = 1; attemptNumber <= maximumAttempts; attemptNumber++) {
+            try {
+                check()
+                await attempt(budget, attemptNumber, scenario)
+                completedAttempts++
+            }
+            catch (error) {
+                if (originalDenial) throw new AggregateError([originalDenial, error], "Incremental fresh-fixture retry failed")
+                if (!windows || !(error instanceof IncrementalManifestDenial)) throw error
+                if (sharingDenial && error !== scenario.initialDenial) throw new AggregateError([error], "Sharing-denial scenario failed outside its initial held install")
+                completedAttempts++
+                scenario.retryRemainingWorkMs = remainingMs()
+                if (attemptNumber === maximumAttempts || scenario.retryRemainingWorkMs < retryMinimumWorkMs) {
+                    throw new AggregateError([error], "Incremental manifest denial unrecovered: insufficient work budget for fresh fixture")
+                }
+                originalDenial = error
+                continue
+            }
+            if (sharingDenial) {
+                expect(attemptNumber).toBe(2)
+                expect(completedAttempts).toBe(2)
+                expect(scenario.initialDenial).toBeDefined()
+                expect(scenario.initialDenial).toBe(originalDenial)
+                const groups = scenario.groups
+                if (!groups || !scenario.firstDirectory) throw new Error("Expected recorded sharing-denial groups and first fixture root")
+                const manifestPath = join(scenario.firstDirectory, ".opencode", "autocode", "scripts", "package.json")
+                const callsPerGroup = 20
+                expect(groups).toHaveLength(2)
+                expect(new Set(groups.map((group): string => group.source)).size).toBe(2)
+                for (const group of groups) {
+                    expect(group.destination).toBe(manifestPath)
+                    expect(isIncrementalAtomicSource(group.source, manifestPath)).toBe(true)
+                    expect(group.calls).toBe(callsPerGroup)
+                    expect(group.codes).toEqual(Array<string>(callsPerGroup).fill("EPERM"))
+                }
+                expect(scenario.retryRemainingWorkMs).toBeGreaterThanOrEqual(retryMinimumWorkMs)
+            }
+            if (originalDenial) {
+                const witness = sharingDenial ? `; sharing witness: ${JSON.stringify({ attempts: completedAttempts, groups: scenario.groups, retryRemainingWorkMs: scenario.retryRemainingWorkMs })}` : ""
+                process.stderr.write(`Incremental fixture passed after ${attemptNumber} complete attempts; original OS denial: ${originalDenial.message}${witness}\n`)
+            }
+            return
+        }
+    }
+}
+
+async function readIncrementalSnapshot(filePath: string, budget: IncrementalWorkBudget): Promise<Buffer | undefined> {
+    budget.check()
+    try {
+        return await readFile(filePath)
+    }
+    catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+        throw error
+    }
+}
+
+function isIncrementalAtomicSource(source: string, destination: string): boolean {
+    const prefix = `${destination}.autocode-tmp-`
+    return source.startsWith(prefix) && /^\d+-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(source.slice(prefix.length))
+}
+
+const incrementalHolderFrameLimitBytes = 4_096
+// The child owns its lease clock even when the Bun event loop cannot service timers.
+const incrementalManifestHolderSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$PSModuleAutoLoadingPreference = 'None'
+$ProgressPreference = 'SilentlyContinue'
+$clock = [Diagnostics.Stopwatch]::StartNew()
+$leaseMs = 20000
+$frameLimit = ${incrementalHolderFrameLimitBytes}
+$inputStream = [Console]::OpenStandardInput()
+$outputStream = [Console]::OpenStandardOutput()
+$utf8 = [Text.UTF8Encoding]::new($false, $true)
+$held = $null
+$exitCode = 1
+$phase = 'initialization'
+function Remaining-Milliseconds {
+    $remaining = $leaseMs - $clock.ElapsedMilliseconds
+    if ($remaining -le 0) { throw 'Holder lease expired' }
+    return [int]$remaining
+}
+function Read-Exact([byte[]]$buffer) {
+    $offset = 0
+    while ($offset -lt $buffer.Length) {
+        $remaining = Remaining-Milliseconds
+        $task = $inputStream.ReadAsync($buffer, $offset, $buffer.Length - $offset)
+        if (-not $task.Wait($remaining)) { throw 'Holder lease expired' }
+        $count = $task.GetAwaiter().GetResult()
+        if ($count -le 0) { throw 'Holder input closed' }
+        $offset += $count
+    }
+}
+function Read-Frame {
+    $header = Microsoft.PowerShell.Utility\New-Object byte[] 4
+    Read-Exact $header
+    $length = [BitConverter]::ToUInt32($header, 0)
+    if ($length -lt 2 -or $length -gt $frameLimit) { throw 'Invalid frame length' }
+    $body = Microsoft.PowerShell.Utility\New-Object byte[] ([int]$length)
+    Read-Exact $body
+    return Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject ($utf8.GetString($body))
+}
+function Write-Status([string]$kind) {
+    $json = Microsoft.PowerShell.Utility\ConvertTo-Json -Compress -InputObject @{ kind = $kind; path = $path; token = $token }
+    $bytes = $utf8.GetBytes($json + [char]10)
+    if ($bytes.Length -gt $frameLimit) { throw 'Oversized status frame' }
+    $remaining = Remaining-Milliseconds
+    $task = $outputStream.WriteAsync($bytes, 0, $bytes.Length)
+    if (-not $task.Wait($remaining)) { throw 'Holder lease expired' }
+    [void]$task.GetAwaiter().GetResult()
+}
+try {
+    if ($PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSVersion.Minor -ne 1) { throw 'PowerShell 5.1 required' }
+    $utilityManifest = [IO.Path]::GetFullPath([IO.Path]::Combine($PSHOME, 'Modules', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Utility.psd1'))
+    if ($utilityManifest -cnotmatch '^[A-Za-z]:\\') { throw 'Local PowerShell Utility manifest required' }
+    $null = Microsoft.PowerShell.Core\Import-Module -Name $utilityManifest -Cmdlet ConvertFrom-Json,ConvertTo-Json,New-Object -ErrorAction Stop
+    $init = Read-Frame
+    if (@($init.PSObject.Properties).Count -ne 4 -or $init.action -cne 'hold' -or $init.path -isnot [string] -or $init.root -isnot [string] -or $init.token -isnot [string] -or $init.token -cnotmatch '^[0-9a-f-]{36}$') { throw 'Invalid initialization frame' }
+    $root = [IO.Path]::GetFullPath($init.root)
+    $path = [IO.Path]::GetFullPath($init.path)
+    $token = $init.token
+    $temp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $expected = [IO.Path]::Combine($root, '.opencode', 'autocode', 'scripts')
+    $expected = [IO.Path]::Combine($expected, 'package.json')
+    if ($root -cne $init.root -or $path -cne $init.path -or $path -cne $expected -or -not $root.StartsWith($temp + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or -not [string]::Equals([IO.Path]::GetDirectoryName($root), [IO.Path]::Combine($temp, 'opencode'), [StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($root) -cnotmatch '^managed-script-incremental-[a-zA-Z0-9_-]+$') { throw 'Manifest ownership rejected' }
+    $current = $path
+    while ($true) {
+        if (([IO.File]::GetAttributes($current) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Fixture reparse point rejected' }
+        if ($current -ceq $root) { break }
+        $current = [IO.Path]::GetDirectoryName($current)
+    }
+    $phase = 'open'
+    $null = Remaining-Milliseconds
+    $held = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, ([IO.FileShare]::Read -bor [IO.FileShare]::Write))
+    Write-Status 'ready'
+    $phase = 'release'
+    $release = Read-Frame
+    if (@($release.PSObject.Properties).Count -ne 4 -or $release.action -cne 'release' -or $release.path -cne $path -or $release.root -cne $root -or $release.token -cne $token) { throw 'Invalid release frame' }
+    $held.Dispose()
+    $held = $null
+    Write-Status 'released'
+    $exitCode = 0
+}
+catch {
+    $exitCode = 1
+}
+finally {
+    if ($null -ne $held) { $held.Dispose() }
+}
+if ($exitCode -ne 0) { [Console]::Error.WriteLine('Fixture sharing holder failed during ' + $phase) }
+exit $exitCode
+`
+
+async function startIncrementalManifestHolder(directory: string, manifestPath: string, cwd: string, budget: IncrementalWorkBudget): Promise<{ ready: Promise<void>, release: () => Promise<void> }> {
+    budget.check()
+    const canonicalTemp = await realpath(tmpdir())
+    budget.check()
+    const ownedRoot = await realpath(directory)
+    budget.check()
+    const canonicalManifest = await realpath(manifestPath)
+    budget.check()
+    const ownedParent = await realpath(scratchRoot)
+    if (process.platform !== "win32" || !ownedRoot.startsWith(`${canonicalTemp}${sep}`) || ownedRoot !== join(ownedParent, basename(directory)) || !/^managed-script-incremental-[a-zA-Z0-9_-]+$/.test(basename(ownedRoot)) || canonicalManifest !== join(ownedRoot, ".opencode", "autocode", "scripts", "package.json")) throw new Error("Manifest holder requires the exact canonical temporary fixture manifest")
+    const powerShellHome = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0")
+    if (!/^[A-Za-z]:\\/.test(powerShellHome) || powerShellHome.includes(";")) throw new Error("Manifest holder requires a local Windows PowerShell directory")
+    const holderEnv = { ...process.env }
+    for (const key of Object.keys(holderEnv)) {
+        if (key.toLowerCase() === "psmodulepath") delete holderEnv[key]
+    }
+    holderEnv.PSModulePath = join(powerShellHome, "Modules")
+    const token = randomUUID()
+    const frame = (action: "hold" | "release"): Buffer => {
+        const body = Buffer.from(JSON.stringify({ action, path: canonicalManifest, root: ownedRoot, token }))
+        if (body.length > incrementalHolderFrameLimitBytes) throw new Error("Manifest holder input frame exceeds limit")
+        const header = Buffer.alloc(4)
+        header.writeUInt32LE(body.length)
+        return Buffer.concat([header, body])
+    }
+    const initializationFrame = frame("hold")
+    const releaseFrame = frame("release")
+    budget.check()
+    const readyTimeoutMs = Math.min(3_000, budget.remainingMs())
+    const readyDeadline = performance.now() + readyTimeoutMs
+    let isClosed = false
+    let readyReceived = false
+    let released = false
+    let releaseRequested = false
+    let killed = false
+    let exitCode: number | null | undefined
+    let exitSignal: NodeJS.Signals | null | undefined
+    let failure: Error | undefined
+    let stdout: Buffer = Buffer.alloc(0)
+    let stdoutBytes = 0
+    let stderr: Buffer = Buffer.alloc(0)
+    let stderrTruncated = false
+    let readyTimer: ReturnType<typeof setTimeout> | undefined
+    let readySettled = false
+    let resolveReady!: () => void
+    let rejectReady!: (error: Error) => void
+    const ready = new Promise<void>((resolve, reject): void => { resolveReady = resolve; rejectReady = reject })
+    void ready.catch((): void => {})
+    let resolveClosed!: () => void
+    const closed = new Promise<void>((resolve): void => { resolveClosed = resolve })
+    const child = spawnChild(join(powerShellHome, "powershell.exe"), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(incrementalManifestHolderSource, "utf16le").toString("base64")], { cwd, windowsHide: true, env: holderEnv })
+    const diagnostic = (reason: string): Error => new Error(`Manifest holder ${reason}; root=${ownedRoot}; manifest=${canonicalManifest}; pid=${child.pid ?? "unspawned"}; closed=${isClosed}; exitCode=${exitCode === undefined ? "pending" : exitCode}; signal=${exitSignal === undefined ? "pending" : exitSignal}; stderrTruncated=${stderrTruncated}; stderr=${JSON.stringify(stderr.toString("utf8"))}`)
+    const fail = (reason: string): void => {
+        failure ??= diagnostic(reason)
+        if (!readySettled) {
+            readySettled = true
+            clearTimeout(readyTimer)
+            rejectReady(failure)
+        }
+    }
+    const stop = (): void => {
+        if (isClosed) return
+        killed = true
+        try { child.kill("SIGKILL") }
+        catch (error) { fail(`kill failed (${(error as NodeJS.ErrnoException).code ?? "unknown"})`) }
+    }
+    child.once("close", (code: number | null, signal: NodeJS.Signals | null): void => {
+        isClosed = true
+        exitCode = code
+        exitSignal = signal
+        clearTimeout(readyTimer)
+        child.stdout.removeListener("data", onStdout)
+        child.stderr.removeListener("data", onStderr)
+        child.removeListener("error", onError)
+        child.stdin.removeListener("error", onInputError)
+        if (!readyReceived || !released || !releaseRequested || stdout.length !== 0 || code !== 0 || signal !== null) fail(`unexpected close (exit=${code}, signal=${signal})`)
+        if (failure) failure.cause = diagnostic("final close")
+        esmTaskChildren.delete(child)
+        resolveClosed()
+    })
+    esmTaskChildren.set(child, { cwd, closed, stop })
+    const onError = (error: NodeJS.ErrnoException): void => { fail(`spawn error (${error.code ?? "unknown"})`) }
+    const onInputError = (error: NodeJS.ErrnoException): void => { fail(`input error (${error.code ?? "unknown"})`) }
+    const onStderr = (chunk: Buffer): void => {
+        const remaining = incrementalHolderFrameLimitBytes - stderr.length
+        stderr = Buffer.concat([stderr, chunk.subarray(0, Math.max(0, remaining))])
+        if (chunk.length > remaining) { stderrTruncated = true; fail("stderr exceeds capture limit") }
+    }
+    const onStdout = (chunk: Buffer): void => {
+        stdoutBytes += chunk.length
+        if (stdoutBytes > incrementalHolderFrameLimitBytes * 2) { fail("stdout exceeds protocol limit"); return }
+        stdout = Buffer.concat([stdout, chunk])
+        let newline = stdout.indexOf(10)
+        while (newline !== -1) {
+            if (newline + 1 > incrementalHolderFrameLimitBytes) { fail("status frame exceeds limit"); return }
+            const line = stdout.subarray(0, newline)
+            stdout = stdout.subarray(newline + 1)
+            try {
+                const message = JSON.parse(line.toString("utf8")) as Record<string, unknown>
+                if (Object.keys(message).sort().join(",") !== "kind,path,token") throw new Error("Holder status keys mismatch")
+                if (message.path !== canonicalManifest) throw new Error("Holder status path mismatch")
+                if (message.token !== token) throw new Error("Holder status token mismatch")
+                if (message.kind === "ready" && !readyReceived && !releaseRequested) {
+                    if (performance.now() > readyDeadline) fail(`readiness exceeded ${readyTimeoutMs}ms`)
+                    else {
+                        readyReceived = true
+                        if (!readySettled) { readySettled = true; clearTimeout(readyTimer); resolveReady() }
+                    }
+                }
+                else if (message.kind === "released" && readyReceived && releaseRequested && !released) released = true
+                else throw new Error("Expected ready && !readyReceived && !releaseRequested, or released && readyReceived && releaseRequested && !released")
+            }
+            catch (error) {
+                const reason = error instanceof Error ? error.message.slice(0, 512) : "Unknown status parser exception"
+                fail(`invalid status frame: ${JSON.stringify({ rawLine: line.toString("utf8"), reason, readyReceived, releaseRequested, released })}`)
+            }
+            newline = stdout.indexOf(10)
+        }
+        if (stdout.length > incrementalHolderFrameLimitBytes) fail("unterminated status frame exceeds limit")
+    }
+    child.on("error", onError)
+    child.stdin.on("error", onInputError)
+    child.stdout.on("data", onStdout)
+    child.stderr.on("data", onStderr)
+    readyTimer = setTimeout((): void => { fail(`readiness exceeded ${readyTimeoutMs}ms`) }, Math.max(0, readyDeadline - performance.now()))
+    try { child.stdin.write(initializationFrame, (error?: Error | null): void => { if (error) fail("initialization write failed") }) }
+    catch { fail("initialization write failed") }
+    const waitForClose = (timeoutMs: number): Promise<boolean> => {
+        if (isClosed) return Promise.resolve(true)
+        return new Promise<boolean>((resolve): void => {
+            let timer: ReturnType<typeof setTimeout> | undefined
+            const finish = (didClose: boolean): void => { clearTimeout(timer); child.removeListener("close", onClose); resolve(didClose) }
+            const onClose = (): void => { finish(true) }
+            child.once("close", onClose)
+            timer = setTimeout((): void => { finish(false) }, timeoutMs)
+        })
+    }
+    return {
+        ready,
+        release: async (): Promise<void> => {
+            releaseRequested = true
+            if (!isClosed) {
+                try { child.stdin.end(releaseFrame, (error?: Error | null): void => { if (error) fail("release write failed") }) }
+                catch { fail("release write failed") }
+            }
+            if (!await waitForClose(1_000)) {
+                stop()
+                const reaped = await waitForClose(2_000)
+                const releaseError = diagnostic(reaped ? "required kill after release grace" : "unreaped after kill; fixture remains owned")
+                if (failure) throw new AggregateError([failure, releaseError], "Manifest holder protocol and release failed")
+                failure = releaseError
+                throw releaseError
+            }
+            if (failure) throw failure
+            if (killed || !readyReceived || !released || exitCode !== 0 || exitSignal !== null) throw diagnostic("did not close after a clean acknowledged release")
+        },
+    }
 }
 
 describe("managed script project", (): void => {
@@ -797,9 +1169,10 @@ describe("managed script project", (): void => {
         finally {
             await rm(workspacePath, { recursive: true, force: true })
         }
-    })
+    }, process.platform === "win32" ? 60_000 : 5_000)
 
-    test("reports missing, incompatible, filesystem, and package-resolution failures without mutating verify", async (): Promise<void> => {
+    // Measured slow tests are skipped from the fast suite; retained for future opt-in/slow testing.
+    test.skip("reports missing, incompatible, filesystem, and package-resolution failures without mutating verify", async (): Promise<void> => {
         const workspacePath = await createTemporaryRoot("managed-script-errors-")
         let omitPackage = true
         const spawn = mock(async (_command: string, _args: readonly string[], options?: { cwd?: string }): Promise<ManagedScriptProjectCommandResult> => {
@@ -1318,66 +1691,267 @@ describe("managed script project", (): void => {
         }
     })
 
-    test("incrementally installs into one shared tree, reuses satisfied ranges, and upgrades only explicit conflicts", async (): Promise<void> => {
+    const runIncrementalFixture = withIncrementalFixtureRetry(async (budget: IncrementalWorkBudget, attemptNumber: number, scenario: IncrementalFixtureScenario): Promise<void> => {
+        budget.check()
         const directory = await createTemporaryRoot("managed-script-incremental-")
         const paths = createManagedScriptProjectPaths(directory, "inspect_data")
         const fileSystem = createFileSystem()
+        const renames: IncrementalRenameObservation[] = []
+        const writes: IncrementalWriteObservation[] = []
+        let sequence = 0
+        let ioFaults = 0
+        let currentOperation: { injected: boolean } | undefined
         let failManifestReplacement = false
         const renameSpy = mock<ManagedScriptProjectFileSystem["rename"]>(async (oldPath, newPath): Promise<void> => {
+            budget.check()
             if (failManifestReplacement && newPath === paths.manifestPath) {
                 failManifestReplacement = false
+                if (currentOperation) currentOperation.injected = true
                 const error = new Error("Fixture manifest sharing violation") as NodeJS.ErrnoException
                 error.code = "EPERM"
                 throw error
             }
-            await fileSystem.rename(oldPath, newPath)
+            const invocation = { sequence: ++sequence, oldPath, newPath }
+            try {
+                await fileSystem.rename(oldPath, newPath)
+                renames.push({ ...invocation, outcome: { ok: true } })
+            }
+            catch (error) {
+                const failure = error as NodeJS.ErrnoException
+                const name = /^[A-Za-z][A-Za-z0-9]*$/.test(failure.name) ? failure.name : "Error"
+                renames.push({ ...invocation, outcome: { ok: false, name, code: failure.code } })
+                throw error
+            }
         })
-        const rmSpy = mock(fileSystem.rm)
+        const observeIo = <Args extends unknown[], Result>(method: keyof ManagedScriptProjectFileSystem, operation: (...args: Args) => Promise<Result>): ((...args: Args) => Promise<Result>) => {
+            return async (...args: Args): Promise<Result> => {
+                budget.check()
+                try {
+                    return await operation(...args)
+                }
+                catch (error) {
+                    const optionalProbe = method === "readFile" || method === "readdir" || method === "lstat" || method === "stat"
+                    // Missing optional files and packages are normal probes, not unrelated I/O faults.
+                    if (!optionalProbe || (error as NodeJS.ErrnoException).code !== "ENOENT") ioFaults++
+                    throw error
+                }
+            }
+        }
+        const rmSpy = mock(observeIo("rm", fileSystem.rm))
         const markerPath = join(paths.nodeModulesPath, ".keep-existing-tree")
         let semverVersion = "7.6.3"
         const tagVersion = "3.0.0"
         let viewQueries = 0
         let installOperations = 0
+        let fixtureFailure: { error: unknown } | undefined
         const spawn = mock<ManagedScriptProjectSpawn>(async (command, args, options): Promise<ManagedScriptProjectCommandResult> => {
-            expect(command).toBe("npm")
-            expect(options?.cwd).toBe(paths.scriptsRoot)
-            expect(await readFile(markerPath, "utf8")).toBe("existing yaml tree\n")
-            if (args[0] === "view") {
-                viewQueries++
-                expect(args).toEqual(["view", "tagged@latest", "version", "--json", ...npmInstallArgs.slice(1)])
-                expect(await exists(join(paths.nodeModulesPath, "tagged"))).toBe(false)
-                return { exitCode: 0, stdout: `${JSON.stringify(tagVersion)}\n`, stderr: "" }
+            try {
+                budget.check()
+                expect(command).toBe("npm")
+                expect(options?.cwd).toBe(paths.scriptsRoot)
+                expect(await readFile(markerPath, "utf8")).toBe("existing yaml tree\n")
+                if (args[0] === "view") {
+                    viewQueries++
+                    expect(args).toEqual(["view", "tagged@latest", "version", "--json", ...npmInstallArgs.slice(1)])
+                    budget.check()
+                    expect(await exists(join(paths.nodeModulesPath, "tagged"))).toBe(false)
+                    return { exitCode: 0, stdout: `${JSON.stringify(tagVersion)}\n`, stderr: "" }
+                }
+                expect(args).toEqual(npmInstallArgs)
+                installOperations++
+                budget.check()
+                const installing = JSON.parse(await readFile(paths.manifestPath, "utf8")) as { dependencies: Record<string, string> }
+                if (installing.dependencies.tagged !== undefined) expect(installing.dependencies.tagged).toBe(tagVersion)
+                budget.check()
+                await writeNpmArtifacts(paths.scriptsRoot, { semver: semverVersion, tagged: tagVersion })
+                return npmInstallSuccess
             }
-            expect(args).toEqual(npmInstallArgs)
-            installOperations++
-            const installing = JSON.parse(await readFile(paths.manifestPath, "utf8")) as { dependencies: Record<string, string> }
-            if (installing.dependencies.tagged !== undefined) expect(installing.dependencies.tagged).toBe(tagVersion)
-            await writeNpmArtifacts(paths.scriptsRoot, { semver: semverVersion, tagged: tagVersion })
-            return npmInstallSuccess
+            catch (error) {
+                fixtureFailure = { error }
+                throw error
+            }
         })
+        let attemptFailure: { error: unknown } | undefined
         try {
-            const sharedFileSystem = { ...fileSystem, rename: renameSpy, rm: rmSpy }
+            if (scenario.sharingDenial) {
+                if (attemptNumber === 1) scenario.firstDirectory = directory
+                else {
+                    expect(scenario.firstDirectory).toBeDefined()
+                    expect(directory).not.toBe(scenario.firstDirectory)
+                }
+            }
+            const sharedFileSystem: ManagedScriptProjectFileSystem = {
+                ...fileSystem,
+                link: observeIo("link", fileSystem.link),
+                mkdir: observeIo("mkdir", fileSystem.mkdir),
+                readFile: observeIo("readFile", fileSystem.readFile),
+                readdir: observeIo("readdir", fileSystem.readdir),
+                ...(fileSystem.lstat ? { lstat: observeIo("lstat", fileSystem.lstat) } : {}),
+                rename: renameSpy,
+                rm: rmSpy,
+                stat: observeIo("stat", fileSystem.stat),
+                writeFile: async (filePath, content, options): Promise<void> => {
+                    const invocationSequence = ++sequence
+                    await observeIo("writeFile", fileSystem.writeFile)(filePath, content, options)
+                    writes.push({ sequence: invocationSequence, filePath, content, exclusive: options?.flag === "wx" })
+                },
+            }
             const firstProject = createProject(directory, spawn, {
                 fileSystem: sharedFileSystem,
                 resolveOwner: async (): Promise<Awaited<ReturnType<typeof resolveManagedScriptProjectOwner>>> => ({ ok: true, owner: { jobName: "inspect_data", directory } }),
             })
+            const expectInstallSuccess = async (operation: string, install: (input: ManagedScriptProjectInstallInput) => Promise<ManagedScriptProjectResult>, input: ManagedScriptProjectInstallInput = {}): Promise<Extract<ManagedScriptProjectResult, { ok: true }>> => {
+                budget.check()
+                if (process.platform !== "win32") {
+                    const result = await install(input)
+                    if (fixtureFailure) throw fixtureFailure.error
+                    return expectSuccess(result)
+                }
+                const manifestBefore = await readIncrementalSnapshot(paths.manifestPath, budget)
+                const lockfileBefore = await readIncrementalSnapshot(paths.lockfilePath, budget)
+                const journalBefore = await readIncrementalSnapshot(paths.journalPath, budget)
+                const faultsBefore = ioFaults
+                budget.check()
+                const priorVerification = await firstProject.verify()
+                const spawnCount = spawn.mock.calls.length
+                const installCount = installOperations
+                const viewCount = viewQueries
+                const renameStart = renames.length
+                const writeStart = writes.length
+                const rmStart = rmSpy.mock.calls.length
+                const observation = { injected: failManifestReplacement }
+                currentOperation = observation
+                let result: ManagedScriptProjectResult
+                try {
+                    budget.check()
+                    result = await install(input)
+                    if (fixtureFailure) throw fixtureFailure.error
+                }
+                finally {
+                    currentOperation = undefined
+                }
+                budget.check()
+                if (result.ok || result.error?.code !== "install_incomplete" || result.blocker || result.npm || !priorVerification.ok || manifestBefore === undefined || journalBefore !== undefined || observation.injected || spawn.mock.calls.length !== spawnCount || installOperations !== installCount || viewQueries !== viewCount || ioFaults !== faultsBefore) return expectSuccess(result)
+
+                const operationRenames = renames.slice(renameStart).sort((left, right): number => left.sequence - right.sequence)
+                const operationWrites = writes.slice(writeStart)
+                const manifestRenames = operationRenames.filter((entry): boolean => entry.newPath === paths.manifestPath)
+                // Production has 19 retry delays, so an exhausted atomic source receives 20 rename calls.
+                const attemptsPerGroup = windowsFileReplacementRetryDelaysMs.length + 1
+                const publishAndRestoreGroups = 2
+                const publish = manifestRenames.slice(0, attemptsPerGroup)
+                const restore = manifestRenames.slice(attemptsPerGroup)
+                const publishSource = publish[0]?.oldPath
+                const restoreSource = restore[0]?.oldPath
+                if (manifestRenames.length !== attemptsPerGroup * publishAndRestoreGroups || !publishSource || !restoreSource || publishSource === restoreSource || !isIncrementalAtomicSource(publishSource, paths.manifestPath) || !isIncrementalAtomicSource(restoreSource, paths.manifestPath)) return expectSuccess(result)
+                if (!publish.every((entry): boolean => entry.oldPath === publishSource && !entry.outcome.ok && entry.outcome.code === "EPERM") || !restore.every((entry): boolean => entry.oldPath === restoreSource && !entry.outcome.ok && entry.outcome.code === "EPERM")) return expectSuccess(result)
+                if (operationRenames.some((entry): boolean => !entry.outcome.ok && entry.newPath !== paths.manifestPath)) return expectSuccess(result)
+
+                const manifestWrites = operationWrites.filter((entry): boolean => isIncrementalAtomicSource(entry.filePath, paths.manifestPath))
+                const publishWrite = manifestWrites.find((entry): boolean => entry.filePath === publishSource)
+                const restoreWrite = manifestWrites.find((entry): boolean => entry.filePath === restoreSource)
+                const journalRenames = operationRenames.filter((entry): boolean => entry.newPath === paths.journalPath)
+                const journalPublish = journalRenames[0]
+                const journalRetention = journalRenames[1]
+                if (manifestWrites.length !== publishAndRestoreGroups || !publishWrite?.exclusive || !restoreWrite?.exclusive || journalRenames.length !== publishAndRestoreGroups || !journalPublish?.outcome.ok || !journalRetention?.outcome.ok || !isIncrementalAtomicSource(journalPublish.oldPath, paths.journalPath) || !isIncrementalAtomicSource(journalRetention.oldPath, paths.journalPath)) return expectSuccess(result)
+                if (Buffer.from(publishWrite.content).equals(manifestBefore) || journalPublish.oldPath === journalRetention.oldPath) return expectSuccess(result)
+                // Journal publication precedes exhausted publication; a new prior-snapshot write proves restoration.
+                if (!(journalPublish.sequence < publishWrite.sequence && publishWrite.sequence < publish[0]!.sequence && publish.at(-1)!.sequence < restoreWrite.sequence && restoreWrite.sequence < restore[0]!.sequence && restore.at(-1)!.sequence < journalRetention.sequence)) return expectSuccess(result)
+                const journalWrites = operationWrites.filter((entry): boolean => entry.filePath === journalPublish.oldPath || entry.filePath === journalRetention.oldPath)
+                if (journalWrites.length !== publishAndRestoreGroups || !journalWrites.every((entry): boolean => entry.exclusive && entry.sequence < (entry.filePath === journalPublish.oldPath ? journalPublish.sequence : journalRetention.sequence) && (entry.filePath !== journalRetention.oldPath || restore.at(-1)!.sequence < entry.sequence))) return expectSuccess(result)
+                if (!journalWrites.some((entry): boolean => entry.filePath === journalPublish.oldPath) || !journalWrites.some((entry): boolean => entry.filePath === journalRetention.oldPath)) return expectSuccess(result)
+
+                expect(await readIncrementalSnapshot(paths.manifestPath, budget)).toEqual(manifestBefore)
+                expect(await readIncrementalSnapshot(paths.lockfilePath, budget)).toEqual(lockfileBefore)
+                expect(Buffer.from(restoreWrite.content).equals(manifestBefore)).toBe(true)
+                const retainedJournal = await readIncrementalSnapshot(paths.journalPath, budget)
+                expect(retainedJournal).toBeDefined()
+                if (retainedJournal === undefined) throw new Error("Expected retained recovery journal after failed manifest restoration")
+                for (const content of [retainedJournal.toString("utf8"), ...journalWrites.map((entry): string => entry.content)]) {
+                    const journal = JSON.parse(content) as Record<string, unknown>
+                    expect(journal).toEqual({
+                        schema: "autocode-script-install",
+                        version: 1,
+                        pid: process.pid,
+                        host: expect.any(String),
+                        token: expect.any(String),
+                        startedAt: expect.any(Number),
+                        requests: input.dependencies ?? {},
+                        upgrade: input.upgrade ?? false,
+                        prior: { manifest: manifestBefore.toString("utf8"), lockfile: lockfileBefore?.toString("utf8") ?? null },
+                        plannedManifest: publishWrite.content,
+                    })
+                    expect(journal.host).toMatch(/\S/)
+                    expect(journal.token).toMatch(/\S/)
+                    expect(Number.isFinite(journal.startedAt)).toBe(true)
+                    const prior = journal.prior as { manifest: string, lockfile: string | null }
+                    expect(Buffer.from(prior.manifest).equals(manifestBefore)).toBe(true)
+                    if (lockfileBefore === undefined) expect(prior.lockfile).toBeNull()
+                    else {
+                        if (typeof prior.lockfile !== "string") throw new Error("Expected recovery journal lockfile snapshot bytes")
+                        expect(Buffer.from(prior.lockfile).equals(lockfileBefore)).toBe(true)
+                    }
+                    expect(Buffer.from(content).equals(retainedJournal)).toBe(true)
+                }
+                expect(JSON.parse(publishWrite.content)).toHaveProperty("dependencies")
+                const priorManifest = JSON.parse(manifestBefore.toString("utf8")) as { dependencies: Record<string, string> }
+                expect(priorManifest.dependencies).toEqual(expect.any(Object))
+                for (const [name, range] of Object.entries(priorManifest.dependencies)) {
+                    budget.check()
+                    const installed = JSON.parse(await readFile(join(paths.nodeModulesPath, ...name.split("/"), "package.json"), "utf8")) as { name: string, version: string }
+                    expect(installed.name).toBe(name)
+                    expect(installed.version).toEqual(expect.any(String))
+                    expect(satisfiesManagedScriptRange(installed.version, range)).toBe(true)
+                }
+                const atomicSources = new Set([publishSource, restoreSource, journalPublish.oldPath, journalRetention.oldPath, ...operationWrites.filter((entry): boolean => entry.filePath.includes(".autocode-tmp-")).map((entry): string => entry.filePath)])
+                for (const temporarySource of atomicSources) {
+                    expect(rmSpy.mock.calls.slice(rmStart)).toContainEqual([temporarySource, { force: true }])
+                    budget.check()
+                    let present = true
+                    try {
+                        await lstat(temporarySource)
+                    }
+                    catch (error) {
+                        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+                        present = false
+                    }
+                    expect(present).toBe(false)
+                }
+                for (const atomicDirectory of [paths.scriptsRoot, paths.metaRoot]) {
+                    budget.check()
+                    expect((await readdir(atomicDirectory)).filter((entry): boolean => entry.includes(".autocode-tmp-"))).toEqual([])
+                }
+                throw new IncrementalManifestDenial(operation, [publish[0]!, publish.at(-1)!, restore[0]!, restore.at(-1)!])
+            }
+            budget.check()
             const first = expectSuccess(await firstProject.setup())
+            budget.check()
             await writeFile(paths.manifestPath, `${JSON.stringify({ private: true, type: "module", dependencies: { yaml: "^2.4.0" } }, undefined, 2)}\n`)
+            budget.check()
             await writeNpmArtifacts(paths.scriptsRoot, { yaml: "2.4.5" })
+            budget.check()
             await writeFile(markerPath, "existing yaml tree\n")
             const yamlManifestPath = join(paths.nodeModulesPath, "yaml", "package.json")
+            budget.check()
             const yamlManifest = await readFile(yamlManifestPath, "utf8")
+            budget.check()
             const yamlSource = await readFile(join(paths.nodeModulesPath, "yaml", "index.js"), "utf8")
+            budget.check()
             const initialLock = JSON.parse(await readFile(paths.lockfilePath, "utf8")) as { packages: Record<string, unknown> }
             const secondProject = createProject(directory, spawn, {
                 fileSystem: sharedFileSystem,
                 resolveOwner: async (): Promise<Awaited<ReturnType<typeof resolveManagedScriptProjectOwner>>> => ({ ok: true, owner: { jobName: "compare_data", directory } }),
             })
+            budget.check()
             const second = expectSuccess(await secondProject.setup())
             const tasks = [join(first.paths.sourceRoot, "task.mjs"), join(second.paths.sourceRoot, "task.mjs")]
-            for (const task of tasks) await writeFile(task, 'import { version } from "semver"\nprocess.stdout.write(version)\n')
+            for (const task of tasks) {
+                budget.check()
+                await writeFile(task, 'import { version } from "semver"\nprocess.stdout.write(version)\n')
+            }
             expect(first.paths.sourceRoot).not.toBe(second.paths.sourceRoot)
             expect(first.paths.nodeModulesPath).toBe(second.paths.nodeModulesPath)
+            budget.check()
             expect(await exists(join(paths.nodeModulesPath, "semver"))).toBe(false)
             expect(spawn).not.toHaveBeenCalled()
             expect(installOperations).toBe(0)
@@ -1385,111 +1959,180 @@ describe("managed script project", (): void => {
             renameSpy.mockClear()
             rmSpy.mockClear()
 
-            const installed = expectSuccess(await firstProject.install({ dependencies: { semver: "^7.6.0" } }))
+            if (scenario.sharingDenial && attemptNumber === 1) {
+                const initialRenameStart = renames.length
+                const holder = await startIncrementalManifestHolder(directory, paths.manifestPath, paths.scriptsRoot, budget)
+                let initialFailure: { error: unknown } | undefined
+                try {
+                    await holder.ready
+                    budget.check()
+                    await expectInstallSuccess("initial semver install", (input): Promise<ManagedScriptProjectResult> => firstProject.install(input), { dependencies: { semver: "^7.6.0" } })
+                    throw new Error("Held initial semver install unexpectedly succeeded without a qualified real denial")
+                }
+                catch (error) {
+                    const replacements = renames.slice(initialRenameStart).filter((entry): boolean => entry.newPath === paths.manifestPath && isIncrementalAtomicSource(entry.oldPath, paths.manifestPath))
+                    scenario.groups = [...new Set(replacements.map((entry): string => entry.oldPath))].map((source): NonNullable<IncrementalFixtureScenario["groups"]>[number] => {
+                        const calls = replacements.filter((entry): boolean => entry.oldPath === source)
+                        return { source, destination: paths.manifestPath, calls: calls.length, codes: calls.map((entry): string => entry.outcome.ok ? "success" : entry.outcome.code ?? "unknown") }
+                    })
+                    const failure = error instanceof IncrementalManifestDenial
+                        ? error
+                        : new AggregateError([error], `Held initial install did not qualify: ${JSON.stringify(scenario.groups)}`)
+                    initialFailure = { error: failure }
+                    if (error instanceof IncrementalManifestDenial) scenario.initialDenial = error
+                    throw failure
+                }
+                finally {
+                    try {
+                        await holder.release()
+                    }
+                    catch (releaseError) {
+                        if (initialFailure) throw new AggregateError([initialFailure.error, releaseError], "Held initial install and holder release failed")
+                        throw releaseError
+                    }
+                }
+            }
+            const installed = await expectInstallSuccess("initial semver install", (input): Promise<ManagedScriptProjectResult> => firstProject.install(input), { dependencies: { semver: "^7.6.0" } })
             expect(spawn).toHaveBeenCalledTimes(1)
             expect(installOperations).toBe(1)
             expect(installed.npm).toMatchObject({ exitCode: 0 })
             expect(installed.dependencies).toEqual([{ name: "semver", requestedRange: "^7.6.0", status: "satisfied", source: "local", version: "7.6.3", packagePath: join(paths.nodeModulesPath, "semver") }])
+            budget.check()
             expect(await readFile(markerPath, "utf8")).toBe("existing yaml tree\n")
+            budget.check()
             expect(await readFile(yamlManifestPath, "utf8")).toBe(yamlManifest)
+            budget.check()
             const incrementalLock = JSON.parse(await readFile(paths.lockfilePath, "utf8")) as { packages: Record<string, unknown> }
             expect(incrementalLock.packages["node_modules/yaml"]).toEqual(initialLock.packages["node_modules/yaml"])
             for (const task of tasks) {
                 expect(createRequire(task).resolve("semver")).toBe(join(paths.nodeModulesPath, "semver", "index.js"))
-                expect(await runEsmTask(task, paths.scriptsRoot)).toEqual({ exitCode: 0, stdout: "7.6.3", stderr: "" })
+                expect(await runEsmTask(task, paths.scriptsRoot, budget.taskTimeoutMs())).toEqual({ exitCode: 0, stdout: "7.6.3", stderr: "" })
             }
 
+            budget.check()
             const manifestBeforeReuse = await readFile(paths.manifestPath, "utf8")
+            budget.check()
             const lockBeforeReuse = await readFile(paths.lockfilePath, "utf8")
-            const repeated = expectSuccess(await secondProject.install({ dependencies: { semver: "^7.6.0" } }))
+            const repeated = await expectInstallSuccess("repeated semver install", (input): Promise<ManagedScriptProjectResult> => secondProject.install(input), { dependencies: { semver: "^7.6.0" } })
             expect(repeated.npm).toBeUndefined()
             expect(repeated.dependencies).toMatchObject([{ name: "semver", status: "satisfied", version: "7.6.3" }])
-            const broader = expectSuccess(await secondProject.setup({ dependencies: { semver: ">=7 <8" } }))
+            const broader = await expectInstallSuccess("broader semver setup", (input): Promise<ManagedScriptProjectResult> => secondProject.setup(input), { dependencies: { semver: ">=7 <8" } })
             expect(broader.npm).toBeUndefined()
-            const satisfiedUpgrade = expectSuccess(await firstProject.install({ dependencies: { semver: "^7.0.0", yaml: ">=2 <3" }, upgrade: true }))
+            const satisfiedUpgrade = await expectInstallSuccess("satisfied range upgrade", (input): Promise<ManagedScriptProjectResult> => firstProject.install(input), { dependencies: { semver: "^7.0.0", yaml: ">=2 <3" }, upgrade: true })
             expect(satisfiedUpgrade.npm).toBeUndefined()
             expect(satisfiedUpgrade.dependencies.map((dependency): string | undefined => dependency.version)).toEqual(["7.6.3", "2.4.5"])
             expect(spawn).toHaveBeenCalledTimes(1)
             expect(installOperations).toBe(1)
             expect(viewQueries).toBe(0)
+            budget.check()
             expect(await readFile(paths.manifestPath, "utf8")).toBe(manifestBeforeReuse)
+            budget.check()
             expect(await readFile(paths.lockfilePath, "utf8")).toBe(lockBeforeReuse)
 
+            budget.check()
             const conflict = await secondProject.install({ dependencies: { semver: "^8.0.0" } })
             expect(conflict).toMatchObject({ ok: false, blocker: { code: "upgrade_required" }, dependencies: [{ name: "semver", requestedRange: "^8.0.0", status: "incompatible", version: "7.6.3" }] })
             expect(conflict.npm).toBeUndefined()
             expect(spawn).toHaveBeenCalledTimes(1)
+            budget.check()
             expect(await readFile(paths.manifestPath, "utf8")).toBe(manifestBeforeReuse)
+            budget.check()
             expect(await readFile(paths.lockfilePath, "utf8")).toBe(lockBeforeReuse)
             semverVersion = "8.0.0"
-            const upgraded = expectSuccess(await secondProject.install({ dependencies: { semver: "^8.0.0", yaml: ">=2 <3" }, upgrade: true }))
+            const upgraded = await expectInstallSuccess("explicit semver upgrade", (input): Promise<ManagedScriptProjectResult> => secondProject.install(input), { dependencies: { semver: "^8.0.0", yaml: ">=2 <3" }, upgrade: true })
             expect(spawn).toHaveBeenCalledTimes(2)
             expect(installOperations).toBe(2)
             expect(viewQueries).toBe(0)
             expect(upgraded.npm).toMatchObject({ exitCode: 0 })
             expect(upgraded.dependencies).toMatchObject([{ name: "semver", status: "satisfied", version: "8.0.0" }, { name: "yaml", status: "satisfied", version: "2.4.5" }])
+            budget.check()
             const manifest = JSON.parse(await readFile(paths.manifestPath, "utf8")) as { dependencies: Record<string, string> }
             expect(manifest.dependencies).toEqual({ yaml: "^2.4.0", semver: "^8.0.0" })
             expect(Object.values(manifest.dependencies)).not.toContain("latest")
             for (const [, args] of spawn.mock.calls) expect(args).toEqual(npmInstallArgs)
+            budget.check()
             expect(await readFile(yamlManifestPath, "utf8")).toBe(yamlManifest)
+            budget.check()
             expect(await readFile(join(paths.nodeModulesPath, "yaml", "index.js"), "utf8")).toBe(yamlSource)
+            budget.check()
             expect(await readFile(markerPath, "utf8")).toBe("existing yaml tree\n")
+            budget.check()
             const finalLock = JSON.parse(await readFile(paths.lockfilePath, "utf8")) as { packages: Record<string, unknown> }
             expect(finalLock.packages["node_modules/yaml"]).toEqual(initialLock.packages["node_modules/yaml"])
             expect(finalLock.packages["node_modules/semver"]).toMatchObject({ version: "8.0.0" })
 
+            budget.check()
             const lockBeforeReplan = await readFile(paths.lockfilePath, "utf8")
             manifest.dependencies.semver = "^7.6.0"
+            budget.check()
             await writeFile(paths.manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+            budget.check()
             const staleDeclaration = await readFile(paths.manifestPath, "utf8")
+            budget.check()
             expect(await firstProject.verify()).toMatchObject({ ok: false, error: { code: "dependency_incompatible" } })
+            budget.check()
             expect(await firstProject.install({ dependencies: { semver: "^8.0.0" } })).toMatchObject({ ok: false, blocker: { code: "upgrade_required" }, dependencies: [{ name: "semver", status: "satisfied", version: "8.0.0" }] })
+            budget.check()
             expect(await readFile(paths.manifestPath, "utf8")).toBe(staleDeclaration)
             const priorRenameAttempts = renameSpy.mock.calls.length
             failManifestReplacement = true
-            const replanned = expectSuccess(await firstProject.install({ dependencies: { semver: "^8.0.0" }, upgrade: true }))
+            const replanned = await expectInstallSuccess("injected manifest replan", (input): Promise<ManagedScriptProjectResult> => firstProject.install(input), { dependencies: { semver: "^8.0.0" }, upgrade: true })
             expect(replanned.npm).toBeUndefined()
             expect(replanned.dependencies).toMatchObject([{ name: "semver", requestedRange: "^8.0.0", status: "satisfied", version: "8.0.0" }])
             expect(failManifestReplacement).toBe(false)
             expect(renameSpy.mock.calls.slice(priorRenameAttempts).filter(([, newPath]): boolean => newPath === paths.manifestPath)).toHaveLength(2)
+            budget.check()
             expect(JSON.parse(await readFile(paths.manifestPath, "utf8"))).toMatchObject({ dependencies: { yaml: "^2.4.0", semver: "^8.0.0" } })
+            budget.check()
             expect(await readFile(paths.lockfilePath, "utf8")).toBe(lockBeforeReplan)
             expect(installOperations).toBe(2)
             expect(viewQueries).toBe(0)
             expect(spawn).toHaveBeenCalledTimes(2)
+            budget.check()
             expect(await firstProject.verify()).toEqual({ ok: true })
 
-            const tagged = expectSuccess(await firstProject.install({ dependencies: { tagged: "latest" } }))
+            const tagged = await expectInstallSuccess("tagged install", (input): Promise<ManagedScriptProjectResult> => firstProject.install(input), { dependencies: { tagged: "latest" } })
             expect(tagged.npm).toMatchObject({ exitCode: 0, command: npmInstallArgs })
             expect(tagged.dependencies).toMatchObject([{ name: "tagged", requestedRange: "latest", status: "satisfied", version: tagVersion, source: "local" }])
             expect(viewQueries).toBe(1)
             expect(installOperations).toBe(3)
+            budget.check()
             const tagManifest = await readFile(paths.manifestPath, "utf8")
+            budget.check()
             const tagLock = await readFile(paths.lockfilePath, "utf8")
             expect(JSON.parse(tagManifest)).toMatchObject({ dependencies: { yaml: "^2.4.0", semver: "^8.0.0", tagged: "latest" }, autocode: { registryTagBindings: { tagged: { requestedRange: "latest", version: tagVersion } } } })
             expect(JSON.parse(tagLock)).toMatchObject({ packages: { "": { dependencies: { tagged: "latest" } }, "node_modules/tagged": { version: tagVersion } } })
-            expect(expectSuccess(await secondProject.setup({ dependencies: { tagged: "latest" } })).npm).toBeUndefined()
-            expect(expectSuccess(await secondProject.install({ dependencies: { tagged: "latest" } })).npm).toBeUndefined()
+            expect((await expectInstallSuccess("reused tag setup", (input): Promise<ManagedScriptProjectResult> => secondProject.setup(input), { dependencies: { tagged: "latest" } })).npm).toBeUndefined()
+            expect((await expectInstallSuccess("reused tag install", (input): Promise<ManagedScriptProjectResult> => secondProject.install(input), { dependencies: { tagged: "latest" } })).npm).toBeUndefined()
+            budget.check()
             expect(await readFile(paths.manifestPath, "utf8")).toBe(tagManifest)
+            budget.check()
             expect(await readFile(paths.lockfilePath, "utf8")).toBe(tagLock)
             expect(viewQueries).toBe(1)
             expect(installOperations).toBe(3)
             expect(spawn).toHaveBeenCalledTimes(4)
 
+            budget.check()
             await rm(join(paths.nodeModulesPath, "tagged"), { recursive: true })
+            budget.check()
             expect(await secondProject.verify()).toMatchObject({ ok: false, error: { code: "dependency_missing" } })
-            const tagRepair = expectSuccess(await secondProject.install())
+            const tagRepair = await expectInstallSuccess("tag repair", (input): Promise<ManagedScriptProjectResult> => secondProject.install(input))
             expect(tagRepair.npm).toMatchObject({ exitCode: 0, command: npmInstallArgs })
             expect(tagRepair.dependencies.find((dependency): boolean => dependency.name === "tagged")).toMatchObject({ requestedRange: "latest", status: "satisfied", version: tagVersion })
             expect(viewQueries).toBe(1)
             expect(installOperations).toBe(4)
             expect(spawn).toHaveBeenCalledTimes(5)
+            budget.check()
             expect(await readFile(paths.manifestPath, "utf8")).toBe(tagManifest)
+            budget.check()
             expect(await readFile(yamlManifestPath, "utf8")).toBe(yamlManifest)
+            budget.check()
             expect(await readFile(join(paths.nodeModulesPath, "yaml", "index.js"), "utf8")).toBe(yamlSource)
+            budget.check()
             expect(await readFile(markerPath, "utf8")).toBe("existing yaml tree\n")
+            budget.check()
             expect(await exists(paths.journalPath)).toBe(false)
+            budget.check()
             await expectReleasedInstallerLock(fileSystem, paths.lockPath)
             expect(renameSpy.mock.calls.length).toBeGreaterThan(0)
             expect(rmSpy.mock.calls.length).toBeGreaterThan(0)
@@ -1498,13 +2141,40 @@ describe("managed script project", (): void => {
                 expect(newPath).not.toContain("node_modules")
             }
             for (const [filePath] of rmSpy.mock.calls) expect(filePath).not.toContain("node_modules")
+            budget.check()
             expect(await firstProject.verify()).toEqual({ ok: true })
+            budget.check()
             expect(await secondProject.verify()).toEqual({ ok: true })
+            budget.check()
+        }
+        catch (error) {
+            const realDenials = renames.filter((entry): boolean => entry.newPath === paths.manifestPath && isIncrementalAtomicSource(entry.oldPath, paths.manifestPath) && !entry.outcome.ok && entry.outcome.code === "EPERM")
+            const failure = error instanceof IncrementalManifestDenial || realDenials.length === 0
+                ? error
+                : new AggregateError([error], `Incremental fixture failed; observed real OS denial context: ${JSON.stringify([realDenials[0], realDenials.at(-1)])}`)
+            attemptFailure = { error: failure }
+            throw failure
         }
         finally {
-            await cleanupEsmTasks(paths.scriptsRoot, directory)
+            try {
+                await cleanupEsmTasks(paths.scriptsRoot, directory)
+            }
+            catch (cleanupError) {
+                if (attemptFailure) throw new AggregateError([attemptFailure.error, cleanupError], "Incremental fixture cleanup failed after body failure")
+                throw cleanupError
+            }
         }
-    }, esmTaskTestTimeoutMs)
+    })
+    test.each([
+        ["incrementally installs into one shared tree, reuses satisfied ranges, and upgrades only explicit conflicts", false],
+    ] as const)("%s", runIncrementalFixture, esmTaskTestTimeoutMs)
+    if (process.platform === "win32") {
+        // Measured slow test stays available for future opt-in/slow runs, not the fast suite.
+        test.skip("incrementally installs into one shared tree, reuses satisfied ranges, and upgrades only explicit conflicts (real Windows sharing denial)", (): Promise<void> => runIncrementalFixture(
+            "incrementally installs into one shared tree, reuses satisfied ranges, and upgrades only explicit conflicts (real Windows sharing denial)",
+            true,
+        ), esmTaskTestTimeoutMs)
+    }
 
     test.each([
         ["1.9.0", "^1.2.3 || ^2.4.0", true],

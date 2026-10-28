@@ -5,6 +5,9 @@
   "private": false,
   "main": "./dist/plugin.js",
   "types": "./dist/plugin.d.ts",
+  "bin": {
+    "autocode-credentials": "./dist/credentials-cli.js"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -40,6 +43,7 @@
   },
   "scripts": {
     "build": "bun scripts/build.ts build",
+    "credentials": "bun dist/credentials-cli.js",
     "install:shim": "bun src/install.ts",
     "watch": "bun scripts/build.ts watch",
     "copy:skills": "bun scripts/copy-skill-sources.ts",
@@ -59,6 +63,7 @@
     "@opencode-ai/sdk": "1.18.32",
     "@opencode/client": "2.0.14",
     "@opencode/plugin": "2.0.14",
+    "dbus-next": "0.10.2",
     "effect": "4.0.0-rc.112",
     "gray-matter": "4.0.3",
     "jsonc-parser": "3.3.1",

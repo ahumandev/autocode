@@ -2,11 +2,24 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "node:path"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { resetRetryCounts } from "@/utils/tools"
+import type { CredentialKind, CredentialResolver, ResolvedCredentialProfile, RestCredentialProfile } from "../credentials/types"
 import { createAutocodeRestTool } from "./autocode_rest"
 import { createToolContext as baseCreateToolContext } from "./test_context"
 
 const workspace = path.resolve("workspace")
 const createToolContext = (): ReturnType<typeof baseCreateToolContext> => baseCreateToolContext({ directory: workspace, worktree: workspace })
+const profileAuthorization = "Bearer resolved-authorization-marker"
+const profileUsername = "resolved-username-marker"
+const profilePassword = "resolved-password-marker"
+const explicitAuthorization = "Bearer explicit-authorization-marker"
+const basicToken = Buffer.from(`${profileUsername}:${profilePassword}`, "utf8").toString("base64")
+const basicAuthorization = `Basic ${basicToken}`
+const secretMarkers = [profileAuthorization, profileUsername, profilePassword, basicAuthorization, basicToken, explicitAuthorization, "resolved-authorization-marker", "explicit-authorization-marker"]
+const secretDiagnosticMessage = secretMarkers.join(" | ")
+const resolutionError = "Unable to resolve REST authentication credentials."
+const requestFailureError = "REST request or response caching failed."
+const credentialTestKey = "  my_key9  "
+const normalizedCredentialTestKey = "MY_KEY9"
 
 type ParsedError = {
     error: string
@@ -18,6 +31,11 @@ type SessionRecord = {
     id?: string
     parentID?: string | null
     title?: string | null
+}
+
+type HostileDiagnostic = {
+    value: unknown
+    hookCalls: string[]
 }
 
 function createMissingError(): NodeJS.ErrnoException {
@@ -40,6 +58,198 @@ function parseResult<T>(result: string | { output: string }): T {
 
 function parseError(result: string | { output: string }): ParsedError {
     return parseResult<ParsedError>(result)
+}
+
+function expectSafeError(result: string | { output: string }, message: string, markers: readonly string[] = secretMarkers): void {
+    const error = parseError(result)
+    expect(error.failedAction).toBe("autocode_rest")
+    expect(error.error).toBe(message)
+    expect(error.instruction).toEqual(expect.any(String))
+    expect(error.instruction.length).toBeGreaterThan(0)
+    const envelope = JSON.stringify(result)
+    for (const marker of markers) {
+        expect(envelope).not.toContain(marker)
+    }
+}
+
+function createFakeCredentialResolver(options: { profile: RestCredentialProfile } | { error: unknown } = { error: new Error("Unexpected credential lookup") }): {
+    resolver: CredentialResolver
+    calls: Array<{ kind: CredentialKind, id: string }>
+} {
+    const calls: Array<{ kind: CredentialKind, id: string }> = []
+    const profiles: { [K in CredentialKind]?: ResolvedCredentialProfile<K> } = {}
+    if ("profile" in options) {
+        profiles.rest = { kind: "rest", provider: "plaintext", profile: options.profile }
+    }
+    const resolver: CredentialResolver = {
+        async resolve<K extends CredentialKind>(kind: K, id: string): Promise<ResolvedCredentialProfile<K>> {
+            calls.push({ kind, id })
+            if ("error" in options) throw options.error
+            const result = profiles[kind]
+            if (result === undefined) throw new Error("Unexpected credential kind")
+            return result
+        },
+    }
+    return { resolver, calls }
+}
+
+function captureRestRequests(): Headers[] {
+    const requests: Headers[] = []
+    globalThis.fetch = (async (_input, init): Promise<Response> => {
+        requests.push(new Headers(init?.headers))
+        return new Response("ok")
+    }) as typeof fetch
+    return requests
+}
+
+function createSecretDiagnosticFields(): Record<string, unknown> {
+    return {
+        authorization: profileAuthorization,
+        username: profileUsername,
+        password: profilePassword,
+        basicToken,
+        basicAuthorization,
+        explicitAuthorization,
+        profile: { authorization: profileAuthorization, username: profileUsername, password: profilePassword },
+    }
+}
+
+const hostileDiagnosticCases = [
+    {
+        name: "secret string",
+        create(): HostileDiagnostic {
+            return { value: secretDiagnosticMessage, hookCalls: [] }
+        },
+    },
+    {
+        name: "plain object",
+        create(): HostileDiagnostic {
+            return { value: createSecretDiagnosticFields(), hookCalls: [] }
+        },
+    },
+    {
+        name: "null-prototype object",
+        create(): HostileDiagnostic {
+            return { value: Object.assign(Object.create(null), createSecretDiagnosticFields()), hookCalls: [] }
+        },
+    },
+    {
+        name: "non-Error class with cause",
+        create(): HostileDiagnostic {
+            class DiagnosticWithCause {
+                readonly cause = createSecretDiagnosticFields()
+            }
+            return { value: new DiagnosticWithCause(), hookCalls: [] }
+        },
+    },
+    {
+        name: "toJSON hook",
+        create(): HostileDiagnostic {
+            const hookCalls: string[] = []
+            return {
+                value: {
+                    ...createSecretDiagnosticFields(),
+                    toJSON(): Record<string, unknown> {
+                        hookCalls.push("toJSON")
+                        return createSecretDiagnosticFields()
+                    },
+                },
+                hookCalls,
+            }
+        },
+    },
+    {
+        name: "toString hook",
+        create(): HostileDiagnostic {
+            const hookCalls: string[] = []
+            return {
+                value: {
+                    ...createSecretDiagnosticFields(),
+                    toString(): string {
+                        hookCalls.push("toString")
+                        return secretDiagnosticMessage
+                    },
+                },
+                hookCalls,
+            }
+        },
+    },
+    {
+        name: "credential getters and primitive hook",
+        create(): HostileDiagnostic {
+            const hookCalls: string[] = []
+            const rejectInspection = (property: string): never => {
+                hookCalls.push(property)
+                throw new Error(secretDiagnosticMessage)
+            }
+            return {
+                value: {
+                    ...createSecretDiagnosticFields(),
+                    get message(): never {
+                        return rejectInspection("message")
+                    },
+                    get name(): never {
+                        return rejectInspection("name")
+                    },
+                    get cause(): never {
+                        return rejectInspection("cause")
+                    },
+                    get authorization(): never {
+                        return rejectInspection("authorization")
+                    },
+                    get username(): never {
+                        return rejectInspection("username")
+                    },
+                    get password(): never {
+                        return rejectInspection("password")
+                    },
+                    get profile(): never {
+                        return rejectInspection("profile")
+                    },
+                    [Symbol.toPrimitive](): never {
+                        return rejectInspection("Symbol.toPrimitive")
+                    },
+                },
+                hookCalls,
+            }
+        },
+    },
+]
+
+async function withRestEnvironmentReadTrap(fn: (reads: readonly string[]) => Promise<void>): Promise<void> {
+    const originalEnvironment = process.env
+    const reads: string[] = []
+    const sentinel = new Error("REST credential environment reads are forbidden.")
+    const probeKey = "AUTOCODE_REST___READ_TRAP_PROBE__"
+    const trappedEnvironment = new Proxy(originalEnvironment, {
+        get(target: NodeJS.ProcessEnv, property: string | symbol, receiver: unknown): unknown {
+            if (typeof property === "string" && property.startsWith("AUTOCODE_REST_")) {
+                reads.push(property)
+                throw sentinel
+            }
+            return Reflect.get(target, property, receiver)
+        },
+    })
+    try {
+        process.env = trappedEnvironment
+        expect(process.env === trappedEnvironment).toBe(true)
+        let sentinelMatched = false
+        try {
+            Reflect.get(process.env, probeKey)
+        }
+        catch (error: unknown) {
+            sentinelMatched = error === sentinel
+        }
+        expect(sentinelMatched).toBe(true)
+        expect(reads.length === 1 && reads[0] === probeKey).toBe(true)
+        reads.length = 0
+        await fn(reads)
+        expect(reads).toEqual([])
+    }
+    finally {
+        process.env = originalEnvironment
+        expect(process.env === originalEnvironment).toBe(true)
+    }
 }
 
 function createSessionClient(sessions: Record<string, SessionRecord> = { "session-1": { title: "My Job" } }): OpencodeClient {
@@ -204,22 +414,6 @@ async function withFixedDate<T>(isoDate: string, fn: () => Promise<T>): Promise<
 
 describe("autocode_rest tools", () => {
     const originalFetch = globalThis.fetch
-    const restEnvNames = [
-        "AUTOCODE_REST_API_AUTHORIZATION",
-        "AUTOCODE_REST_API_USERNAME",
-        "AUTOCODE_REST_API_PASSWORD",
-        "AUTOCODE_REST_MY_KEY_AUTHORIZATION",
-        "AUTOCODE_REST_MY_KEY_USERNAME",
-        "AUTOCODE_REST_MY_KEY_PASSWORD",
-    ] as const
-    const originalRestEnv = new Map(restEnvNames.map(name => [name, process.env[name]]))
-
-    function setRestEnvironment(values: Partial<Record<typeof restEnvNames[number], string>>): void {
-        for (const name of restEnvNames) {
-            delete process.env[name]
-        }
-        Object.assign(process.env, values)
-    }
 
     beforeEach(() => {
         resetRetryCounts()
@@ -227,10 +421,6 @@ describe("autocode_rest tools", () => {
 
     afterEach(() => {
         globalThis.fetch = originalFetch
-        for (const [name, value] of originalRestEnv) {
-            if (value === undefined) delete process.env[name]
-            else process.env[name] = value
-        }
     })
 
     test("validates method and protocol and serializes headers", async () => {
@@ -240,12 +430,12 @@ describe("autocode_rest tools", () => {
 
         const invalidMethod = parseError(await tool.execute({ url: "http://example.com", method: "trace" } as never, createToolContext()))
         expect(invalidMethod.failedAction).toBe("autocode_rest")
-        expect(invalidMethod.error).toContain("Invalid method: trace")
+        expect(invalidMethod.error).toBe("Invalid method.")
         expect(invalidMethod.instruction).toContain("Use method as one of")
 
         const invalidProtocol = parseError(await tool.execute({ url: "ftp://example.com", method: "get" } as never, createToolContext()))
         expect(invalidProtocol.failedAction).toBe("autocode_rest")
-        expect(invalidProtocol.error).toContain("Unsupported protocol: ftp:")
+        expect(invalidProtocol.error).toBe("Unsupported protocol.")
         expect(invalidProtocol.instruction).toContain("Use only http or https URLs")
 
         const requests: Array<{ init?: RequestInit, url: URL }> = []
@@ -420,7 +610,7 @@ describe("autocode_rest tools", () => {
         } as never, createToolContext()))
 
         expect(errored.failedAction).toBe("autocode_rest")
-        expect(errored.error).toContain("Current session title must contain letters or numbers.")
+        expect(errored.error).toBe("Unable to prepare REST response directory.")
     })
 
     test("writes REST artifacts in the resolved timestamped workspace", async () => {
@@ -484,112 +674,362 @@ describe("autocode_rest tools", () => {
         expect(allFiles.some((filePath) => filePath.includes(`_my_job${path.sep}rest${path.sep}`))).toBe(true)
     })
 
-    test("uses raw Authorization environment value", async () => {
+    test("uses resolved profile Authorization", async (): Promise<void> => {
         const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        setRestEnvironment({ AUTOCODE_REST_API_AUTHORIZATION: "Bearer raw-secret" })
-        let requestHeaders: HeadersInit | undefined
-        globalThis.fetch = (async (_input, init) => {
-            requestHeaders = init?.headers
-            return new Response("ok")
-        }) as typeof fetch
+        const { resolver, calls } = createFakeCredentialResolver({ profile: { authorization: profileAuthorization } })
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
 
-        await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext())
+        const result = parseResult<{ status_code: number }>(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext()))
 
-        expect(requestHeaders).toEqual({ Authorization: "Bearer raw-secret" })
+        expect(result.status_code).toBe(200)
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.get("authorization")).toBe(profileAuthorization)
+        expect(calls).toEqual([{ kind: "rest", id: "API" }])
     })
 
-    test("uses raw Authorization before environment credentials", async () => {
+    test.each([
+        { name: "nonempty", authorization: profileAuthorization },
+        { name: "empty", authorization: "" },
+    ])("uses $name profile Authorization before complete Basic credentials", async ({ authorization }): Promise<void> => {
         const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        setRestEnvironment({
-            AUTOCODE_REST_API_AUTHORIZATION: "Bearer raw-secret",
-            AUTOCODE_REST_API_USERNAME: "user",
-            AUTOCODE_REST_API_PASSWORD: "password",
+        const { resolver, calls } = createFakeCredentialResolver({ profile: { authorization, username: profileUsername, password: profilePassword } })
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
+
+        const result = parseResult<{ status_code: number }>(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext()))
+
+        expect(result.status_code).toBe(200)
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.has("authorization")).toBe(true)
+        expect(requests[0]?.get("authorization")).toBe(authorization)
+        expect(calls).toEqual([{ kind: "rest", id: "API" }])
+    })
+
+    test("generates UTF-8 Basic Authorization from resolved credentials", async (): Promise<void> => {
+        const fileSystem = createMemoryRestFileSystem()
+        const { resolver, calls } = createFakeCredentialResolver({ profile: { username: "usér", password: "päss" } })
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
+
+        const result = parseResult<{ status_code: number }>(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext()))
+
+        expect(result.status_code).toBe(200)
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.get("authorization")).toBe("Basic dXPDqXI6cMOkc3M=")
+        expect(calls).toEqual([{ kind: "rest", id: "API" }])
+    })
+
+    test.each([
+        { name: "both empty", profile: { username: "", password: "" }, authorization: "Basic Og==" },
+        { name: "empty username", profile: { username: "", password: "password" }, authorization: "Basic OnBhc3N3b3Jk" },
+        { name: "empty password", profile: { username: "user", password: "" }, authorization: "Basic dXNlcjo=" },
+        { name: "undefined authorization", profile: { authorization: undefined, username: "user", password: "password" }, authorization: "Basic dXNlcjpwYXNzd29yZA==" },
+    ])("generates exact Basic Authorization with $name", async ({ profile, authorization }): Promise<void> => {
+        const fileSystem = createMemoryRestFileSystem()
+        const { resolver, calls } = createFakeCredentialResolver({ profile })
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
+
+        const result = parseResult<{ status_code: number }>(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext()))
+
+        expect(result.status_code).toBe(200)
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.get("authorization")).toBe(authorization)
+        expect(calls).toEqual([{ kind: "rest", id: "API" }])
+    })
+
+    test.each([
+        { name: "undefined", profile: undefined },
+        { name: "null", profile: null },
+        { name: "empty", profile: {} },
+        { name: "username-only", profile: { username: profileUsername } },
+        { name: "password-only", profile: { password: profilePassword } },
+    ])("rejects $name profile without fallback reads or exposed secrets", async ({ profile }): Promise<void> => {
+        const fileSystem = createMemoryRestFileSystem()
+        const { resolver, calls } = createFakeCredentialResolver({ profile: profile as RestCredentialProfile })
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
+
+        const result = await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext())
+
+        expectSafeError(result, resolutionError)
+        expect(calls).toEqual([{ kind: "rest", id: "API" }])
+        expect(requests).toHaveLength(0)
+    })
+
+    test("hides rejected resolver diagnostics without fallback reads", async (): Promise<void> => {
+        const fileSystem = createMemoryRestFileSystem()
+        const { resolver, calls } = createFakeCredentialResolver({ error: new Error(secretDiagnosticMessage) })
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
+
+        const result = await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext())
+
+        expectSafeError(result, resolutionError)
+        expect(calls).toEqual([{ kind: "rest", id: "API" }])
+        expect(requests).toHaveLength(0)
+    })
+
+    for (const { name, create } of hostileDiagnosticCases) {
+        test(`hides ${name} resolver diagnostics without inspection`, async (): Promise<void> => {
+            const fileSystem = createMemoryRestFileSystem()
+            const { value, hookCalls } = create()
+            const { resolver, calls } = createFakeCredentialResolver({ error: value })
+            const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+            const requests = captureRestRequests()
+
+            const result = await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: credentialTestKey } as never, createToolContext())
+
+            expect(hookCalls).toEqual([])
+            expectSafeError(result, resolutionError)
+            expect(hookCalls).toEqual([])
+            expect(calls).toEqual([{ kind: "rest", id: normalizedCredentialTestKey }])
+            expect(requests).toHaveLength(0)
+        })
+    }
+
+    test.each([
+        { restKey: "  my_key  ", id: "MY_KEY" },
+        { restKey: "_", id: "_" },
+        { restKey: "0", id: "0" },
+        { restKey: " a0_9z ", id: "A0_9Z" },
+        { restKey: "_0a_", id: "_0A_" },
+        { restKey: "123", id: "123" },
+    ])("normalizes rest_key $restKey exactly once to $id", async ({ restKey, id }): Promise<void> => {
+        const fileSystem = createMemoryRestFileSystem()
+        const { resolver, calls } = createFakeCredentialResolver({ profile: { authorization: profileAuthorization } })
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
+
+        const result = parseResult<{ status_code: number }>(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: restKey } as never, createToolContext()))
+
+        expect(result.status_code).toBe(200)
+        expect(calls).toEqual([{ kind: "rest", id }])
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.get("authorization")).toBe(profileAuthorization)
+    })
+
+    test.each([
+        { name: "blank", restKey: "" },
+        { name: "whitespace", restKey: " \t\r\n " },
+        { name: "hyphen", restKey: "bad-key" },
+        { name: "slash", restKey: "bad/key" },
+        { name: "accented", restKey: "café" },
+        { name: "non-ASCII", restKey: "キー" },
+        { name: "fullwidth", restKey: "ＫＥＹ" },
+    ])("rejects $name rest_key without lookup or request", async ({ restKey }): Promise<void> => {
+        const fileSystem = createMemoryRestFileSystem()
+        const { resolver, calls } = createFakeCredentialResolver()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
+
+        const result = await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: restKey } as never, createToolContext())
+
+        expectSafeError(result, "Invalid rest_key. Use only ASCII letters, digits, and underscores.")
+        expect(calls).toHaveLength(0)
+        expect(requests).toHaveLength(0)
+    })
+
+    for (const header of ["Authorization", "authorization", "aUtHoRiZaTiOn"]) {
+        test.each([
+            { name: "nonempty with valid key", authorization: explicitAuthorization, restKey: "api" },
+            { name: "empty with valid key", authorization: "", restKey: "api" },
+            { name: "nonempty with invalid key", authorization: explicitAuthorization, restKey: "bad-key" },
+            { name: "empty with invalid key", authorization: "", restKey: "bad-key" },
+            { name: "nonempty without key", authorization: explicitAuthorization, restKey: undefined },
+            { name: "empty without key", authorization: "", restKey: undefined },
+        ])(`explicit ${header} $name skips credential lookup`, async ({ authorization, restKey }): Promise<void> => {
+            const fileSystem = createMemoryRestFileSystem()
+            const { resolver, calls } = createFakeCredentialResolver()
+            const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+            const requests = captureRestRequests()
+
+            const result = parseResult<{ status_code: number }>(await tool.execute({
+                url: "http://example.com/api",
+                method: "GET",
+                headers: { [header]: authorization },
+                rest_key: restKey,
+            } as never, createToolContext()))
+
+            expect(result.status_code).toBe(200)
+            expect(calls).toHaveLength(0)
+            expect(requests).toHaveLength(1)
+            expect(requests[0]?.has("authorization")).toBe(true)
+            expect(requests[0]?.get("authorization")).toBe(authorization)
+        })
+    }
+
+    test("omitting rest_key sends unauthenticated request without lookup", async (): Promise<void> => {
+        const fileSystem = createMemoryRestFileSystem()
+        const { resolver, calls } = createFakeCredentialResolver()
+        const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+        const requests = captureRestRequests()
+
+        const result = parseResult<{ status_code: number }>(await tool.execute({ url: "http://example.com/api", method: "GET" } as never, createToolContext()))
+
+        expect(result.status_code).toBe(200)
+        expect(calls).toHaveLength(0)
+        expect(requests).toHaveLength(1)
+        expect(requests[0]?.has("authorization")).toBe(false)
+        expect(requests[0]?.get("authorization")).toBeNull()
+    })
+
+    test("uses whole resolved profile without REST credential environment reads", async (): Promise<void> => {
+        await withRestEnvironmentReadTrap(async (reads): Promise<void> => {
+            const fileSystem = createMemoryRestFileSystem()
+            const { resolver, calls } = createFakeCredentialResolver({ profile: { authorization: profileAuthorization, username: profileUsername, password: profilePassword } })
+            const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+            const requests = captureRestRequests()
+
+            const result = parseResult<{ status_code: number }>(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: credentialTestKey } as never, createToolContext()))
+
+            expect(result.status_code).toBe(200)
+            expect(requests).toHaveLength(1)
+            expect(requests[0]?.get("authorization")).toBe(profileAuthorization)
+            expect(calls).toEqual([{ kind: "rest", id: normalizedCredentialTestKey }])
+            expect(reads).toEqual([])
+        })
+    })
+
+    test("rejects resolver failure without REST credential environment fallback reads", async (): Promise<void> => {
+        await withRestEnvironmentReadTrap(async (reads): Promise<void> => {
+            const fileSystem = createMemoryRestFileSystem()
+            const { resolver, calls } = createFakeCredentialResolver({ error: new Error(secretDiagnosticMessage) })
+            const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+            const requests = captureRestRequests()
+
+            const result = await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: credentialTestKey } as never, createToolContext())
+
+            expectSafeError(result, resolutionError)
+            expect(calls).toEqual([{ kind: "rest", id: normalizedCredentialTestKey }])
+            expect(requests).toHaveLength(0)
+            expect(reads).toEqual([])
+        })
+    })
+
+    const authenticationCases = [
+        { name: "profile Authorization over Basic", profile: { authorization: profileAuthorization, username: profileUsername, password: profilePassword }, headers: undefined, authorization: profileAuthorization },
+        { name: "Basic", profile: { username: profileUsername, password: profilePassword }, headers: undefined, authorization: basicAuthorization },
+        { name: "explicit Authorization", profile: undefined, headers: { aUtHoRiZaTiOn: explicitAuthorization }, authorization: explicitAuthorization },
+    ]
+
+    for (const { name, profile, headers, authorization } of authenticationCases) {
+        for (const { name: variant, create } of hostileDiagnosticCases) {
+            test.each(["fetch", "cache writeFile"])(`hides ${variant} %s diagnostics with ${name} without inspection`, async (failurePoint): Promise<void> => {
+                const memoryFileSystem = createMemoryRestFileSystem()
+                const { value, hookCalls } = create()
+                let cacheWrites = 0
+                const fileSystem = {
+                    ...memoryFileSystem,
+                    async writeFile(filePath: string, content: string | Buffer | Uint8Array): Promise<void> {
+                        cacheWrites += 1
+                        if (failurePoint === "cache writeFile") throw value
+                        return memoryFileSystem.writeFile(filePath, content)
+                    },
+                }
+                const { resolver, calls } = profile === undefined ? createFakeCredentialResolver() : createFakeCredentialResolver({ profile })
+                const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+                const requests: Headers[] = []
+                globalThis.fetch = (async (_input, init): Promise<Response> => {
+                    requests.push(new Headers(init?.headers))
+                    if (failurePoint === "fetch") throw value
+                    return new Response("ok")
+                }) as typeof fetch
+
+                const result = await tool.execute({ url: "http://example.com/api", method: "GET", headers, rest_key: credentialTestKey } as never, createToolContext())
+
+                expect(hookCalls).toEqual([])
+                expectSafeError(result, requestFailureError)
+                expect(hookCalls).toEqual([])
+                expect(requests).toHaveLength(1)
+                expect(requests[0]?.get("authorization")).toBe(authorization)
+                expect(calls).toEqual(profile === undefined ? [] : [{ kind: "rest", id: normalizedCredentialTestKey }])
+                expect(cacheWrites).toBe(failurePoint === "cache writeFile" ? 1 : 0)
+            })
+        }
+
+        test.each(["fetch", "response body", "cache mkdir", "cache stat", "cache writeFile"])(`hides secrets when %s fails with ${name}`, async (failurePoint): Promise<void> => {
+            const memoryFileSystem = createMemoryRestFileSystem()
+            const failure = new Error(secretDiagnosticMessage)
+            const fileSystem = {
+                ...memoryFileSystem,
+                async mkdir(dirPath: string, options?: { recursive?: boolean }): Promise<string | undefined> {
+                    if (failurePoint === "cache mkdir" && path.basename(dirPath) === "rest") throw failure
+                    return memoryFileSystem.mkdir(dirPath, options)
+                },
+                async stat(targetPath: string): Promise<{ mtimeMs: number }> {
+                    if (failurePoint === "cache stat" && path.basename(path.dirname(targetPath)) === "rest") throw failure
+                    return memoryFileSystem.stat(targetPath)
+                },
+                async writeFile(filePath: string, content: string | Buffer | Uint8Array): Promise<void> {
+                    if (failurePoint === "cache writeFile") throw failure
+                    return memoryFileSystem.writeFile(filePath, content)
+                },
+            }
+            const { resolver, calls } = profile === undefined ? createFakeCredentialResolver() : createFakeCredentialResolver({ profile })
+            const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+            const requests: Headers[] = []
+            globalThis.fetch = (async (_input, init): Promise<Response> => {
+                requests.push(new Headers(init?.headers))
+                if (failurePoint === "fetch") throw failure
+                if (failurePoint === "response body") {
+                    return new Response(new ReadableStream<Uint8Array>({
+                        start(controller): void {
+                            controller.error(failure)
+                        },
+                    }))
+                }
+                return new Response("ok")
+            }) as typeof fetch
+
+            const result = await tool.execute({ url: "http://example.com/api", method: "GET", headers, rest_key: "api" } as never, createToolContext())
+
+            expectSafeError(result, requestFailureError)
+            expect(requests).toHaveLength(1)
+            expect(requests[0]?.get("authorization")).toBe(authorization)
+            expect(calls).toEqual(profile === undefined ? [] : [{ kind: "rest", id: "API" }])
         })
 
-        let requestHeaders: HeadersInit | undefined
-        globalThis.fetch = (async (_input, init) => {
-            requestHeaders = init?.headers
-            return new Response("ok")
-        }) as typeof fetch
+        test(`hides filesystem preparation diagnostics with ${name}`, async (): Promise<void> => {
+            const fileSystem = {
+                ...createMemoryRestFileSystem(),
+                async readdir(): Promise<never> {
+                    throw new Error(secretDiagnosticMessage)
+                },
+            }
+            const { resolver, calls } = profile === undefined ? createFakeCredentialResolver() : createFakeCredentialResolver({ profile })
+            const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+            const requests = captureRestRequests()
 
-        await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext())
+            const result = await tool.execute({ url: "http://example.com/api", method: "GET", headers, rest_key: "api" } as never, createToolContext())
 
-        expect(requestHeaders).toEqual({ Authorization: "Bearer raw-secret" })
-    })
+            expectSafeError(result, "Unable to prepare REST response directory.")
+            expect(requests).toHaveLength(0)
+            expect(calls).toEqual(profile === undefined ? [] : [{ kind: "rest", id: "API" }])
+        })
 
-    test("generates Basic Authorization from UTF-8 environment credentials", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        setRestEnvironment({ AUTOCODE_REST_API_USERNAME: "usér", AUTOCODE_REST_API_PASSWORD: "päss" })
+        test(`hides outer preparation diagnostics with ${name}`, async (): Promise<void> => {
+            const fileSystem = createMemoryRestFileSystem()
+            const { resolver, calls } = profile === undefined ? createFakeCredentialResolver() : createFakeCredentialResolver({ profile })
+            const tool = createAutocodeRestTool(createSessionClient(), fileSystem, resolver)
+            const requests = captureRestRequests()
 
-        let requestHeaders: HeadersInit | undefined
-        globalThis.fetch = (async (_input, init) => {
-            requestHeaders = init?.headers
-            return new Response("ok")
-        }) as typeof fetch
+            const result = await tool.execute({
+                url: "http://example.com/api",
+                method: "GET",
+                headers,
+                rest_key: "api",
+                body: {
+                    get value(): string {
+                        throw new Error(secretDiagnosticMessage)
+                    },
+                },
+            } as never, createToolContext())
 
-        await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext())
-
-        expect(requestHeaders).toEqual({ Authorization: "Basic dXPDqXI6cMOkc3M=" })
-    })
-
-    test("errors when REST credentials are incomplete without exposing values", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        setRestEnvironment({ AUTOCODE_REST_API_USERNAME: "hidden-user" })
-
-        const error = parseError(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "api" } as never, createToolContext()))
-
-        expect(error.error).toContain("AUTOCODE_REST_API_AUTHORIZATION")
-        expect(error.error).toContain("AUTOCODE_REST_API_PASSWORD")
-        expect(error.error).not.toContain("hidden-user")
-    })
-
-    test("normalizes rest_key for environment lookup", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        setRestEnvironment({ AUTOCODE_REST_MY_KEY_AUTHORIZATION: "Bearer normalized" })
-
-        let requestHeaders: HeadersInit | undefined
-        globalThis.fetch = (async (_input, init) => {
-            requestHeaders = init?.headers
-            return new Response("ok")
-        }) as typeof fetch
-
-        await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "  my_key  " } as never, createToolContext())
-
-        expect(requestHeaders).toEqual({ Authorization: "Bearer normalized" })
-    })
-
-    test("rejects invalid rest_key without request", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-
-        const error = parseError(await tool.execute({ url: "http://example.com/api", method: "GET", rest_key: "bad/key" } as never, createToolContext()))
-
-        expect(error.error).toBe("Invalid rest_key. Use only ASCII letters, digits, and underscores.")
-    })
-
-    test("explicit Authorization header takes precedence over rest_key authentication", async () => {
-        const fileSystem = createMemoryRestFileSystem()
-        const tool = createAutocodeRestTool(createSessionClient(), fileSystem)
-        setRestEnvironment({ AUTOCODE_REST_API_AUTHORIZATION: "Bearer environment-secret" })
-
-        let requestHeaders: HeadersInit | undefined
-        globalThis.fetch = (async (_input, init) => {
-            requestHeaders = init?.headers
-            return new Response("ok")
-        }) as typeof fetch
-
-        await tool.execute({
-            url: "http://example.com/api",
-            method: "GET",
-            headers: { authorization: "Bearer explicit" },
-            rest_key: "api",
-        } as never, createToolContext())
-
-        expect(requestHeaders).toEqual({ authorization: "Bearer explicit" })
-    })
+            expectSafeError(result, "Unable to prepare REST request.")
+            expect(requests).toHaveLength(0)
+            expect(calls).toEqual(profile === undefined ? [] : [{ kind: "rest", id: "API" }])
+        })
+    }
 })

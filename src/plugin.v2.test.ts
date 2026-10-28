@@ -351,6 +351,15 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
         expect([...registeredNames].sort()).toEqual(expectedNames.sort())
         expect(new Set(registeredNames).size).toBe(registeredNames.length)
         expect(registeredNames).toContain("autocode_session_create")
+        expect(registeredNames).toEqual(expect.arrayContaining([
+            "autocode_ssh_command",
+            "autocode_ssh_config_read",
+            "autocode_db_schemas",
+            "autocode_db_tables",
+            "autocode_db_table",
+            "autocode_db_table_read",
+            "autocode_rest",
+        ]))
         for (const tool of tools.values()) expect(tool.options?.codemode).toBe(false)
         expect(registeredNames.some((name) => name.startsWith("autocode_sandbox_"))).toBe(platform !== "win32")
         // Remaining execution and event contracts exercise the Linux sandbox fixture.

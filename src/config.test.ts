@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { applyExternalDirectoryPolicy, buildAgents, toV2Permissions } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig } from "./config"
-import type { ConfigFileSystem } from "./config"
+import type { ConfigFileSystem, ModelTier, TierConfig } from "./config"
 import { createPlatformCapabilities } from "./utils/platform"
 import { resolveOpenCodePaths } from "./utils/paths"
 import { permissionEffect, type PermissionRule } from "./utils/permissions"
@@ -718,6 +721,351 @@ describe("model tier config", () => {
         expect(result.tiers).toEqual({
             context: { model: "anthropic/claude-opus-4-5", variant: "thinking" },
             operator: { model: "anthropic/claude-sonnet-4-5", variant: "standard" },
+        })
+    })
+})
+
+describe("credential config policy", () => {
+    const providers = ["auto", "windows-credential-manager", "linux-secret-service", "plaintext"] as const
+    const canary = "credential-policy-canary-never-echo"
+    const invalidGlobalPolicyMessage = "autocode: invalid global autocode.jsonc credentials policy; supported top-level credentials.provider values: auto, windows-credential-manager, linux-secret-service, plaintext"
+    const nestedGlobalPolicyMessage = "autocode: global autocode.jsonc does not support autocode.credentials; move policy to top-level credentials.provider."
+    const ignoredPolicyLocations = ["root", "nested", "both"] as const
+    const worktree = resolve("/wt")
+    const ancestor = resolve("/wt/packages")
+    const directory = resolve("/wt/packages/app")
+    const ignoredSources: [string, () => string][] = [
+        ["global opencode.json", (): string => globalOpencodeConfigPath("json")],
+        ["global opencode.jsonc", (): string => globalOpencodeConfigPath("jsonc")],
+        ["worktree autocode.jsonc", (): string => localAutocodeConfigPath(worktree)],
+        ["ancestor autocode.jsonc", (): string => localAutocodeConfigPath(ancestor)],
+        ["directory autocode.jsonc", (): string => localAutocodeConfigPath(directory)],
+        ["worktree opencode.json", (): string => localOpencodeConfigPath(worktree, "json")],
+        ["worktree opencode.jsonc", (): string => localOpencodeConfigPath(worktree, "jsonc")],
+        ["ancestor opencode.json", (): string => localOpencodeConfigPath(ancestor, "json")],
+        ["ancestor opencode.jsonc", (): string => localOpencodeConfigPath(ancestor, "jsonc")],
+        ["directory opencode.json", (): string => localOpencodeConfigPath(directory, "json")],
+        ["directory opencode.jsonc", (): string => localOpencodeConfigPath(directory, "jsonc")],
+    ]
+    const defaultConfigs: [string, unknown][] = [
+        ["missing global config", undefined],
+        ["empty global object", {}],
+        ["omitted credentials", { autocode: {} }],
+        ["empty credentials object", { credentials: {} }],
+    ]
+    const invalidCredentials: [string, unknown][] = [
+        ["native provider", { provider: "native" }],
+        ["null provider", { provider: null }],
+        ["empty provider", { provider: "" }],
+        ["number provider", { provider: 42 }],
+        ["boolean provider", { provider: false }],
+        ["array provider", { provider: [] }],
+        ["object provider", { provider: {} }],
+        ["case-mismatched provider", { provider: "AUTO" }],
+        ["padded provider", { provider: " plaintext " }],
+        ["unknown provider", { provider: canary }],
+        ["null credentials", null],
+        ["array credentials", []],
+        ["array of policies", [{ provider: "auto" }]],
+        ["string credentials", "plaintext"],
+        ["empty string credentials", ""],
+        ["number credentials", 42],
+        ["boolean credentials", false],
+        ["path-only credentials", { path: canary }],
+        ["helper-only credentials", { helper: canary }],
+        ["unknown property", { [canary]: "auto" }],
+        ["provider with path", { provider: "auto", path: canary }],
+        ["provider with helper", { provider: "auto", helper: canary }],
+        ["provider with unknown property", { provider: "auto", [canary]: canary }],
+    ]
+    const autocodeBranches: [string, Record<string, unknown>, Partial<Record<ModelTier, TierConfig>>][] = [
+        ["noncredential settings", {}, {}],
+        ["direct tiers", { tiers: { spy: { model: "global/spy", variant: "global" } } }, { spy: { model: "global/spy", variant: "global" } }],
+        ["selected provider tiers", { tier: "configured", tiers: { configured: { spy: { model: "global/spy", variant: "global" } } } }, { spy: { model: "global/spy", variant: "global" } }],
+        ["tier-only selection", { tier: "configured" }, { spy: { model: "opencode/spy", variant: "opencode" } }],
+        ["legacy aliases", { model: { spy: "legacy/spy" }, variant: { spy: "legacy" } }, { spy: { model: "legacy/spy", variant: "legacy" } }],
+    ]
+
+    async function withCredentialFixture(run: (project: string) => Promise<void>): Promise<void> {
+        const originalConfigDir = process.env.OPENCODE_CONFIG_DIR
+        const originalXdgConfigHome = process.env.XDG_CONFIG_HOME
+        const owned = mkdtempSync(join(tmpdir(), "autocode-config-policy-"))
+
+        try {
+            const globalDirectory = join(owned, "global")
+            const projectDirectory = join(owned, "project")
+            mkdirSync(globalDirectory)
+            mkdirSync(projectDirectory)
+            process.env.OPENCODE_CONFIG_DIR = globalDirectory
+            process.env.XDG_CONFIG_HOME = join(owned, "xdg")
+            await run(projectDirectory)
+        } finally {
+            if (originalConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
+            else process.env.OPENCODE_CONFIG_DIR = originalConfigDir
+
+            if (originalXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME
+            else process.env.XDG_CONFIG_HOME = originalXdgConfigHome
+
+            rmSync(owned, { recursive: true, force: true })
+        }
+
+        expect(existsSync(owned)).toBe(false)
+    }
+
+    test.each(defaultConfigs)("loadAutocodeConfig defaults credentials to auto for %s", async (_label: string, config: unknown): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            const files: Record<string, string> = {}
+            if (config !== undefined) files[globalAutocodeConfigPath()] = JSON.stringify(config)
+
+            const result = await loadAutocodeConfig(worktree, directory, makeFs(files))
+
+            expect(result.credentials).toEqual({ provider: "auto" })
+        })
+    })
+
+    test.each([...providers])("loadAutocodeConfig accepts root-only global provider %s with JSONC comments and trailing commas", async (provider: (typeof providers)[number]): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            const fs = makeFs({
+                [globalAutocodeConfigPath()]: `{
+                    // Only global config controls credential policy.
+                    "credentials": {
+                        "provider": "${provider}", /* No autocode wrapper is required. */
+                    },
+                }`,
+            })
+
+            const result = await loadAutocodeConfig(worktree, directory, fs)
+
+            expect(result.credentials).toEqual({ provider })
+        })
+    })
+
+    test.each([undefined, ...providers])("loadAutocodeConfig keeps global provider %s despite other config policies and merges unrelated config", async (provider: (typeof providers)[number] | undefined): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            const expectedProvider = provider ?? "auto"
+            for (const [, getPath] of ignoredSources) {
+                for (const overrideProvider of providers) {
+                    for (const location of ignoredPolicyLocations) {
+                        const fs = makeFs({
+                            [globalAutocodeConfigPath()]: JSON.stringify({
+                                ...(provider === undefined ? {} : { credentials: { provider } }),
+                                autocode: {
+                                    tiers: { cheap: { variant: "global" }, spy: { model: "global/spy" } },
+                                },
+                                permissions: [{ action: "external_directory", resource: "/global/*", effect: "deny" }],
+                            }),
+                            [getPath()]: JSON.stringify({
+                                ...(location === "nested" ? {} : { credentials: { provider: overrideProvider } }),
+                                autocode: {
+                                    ...(location === "root" ? {} : { credentials: { provider: overrideProvider } }),
+                                    tiers: { cheap: { model: "source/cheap" } },
+                                },
+                                permissions: [{ action: "external_directory", resource: "/source/*", effect: "allow" }],
+                            }),
+                        })
+
+                        const result = await loadAutocodeConfig(worktree, directory, fs)
+
+                        expect(result.credentials).toEqual({ provider: expectedProvider })
+                        expect(result.tiers).toEqual({
+                            cheap: { model: "source/cheap", variant: "global" },
+                            spy: { model: "global/spy" },
+                        })
+                        expect(result.externalDirectories).toEqual({ "/global/*": "deny", "/source/*": "allow" })
+                    }
+                }
+            }
+        })
+    })
+
+    test.each(ignoredSources)("loadAutocodeConfig ignores malformed credentials in %s without dropping other config", async (_label: string, getPath: () => string): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            const ignoredCredentials: unknown[] = [
+                null,
+                [],
+                "auto",
+                42,
+                false,
+                { provider: "native" },
+                { provider: null },
+                { provider: "auto", path: canary, helper: canary },
+            ]
+            for (const provider of [undefined, ...providers]) {
+                for (const credentials of ignoredCredentials) {
+                    for (const location of ignoredPolicyLocations) {
+                        const fs = makeFs({
+                            [globalAutocodeConfigPath()]: JSON.stringify(provider === undefined ? {} : { credentials: { provider } }),
+                            [getPath()]: JSON.stringify({
+                                ...(location === "nested" ? {} : { credentials }),
+                                autocode: {
+                                    ...(location === "root" ? {} : { credentials }),
+                                    tiers: { spy: { model: "source/spy" } },
+                                },
+                                permissions: [{ action: "external_directory", resource: "/source/*", effect: "ask" }],
+                            }),
+                        })
+
+                        const result = await loadAutocodeConfig(worktree, directory, fs)
+
+                        expect(result.credentials).toEqual({ provider: provider ?? "auto" })
+                        expect(result.tiers.spy).toEqual({ model: "source/spy" })
+                        expect(result.externalDirectories).toEqual({ "/source/*": "ask" })
+                    }
+                }
+            }
+        })
+    })
+
+    test.each(invalidCredentials)("loadAutocodeConfig rejects global %s with a sanitized error despite valid project policy", async (_label: string, credentials: unknown): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            const files: Record<string, string> = {
+                [globalAutocodeConfigPath()]: JSON.stringify({ credentials, [canary]: canary }),
+            }
+            for (const [, getPath] of ignoredSources) {
+                files[getPath()] = JSON.stringify({ credentials: { provider: "plaintext" }, autocode: { credentials: { provider: "plaintext" } } })
+            }
+
+            const error = await loadAutocodeConfig(worktree, directory, makeFs(files)).catch((error: unknown): unknown => error)
+
+            expect(error).toBeInstanceOf(Error)
+            expect((error as Error).message).toBe(invalidGlobalPolicyMessage)
+            expect((error as Error).message).not.toContain(canary)
+            expect((error as Error).message).not.toContain("malformed JSONC")
+            expect((error as Error).message).not.toContain(globalAutocodeConfigPath())
+        })
+    })
+
+    test.each([
+        ["global", (): string => globalAutocodeConfigPath()],
+        ["project", (): string => localAutocodeConfigPath(directory)],
+    ])("loadAutocodeConfig keeps malformed %s JSONC errors distinct from credential policy errors", async (_label: string, getPath: () => string): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            const path = getPath()
+            const error = await loadAutocodeConfig(worktree, directory, makeFs({
+                [globalAutocodeConfigPath()]: JSON.stringify({ credentials: { provider: "auto" } }),
+                [path]: '{"credentials":',
+            })).catch((error: unknown): unknown => error)
+            const prefix = `autocode: malformed JSONC in ${path}: `
+
+            expect(error).toBeInstanceOf(Error)
+            expect((error as Error).message.startsWith(prefix)).toBe(true)
+            expect((error as Error).message.length).toBeGreaterThan(prefix.length)
+        })
+    })
+
+    test.each([...providers])("loadAutocodeConfig keeps pinned global provider %s and unrelated merges despite malformed credentials elsewhere", async (provider: (typeof providers)[number]): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            for (const [, getPath] of ignoredSources) {
+                for (const location of ignoredPolicyLocations) {
+                    const credentials = { provider: "native", path: canary, helper: canary }
+                    const fs = makeFs({
+                        [globalAutocodeConfigPath()]: JSON.stringify({
+                            credentials: { provider },
+                            autocode: {
+                                tiers: { cheap: { variant: "global" }, spy: { model: "global/spy" } },
+                            },
+                            permissions: [{ action: "external_directory", resource: "/global/*", effect: "deny" }],
+                        }),
+                        [getPath()]: JSON.stringify({
+                            ...(location === "nested" ? {} : { credentials }),
+                            autocode: {
+                                ...(location === "root" ? {} : { credentials }),
+                                tiers: { cheap: { model: "source/cheap" } },
+                            },
+                            permissions: [{ action: "external_directory", resource: "/source/*", effect: "allow" }],
+                        }),
+                    })
+
+                    const result = await loadAutocodeConfig(worktree, directory, fs)
+
+                    expect(result.credentials).toEqual({ provider })
+                    expect(result.tiers).toEqual({
+                        cheap: { model: "source/cheap", variant: "global" },
+                        spy: { model: "global/spy" },
+                    })
+                    expect(result.externalDirectories).toEqual({ "/global/*": "deny", "/source/*": "allow" })
+                }
+            }
+        })
+    })
+
+    test.each(autocodeBranches)("loadAutocodeConfig keeps root credentials alongside %s and preserves unrelated merges", async (_label: string, autocode: Record<string, unknown>, expectedTiers: Partial<Record<ModelTier, TierConfig>>): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            for (const provider of providers) {
+                const fs = makeFs({
+                    [globalOpencodeConfigPath("jsonc")]: JSON.stringify({
+                        autocode: {
+                            tiers: {
+                                cheap: { model: "opencode/cheap", variant: "opencode" },
+                                configured: { spy: { model: "opencode/spy", variant: "opencode" } },
+                            },
+                        },
+                        permissions: [{ action: "external_directory", resource: "/opencode/*", effect: "allow" }],
+                    }),
+                    [globalAutocodeConfigPath()]: JSON.stringify({
+                        credentials: { provider },
+                        autocode: {
+                            sandbox: { sync_method: "copy", distro: { cache_path: "/global/cache", expire: "never" } },
+                            skills: { freeze: true, learned: { max: 4 } },
+                            ...autocode,
+                        },
+                        permissions: [{ action: "external_directory", resource: "/global/*", effect: "deny" }],
+                    }),
+                    [localAutocodeConfigPath(directory)]: JSON.stringify({
+                        autocode: {
+                            tiers: { cheap: { variant: "project" } },
+                            sandbox: { sync_method: "reflink" },
+                            skills: { learned: { max: 2 } },
+                        },
+                        permissions: [{ action: "external_directory", resource: "/project/*", effect: "ask" }],
+                    }),
+                })
+
+                const result = await loadAutocodeConfig(worktree, directory, fs)
+
+                expect(result.credentials).toEqual({ provider })
+                expect(result.tiers).toEqual({ cheap: { model: "opencode/cheap", variant: "project" }, ...expectedTiers })
+                expect(result.sandbox).toEqual({ sync_method: "reflink", distro_cache_path: "/global/cache", distro_expire: "never" })
+                expect(result.skills).toEqual({ freeze: true, learned: { max: 2 } })
+                expect(result.externalDirectories).toEqual({ "/opencode/*": "allow", "/global/*": "deny", "/project/*": "ask" })
+            }
+        })
+    })
+
+    test.each([undefined, ...providers])("loadAutocodeConfig rejects nested global credentials with root provider %s using fixed migration guidance", async (provider: (typeof providers)[number] | undefined): Promise<void> => {
+        await withCredentialFixture(async (): Promise<void> => {
+            const nestedCredentials: unknown[] = [{}, ...providers.map((provider): unknown => ({ provider })), ...invalidCredentials.map(([, credentials]): unknown => credentials)]
+            for (const credentials of nestedCredentials) {
+                const error = await loadAutocodeConfig(worktree, directory, makeFs({
+                    [globalAutocodeConfigPath()]: JSON.stringify({
+                        ...(provider === undefined ? {} : { credentials: { provider } }),
+                        autocode: { credentials },
+                        [canary]: canary,
+                    }),
+                    [localAutocodeConfigPath(directory)]: JSON.stringify({ credentials: { provider: "plaintext" }, autocode: { credentials: { provider: "plaintext" } } }),
+                })).catch((error: unknown): unknown => error)
+
+                expect(error).toBeInstanceOf(Error)
+                expect((error as Error).message).toBe(nestedGlobalPolicyMessage)
+                expect((error as Error).message).not.toContain(canary)
+                expect((error as Error).message).not.toContain("malformed JSONC")
+                expect((error as Error).message).not.toContain(globalAutocodeConfigPath())
+            }
+        })
+    })
+
+    test.each([...providers])("loadAutocodeConfig reads exact root-only provider %s from an owned real global autocode.jsonc", async (provider: (typeof providers)[number]): Promise<void> => {
+        await withCredentialFixture(async (projectDirectory: string): Promise<void> => {
+            const contents = provider === "auto" ? '{"credentials":{"provider":"auto"}}' : `{"credentials":{"provider":"${provider}"}}`
+            const configPath = globalAutocodeConfigPath()
+            writeFileSync(configPath, contents, "utf-8")
+
+            expect(readFileSync(configPath)).toEqual(Buffer.from(contents, "utf-8"))
+            expect(resolveOpenCodePaths().globalAutocodeConfigPath).toBe(configPath)
+
+            const result = await loadAutocodeConfig(projectDirectory, projectDirectory)
+
+            expect(result.credentials).toEqual({ provider })
         })
     })
 })

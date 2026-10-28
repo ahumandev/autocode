@@ -8,6 +8,7 @@ import type { Session, OpencodeClient } from "@opencode-ai/sdk"
 import autocode from "../plugin"
 import { loadAutocodeConfig } from "@/config"
 import type { ConfigFileSystem } from "@/config"
+import type { CredentialKind, CredentialResolver } from "@/credentials/types"
 import { createAutocodeConceptReadTool } from "./autocode_concept_read"
 import { createAutocodeConceptListTool } from "./autocode_concept_list"
 import { createAutocodeConceptCreateTool } from "./autocode_concept_create"
@@ -275,6 +276,50 @@ describe("auto resume wiring", () => {
         expect(skill.description).toContain("skill")
         expect(Object.keys(skill.args)).toEqual(["name", "reference"])
         expect(Object.keys(skill.args)).not.toContain("subjects")
+    })
+
+    test("createTools shares one injected credential resolver across SSH, remote config, DB, and REST tools", async (): Promise<void> => {
+        const sensitiveMarker = "registry-shared-resolver-sensitive-marker-7f31c8"
+        const calls: Array<{ kind: CredentialKind, id: string }> = []
+        const credentialResolver: CredentialResolver = {
+            async resolve(kind: CredentialKind, id: string): Promise<never> {
+                calls.push({ kind, id })
+                throw new Error(sensitiveMarker)
+            },
+        }
+        const tools = createTools(createMockClient(), {}, { credentialResolver })
+        const requests = [
+            ["autocode_ssh_command", { ssh_key: " sample-ssh ", command: "true" }],
+            ["autocode_ssh_config_read", { ssh_key: " sample-ssh ", file_path_glob: "*.json" }],
+            ["autocode_db_schemas", { db_key: "sample_db" }],
+            ["autocode_db_tables", { db_key: "sample_db" }],
+            ["autocode_db_table", { db_key: "sample_db", schema: "public", table: "items" }],
+            ["autocode_db_table_read", { db_key: "sample_db", schema: "public", table: "items" }],
+            ["autocode_rest", { url: "http://example.invalid/", method: "GET", rest_key: "sample_service" }],
+        ] as const
+        const expectedCalls = [
+            { kind: "ssh", id: "SAMPLE_SSH" },
+            { kind: "ssh", id: "SAMPLE_SSH" },
+            { kind: "db", id: "SAMPLE_DB" },
+            { kind: "db", id: "SAMPLE_DB" },
+            { kind: "db", id: "SAMPLE_DB" },
+            { kind: "db", id: "SAMPLE_DB" },
+            { kind: "rest", id: "SAMPLE_SERVICE" },
+        ] as const
+
+        for (const [index, [toolName, args]] of requests.entries()) {
+            const tool = tools[toolName]
+            if (!tool) throw new Error(`Tool not registered: ${toolName}`)
+            const result = await tool.execute(args, createToolContext())
+
+            expect(parseToolResult(result)).toMatchObject({
+                failedAction: expect.any(String),
+                error: expect.any(String),
+                instruction: expect.any(String),
+            })
+            expect(JSON.stringify(result)).not.toContain(sensitiveMarker)
+            expect(calls).toEqual(expectedCalls.slice(0, index + 1))
+        }
     })
 
     test("createTools registers exact managed script tool set", () => {
@@ -771,6 +816,7 @@ describe("tool registrations", () => {
                 "autocode_config_read",
                 "autocode_config_edit",
                 "autocode_config_remove",
+                "autocode_credentials_list",
                 "autocode_md_create",
                 "autocode_md_h1",
                 "autocode_md_read",

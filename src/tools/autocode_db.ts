@@ -1,4 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
+import { createRuntimeCredentialResolver } from "@/credentials/runtime"
+import type { CredentialResolver } from "@/credentials/types"
 import {
     buildReadOnlySelectQuery,
     defaultDbClientFactory,
@@ -13,60 +15,71 @@ import {
     type DbAdapter,
     type DbClient,
     type DbClientFactory,
+    type DbConfig,
     type DbFilter,
 } from "@/utils/db"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 export type DbDeps = {
     clientFactory?: DbClientFactory
-    env?: NodeJS.ProcessEnv
+    credentialResolver?: CredentialResolver
 }
 
 const DB_KEY_DESCRIPTION = "Use correct db_key to unlock your database."
 const SCHEMA_DESCRIPTION = "DB schema name as a single identifier. Use autocode_db_schemas first when uncertain."
 const TABLE_DESCRIPTION = "DB table name as a single identifier. Use autocode_db_tables first when uncertain."
-const RETRY_INSTRUCTION = "Provide a valid db_key/schema/table/fields/filters request or configure the required AUTOCODE_DB_<KEY> environment variables."
+const RETRY_INSTRUCTION = "Provide a valid db_key/schema/table/fields/filters request or configure the required database credential profile."
 const FILTER_OPERATORS = ["=", "!=", "<", "<=", ">", ">=", "like", "in", "is_null"] as const
 
 function getDeps(deps?: DbDeps): Required<DbDeps> {
     return {
         clientFactory: deps?.clientFactory ?? defaultDbClientFactory,
-        env: deps?.env ?? process.env,
+        credentialResolver: deps?.credentialResolver ?? createRuntimeCredentialResolver(),
     }
 }
 
 async function withClient<T>(action: string, deps: Required<DbDeps>, dbKey: string, run: (client: DbClient, adapter: DbAdapter) => Promise<T>): Promise<string> {
     let client: DbClient | undefined
+    let config: DbConfig | undefined
+    let response: string
+    let succeeded = false
 
     try {
-        const config = loadDbConfig(dbKey, deps.env)
+        config = await loadDbConfig(dbKey, deps.credentialResolver)
         client = await deps.clientFactory(config)
         const result = await run(client, config.adapter)
-        return JSON.stringify(normalizeJsonValue(result))
+        response = JSON.stringify(normalizeJsonValue(result))
+        succeeded = true
     }
     catch (error) {
-        if (isRetryableDbError(error)) {
-            return createRetryResponse(action, retryMessage(error), RETRY_INSTRUCTION)
+        const sanitizedError = config ? sanitizeDbError(error, config) : new Error("Credential read failed.")
+        if (isRetryableDbError(sanitizedError)) {
+            response = createRetryResponse(action, retryMessage(sanitizedError), RETRY_INSTRUCTION)
         }
-
-        const config = tryLoadConfig(dbKey, deps.env)
-        return createAbortResponse(action, sanitizeDbError(error, config))
+        else {
+            response = createAbortResponse(action, sanitizedError)
+        }
     }
     finally {
         if (client) {
             try {
                 await client.close()
             }
-            catch {
+            catch (error) {
+                const sanitizedError = sanitizeDbError(error, config)
+                if (succeeded) {
+                    response = createAbortResponse(action, sanitizedError)
+                }
             }
         }
     }
+
+    return response
 }
 
 function isRetryableDbError(error: unknown): boolean {
     return error instanceof Error && (
         error.message.startsWith("Invalid ")
-        || error.message.startsWith("Missing required environment variable:")
         || error.message.startsWith("Provide only one")
         || error.message.startsWith("Unsupported ")
         || error.message.startsWith("is_null ")
@@ -77,16 +90,7 @@ function retryMessage(error: unknown): string {
     return error instanceof Error ? error.message : "Invalid database request."
 }
 
-function tryLoadConfig(dbKey: string, env: NodeJS.ProcessEnv): ReturnType<typeof loadDbConfig> | undefined {
-    try {
-        return loadDbConfig(dbKey, env)
-    }
-    catch {
-        return undefined
-    }
-}
-
-export function createAutocodeDbTablesTool(deps?: DbDeps) {
+export function createAutocodeDbTablesTool(deps?: DbDeps): ReturnType<typeof tool> {
     const resolvedDeps = getDeps(deps)
 
     return tool({
@@ -104,7 +108,7 @@ export function createAutocodeDbTablesTool(deps?: DbDeps) {
     })
 }
 
-export function createAutocodeDbTableTool(deps?: DbDeps) {
+export function createAutocodeDbTableTool(deps?: DbDeps): ReturnType<typeof tool> {
     const resolvedDeps = getDeps(deps)
 
     return tool({
@@ -122,7 +126,7 @@ export function createAutocodeDbTableTool(deps?: DbDeps) {
     })
 }
 
-export function createAutocodeDbTableReadTool(deps?: DbDeps) {
+export function createAutocodeDbTableReadTool(deps?: DbDeps): ReturnType<typeof tool> {
     const resolvedDeps = getDeps(deps)
 
     return tool({
@@ -160,7 +164,7 @@ export function createAutocodeDbTableReadTool(deps?: DbDeps) {
     })
 }
 
-export function createAutocodeDbSchemasTool(deps?: DbDeps) {
+export function createAutocodeDbSchemasTool(deps?: DbDeps): ReturnType<typeof tool> {
     const resolvedDeps = getDeps(deps)
 
     return tool({

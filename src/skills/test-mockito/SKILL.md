@@ -120,13 +120,9 @@ verify(mock, never()).method()
 // Verify at least / at most
 verify(mock, atLeast(1)).method()
 verify(mock, atMost(2)).method()
-
-// Verify no other interactions after verified ones
-verifyNoMoreInteractions(mock)
-
-// Verify nothing was ever called
-verifyNoInteractions(mock)
 ```
+
+Only use: `verifyNoMoreInteractions(mock)` and `verifyNoInteractions(mock)` if you know that more interactions would have severe effects on system
 
 ## Argument Captors
 

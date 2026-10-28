@@ -298,7 +298,7 @@ describe("autocode plugin config", () => {
 		});
 	});
 
-	test("legacy retains hidden worker defaults, tool shapes, and nesting depth floor", async () => {
+	test("legacy retains hidden worker defaults, tool shapes, and nesting depth bounds", async () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");
 		await mkdir(join(worktree, ".opencode"), { recursive: true });
@@ -307,7 +307,7 @@ describe("autocode plugin config", () => {
 			const input: PluginInputWithSandboxSupportOverride = { ...createInput(worktree), homeOverride: root };
 			const hooks = await autocode.server(input);
 			try {
-				for (const [configuredDepth, expectedDepth] of [[1, 5], [8, 8]]) {
+				for (const [configuredDepth, expectedDepth] of [[1, 5], [7, 7], [8, 7]]) {
 					const cfg: PluginConfig = { subagent_depth: configuredDepth };
 					await (hooks as unknown as PluginConfigHook).config?.(cfg);
 					expect(cfg.subagent_depth).toBe(expectedDepth);
@@ -317,6 +317,15 @@ describe("autocode plugin config", () => {
 				expect(hooks.tool?.autocode_md_read?.args).toBeDefined();
 				expect(hooks.tool?.autocode_md_read).not.toHaveProperty("options");
 				expect(hooks.tool?.skill?.args).toBeDefined();
+				expect(Object.keys(hooks.tool ?? {})).toEqual(expect.arrayContaining([
+					"autocode_ssh_command",
+					"autocode_ssh_config_read",
+					"autocode_db_schemas",
+					"autocode_db_tables",
+					"autocode_db_table",
+					"autocode_db_table_read",
+					"autocode_rest",
+				]));
 			} finally {
 				await hooks.dispose?.();
 			}

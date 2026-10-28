@@ -1,3 +1,4 @@
+
 import type { AgentConfig } from "@opencode-ai/sdk/v2"
 import type { ExternalDirectoryRules, ModelTier, PermissionAction, TierConfig } from "@/config"
 import type { PlatformCapabilities } from "@/utils/platform"
@@ -77,10 +78,10 @@ const sandboxLinuxCapabilities: PlatformCapabilities = { isWindows: false, comma
 
 const colorAutonomousOrchestrator = "#AA0000"
 const colorWritableInteractiveOrchestrator = "#00AA00"
-const colorReadOnlyInteractiveOrchestrator = "#0000AA"
+const colorReadOnlyInteractiveOrchestrator = "#0022CC"
 const colorWritableWorker = "#AA8300"
-const colorReadOnlyWorker = "#00AAAA"
-const colorDocumentWorker = "#AA00AA"
+const colorReadOnlyWorker = "#00AACC"
+const colorDocumentWorker = "#AA00CC"
 
 function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
     return {
@@ -88,6 +89,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         // Build-in opencode
 
         build: {
+            color: colorWritableInteractiveOrchestrator,
             tier: "fast",
         },
 
@@ -599,6 +601,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-os": "allow",
                     "execute-rest": "allow",
                     "execute-sandbox": "allow",
+                    "execute-script": "allow",
                     "execute-ssh": "allow",
                     "query*": "allow",
                 },
@@ -1048,12 +1051,13 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
 
         "query-autocode": {
             color: colorReadOnlyWorker,
-            description: "Use query-autocode subagent for OpenCode or AutoCode documentation or configuration related queries or advise.",
+            description: "Use query-autocode subagent for OpenCode or AutoCode documentation, configuration related queries, autocode tool keys or advise.",
             hidden: true,
             mode: "subagent",
             permission: {
                 "*": "deny",
                 "autocode_config_read": "allow",
+                "autocode_credentials": "allow",
                 "autocode_md_read": "allow",
                 "autocode_md_frontmatter_read": "allow",
                 "open_websearch*": "allow",

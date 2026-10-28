@@ -11,6 +11,7 @@ export const cavemanEnglish = `
 - Task/Object focused. Avoid possessives words (I/my/you/your) if intend clear.
 - Common abbreviations.
 - Short plain words. Keep technical terms exact.
+- Keep spaces between words.
 
 ### Caveman English Rules
 

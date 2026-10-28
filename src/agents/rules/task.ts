@@ -1,4 +1,5 @@
 export const taskPrompt = `
+* User ask follow up: Prefer reusing previous subagents with context, if unavailable then start new subagent or tool.
 * **VERY IMPORTANT!!!**: ALWAYS write \`prompt\` in Caveman English.
 * New session has no context - ONLY this \`prompt\`.
 * Distill for clean context:

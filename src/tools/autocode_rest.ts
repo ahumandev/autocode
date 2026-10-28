@@ -2,8 +2,10 @@ import path from "node:path"
 import { tool } from "@opencode-ai/plugin"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
+import { createRuntimeCredentialResolver } from "../credentials/runtime"
+import type { CredentialResolver } from "../credentials/types"
+import { normalizeCredentialId, resolveCredentialProfile } from "../credentials/lookup"
 import { ensureSessionJobWorkspace, isMissingFile, type JobToolFileSystem, type SessionJobContext } from "@/utils/jobs"
-import { buildEnvVarName, normalizeEnvKey } from "@/utils/envkey"
 import { createAbortResponse, createRetryResponse } from "@/utils/tools"
 
 type RestToolFileSystem = Pick<JobToolFileSystem, "mkdir" | "readFile" | "readdir" | "rename" | "rm" | "stat"> & {
@@ -85,7 +87,7 @@ function normalizeHeaderMap(value: unknown): { ok: true, headers: HeaderMap } | 
 
         if (typeof entry === "number") {
             if (!Number.isFinite(entry)) {
-                return { ok: false, error: `headers.${key} must be a finite scalar value.` }
+                return { ok: false, error: "headers values must be finite scalar values." }
             }
             headers[key] = String(entry)
             continue
@@ -96,7 +98,7 @@ function normalizeHeaderMap(value: unknown): { ok: true, headers: HeaderMap } | 
             continue
         }
 
-        return { ok: false, error: `headers.${key} must be a string, number, or boolean.` }
+        return { ok: false, error: "headers values must be strings, numbers, or booleans." }
     }
 
     return { ok: true, headers }
@@ -108,7 +110,7 @@ function normalizeMethod(method: unknown): { ok: true, method: "GET" | "POST" | 
         return { ok: true, method: normalized }
     }
 
-    return { ok: false, error: `Invalid method: ${String(method)}` }
+    return { ok: false, error: "Invalid method." }
 }
 
 function normalizeRequestBody(value: unknown): { ok: true, body?: string } | { ok: false, error: string } {
@@ -138,35 +140,35 @@ function findHeaderValue(headers: HeaderMap, requestedHeader: string): { key: st
     return undefined
 }
 
-function resolveRestAuthorization(restKey: string): RestAuthorizationResult {
+async function resolveRestAuthorization(restKey: string, credentialResolver: CredentialResolver): Promise<RestAuthorizationResult> {
+    const invalidKeyError = "Invalid rest_key. Use only ASCII letters, digits, and underscores."
     let normalizedKey: string
     try {
-        normalizedKey = normalizeEnvKey(restKey, {
-            errorMessage: "Invalid rest_key. Use only ASCII letters, digits, and underscores.",
+        normalizedKey = normalizeCredentialId("rest", restKey, {
+            errorMessage: invalidKeyError,
             label: "rest_key",
         })
     }
-    catch (error) {
-        return { error: error instanceof Error ? error.message : "Invalid rest_key." }
+    catch {
+        return { error: invalidKeyError }
     }
 
-    const authorizationEnvVar = buildEnvVarName("AUTOCODE_REST", normalizedKey, "AUTHORIZATION")
-    const usernameEnvVar = buildEnvVarName("AUTOCODE_REST", normalizedKey, "USERNAME")
-    const passwordEnvVar = buildEnvVarName("AUTOCODE_REST", normalizedKey, "PASSWORD")
-    const authorization = process.env[authorizationEnvVar]
-    if (authorization !== undefined) {
-        return { authorization }
-    }
+    const resolutionError: RestAuthorizationResult = { error: "Unable to resolve REST authentication credentials." }
+    try {
+        const { profile } = await resolveCredentialProfile("rest", normalizedKey, credentialResolver)
+        if (profile.authorization !== undefined) {
+            return { authorization: profile.authorization }
+        }
 
-    const username = process.env[usernameEnvVar]
-    const password = process.env[passwordEnvVar]
-    if (username === undefined || password === undefined) {
-        return {
-            error: `Missing REST authentication configuration: set ${authorizationEnvVar} or both ${usernameEnvVar} and ${passwordEnvVar}.`,
+        if (profile.username !== undefined && profile.password !== undefined) {
+            return { authorization: `Basic ${Buffer.from(`${profile.username}:${profile.password}`, "utf8").toString("base64")}` }
         }
     }
+    catch {
+        return resolutionError
+    }
 
-    return { authorization: `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}` }
+    return resolutionError
 }
 
 const TEXT_CONTENT_TYPE_FRAGMENTS = [
@@ -263,16 +265,15 @@ async function fileExists(fileSystem: RestToolFileSystem, filePath: string): Pro
 }
 
 async function resolveCurrentJobRestDirectory(action: string, fileSystem: RestToolFileSystem, client: OpencodeClient | undefined, context: SessionJobContext): Promise<{ jobName: string, restDir: string } | { error: string }> {
-    let workspace: Awaited<ReturnType<typeof ensureSessionJobWorkspace>>
     try {
-        workspace = await ensureSessionJobWorkspace(fileSystem, client, context)
+        const workspace = await ensureSessionJobWorkspace(fileSystem, client, context)
+        return {
+            jobName: workspace.job_name,
+            restDir: path.join(workspace.absolute_path, "rest"),
+        }
     }
-    catch (error) {
-        return { error: createAbortResponse(action, error) }
-    }
-    return {
-        jobName: workspace.job_name,
-        restDir: path.join(workspace.absolute_path, "rest"),
+    catch {
+        return { error: createAbortResponse(action, "Unable to prepare REST response directory.") }
     }
 }
 
@@ -284,7 +285,7 @@ async function executeRestRequest(args: {
     rest_key?: string
     timeout?: number
     check_tls?: boolean
-}, context: SessionJobContext, client: OpencodeClient | undefined, fileSystem: RestToolFileSystem): Promise<string> {
+}, context: SessionJobContext, client: OpencodeClient | undefined, fileSystem: RestToolFileSystem, credentialResolver: CredentialResolver): Promise<string> {
     const methodResult = normalizeMethod(args.method)
     if (!methodResult.ok) {
         return createRetryResponse("autocode_rest", methodResult.error, "Use method as one of: GET, POST, PUT, PATCH, DELETE.")
@@ -295,15 +296,13 @@ async function executeRestRequest(args: {
         return createRetryResponse("autocode_rest", headersResult.error, "Provide headers as a plain object with string, number, or boolean values.")
     }
 
-    if (args.rest_key !== undefined) {
-        const authorizationResult = resolveRestAuthorization(args.rest_key)
+    if (!findHeaderValue(headersResult.headers, "authorization") && args.rest_key !== undefined) {
+        const authorizationResult = await resolveRestAuthorization(args.rest_key, credentialResolver)
         if ("error" in authorizationResult) {
-            return createRetryResponse("autocode_rest", authorizationResult.error, "Configure rest_key authentication in environment variables, then retry.")
+            return createRetryResponse("autocode_rest", authorizationResult.error, "Configure a complete REST credential profile for rest_key, then retry.")
         }
 
-        if (!findHeaderValue(headersResult.headers, "authorization")) {
-            headersResult.headers.Authorization = authorizationResult.authorization
-        }
+        headersResult.headers.Authorization = authorizationResult.authorization
     }
 
     const bodyResult = normalizeRequestBody(args.body)
@@ -316,11 +315,11 @@ async function executeRestRequest(args: {
         requestUrl = new URL(args.url)
     }
     catch {
-        return createRetryResponse("autocode_rest", `Invalid url: ${args.url}`, "Provide a valid absolute http or https URL.")
+        return createRetryResponse("autocode_rest", "Invalid url.", "Provide a valid absolute http or https URL.")
     }
 
     if (requestUrl.protocol !== "http:" && requestUrl.protocol !== "https:") {
-        return createRetryResponse("autocode_rest", `Unsupported protocol: ${requestUrl.protocol}`, "Use only http or https URLs.")
+        return createRetryResponse("autocode_rest", "Unsupported protocol.", "Use only http or https URLs.")
     }
 
     const timeout = args.timeout ?? 5000
@@ -333,6 +332,7 @@ async function executeRestRequest(args: {
 
     const restDirectory = await resolveCurrentJobRestDirectory("autocode_rest", fileSystem, client, context)
     if ("error" in restDirectory) {
+        clearTimeout(timeoutHandle)
         return restDirectory.error
     }
 
@@ -389,7 +389,7 @@ async function executeRestRequest(args: {
         }
         return JSON.stringify(output)
     }
-    catch (error) {
+    catch (error: unknown) {
         if (error instanceof Error && error.name === "AbortError") {
             const elapsed = Date.now() - startedAt
             return JSON.stringify({
@@ -399,14 +399,14 @@ async function executeRestRequest(args: {
                 timeout_ms: timeout,
             })
         }
-        return createAbortResponse("autocode_rest", error)
+        return createAbortResponse("autocode_rest", "REST request or response caching failed.")
     }
     finally {
         clearTimeout(timeoutHandle)
     }
 }
 
-export function createAutocodeRestTool(client?: OpencodeClient, fileSystem: RestToolFileSystem = defaultFileSystem): ReturnType<typeof tool> {
+export function createAutocodeRestTool(client?: OpencodeClient, fileSystem: RestToolFileSystem = defaultFileSystem, credentialResolver: CredentialResolver = createRuntimeCredentialResolver()): ReturnType<typeof tool> {
     return tool({
         description: "Send REST API request and save response body to a file. Returns response_body inline only when text and short; otherwise use response_body_file_path to read the full body.",
         args: {
@@ -414,20 +414,25 @@ export function createAutocodeRestTool(client?: OpencodeClient, fileSystem: Rest
             method: tool.schema.string().describe("HTTP method: GET, POST, PUT, PATCH, DELETE."),
             headers: tool.schema.unknown().optional().describe("Optional object of request headers."),
             body: tool.schema.unknown().optional().describe("Optional request body."),
-            rest_key: tool.schema.string().optional().describe("Optional environment-backed REST authentication key."),
+            rest_key: tool.schema.string().optional().describe("Optional REST credential profile key."),
             timeout: tool.schema.number().optional().default(5000).describe("Optional timeout in milliseconds."),
             check_tls: tool.schema.boolean().optional().default(false).describe("Validate TLS certificates when true."),
         },
-        async execute(args, context) {
-            return executeRestRequest(args as {
-                url: string
-                method: string
-                headers?: unknown
-                body?: unknown
-                rest_key?: string
-                timeout?: number
-                check_tls?: boolean
-            }, context, client, fileSystem)
+        async execute(args, context): Promise<string> {
+            try {
+                return await executeRestRequest(args as {
+                    url: string
+                    method: string
+                    headers?: unknown
+                    body?: unknown
+                    rest_key?: string
+                    timeout?: number
+                    check_tls?: boolean
+                }, context, client, fileSystem, credentialResolver)
+            }
+            catch {
+                return createAbortResponse("autocode_rest", "Unable to prepare REST request.")
+            }
         },
     })
 }

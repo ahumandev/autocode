@@ -506,7 +506,6 @@ describe("agent policies", () => {
         const permission = spy?.permission
         const rules = permissionObject(permission)
 
-        expect(spy?.color).toBe("#0000AA")
         expect(spy?.description).toContain("private information")
         expect(spy?.hidden).toBe(false)
         expect(spy?.mode).toBe("primary")

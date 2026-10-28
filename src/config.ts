@@ -5,10 +5,12 @@ import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json"
 import { resolveOpenCodePaths } from "./utils/paths"
 import { createJsoncDocumentEditor } from "./tools/config/json"
 import type { PermissionRule } from "./utils/permissions"
+import { CREDENTIAL_PROVIDER_POLICIES, isCredentialProviderPolicy, type CredentialPolicy } from "./credentials/types"
 
 const MODEL_TIERS = ["cheap", "fast", "operator", "context", "balanced", "smart", "spy"] as const
 const PERMISSION_ACTIONS = ["ask", "allow", "deny"] as const
 const SANDBOX_SYNC_METHODS = ["auto", "overlayfs", "reflink", "copy"] as const
+const DEFAULT_CREDENTIAL_PROVIDER = "auto"
 const SKILL_CATEGORIES: readonly SkillCategory[] = ["bash", "code", "design", "test"]
 
 export type ModelTier = (typeof MODEL_TIERS)[number]
@@ -66,6 +68,7 @@ type AutocodeJsoncNew = {
         sandbox?: unknown
         skills?: unknown
     }
+    credentials?: unknown
     permissions?: unknown
 }
 
@@ -84,6 +87,7 @@ type ParsedAutocodeConfig = {
     externalDirectoryPermissions?: PermissionRule[]
     sandbox?: AutocodeSandboxConfig
     skills?: SkillsConfig
+    credentials?: CredentialPolicy
 }
 
 function stripJsoncComments(raw: string): string {
@@ -241,7 +245,17 @@ export function mergeExternalDirectoryRules(base: ExternalDirectoryRules, next: 
     return merged
 }
 
-function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
+function collectCredentialPolicy(value: unknown): CredentialPolicy {
+    if (value === undefined) return { provider: DEFAULT_CREDENTIAL_PROVIDER }
+    if (isRecord(value) && Object.keys(value).every((key: string): boolean => key === "provider")) {
+        const provider = Object.hasOwn(value, "provider") ? value.provider : DEFAULT_CREDENTIAL_PROVIDER
+        if (isCredentialProviderPolicy(provider)) return { provider }
+    }
+
+    throw new Error(`autocode: invalid global autocode.jsonc credentials policy; supported top-level credentials.provider values: ${CREDENTIAL_PROVIDER_POLICIES.join(", ")}`)
+}
+
+function parseAutocodeConfig(raw: string, path: string, parseCredentials: boolean = false): ParsedAutocodeConfig {
     let parsed: AutocodeJsoncNew & AutocodeJsoncLegacy
     try {
         parsed = JSON.parse(stripJsoncComments(raw))
@@ -249,12 +263,16 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
         throw new Error(`autocode: malformed JSONC in ${path}: ${(err as Error).message}`)
     }
     const ac = parsed?.autocode
+    if (parseCredentials && isRecord(ac) && Object.hasOwn(ac, "credentials")) {
+        throw new Error("autocode: global autocode.jsonc does not support autocode.credentials; move policy to top-level credentials.provider.")
+    }
+    const credentials = parseCredentials ? collectCredentialPolicy(parsed?.credentials) : undefined
     const externalDirectories = collectExternalDirectories(parsed.permissions)
     const externalDirectoryPermissions = collectExternalDirectoryPermissions(parsed.permissions)
     const sandbox = collectSandboxConfig(ac?.sandbox)
     const skills = collectSkills(ac?.skills)
 
-    if (!ac) return { externalDirectories, externalDirectoryPermissions, sandbox, skills }
+    if (!ac) return { externalDirectories, externalDirectoryPermissions, sandbox, skills, credentials }
 
     if (isRecord(ac.tiers)) {
         return {
@@ -264,11 +282,12 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
             externalDirectoryPermissions,
             sandbox,
             skills,
+            credentials,
         }
     }
 
     if (typeof ac.tier === "string") {
-        return { tier: ac.tier, externalDirectories, externalDirectoryPermissions, sandbox, skills }
+        return { tier: ac.tier, externalDirectories, externalDirectoryPermissions, sandbox, skills, credentials }
     }
 
     // legacy shape: autocode.model.<tier> + optional autocode.variant.<tier>
@@ -280,10 +299,10 @@ function parseAutocodeConfig(raw: string, path: string): ParsedAutocodeConfig {
                 result[tier] = { model, variant: ac.variant?.[tier] }
             }
         }
-        return { legacyTiers: result, externalDirectories, externalDirectoryPermissions, sandbox, skills }
+        return { legacyTiers: result, externalDirectories, externalDirectoryPermissions, sandbox, skills, credentials }
     }
 
-    return { externalDirectories, externalDirectoryPermissions, sandbox, skills }
+    return { externalDirectories, externalDirectoryPermissions, sandbox, skills, credentials }
 }
 
 function addCandidate(candidates: string[], path: string): void {
@@ -376,7 +395,7 @@ export async function loadAutocodeConfig(
     worktree: string,
     directory: string,
     fs: ConfigFileSystem = defaultFs,
-): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, externalDirectoryPermissions: PermissionRule[], sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined }> {
+): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, externalDirectoryPermissions: PermissionRule[], sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined, credentials: CredentialPolicy }> {
     const globalConfigDirectory = resolveOpenCodePaths().globalConfigRoot
     const globalConfigPath = join(globalConfigDirectory, "autocode.jsonc")
     const candidates: string[][] = []
@@ -397,11 +416,13 @@ export async function loadAutocodeConfig(
     const externalDirectoryPermissions: PermissionRule[] = []
     let sandbox: AutocodeSandboxConfig = {}
     let skills: SkillsConfig | undefined
+    let credentials: CredentialPolicy = { provider: DEFAULT_CREDENTIAL_PROVIDER }
     for (const candidate of candidates) {
         const config = readFirstConfig(fs, candidate)
         if (!config) continue
         // Provider definitions merge field-wise; selecting one replaces each defined tier.
-        const parsed = parseAutocodeConfig(config.raw, config.path)
+        const parsed = parseAutocodeConfig(config.raw, config.path, config.path === globalConfigPath)
+        if (parsed.credentials) credentials = parsed.credentials
         if (parsed.tiers) {
             const directTiers = collectTiers(parsed.tiers) ?? {}
             providerTiers = mergeProviderTiers(providerTiers, parsed.tiers)
@@ -476,5 +497,6 @@ export async function loadAutocodeConfig(
         externalDirectoryPermissions,
         sandbox,
         skills,
+        credentials,
     }
 }
