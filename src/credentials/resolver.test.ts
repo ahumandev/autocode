@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
 import { Buffer } from "node:buffer"
-import { createCredentialResolver } from "./resolver"
+import { createCredentialResolver as createResolver } from "./resolver"
 import {
     CredentialError,
     MAX_CREDENTIAL_ENVELOPE_BYTES,
@@ -27,6 +27,10 @@ const profiles: CredentialProfileMap = {
     ssh: { host: "plaintext.example.test" },
     db: { connection: "Server=plaintext.example.test" },
     rest: { authorization: `Bearer ${SECRET}` },
+}
+
+function createCredentialResolver(options: Parameters<typeof createResolver>[0]): ReturnType<typeof createResolver> {
+    return createResolver({ ...options, platform: "win32" })
 }
 
 function providerReturning(result: CredentialReadResult): CredentialProvider {

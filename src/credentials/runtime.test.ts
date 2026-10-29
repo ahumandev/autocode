@@ -252,6 +252,7 @@ describe("runtime credential resolver on Windows", (): void => {
         `)
     }, TEST_TIMEOUT_MS)
 
+    describe.skipIf(process.platform !== "win32")("Windows runtime integration", (): void => {
     test("default and auto native success never inspect an unsafe plaintext root", async (): Promise<void> => {
         await runIsolated(`
             ${isolatedIoGuard}
@@ -564,4 +565,5 @@ describe("runtime credential resolver on Windows", (): void => {
             })
         }, TEST_TIMEOUT_MS)
     }
+    })
 })
