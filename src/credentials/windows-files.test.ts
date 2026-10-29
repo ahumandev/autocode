@@ -4,6 +4,7 @@ import { Buffer } from "node:buffer"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { appendFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, rmdir, stat, symlink, unlink, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { win32 } from "node:path"
 import { CredentialError, type CredentialErrorCode } from "./types"
 import { getWindowsCredentialIdentity } from "./windows"
@@ -16,7 +17,7 @@ import {
     type WindowsCredentialHelperTrace,
 } from "./windows-process"
 
-const TEMP_DIRECTORY = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_DIRECTORY = tmpdir()
 const ROOT_PREFIX = "autocode-windows-credentials-"
 const WINDOWS_ROOT = "C:\\Windows"
 const POWERSHELL_PATH = `${WINDOWS_ROOT}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`

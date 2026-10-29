@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { Buffer } from "node:buffer"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { win32 } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import { MAX_PLAINTEXT_STORE_BYTES, readPlaintextCredentialStore, type PlaintextCredentialOptions, type PlaintextCredentialStore } from "./plaintext"
@@ -10,7 +11,7 @@ import { CredentialError, MAX_CREDENTIAL_ENVELOPE_BYTES, MAX_CREDENTIAL_FIELD_BY
 import { getWindowsCredentialIdentity } from "./windows"
 import { writeSecureWindowsFile } from "./windows-files"
 
-const TEMP_DIRECTORY = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_DIRECTORY = tmpdir()
 const ROOT_PREFIX = "autocode-provision-"
 const WINDOWS_ROOT = "C:\\Windows"
 const POWERSHELL_PATH = `${WINDOWS_ROOT}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`

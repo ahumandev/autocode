@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import { tmpdir } from "node:os"
 import { describe, expect, test } from "bun:test"
 import type { ConnectConfig, FileEntryWithStats, Stats } from "ssh2"
 import type { CredentialKind, CredentialResolver, ResolvedCredentialProfile, SshCredentialProfile } from "../credentials/types"
@@ -506,7 +507,7 @@ describe("ssh config read tool", () => {
     })
 
     test("SFTP listing failure returns structured errors without credential markers", async () => {
-        const directory = await mkdtemp(join("C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode", "autocode-ssh-"))
+        const directory = await mkdtemp(join(tmpdir(), "autocode-ssh-"))
         try {
             const markers = { password: "read-password-marker", keypass: "read-keypass-marker", privateKey: "read-private-key-marker" }
             const keyfile = join(directory, "id_ed25519")
@@ -532,7 +533,7 @@ describe("ssh config read tool", () => {
     })
 
     test.each(["string", "object"] as const)("serialized config read %s failure never evaluates hostile payloads", async (form) => {
-        const directory = await mkdtemp(join("C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode", "autocode-ssh-"))
+        const directory = await mkdtemp(join(tmpdir(), "autocode-ssh-"))
         resetRetryCounts()
 
         try {

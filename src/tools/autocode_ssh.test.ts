@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, test } from "bun:test"
 import type { ConnectConfig, FileEntryWithStats, Stats } from "ssh2"
@@ -32,7 +33,7 @@ const profileWithPassword = {
     username: "devuser",
     password: "secret",
 } satisfies SshCredentialProfile
-const temporaryRoot = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const temporaryRoot = tmpdir()
 const temporaryDirectories: string[] = []
 const secretMarkers = {
     password: "password-fixture-marker",

@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { Buffer } from "node:buffer"
 import { randomUUID } from "node:crypto"
 import { appendFile, mkdtemp } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { win32 } from "node:path"
 import {
     CredentialError,
@@ -35,7 +36,7 @@ const TEST_TIMEOUT_MS = 600_000
 const NATIVE_OPTIONS = { timeoutMs: 15_000 } satisfies WindowsCredentialProcessOptions
 const NATIVE_NOT_FOUND = 1168
 const ID_PREFIX = "AUTOCODE_WINDOWS_TEST_"
-const TEMP_DIRECTORY = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_DIRECTORY = tmpdir()
 const MAX_RETAINED_HELPER_TRACES = 8
 const HELPER_STAGES: readonly WindowsCredentialHelperStage[] = [
     "nativecompile-before", "nativecompile-after", "input-before", "input-newline", "input-await-EOF", "input-after",

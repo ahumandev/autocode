@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { EventEmitter } from "node:events"
 import { readFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { createInterface } from "node:readline"
 import { fileURLToPath } from "node:url"
 import { CredentialError, WINDOWS_CREDENTIAL_MAX_BYTES, type CredentialErrorCode } from "./types"
@@ -22,7 +23,7 @@ import {
 
 const POWERSHELL_PATH = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 const SYSTEM_DIRECTORY = "C:\\Windows\\System32"
-const APPROVED_TEMP = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_ROOT = tmpdir()
 const HELPER_PATH = fileURLToPath(new URL("./windows-credentials.ps1", import.meta.url))
 const WORKER_ARGUMENT = "--autocode-windows-credentials-worker"
 const TEST_TIMEOUT_MS = 180000
@@ -135,7 +136,7 @@ class JsonFixtureProcess {
     constructor(executable: string, args: string[]) {
         this.child = spawn(executable, args, {
             cwd: SYSTEM_DIRECTORY,
-            env: { SystemRoot: "C:\\Windows", WINDIR: "C:\\Windows", TEMP: APPROVED_TEMP, TMP: APPROVED_TEMP },
+            env: { SystemRoot: "C:\\Windows", WINDIR: "C:\\Windows", TEMP: TEMP_ROOT, TMP: TEMP_ROOT },
             stdio: ["pipe", "pipe", "pipe"],
             windowsHide: true,
             shell: false,
@@ -1076,7 +1077,7 @@ if (import.meta.main && process.argv[2] === WORKER_ARGUMENT) {
             id,
             target: `AutoCode/v1/ssh/${id}`,
             payload: prefix + "é".repeat(Math.floor(remaining / 2)) + "a".repeat(remaining % 2),
-            path: `${APPROVED_TEMP}\\autocode-windows-credentials-${crypto.randomUUID()}.json`,
+            path: `${TEMP_ROOT}\\autocode-windows-credentials-${crypto.randomUUID()}.json`,
         }
     }
 

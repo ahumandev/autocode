@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { describe, expect, mock, test } from "bun:test"
 import { randomUUID } from "node:crypto"
 import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { extname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { MAX_PLAINTEXT_STORE_BYTES, serializePlaintextCredentialStore, type PlaintextCredentialStore } from "./plaintext"
@@ -22,7 +23,7 @@ import { writeSecureWindowsFile } from "./windows-files"
 const TEST_TIMEOUT_MS = 60_000
 const CHILD_TIMEOUT_MS = 30_000
 const MAX_CHILD_OUTPUT_BYTES = 65_536
-const TEMP_ROOT = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_ROOT = tmpdir()
 const SECRET = "runtime-credential-secret-canary"
 const UNSAFE_LOCATION_MESSAGE = "Plaintext credential storage must use a private global configuration directory outside workspaces and Git repositories. Set OPENCODE_CONFIG_DIR to a private user directory."
 const NATIVE_OPTIONS = { timeoutMs: 15_000 }
@@ -208,10 +209,6 @@ async function runIsolated(script: string): Promise<void> {
 }
 
 describe("runtime credential resolver on Windows", (): void => {
-    beforeAll((): void => {
-        expect(process.platform).toBe("win32")
-    })
-
     test("runtime import graph excludes provisioning and keeps platform-only loading lazy", async (): Promise<void> => {
         const pending = [new URL("./runtime.ts", import.meta.url)]
         const visited = new Set<string>()

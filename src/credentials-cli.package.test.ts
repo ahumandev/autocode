@@ -3,13 +3,14 @@ import { Buffer } from "node:buffer"
 import { randomBytes, randomUUID } from "node:crypto"
 import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises"
 import { createRequire, isBuiltin } from "node:module"
+import { tmpdir } from "node:os"
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
 import { stripVTControlCharacters } from "node:util"
 import * as typescript from "typescript"
 
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-const APPROVED_TEMP_ROOT = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_ROOT = tmpdir()
 const BUILD_TIMEOUT_MS = 120000
 const CHILD_TIMEOUT_MS = 60000
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024
@@ -388,7 +389,7 @@ try {
 }
 `
 
-// This fixture deliberately requires the approved Windows temp root, never an OS-temp fallback.
+// Keep package fixtures under OS temp and outside the repository.
 describe.skipIf(process.platform !== "win32").serial("production credentials package: Bun-on-Node-target compatibility", (): void => {
     let ownedRoot = ""
     let packageRoot = ""
@@ -400,8 +401,8 @@ describe.skipIf(process.platform !== "win32").serial("production credentials pac
 
     beforeAll(async (): Promise<void> => {
         expect(typeof process.versions.bun === "string").toBe(true)
-        ownedRoot = await mkdtemp(join(APPROVED_TEMP_ROOT, "credentials-package-"))
-        expect(isWithin(APPROVED_TEMP_ROOT, ownedRoot)).toBe(true)
+        ownedRoot = await mkdtemp(join(TEMP_ROOT, "credentials-package-"))
+        expect(isWithin(TEMP_ROOT, ownedRoot)).toBe(true)
         expect(isWithin(REPOSITORY_ROOT, ownedRoot)).toBe(false)
         packageRoot = join(ownedRoot, "package")
         nativeRoot = join(ownedRoot, "native-package")

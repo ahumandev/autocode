@@ -220,7 +220,7 @@ describe("auto resume wiring", () => {
             const cfg: ConfigWithRuntimeSections = {
                 agent: {},
                 command: {},
-                permissions: [{ action: "external_directory", resource: "/home/me/CarData/*", effect: "allow" }],
+                permissions: [{ action: "external_directory", resource: "/fixture-home/CarData/*", effect: "allow" }],
             }
 
             await configurePlugin(plugin, cfg)
@@ -228,7 +228,7 @@ describe("auto resume wiring", () => {
             for (const [name, fallback, allowed] of [["design", "ask", "allow"], ["execute-os", "allow", "allow"], ["assist", "ask", "allow"], ["query-code", "ask", "allow"], ["auto-general", "deny", "deny"]] as const) {
                 const rules = cfg.agent[name]?.permissions as V2PermissionRule[] | undefined
                 expect(permissionEffect(rules, "external_directory", "/unconfigured/file")).toBe(fallback)
-                expect(permissionEffect(rules, "external_directory", "/home/me/CarData/file")).toBe(allowed)
+                expect(permissionEffect(rules, "external_directory", "/fixture-home/CarData/file")).toBe(allowed)
             }
         })
     })

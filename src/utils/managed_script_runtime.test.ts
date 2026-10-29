@@ -15,7 +15,7 @@ const interleavedLogHeader = "stdout/stderr (interleaved):\n"
 const entryConfinementMessage = "Managed script entry must remain confined to the current job source root under the real project directory; managed root and job-source symlink aliases are not allowed."
 const missingEntryMessage = "Managed script entry must be an existing regular file."
 const nodeAvailable = spawnSync("node", ["--version"], { stdio: "ignore" }).status === 0
-const temporaryRoot = process.platform === "win32" ? "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode" : tmpdir()
+const temporaryRoot = tmpdir()
 
 async function canCreateFileSymlinks(): Promise<boolean> {
     const root = await mkdtemp(join(temporaryRoot, "managed-runtime-symlink-probe-"))

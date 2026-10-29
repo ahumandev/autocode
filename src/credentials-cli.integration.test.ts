@@ -4,6 +4,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { createHash, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { lstat, mkdir, open, rm, symlink, unlink, type FileHandle } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { createPlaintextCredentialProvider } from "./credentials/plaintext"
@@ -34,7 +35,7 @@ import {
 
 const REPO = fileURLToPath(new URL("../", import.meta.url))
 const SOURCE = join(REPO, "src", "credentials-cli.ts")
-const TEMP_ROOT = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_ROOT = tmpdir()
 const WINDOWS_ROOT = "C:\\Windows"
 const CHILD_TIMEOUT_MS = 20_000
 const TEST_TIMEOUT_MS = 120_000

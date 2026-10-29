@@ -17,8 +17,8 @@ describe("install plugin shim", () => {
     })
 
     test("getShimPath uses derived shim filename in plugin path", () => {
-        expect(getShimPath("/tmp/home", "@ahumandev/autocode", { platform: "linux", env: {} })).toBe("/tmp/home/.config/opencode/plugins/autocode.js")
-        expect(getShimPath("C:\\Users\\Ada", "@ahumandev/autocode", { platform: "win32", env: {} })).toBe(win32.join("C:\\Users\\Ada", ".config", "opencode", "plugins", "autocode.js"))
+        expect(getShimPath("/fixture-home", "@ahumandev/autocode", { platform: "linux", env: {} })).toBe("/fixture-home/.config/opencode/plugins/autocode.js")
+        expect(getShimPath("C:\\fixture-home", "@ahumandev/autocode", { platform: "win32", env: {} })).toBe(win32.join("C:\\fixture-home", ".config", "opencode", "plugins", "autocode.js"))
     })
 
     test("installPluginShim writes shim under OPENCODE_CONFIG_DIR", async () => {

@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { createHash, randomUUID } from "node:crypto"
 import { appendFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, rmdir, unlink, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { win32 } from "node:path"
 import { resolveOpenCodePaths } from "../utils/paths"
 import {
@@ -29,7 +30,7 @@ import { getWindowsCredentialIdentity } from "./windows"
 import { writeSecureWindowsFile } from "./windows-files"
 import { readWindowsCredentialFailureDiagnostics, WindowsCredentialProcessError } from "./windows-process"
 
-const TEMP_DIRECTORY = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_DIRECTORY = tmpdir()
 const ROOT_PREFIX = "autocode-plaintext-"
 const DIAGNOSTIC_PATH = win32.join(TEMP_DIRECTORY, `autocode-plaintext-diagnostics-${randomUUID()}.jsonl`)
 const DIAGNOSTIC_STARTED_AT = performance.now()

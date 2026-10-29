@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import type { ConnectConfig, FileEntryWithStats, Stats } from "ssh2"
@@ -268,7 +269,7 @@ describe("ssh config edit tool", () => {
     })
 
     test("SFTP read failure never exposes credentials through config flow errors", async () => {
-        const directory = await mkdtemp(join("C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode", "autocode-ssh-"))
+        const directory = await mkdtemp(join(tmpdir(), "autocode-ssh-"))
         try {
             const markers = { password: "edit-password-marker", keypass: "edit-keypass-marker", privateKey: "edit-private-key-marker" }
             const keyfile = join(directory, "id_ed25519")
@@ -295,7 +296,7 @@ describe("ssh config edit tool", () => {
     })
 
     test.each(["string", "object"] as const)("serialized config edit read %s failure never evaluates hostile payloads", async (form) => {
-        const directory = await mkdtemp(join("C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode", "autocode-ssh-"))
+        const directory = await mkdtemp(join(tmpdir(), "autocode-ssh-"))
         resetRetryCounts()
 
         try {

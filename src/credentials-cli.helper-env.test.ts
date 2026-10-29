@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { CredentialReadResult } from "./credentials/types"
 import {
@@ -12,7 +13,7 @@ import {
     type WindowsCredentialIdentity,
 } from "./credentials/windows"
 
-const TEMP_ROOT = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode"
+const TEMP_ROOT = tmpdir()
 const WINDOWS_ROOT = "C:\\Windows"
 const NATIVE_TIMEOUT_MS = 15_000
 const CHILD_TIMEOUT_MS = 60_000

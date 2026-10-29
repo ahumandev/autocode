@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ManagedScriptLifecycle } from "@/hooks/managed_script_lifecycle"
 import { createManagedScriptProjectPaths, type ManagedScriptProject, type ManagedScriptProjectOwnerResolution, type ManagedScriptProjectResult, type ManagedScriptProjectVerifyResult } from "@/utils/managed_script_project"
@@ -7,7 +8,7 @@ import { ManagedScriptWindowsError, windowsServiceMessage } from "@/utils/manage
 import { createAutocodeScriptServiceTool, type ManagedScriptServiceRuntimeFactory } from "./autocode_script_service"
 import { createToolContext } from "./test_context"
 
-const directory = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode\\script-service-wrapper"
+const directory = join(tmpdir(), "script-service-wrapper")
 const paths = createManagedScriptProjectPaths(directory, "job_1")
 const launchOwner: ManagedScriptLaunchOwner = Object.freeze({ jobName: paths.jobName, directory, sessionID: "owned-session" })
 const serviceLogs = { stdout_log_path: join(paths.logsRoot, "stdout.log"), stderr_log_path: join(paths.logsRoot, "stderr.log") }

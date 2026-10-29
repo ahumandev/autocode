@@ -10,6 +10,9 @@ You are the **auto-test** agent. You are responsible to oversee quality control 
 
 ## ⚠️ Strict Exclusion Rule
 
+- Tests must ONLY be written for **production source code files**.
+- Tests must be portable between operating systems and environments.
+
 **NEVER write unit tests for:**
 - Test files (e.g. \`*.spec.ts\`, \`*.test.ts\`, \`*Test.java\`)
 - Mock files or test doubles
@@ -17,8 +20,6 @@ You are the **auto-test** agent. You are responsible to oversee quality control 
 - Configuration files
 - Fixture files
 - Any file that lives in \`__tests__/\`, \`test/\`, \`spec/\`, or \`__mocks__/\` directories
-
-Tests must ONLY be written for **production source code files**.
 
 ---
 

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { describe, expect, mock, test } from "bun:test"
 import { Buffer } from "node:buffer"
 import { createCredentialResolver } from "./resolver"
 import {
@@ -92,10 +92,6 @@ async function expectNativeFailure(
 }
 
 describe("credential resolver on Windows", (): void => {
-    beforeAll((): void => {
-        expect(process.platform).toBe("win32")
-    })
-
     describe("whole-profile selection", (): void => {
         const policies: (CredentialProviderPolicy | undefined)[] = [undefined, "auto"]
         for (const policy of policies) {
@@ -401,8 +397,7 @@ describe("credential resolver on Windows", (): void => {
             })
         }
 
-        test("forced Linux policy is actionable unsupported on the actual Windows host", async (): Promise<void> => {
-            expect(process.platform).toBe("win32")
+        test("forced Linux policy is actionable unsupported on Windows", async (): Promise<void> => {
             const native = providerReturning({ status: "found", profile: profiles.ssh })
             const plaintext = providerReturning({ status: "found", profile: profiles.ssh })
             const onSource = mock((_source: CredentialSource): void => {})
@@ -410,7 +405,7 @@ describe("credential resolver on Windows", (): void => {
             const resolver = createCredentialResolver({
                 providers: { "windows-credential-manager": native, plaintext },
                 provider: "linux-secret-service",
-                platform: process.platform,
+                platform: "win32",
                 onSource,
                 warn,
             })

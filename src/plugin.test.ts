@@ -1158,7 +1158,7 @@ describe("autocode plugin config", () => {
 
 	test("Windows startup config prepends Bun bin using Windows paths", async (): Promise<void> => {
 		const root = await createTempRoot();
-		const home = "C:\\Users\\Jane Doe";
+		const home = "C:\\fixture home";
 		const originalPath = "C:\\Windows\\System32;C:\\Tools\\bin";
 		const worktree = join(root, "worktree");
 		await mkdir(join(worktree, ".opencode"), { recursive: true });
@@ -1178,9 +1178,9 @@ describe("autocode plugin config", () => {
 				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				await hooks.config?.({});
 
-				expect(process.env.BUN_INSTALL).toBe("C:\\Users\\Jane Doe\\.bun");
+				expect(process.env.BUN_INSTALL).toBe("C:\\fixture home\\.bun");
 				expect(process.env.PATH).toBe(
-					`C:\\Users\\Jane Doe\\.bun\\bin;${originalPath}`,
+					`C:\\fixture home\\.bun\\bin;${originalPath}`,
 				);
 			},
 		);

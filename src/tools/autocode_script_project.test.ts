@@ -1,10 +1,11 @@
 import { describe, expect, mock, test } from "bun:test"
+import { tmpdir } from "node:os"
 import { basename, join } from "node:path"
 import { createManagedScriptProjectPaths, type ManagedScriptProject, type ManagedScriptProjectDependencies, type ManagedScriptProjectResult, type ManagedScriptProjectVerifyResult } from "@/utils/managed_script_project"
 import { createAutocodeScriptProjectTool, type ManagedScriptProjectFactory } from "./autocode_script_project"
 import { createToolContext } from "./test_context"
 
-const directory = "C:\\Users\\qxz13vb\\AppData\\Local\\Temp\\opencode\\script-project-wrapper"
+const directory = join(tmpdir(), "script-project-wrapper")
 const paths = createManagedScriptProjectPaths(directory, "job_1")
 const npmLogPath = join(paths.logsRoot, "npm.log")
 
