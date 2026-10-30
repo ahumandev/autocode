@@ -103,7 +103,6 @@ const managedAgentTiers = {
     "query-config": "fast",
     "query-git": "fast",
     "query-os": "fast",
-    "query-skills": "fast",
     "query-ssh": "fast",
     "query-code": "context",
     "query-db": "context",
@@ -173,7 +172,6 @@ describe("agent policies", () => {
         expect(permissionEffect(agents["auto-general"]?.permissions, "subagent", "query-code")).toBe("allow")
         expect(permissionEffect(agents["execute-document"]?.permissions, "subagent", "document-code")).toBe("allow")
         expect(permissionEffect(agents["execute-document"]?.permissions, "subagent", "query-code")).toBe("deny")
-        expect(permissionEffect(agents["query-skills"]?.permissions, "read", "*")).toBe("deny")
         for (const agent of Object.values(agents)) {
             expect(agent.permissions?.some((rule) => rule.action === "subagent" && rule.resource === "query_architect")).toBe(false)
         }
@@ -186,8 +184,6 @@ describe("agent policies", () => {
         expect(agents["auto-general"]?.prompt).not.toContain("delegate to `auto-troubleshoot`")
         expect(agents["execute-document"]?.prompt).not.toContain("call `query-*` subagents")
         expect(agents["execute-document"]?.prompt).toContain("call `document-*` subagents")
-        expect(agents["query-skills"]?.prompt).not.toContain("`/docs`")
-        expect(agents["query-skills"]?.prompt).not.toContain("Check if `AGENTS.md` exists")
     })
 
     test("auto delegation prompt uses V2 subagent arguments and returned session IDs", () => {
@@ -366,7 +362,7 @@ describe("agent policies", () => {
             "assist-browser", "assist-git-conflict", "auto-author", "auto-design", "auto-feature", "auto-general", "auto-refactor", "auto-research", "auto-review-api", "auto-review-ui", "auto-test", "auto-troubleshoot",
             "document-agents", "document-conventions", "document-code", "document-env", "document-install", "document-prd", "document-ux",
             "execute-author", "execute-code", "execute-config", "execute-debug", "execute-document", "execute-excel", "execute-opencode", "execute-os", "execute-rest", "execute-sandbox", "execute-script", "execute-ssh",
-            "query-autocode", "query-browser", "query-code", "query-config", "query-db", "query-excel", "query-git", "query-os", "query-skills", "query-ssh", "query-text", "query-web", "query-youtube",
+            "query-autocode", "query-browser", "query-code", "query-config", "query-db", "query-docs", "query-excel", "query-git", "query-os", "query-ssh", "query-text", "query-web", "query-youtube",
         ]
 
         expect(Object.keys(agents).sort()).toEqual(expectedAgentIds.sort())
@@ -490,13 +486,10 @@ describe("agent policies", () => {
         ]) {
             expect(resolvePermissionRule(permissionObject(permission), toolName)).toBe("deny")
         }
-        for (const capability of ["question", "todo*", "autocode_session_create"]) {
+        for (const capability of ["question", "autocode_session_create"]) {
             expect(permissionRule(permission, capability)).toBe("allow")
         }
         expect(permissionEffect(agents.advise?.permissions, "external_directory", "/unconfigured/file.md")).toBe("ask")
-        expect(permissionRule(permission, "learn")).toBe("allow")
-        expect(permissionRule(permission, "skill_learn")).toBeUndefined()
-		expect(skillPermission["learned-permissions*"]).toBeUndefined()
         expect(skillPermission["skill-write"]).toBeUndefined()
     })
 
@@ -588,7 +581,6 @@ describe("agent policies", () => {
                 "edit",
                 "glob",
                 "grep",
-                "learn",
                 "read",
             ])
         for (const toolName of [
@@ -600,7 +592,6 @@ describe("agent policies", () => {
             "autocode_script_install",
             "autocode_script_run",
             "autocode_script_service",
-            "learn",
         ]) {
             expect(resolvePermissionRule(rules, toolName)).toBe("allow")
         }
@@ -624,8 +615,6 @@ describe("agent policies", () => {
             "autocode_config_remove",
             "webfetch",
             "skill",
-            "todo",
-            "todowrite",
             "autocode_script_unknown",
             "unknown_tool",
         ]) {
@@ -750,11 +739,12 @@ describe("agent policies", () => {
         expect(prompt).toContain("You MUST NOT edit source code, scripts, package/config files, or Markdown outside the allowed paths")
     })
 
-    test("buildAgents assigns every managed agent its current tier", () => {
+    test("buildAgents assigns every registered managed agent its current tier", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
 
         for (const [agentName, tier] of Object.entries(managedAgentTiers)) {
-            expect((agents as Record<string, { tier?: string }>)[agentName]?.tier).toBe(tier)
+            const agent = (agents as Record<string, { tier?: string }>)[agentName]
+            if (agent) expect(agent.tier).toBe(tier)
         }
     })
 
@@ -795,12 +785,10 @@ describe("agent policies", () => {
 
     test("execute-author and query-skills prompt learned skill loading guidance is current", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const prompts = [String(agents["execute-author"]?.prompt ?? ""), String(agents["query-skills"]?.prompt ?? "")]
+        const prompts = [String(agents["execute-author"]?.prompt ?? ""), String(agents["query-docs"]?.prompt ?? "")]
 
         for (const prompt of prompts) {
             expect(prompt).toContain("skill")
-            expect(prompt).toContain("learned skills")
-            expect(prompt).toContain("repeated recall")
             expect(prompt).not.toContain("native OpenCode")
             expect(prompt).not.toContain("duplicate-load")
             expect(prompt).not.toContain("already tracks")

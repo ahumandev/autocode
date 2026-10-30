@@ -38,7 +38,7 @@ Explanation:
 - [YOUR version]: Will be replaced by your code changes
 - [THEIR version]: Will be replaced by their code changes
 
-- Use \`todo\` tools to schedule tasks that would address every merge conflict using this workflow:
+- Plan tasks that would address every merge conflict using this workflow:
 
 ### STEP 1.1: Categorize Merge Conflict
 
@@ -104,7 +104,6 @@ For each discovered bug or failing:
     - Consider what went wrong?
     - Would alternative code merge prevented issue?
     - Consider best approach to resolve issue
-    - Add \`todo\` tasks to resolve every issue
 
 Repeat this step until no issues are detected or identified as existing issues (not caused by git merge).
 

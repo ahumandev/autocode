@@ -125,7 +125,7 @@ Local setup targets repository development, not public npm installation.
    bun run verify:package
    ```
 
-   Build clears `dist`, bundles [`src/plugin.ts`](../src/plugin.ts), emits declarations, and copies bundled local skills into `dist/skills` with `.bundle-manifest.json`. Expected outputs: `dist/plugin.js`, `dist/plugin.d.ts`, and validated skill assets. Build does not install shim.
+   Build preserves the live `dist` entrypoint, bundles [`src/plugin.ts`](../src/plugin.ts), emits declarations, and copies bundled local skills into `dist/skills` with `.bundle-manifest.json`. Expected outputs: `dist/plugin.js`, `dist/plugin.d.ts`, and validated skill assets. Build does not install shim.
 
 3. Install local shim so OpenCode loads repository build:
 
@@ -135,13 +135,13 @@ Local setup targets repository development, not public npm installation.
 
    Shim path: `~/.config/opencode/plugins/autocode.js`.
 
-4. Load plugin in OpenCode. Repository-local [`.opencode/plugins/autocode.ts`](../.opencode/plugins/autocode.ts) re-exports `dist/plugin.js`; build must exist first.
+4. Load plugin in OpenCode through the installed global shim; build must exist first. Do not add a repository-local shim for the same plugin: OpenCode discovers both and rejects the second with `Duplicate plugin ID: autocode`. Use `/reload` to reload the completed build.
 
 ## Development commands
 
 | Command | Purpose |
 | --- | --- |
-| `bun run build` | Clears `dist`, bundles plugin, emits declarations, copies bundled local skills, writes manifest. |
+| `bun run build` | Preserves the live entrypoint, bundles plugin, emits declarations, copies bundled local skills, writes manifest. |
 | `bun run copy:skills` | Refreshes `dist/skills` and `.bundle-manifest.json` from local sources only. |
 | `bun run verify:package` | Validates plugin artifacts, package metadata, and skill manifest paths/SHA-256 digests. |
 | `bun run install:shim` | Installs local development shim at `~/.config/opencode/plugins/autocode.js`. |

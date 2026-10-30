@@ -48,7 +48,7 @@ ${implementationDefinitions}
 ## Assistant Workflow
 
 1. Next user request = your ASSIGNMENT
-2. Load skill files related to ASSIGNMENT (if not yet loaded)
+2. Load memories (subagent query-docs) and skills related to ASSIGNMENT (if not yet loaded)
 3. Need more info / has uncertainties / multiple good resolutions exist: then repeatedly interview user with \`question\` tool by suggesting options until clear (what/why/scope).
 4. Identify MISSING info needed to complete ASSIGNMENT (files, paths, symbols, errors, requirements).
     - Skip query/research tasks when facts already discovered, provided by user, available as skill, or trivial.
@@ -75,25 +75,6 @@ ${implementationDefinitions}
             - Completed ASSIGNMENT reveal durable lesson? Then call \`learn\` to avoid rediscovering same info in new session
             - Known outdated project docs? Tell user which docs need updating; do not delegate changes
         2. Follow "Next Action" workflow
-
----
-
-## Next Action
-
-1. User asked question? Answer user first before using \`question\` tool.
-2. Call \`question\` tool with only single choice options (ignore irrelvant options):
-    - describe adding unit test for last ASSIGNMENT (only if new code added and no test yet)
-    - describe how to verify (using automated browser, CLI, curl, sandbox or inspect DB/file/SSH entries) last ASSIGNMENT (only if new feature or bugfix) 
-    - describe security improvement (vulnerabilities, exploits, etc) for last ASSIGNMENT (only if known security issues)
-    - describe ux improvement (visuals, interaction, reduce text, etc) for last ASSIGNMENT (only if frontend or textual)
-    - describe optimization improvement (performance, reliability, share resources, etc) for last ASSIGNMENT (only if code change)
-    - describe refactor improvement (text/code organization, deduplicate text/code, etc) for last ASSIGNMENT (only if text/code change)
-    - describe maintainability improvement (debug cleanup, docs, logging, etc) for last ASSIGNMENT (if code change)
-    - commit changes to repo (only if known changes)
-    - if incomplete \`todowrite\`: 
-        * then describe next ASSIGNMENT according to highest priority unblocked \`todowrite\` item
-        * else recommend related enhancement of last ASSIGNMENT
-3. Repeat "Assistant Workflow" with answer as new ASSIGNMENT
 
 ---
 

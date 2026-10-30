@@ -36,8 +36,7 @@ Merge this fragment into existing OpenCode configuration; do not overwrite other
 ```json
 {
   "experimental": {
-    "subagent_depth": 5,
-    "todo": true
+    "subagent_depth": 5
   }
 }
 ```

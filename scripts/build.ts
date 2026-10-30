@@ -96,10 +96,6 @@ function waitForCommand(child: ChildProcess): Promise<void> {
     })
 }
 
-async function removeDist(deps: BuildDependencies): Promise<void> {
-    await deps.rm(distDirectory, { recursive: true, force: true })
-}
-
 export async function build(deps: BuildDependencies = defaultBuildDependencies): Promise<void> {
     await runBuild(false, deps)
 }
@@ -185,7 +181,8 @@ async function runBuild(watchMode: boolean, deps: BuildDependencies): Promise<vo
     try {
         unregisterSignalHandlers.push(deps.registerSignalHandler("SIGINT", stopForSignal))
         unregisterSignalHandlers.push(deps.registerSignalHandler("SIGTERM", stopForSignal))
-        await removeDist(deps)
+        // OpenCode's installed shim points at dist/plugin.js, including during rebuilds.
+        // Let each build step replace its outputs instead of removing the live entrypoint.
         throwIfStopped()
         const preparationArgs = watchMode
             ? [[copySkillSourcesScript]]

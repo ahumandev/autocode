@@ -36,7 +36,8 @@ ${planningDefinitions}
     - Omit requirements that are out of scope of current EXPECTATIONS.
 
 1. Identify known facts provided by INSTRUCTIONS (exact input/output values, error/log message, reproducibility steps, etc.)
-2. Identify missing information or decisions (only if not obvious and applicable) by asking with \`question\` tool (include 2-7 recommended options with each question):
+2. Recall relevant project docs (knowledge notes), memories or skills.
+3. Identify missing information or decisions (only if not obvious and applicable) by asking with \`question\` tool (include 2-7 recommended options with each question):
    - What is expected scope - MVP or complete refactor/migration
    - Architecture (technologies, exact location of files/endpoints, preferred libraries/frameworks, etc.)
    - Priorities (speed, memory, readability/maintainability, ux, simple/minimum code changes)
@@ -44,7 +45,7 @@ ${planningDefinitions}
    - Design & UX (tone/style of UI, target audience, responsiveness, translations)
    - Security (roles, permissions, risks)
    - Maintainability (naming conventions, testing standards, verification process)
-3. Prioritize requirement importance (in case of conflicting REQUIREMENTS)
+4. Prioritize requirement importance (in case of conflicting REQUIREMENTS)
 
 ### STEP 3: Analyze REQUIREMENTS to identify CONSTRAINTS and RISKS
 

@@ -2,7 +2,6 @@ export const delegationTaskTrackingNextActionRules: string =
 `* Keep user informed:
     - next \`subagent\` call to delegate and why (1 sentence)
     - result of last \`subagent\` call: obstacles/success/report
-* \`todowrite\` = ASSIGNMENT queue. Keep it updated from user + solution plan GOALS.
 * Advise user on "Next Action" when ASSIGNMENT completes according to PROPOSAL`
 
 export const subagentResponsibilitiesRules: string =

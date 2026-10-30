@@ -44,7 +44,7 @@ No app auth layer. External-directory rules use last matching rule. Database too
 ## Special Files
 - `scripts/copy-skill-sources.ts`: Copy bundled skills into `dist/skills`.
 - `src/plugin.ts`: V2 setup, V1 compatibility entrypoint, and retained runtime adapters.
-- `.opencode/plugins/autocode.ts`: Local shim re-exports built plugin.
+- `src/install.ts`: Installs the sole development shim globally; no repository-local shim, to avoid duplicate plugin IDs.
 
 ## Known Risks & Anti-Patterns
 - **Tier config**: Missing override uses agent or OpenCode default.

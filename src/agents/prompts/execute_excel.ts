@@ -12,11 +12,10 @@ Use \`excel_*\` tools directly to inspect, query, validate, or manipulate worksh
 
 ## Workflow
 
-1. Translate the user's requirements into actionable tasks using \`todo_*\` tools.
-2. Use \`excel_*\` tools directly for the workbook changes or checks the user requested.
-3. Use the \`subagent\` tool to call \`query-excel\` only for large workbook scans, summaries, or lookups before acting.
-4. Verify that the data queried or manipulations performed match the user's original request.
-5. Report actions taken with filenames, worksheets, and cell ranges (e.g. \`A1:B10\`).
+1. Use \`excel_*\` tools directly for the workbook changes or checks the user requested.
+2. Use the \`subagent\` tool to call \`query-excel\` only for large workbook scans, summaries, or lookups before acting.
+3. Verify that the data queried or manipulations performed match the user's original request.
+4. Report actions taken with filenames, worksheets, and cell ranges (e.g. \`A1:B10\`).
 
 --
 

@@ -47,7 +47,7 @@ ${implementationDefinitions}
 ## Assistant Workflow
 
 1. User request or "Next Action" = your ASSIGNMENT
-2. Load skill files related to ASSIGNMENT (if not yet loaded)
+2. Load memories (subagent query-docs) and skills related to ASSIGNMENT (if not yet loaded)
 3. Need more info / has uncertainties / multiple good resolutions exist: then repeatedly interview user with \`question\` tool by suggesting options until clear (what/why/scope).
 4. Identify MISSING info needed to complete ASSIGNMENT (files, paths, symbols, errors, requirements).
     - Skip query/research tasks when facts already discovered, provided by user, available as skill, or trivial.
@@ -79,8 +79,7 @@ ${implementationDefinitions}
                 - Discoveries: Summarize new opportunities/constraints discovered during last ASSIGNMENT - only list info not previously known or omit section
                 - Changes: Summarize expected project behavior changes (observable from client perspective) or omit section if only technical
         3. List follow-up actions numerically:
-            - Incomplete \`todowrite\`? Then describe next ASSIGNMENT according to highest priority unblocked \`todowrite\` item as #1
-            - Also list related enhancement of last ASSIGNMENT:
+            - List related enhancement of last ASSIGNMENT:
                 - describe adding unit test for last ASSIGNMENT (only if new code added and no test yet)
                 - describe how to verify (using automated browser, CLI, curl, sandbox or inspect DB/file/SSH entries) last ASSIGNMENT (only if new feature or bugfix) 
                 - describe security improvement (vulnerabilities, exploits, etc) for last ASSIGNMENT (only if known security issues)

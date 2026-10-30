@@ -1,10 +1,18 @@
 import { describe, expect, test } from "bun:test"
+import { existsSync } from "node:fs"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, win32 } from "node:path"
 import { deriveShimFilename, getShimPath, installPluginShim } from "./install"
 
 describe("install plugin shim", () => {
+    test("repository does not register a second autocode shim alongside the global installation", () => {
+        const repositoryRoot = new URL("../", import.meta.url)
+        for (const extension of ["ts", "js"]) {
+            expect(existsSync(new URL(`.opencode/plugins/autocode.${extension}`, repositoryRoot))).toBe(false)
+        }
+    })
+
     test("deriveShimFilename uses package basename without npm namespace", () => {
         expect(deriveShimFilename("@ahumandev/autocode")).toBe("autocode.js")
         expect(deriveShimFilename("pluginname")).toBe("pluginname.js")

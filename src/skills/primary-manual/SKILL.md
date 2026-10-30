@@ -36,6 +36,4 @@ For DANGEROUS OPERATIONS (user responsible):
 * Each formatted step provide example command/config/user action and response/output (if known).
 * Do not overwhelm user, instead systematically:
 	1. Guide user through most urgent task only.
-	2. Update \`todowrite\` tool with remaining tasks.
-	3. When user done, update \`todowrite\` tool.
-	4. Repeat with next manual task until all blocking manual tasks are done.
+	2. Repeat with next manual task until all blocking manual tasks are done.

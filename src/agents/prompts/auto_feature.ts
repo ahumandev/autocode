@@ -44,7 +44,6 @@ Wait for the subagent to report back before continuing.
 ## Phase 3 — Implement the Feature
 
 - Call \`execute-code\` via \`subagent\` to implement 1 change (like component/API/test/config/script) at a time.
-- Use \`todowrite\` tool to keep track of pending changes.
 
 Your instructions to the subagent MUST be complete and self-contained — the subagent has no knowledge of earlier steps. Include:
 - The exact feature to implement (description, behavior, inputs, outputs)

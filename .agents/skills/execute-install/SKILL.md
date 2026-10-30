@@ -29,7 +29,7 @@ description: Use this skill to understand how to install, setup, run or deploy p
 ## [Startup Steps]
 
 1. Build once with `bun run build`.
-    - Why: it removes `dist`, bundles `src/plugin.ts`, emits declarations, and copies skills.
+    - Why: it preserves the live `dist` entrypoint, bundles `src/plugin.ts`, emits declarations, and copies skills.
     - Expected: `dist/plugin.js`, `dist/plugin.d.ts`, `dist/skills/**/SKILL.md`.
 2. Install the local shim with `bun run install:shim`.
     - Why: build does not install the shim.
@@ -38,6 +38,7 @@ description: Use this skill to understand how to install, setup, run or deploy p
     - Why: it watches Bun bundle plus TypeScript declarations.
 4. Load plugin in OpenCode using the generated shim path.
     - Example path: `~/.config/opencode/plugins/autocode.js`.
+    - Do not add a repository-local shim for AutoCode: it duplicates the global plugin ID.
 
 ## [Common Project Commands/URLs]
 

@@ -263,7 +263,7 @@ test("creates exact portable bundle and declaration arguments", (): void => {
     expect(createDeclarationArgs(true)).toEqual([...createDeclarationArgs(false), "--watch"])
 })
 
-test("build removes dist then awaits plugin, CLI, declarations, skills, and helper sequentially", async (): Promise<void> => {
+test("build preserves the live dist entrypoint and awaits plugin, CLI, declarations, skills, and helper sequentially", async (): Promise<void> => {
     const environment = createEnvironment((call): ChildProcess => call.child)
     environment.helper.automatic = false
     const result = observeResult(build(environment.dependencies))
@@ -282,7 +282,7 @@ test("build removes dist then awaits plugin, CLI, declarations, skills, and help
         expect(environment.copyCalls[0].target).toBe(helperTarget)
         expect(environment.watchCalls).toHaveLength(0)
         expect(result.settled).toBe(false)
-        expect(environment.events).toEqual(["rm", "spawn:build", "spawn:build", `spawn:${resolveTypeScriptCli()}`, `spawn:${copySkillsScript}`, "copy:helper"])
+        expect(environment.events).toEqual(["spawn:build", "spawn:build", `spawn:${resolveTypeScriptCli()}`, `spawn:${copySkillsScript}`, "copy:helper"])
         expect(environment.spawnCalls.map((call): [string, string[], SpawnOptions] => [call.command, call.args, call.options])).toEqual([
             ["/test/bun", createBundleArgs(false), { cwd: repositoryRoot, shell: false, stdio: "inherit" }],
             ["/test/bun", createCredentialsBundleArgs(false), { cwd: repositoryRoot, shell: false, stdio: "inherit" }],
@@ -376,7 +376,7 @@ test("watch awaits skills and initial helper copy before starting three child wa
         environment.copyCalls[0].resolve()
         await waitForSpawnCalls(environment, 4)
 
-        expect(environment.events).toEqual(["rm", `spawn:${copySkillsScript}`, "watch:helper", "copy:helper", "spawn:build", "spawn:build", `spawn:${resolveTypeScriptCli()}`])
+        expect(environment.events).toEqual([`spawn:${copySkillsScript}`, "watch:helper", "copy:helper", "spawn:build", "spawn:build", `spawn:${resolveTypeScriptCli()}`])
         expect(environment.spawnCalls.slice(1).map((call): [string, string[], SpawnOptions] => [call.command, call.args, call.options])).toEqual([
             ["/test/bun", createBundleArgs(true), { cwd: repositoryRoot, shell: false, stdio: "inherit" }],
             ["/test/bun", createCredentialsBundleArgs(true), { cwd: repositoryRoot, shell: false, stdio: "inherit" }],

@@ -3,7 +3,6 @@ import { docsCommandTemplate } from "./docs"
 import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { createCommands } from "./index"
-import { learnCommand } from "./learn"
 import { newSessionTemplate } from "./new-session"
 import { testsCommandTemplate } from "./tests"
 import { buildAgents } from "../agents"
@@ -33,7 +32,6 @@ describe("commands", () => {
             "autocode-install",
             "autocode-version",
             "author",
-            "commit",
             "docs",
             "docs-conventions",
             "docs-code",
@@ -43,11 +41,9 @@ describe("commands", () => {
             "explain",
             "git-conflict",
             "init",
-            "learn",
             "repeat-as-md",
             "repeat-as-wiki",
             "report",
-            "resume",
             "tests",
         ])
 
@@ -180,13 +176,10 @@ describe("commands", () => {
         }
     })
 
-    test("keeps key command template substrings stable", () => {
-        expect(commands.commit?.subtask).toBe(false)
-        expect(commands.commit?.template).toContain("$ARGUMENTS")
-        expect(commands.commit?.template).toContain("git-commit")
-        expect(commands.commit?.template).toContain("NEVER any other tool")
-        expect(commands.resume?.subtask).toBe(false)
-        expect(commands.resume?.template).toContain("You were interrupted. Resume your own work.")
+    test("does not register removed commands", () => {
+        for (const commandName of ["commit", "learn", "resume"]) {
+            expect(commands[commandName]).toBeUndefined()
+        }
     })
 
     test("keeps init documentation-only", () => {

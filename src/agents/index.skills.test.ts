@@ -31,7 +31,7 @@ describe("buildAgents skill permissions", () => {
             "execute-sandbox": "allow",
         })
         expect(getSkillRule(agents["execute-os"], "learned-permissions*")).toBeUndefined()
-        expect(permissionRule(agents["execute-os"]?.permissions, "learn")).toBe("allow")
+        expect(permissionRule(agents["execute-os"]?.permissions, "learn")).toBeUndefined()
     })
 
     test("does not grant unregistered skills to category agents", () => {

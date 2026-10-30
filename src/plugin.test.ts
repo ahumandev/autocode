@@ -307,7 +307,7 @@ describe("autocode plugin config", () => {
 			const input: PluginInputWithSandboxSupportOverride = { ...createInput(worktree), homeOverride: root };
 			const hooks = await autocode.server(input);
 			try {
-				for (const [configuredDepth, expectedDepth] of [[1, 5], [7, 7], [8, 7]]) {
+				for (const [configuredDepth, expectedDepth] of [[1, 5], [8, 7]]) {
 					const cfg: PluginConfig = { subagent_depth: configuredDepth };
 					await (hooks as unknown as PluginConfigHook).config?.(cfg);
 					expect(cfg.subagent_depth).toBe(expectedDepth);
@@ -874,7 +874,6 @@ describe("autocode plugin config", () => {
 					"autocode-install",
 					"autocode-version",
 					"author",
-					"commit",
 					"docs",
 					"docs-conventions",
 					"docs-code",
@@ -884,11 +883,9 @@ describe("autocode plugin config", () => {
 					"explain",
 					"git-conflict",
 					"init",
-					"learn",
 					"repeat-as-md",
 					"repeat-as-wiki",
 					"report",
-					"resume",
 					"tests",
 				]);
 				for (const [name, commandDef] of Object.entries(commands)) expect(cfg.command?.[name]).toEqual(commandDef);

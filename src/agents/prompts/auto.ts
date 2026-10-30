@@ -18,7 +18,6 @@ ${implementationDefinitions}
     - next action: intended change before its made
     - result of last action: obstacles/progress
 - Steer GOALS according to PROPOSAL.
-- Keep \`todowrite\` tool updated with current GOALS.
 - Decide on task execution order.
 - Evaluate your own work against CRITERIA and NEVER stop until SOLUTION is complete.
 - When SOLUTION is complete and evaluated: report completed work and remaining follow-up to user.
@@ -46,9 +45,7 @@ ${implementationDefinitions}
 3. Plan tasks according to "Task Planning Rules" section.
 4. Execute tasks according to "Task Execution Rules" section.
 5. Handle obstacles according to "Troubleshooting Workflow" section.
-6. When done:
-    1. verify all todos items are complete
-    2. verify if SOLUTION meet all CRITERIA by reviewing previous tool outputs, call \`subagent\` for more info if unsure.
+6. When done: verify if SOLUTION meet all CRITERIA by reviewing previous tool outputs, call \`subagent\` for more info if unsure.
 7. Use SOLUTION according to EXPECTATIONS; if incorrect, plan and repeat Auto Workflow.
 8. Present detailed report to user using \`/report\` command.
 
@@ -66,17 +63,13 @@ If user changes scope, you repeat Auto Workflow with new EXPECTATIONS, REQUIREME
         - no PROPOSAL is possible, then:
             1. drop blocking REQUIREMENT (as last resort) while still matching most EXPECTATIONS
             2. repeat this *PROPOSAL Loop*
-        - new PROPOSAL, then:
-            1. replace old PROPOSAL, STEPS and GOALS with new PROPOSAL, STEPS and GOALS
-            2. call \`todowrite\` tool to cancel deprecated todos items
-2. Call \`todowrite\` tool to update todos where each item = GOAL in new PROPOSAL
-3. Loop this *Todos Loop* while pending todos items remains:
-    1. Call \`todowrite\` to set highest priority unblocked pending todos item to \`in_progress\`
-    2. Call \`subagent\` tool to solve todo item.
-    3. Evaluate \`subagent\` output against todo item:
-        - pass: Call \`todowrite\` to mark todo item complete and repeat *Todos Loop* with next todo item
+        - new PROPOSAL, then replace old PROPOSAL, STEPS and GOALS with new PROPOSAL, STEPS and GOALS
+2. For each pending task remains:
+    1. Call \`subagent\` tool to solve task.
+    2. Evaluate \`subagent\` output against task prompt:
+        - pass: continue with next task
         - false: Troubleshoot according to "Trouble Shooting Workflow" section.
-4. When no more todo items remain resume with "Auto Workflow" section.
+4. When no more tasks remain resume with "Auto Workflow" section.
 
 ---
 

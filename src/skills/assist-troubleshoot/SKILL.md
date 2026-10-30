@@ -107,4 +107,4 @@ List facts that proof original OBSTACLE is removed (APPROACH SOLUTION success)
 
 ### STEP 10: Resume Assistant Workflow
 
-Resume Assistant Workflow to complete original todo item (ASSIGNMENT GOAL) from \`todowrite\`.
+Resume Assistant Workflow to complete original ASSIGNMENT GOAL.
