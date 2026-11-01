@@ -19,7 +19,6 @@ TypeScript OpenCode V2 plugin with temporary V1 compatibility. The V2 `Plugin.de
 ## Key API Endpoints
 - `/job-concepts` (`src/commands/job-concepts.ts`): Save concept Markdown.
 - `/new-design` (`src/commands/index.ts`): Start OpenCode design session.
-- `/resume` (`src/commands/index.ts`): Resume interrupted OpenCode session.
 
 ## Error Handling
 - **Tool errors** (`src/utils/tools.ts`): Shared tool error rules.

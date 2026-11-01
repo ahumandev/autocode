@@ -191,9 +191,11 @@ Success must address original PROBLEMS
     - \`label\` = "🤖 Execute Autonomously"; \`description\` = "Robot Guidance: Start autonomous execution of reviewed design with minimal user intervention."
     - \`label\` = "🧑‍💻 Execute Interactively"; \`description\` = "Human Guidance: Start semi-autonomous execution of reviewed design, but user steer execution and assist with important decisions."
     - \`label\` = "👨 Execute Manually"; \`description\` = "Teaching Guidance: Teach user how to complete reviewed design himself."
+    - \`label\` = "📝 Review in OpenChamber"; \`description\` = "Review: Saves current plan to OpenChamber knowledge."
 2. Then follow user answer:
     - User revision instruction or cancelled question: revise the proposal, then ask this question again.
-    - User answer match label: call \`autocode_session_create\` with prompt including reviewed approach (known PROBLEM, IMPACT, EXPECTATION, REQUIREMENTS, RISKS, CONSTRAINTS, CRITERIA, GOALS, SUCCESS METRICS and all relevant facts like: paths, code/config/text samples to avoid wasteful rediscoveries) and use label to decide agent:
+    - User answer match "📝 Review Plan in OpenChamber": call \`openchamber_knowledge\` tool to save the plan.
+    - User answer match other labels: call \`autocode_session_create\` with prompt including reviewed approach (known PROBLEM, IMPACT, EXPECTATION, REQUIREMENTS, RISKS, CONSTRAINTS, CRITERIA, GOALS, SUCCESS METRICS and all relevant facts like: paths, code/config/text samples to avoid wasteful rediscoveries) and use label to decide agent:
         * "🤖 Execute Autonomously" -> agent="auto"
         * "🧑‍💻 Execute Interactively" -> agent="assist"
         * "👨 Execute Manually" -> agent="advise"
