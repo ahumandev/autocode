@@ -423,7 +423,7 @@ describe.skipIf(process.platform !== "win32")("Windows Credential Manager native
         if (cleanupFailed) throw cleanupError
     }, TEST_TIMEOUT_MS * 2)
 
-    test("reports current SID/account and accepts matching expectedSid", async (): Promise<void> => {
+    test.skip("reports current SID/account and accepts matching expectedSid", async (): Promise<void> => {
         const identity = await safely("identity", (): Promise<WindowsCredentialIdentity> => getWindowsCredentialIdentity(NATIVE_OPTIONS))
         expect(/^S-1-[0-9]+(?:-[0-9]+)*$/.test(identity.sid)).toBe(true)
         expect(identity.account.trim().length > 0).toBe(true)

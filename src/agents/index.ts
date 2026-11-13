@@ -1438,6 +1438,7 @@ function removeWindowsSandboxPermissionRule(
     rule: AutocodePermissionRule | AutocodeTaskPermissionRules | undefined,
 ): AutocodePermissionRule | AutocodeTaskPermissionRules | undefined {
     if (rule === undefined || typeof rule === "string") return rule
+    if (Array.isArray(rule)) return rule
 
     return Object.fromEntries(Object.entries(rule).flatMap(([key, nestedRule]) => {
         if (isSandboxReference(key)) return []

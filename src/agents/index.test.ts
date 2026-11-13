@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, buildAgents as buildV2Agents, getAgentPermission as getV2AgentPermission, toV2Permissions, type AutocodeAgentConfig } from "./index"
+import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, applyWindowsSandboxPolicy, buildAgents as buildV2Agents, getAgentPermission as getV2AgentPermission, toV2Permissions, type AutocodeAgentConfig } from "./index"
 import { executeOpencodePrompt } from "./prompts/execute_opencode"
 import { buildExecuteOsPrompt } from "./prompts/execute_os"
 import { queryAutocodePrompt } from "./prompts/query_autocode"
@@ -13,7 +13,8 @@ import { designPrompt } from "./prompts/design"
 import { spyPrompt } from "./prompts/spy"
 import { buildTroubleshootPrompt } from "./prompts/auto_troubleshoot"
 import { createPlatformCapabilities } from "../utils/platform"
-import { permissionEffect } from "../utils/permissions"
+import { permissionEffect, type PermissionRule } from "../utils/permissions"
+import { matchExternalDirectoryAction } from "../utils/external_directory"
 
 function permissionRule(permission: unknown, key: string): unknown {
     if (!permission) return undefined
@@ -423,6 +424,25 @@ describe("agent policies", () => {
             expect(agents[agentName]).toBeDefined()
             expect(permissionRule(agents[agentName]?.permission, "task")).not.toEqual(expect.objectContaining({ "execute-sandbox": "allow" }))
         }
+    })
+
+    test("preserves Windows external-directory rules while removing sandbox permissions", () => {
+        const agents = applyExternalDirectoryPolicy({
+            windows: {
+                permission: {
+                    autocode_sandbox_cli: "allow",
+                    external_directory: "ask",
+                    question: "allow",
+                },
+            },
+        }, [{ action: "external_directory", resource: "C:\\Dev\\**", effect: "allow" }])
+        const windowsAgents = applyWindowsSandboxPolicy(agents, createPlatformCapabilities("win32"))
+        const permission = windowsAgents.windows?.permission
+        const externalDirectoryRules = permissionRule(permission, "external_directory")
+
+        expect(Array.isArray(externalDirectoryRules)).toBe(true)
+        expect(permissionRule(permission, "autocode_sandbox_cli")).toBeUndefined()
+        expect(matchExternalDirectoryAction(externalDirectoryRules as PermissionRule[], "c:/dev/src/file.ts")).toBe("allow")
     })
 
     test("buildAgents keeps sandbox registrations and guidance on Linux", () => {

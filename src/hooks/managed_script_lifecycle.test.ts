@@ -1,5 +1,6 @@
 import { describe, expect, mock, spyOn, test, type Mock } from "bun:test"
 import type { Event, OpencodeClient } from "@opencode-ai/sdk"
+import { createManagedScriptLifecycle } from "./managed_script_lifecycle"
 import type { ManagedScriptLifecycle, ManagedScriptLifecycleDependencies } from "./managed_script_lifecycle"
 import type { SessionJobContext } from "@/utils/jobs"
 import type {
@@ -9,7 +10,6 @@ import type {
     ManagedScriptServiceStartResult,
 } from "@/utils/managed_script_runtime"
 
-type CleanupManagedScriptServices = (runtime: Pick<ManagedScriptRuntime, "cleanup">) => Promise<ManagedScriptServiceCleanupResult>
 type CreateRuntime = NonNullable<ManagedScriptLifecycleDependencies["createRuntime"]>
 type Cleanup = () => Promise<ManagedScriptServiceCleanupResult>
 
@@ -18,15 +18,6 @@ const DIRECTORY = "/repo"
 const WORKTREE = "/repo-worktree"
 const JOB_NAME = "launch_job"
 const CLEANUP_RESULT: ManagedScriptServiceCleanupResult = { stopped_run_ids: [], finalized_run_ids: [] }
-const cleanupManagedScriptServicesMock = mock<CleanupManagedScriptServices>(async (runtime) => await runtime.cleanup())
-
-await mock.module("@/utils/managed_script_runtime", () => ({
-    cleanupManagedScriptServices: cleanupManagedScriptServicesMock,
-    createManagedScriptRuntime: (): never => { throw new Error("Default runtime must not be created in lifecycle tests.") },
-}))
-
-const { createManagedScriptLifecycle } = await import("./managed_script_lifecycle")
-
 type LifecycleHarness = {
     client: OpencodeClient
     cleanup: Mock<Cleanup>
@@ -67,7 +58,6 @@ function startResult(sessionContext: SessionJobContext, jobName: string, runID: 
 }
 
 function createHarness(client: OpencodeClient = {} as unknown as OpencodeClient): LifecycleHarness {
-    cleanupManagedScriptServicesMock.mockClear()
     const cleanup = mock<Cleanup>(async (): Promise<ManagedScriptServiceCleanupResult> => CLEANUP_RESULT)
     const foreignKill = mock((): void => undefined)
     const runtime: LifecycleHarness["runtime"] = { cleanup, kill: foreignKill }
@@ -91,7 +81,7 @@ function idleEvent(sessionID: string = SESSION_ID): Event {
 }
 
 function expectCleanupOwnership(harness: LifecycleHarness, expectedContext: SessionJobContext): void {
-    expect(cleanupManagedScriptServicesMock).toHaveBeenCalledWith(harness.runtime)
+    expect(harness.cleanup).toHaveBeenCalled()
     expect(harness.factory).toHaveBeenCalledWith(expectedContext, {
         jobName: JOB_NAME,
         directory: expectedContext.directory,
@@ -146,7 +136,7 @@ describe("createManagedScriptLifecycle", () => {
         ])
 
         expect(harness.cleanup).not.toHaveBeenCalled()
-        expect(cleanupManagedScriptServicesMock).not.toHaveBeenCalled()
+        expect(harness.factory).not.toHaveBeenCalled()
     })
 
     test("coalesces concurrent terminal events into one serialized cleanup", async () => {
@@ -171,7 +161,7 @@ describe("createManagedScriptLifecycle", () => {
         await Promise.all([first, second])
 
         expect(order).toEqual(["cleanup started", "cleanup finished"])
-        expect(cleanupManagedScriptServicesMock).toHaveBeenCalledTimes(1)
+        expect(harness.cleanup).toHaveBeenCalledTimes(1)
     })
 
     test("groups matching launch owners and cleans distinct owners in one session", async () => {
@@ -289,7 +279,7 @@ describe("createManagedScriptLifecycle", () => {
         try {
             await expect(harness.lifecycle.handleEvent(idleEvent())).resolves.toBeUndefined()
 
-            expect(cleanupManagedScriptServicesMock).toHaveBeenCalledTimes(1)
+            expect(harness.cleanup).toHaveBeenCalledTimes(1)
             expect(warn).toHaveBeenCalledWith("autocode: cleanup managed script services failed: owned cleanup unavailable")
             expect(harness.foreignKill).not.toHaveBeenCalled()
         }
@@ -328,7 +318,6 @@ describe("createManagedScriptLifecycle", () => {
             await expect(harness.lifecycle.dispose()).resolves.toBeUndefined()
 
             expect(harness.cleanup).toHaveBeenCalledTimes(2)
-            expect(cleanupManagedScriptServicesMock).toHaveBeenCalledTimes(2)
             expect(harness.factory.mock.calls).toEqual([[capturedContext, capturedOwner], [capturedContext, capturedOwner]])
             expect(harness.factory.mock.calls[1]?.[1]).toBe(harness.factory.mock.calls[0]?.[1])
             expect(warn).toHaveBeenCalledTimes(1)
@@ -363,7 +352,6 @@ describe("createManagedScriptLifecycle", () => {
             await expect(harness.lifecycle.handleEvent(idleEvent())).resolves.toBeUndefined()
 
             expect(harness.cleanup).toHaveBeenCalledTimes(2)
-            expect(cleanupManagedScriptServicesMock).toHaveBeenCalledTimes(2)
             expect(harness.factory.mock.calls).toEqual([[ownedContext, capturedOwner], [ownedContext, capturedOwner]])
             expect(warn).toHaveBeenCalledTimes(1)
         }
@@ -391,7 +379,6 @@ describe("createManagedScriptLifecycle", () => {
             await expect(harness.lifecycle.dispose()).resolves.toBeUndefined()
 
             expect(harness.cleanup).toHaveBeenCalledTimes(3)
-            expect(cleanupManagedScriptServicesMock).toHaveBeenCalledTimes(3)
             expect(harness.factory.mock.calls).toEqual([
                 [ownedContext, capturedOwner],
                 [ownedContext, capturedOwner],
@@ -436,7 +423,6 @@ describe("createManagedScriptLifecycle", () => {
             expect(harness.cleanup).toHaveBeenCalledTimes(1)
             expect(laterCleanup).toHaveBeenCalledTimes(2)
             expect(harness.factory.mock.calls).toEqual([[firstContext, firstOwner], [laterContext, laterOwner], [laterContext, laterOwner]])
-            expect(cleanupManagedScriptServicesMock.mock.calls).toEqual([[harness.runtime], [laterRuntime], [laterRuntime]])
             expect(warn).toHaveBeenCalledTimes(1)
         }
         finally {
@@ -466,7 +452,6 @@ describe("createManagedScriptLifecycle", () => {
 
             expect(harness.factory).toHaveBeenCalledTimes(1)
             expect(harness.cleanup).toHaveBeenCalledTimes(1)
-            expect(cleanupManagedScriptServicesMock).toHaveBeenCalledTimes(1)
 
             cleanupGate.reject(cleanupFailure)
             await expect(concurrent).resolves.toEqual([undefined, undefined])
@@ -480,7 +465,6 @@ describe("createManagedScriptLifecycle", () => {
             await expect(harness.lifecycle.handleEvent(idleEvent())).resolves.toBeUndefined()
 
             expect(harness.cleanup).toHaveBeenCalledTimes(2)
-            expect(cleanupManagedScriptServicesMock).toHaveBeenCalledTimes(2)
             expect(harness.factory.mock.calls).toEqual([[ownedContext, capturedOwner], [ownedContext, capturedOwner]])
             expect(warn).toHaveBeenCalledTimes(1)
         }

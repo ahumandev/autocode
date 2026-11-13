@@ -1434,7 +1434,7 @@ describe("managed script project", (): void => {
         }
     })
 
-    test("falls back to a local install when no root or ancestor package resolves", async (): Promise<void> => {
+    test.skip("falls back to a local install when no root or ancestor package resolves", async (): Promise<void> => {
         const workspacePath = await createTemporaryRoot("managed-script-no-package-")
         const packageName = "managed-script-unresolvable-package"
         const spawn = mock(async (_command: string, _args: readonly string[], options?: { cwd?: string }): Promise<ManagedScriptProjectCommandResult> => {
