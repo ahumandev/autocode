@@ -195,8 +195,8 @@ describe("autocode_dependencies", () => {
         const result = parseResult(await createAutocodeDependenciesTool(deps, { isWindows: true }).execute({}, createToolContext()) as string)
         const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
 
-        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"])
-        expect(Object.keys(result.optional_dependencies ?? {})).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"])
+        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "figma_mcp", "git_cli", "browser"])
+        expect(Object.keys(result.optional_dependencies ?? {})).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "figma_mcp", "git_cli", "browser"])
         expect(result.bwrap).toBeUndefined()
         expect(result.dependencies?.bwrap).toBeUndefined()
         expect(result.optional_dependencies?.git_cli?.status).toBe("ok")
@@ -219,7 +219,7 @@ describe("autocode_dependencies", () => {
         const result = parseResult(await createAutocodeDependenciesTool(deps).execute({}, createToolContext()) as string)
         const calls = (deps.spawn as ReturnType<typeof mock>).mock.calls
 
-        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "bwrap", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"])
+        expect(Object.keys(result.dependencies ?? {})).toEqual(["opencode", "bwrap", "chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "figma_mcp", "git_cli", "browser"])
         expect(result.dependencies?.bwrap).toEqual(result.bwrap)
         expect(calls).toContainEqual(["sh", ["-c", "command -v git"], expect.anything()])
         expect(calls).toContainEqual(["git", ["--version"], expect.anything()])
@@ -314,8 +314,8 @@ describe("autocode_dependencies", () => {
         const result = parseResult(await createAutocodeDependenciesTool(createDeps()).execute({}, createToolContext()) as string)
         const optionalDependencies = result.optional_dependencies ?? {}
 
-        expect(Object.keys(optionalDependencies)).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"])
-        for (const key of ["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "git_cli", "browser"]) {
+        expect(Object.keys(optionalDependencies)).toEqual(["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "figma_mcp", "git_cli", "browser"])
+        for (const key of ["chrome_devtools_mcp", "context7_mcp", "excel_mcp", "websearch_mcp", "figma_mcp", "git_cli", "browser"]) {
             expect(result.dependencies?.[key]).toEqual(optionalDependencies[key])
         }
         expect(result.required_ok).toBe(true)
@@ -345,6 +345,15 @@ describe("autocode_dependencies", () => {
         expect(optionalDependencies.websearch_mcp.bin).toBe("open-websearch")
         expect(optionalDependencies.websearch_mcp.install_command).toBe("npm install -g open-websearch@latest")
         expect(optionalDependencies.websearch_mcp.docs_url).toBe("https://www.npmjs.com/package/open-websearch")
+        expect(optionalDependencies.figma_mcp.status).toBe("missing")
+        expect(optionalDependencies.figma_mcp.optional).toBe(true)
+        expect(optionalDependencies.figma_mcp.url).toBe("https://mcp.figma.com/mcp")
+        expect(optionalDependencies.figma_mcp.docs_url).toBe("https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/")
+        expect(optionalDependencies.figma_mcp.package).toBeUndefined()
+        expect(optionalDependencies.figma_mcp.install_command).toBeUndefined()
+        const figmaGuidance = optionalDependencies.figma_mcp.guidance
+        if (figmaGuidance === undefined) throw new Error("Figma MCP guidance is missing")
+        expect(result.next_actions).toContain(figmaGuidance)
         expect(optionalDependencies.git_cli.package).toBe("git")
         expect(optionalDependencies.git_cli.install_command).toBe("Install git using your system package manager.")
         expect(optionalDependencies.git_cli.guidance).toBe("Install system git CLI for built-in Git tools.")
@@ -415,6 +424,49 @@ describe("autocode_dependencies", () => {
         expect(configResult.optional_dependencies?.websearch_mcp?.status).toBe("ok")
         expect(configResult.optional_dependencies?.websearch_mcp?.detection_source).toBe("launcher_command")
         expect(configResult.optional_dependencies?.websearch_mcp?.configured_command).toBe("npx -y open-websearch@latest")
+    })
+
+    test("detects official Figma remote by URL regardless of entry name", async () => {
+        const configPath = fixturePath("/xdg/opencode/opencode.json")
+        const deps = createDeps({
+            env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
+            fileMap: {
+                [configPath]: JSON.stringify({ mcp: { design: { type: "remote", url: "https://mcp.figma.com/mcp" } } }),
+            },
+        })
+        const result = parseResult(await createAutocodeDependenciesTool(deps).execute({}, createToolContext()) as string)
+        const figma = result.optional_dependencies?.figma_mcp
+
+        expect(result.detect_only).toBe(true)
+        expect(figma?.status).toBe("ok")
+        expect(figma?.ok).toBe(true)
+        expect(figma?.detection_source).toBe("config_entry")
+        expect(figma?.config_path).toBe(configPath)
+        expect(figma?.guidance).toBe("Figma MCP is configured.")
+        expect(figma?.notes).toContain("does not verify connection, authentication, tools, or permissions")
+        expect(figma?.package).toBeUndefined()
+        expect(figma?.install_command).toBeUndefined()
+        expect((deps.spawn as ReturnType<typeof mock>).mock.calls.map(([command]) => command)).not.toContain("figma")
+    })
+
+    test("rejects unrelated and lookalike Figma URLs even under Figma entry names", async () => {
+        for (const url of [
+            "https://mcp.figma.com.evil.example/mcp",
+            "https://evil.example/mcp.figma.com/mcp",
+            "https://mcp.figma.com@evil.example/mcp",
+            "https://mcp.figma.com/other",
+            "https://mcp.figma.com/mcp?redirect=evil",
+            "http://mcp.figma.com/mcp",
+            "not a url",
+        ]) {
+            const result = parseResult(await createAutocodeDependenciesTool(createDeps({
+                env: { XDG_CONFIG_HOME: fixturePath("/xdg") },
+                fileMap: {
+                    [fixturePath("/xdg/opencode/opencode.json")]: JSON.stringify({ mcp: { figma: { type: "remote", url } } }),
+                },
+            })).execute({}, createToolContext()) as string)
+            expect(result.optional_dependencies?.figma_mcp?.status).toBe("missing")
+        }
     })
 
     test("detects MCP launcher config and system git independently", async () => {

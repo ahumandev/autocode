@@ -56,6 +56,13 @@ type OptionalDependencyDefinition = {
     notes?: string
 }
 
+type RemoteDependencyDefinition = {
+    key: string
+    remoteUrl: string
+    docsUrl: string
+    guidance: string
+}
+
 type ConfigDetection = {
     configPath: string
     configuredCommand?: string
@@ -344,8 +351,18 @@ function getConfigNodeName(value: Record<string, unknown>, index: number): strin
     return `index:${index}`
 }
 
-function detectMcpConfigNode(value: unknown, definition: OptionalDependencyDefinition, parentKey?: string): Omit<ConfigDetection, "configPath"> | undefined {
+function detectMcpConfigNode(value: unknown, definition: OptionalDependencyDefinition | RemoteDependencyDefinition, parentKey?: string): Omit<ConfigDetection, "configPath"> | undefined {
     if (!isRecord(value)) return undefined
+
+    if ("remoteUrl" in definition) {
+        if (typeof value.url !== "string" || (value.type !== undefined && value.type !== "remote")) return undefined
+        try {
+            return new URL(value.url).href === definition.remoteUrl ? { detectionSource: "config_entry", key: parentKey } : undefined
+        }
+        catch {
+            return undefined
+        }
+    }
 
     const aliases = getNormalizedAliases(definition)
     if (parentKey && tokenMatchesAliases(parentKey, aliases)) {
@@ -372,7 +389,7 @@ function detectMcpConfigNode(value: unknown, definition: OptionalDependencyDefin
     return undefined
 }
 
-function inspectMcpSection(value: unknown, definition: OptionalDependencyDefinition, section: string): Omit<ConfigDetection, "configPath"> | undefined {
+function inspectMcpSection(value: unknown, definition: OptionalDependencyDefinition | RemoteDependencyDefinition, section: string): Omit<ConfigDetection, "configPath"> | undefined {
     if (isRecord(value)) {
         for (const [key, child] of Object.entries(value)) {
             const detection = detectMcpConfigNode(child, definition, key)
@@ -391,7 +408,7 @@ function inspectMcpSection(value: unknown, definition: OptionalDependencyDefinit
     return undefined
 }
 
-function findConfigDetection(value: unknown, definition: OptionalDependencyDefinition): Omit<ConfigDetection, "configPath"> | undefined {
+function findConfigDetection(value: unknown, definition: OptionalDependencyDefinition | RemoteDependencyDefinition): Omit<ConfigDetection, "configPath"> | undefined {
     if (!isRecord(value)) return undefined
 
     const sections: Array<{ name: string, value: unknown }> = []
@@ -411,7 +428,7 @@ function findConfigDetection(value: unknown, definition: OptionalDependencyDefin
     return undefined
 }
 
-async function inspectConfigForOptionalMcp(definition: OptionalDependencyDefinition, deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter): Promise<ConfigDetection | undefined> {
+async function inspectConfigForOptionalMcp(definition: OptionalDependencyDefinition | RemoteDependencyDefinition, deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter): Promise<ConfigDetection | undefined> {
     const candidateConfigPaths = await getCandidateConfigPaths(deps.process.env, context, deps)
     emitDebug({ dependency: definition.key, stage: "config_paths", config_paths: candidateConfigPaths })
 
@@ -689,7 +706,7 @@ function getMcpDetectionNotes(notes: string | undefined): string {
     return notes === undefined ? versionNote : `${notes} ${versionNote}`
 }
 
-function emitFinalDebugEvent(definition: OptionalDependencyDefinition, result: DependencyReport, emitDebug: DebugEmitter, reason: string): void {
+function emitFinalDebugEvent(definition: Pick<OptionalDependencyDefinition, "key">, result: DependencyReport, emitDebug: DebugEmitter, reason: string): void {
     emitDebug({
         dependency: definition.key,
         stage: "final",
@@ -866,6 +883,29 @@ const optionalMcpDefinitions: readonly OptionalDependencyDefinition[] = [
     },
 ]
 
+const figmaMcpDefinition: RemoteDependencyDefinition = {
+    key: "figma_mcp",
+    remoteUrl: "https://mcp.figma.com/mcp",
+    docsUrl: "https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/",
+    guidance: "Add the official Figma remote server to OpenCode MCP config and authenticate with Figma OAuth; follow the installation docs.",
+}
+
+async function inspectFigmaMcp(deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter): Promise<DependencyReport> {
+    const detection = await inspectConfigForOptionalMcp(figmaMcpDefinition, deps, context, emitDebug)
+    const result: DependencyReport = {
+        ok: detection !== undefined,
+        optional: true,
+        status: detection ? "ok" : "missing",
+        url: figmaMcpDefinition.remoteUrl,
+        docs_url: figmaMcpDefinition.docsUrl,
+        guidance: detection ? "Figma MCP is configured." : figmaMcpDefinition.guidance,
+        notes: "Configuration detection does not verify connection, authentication, tools, or permissions.",
+        ...(detection ? { detection_source: detection.detectionSource, config_path: detection.configPath } : {}),
+    }
+    emitFinalDebugEvent(figmaMcpDefinition, result, emitDebug, detection ? "Detected from OpenCode config." : "No matching OpenCode config found.")
+    return result
+}
+
 async function inspectGitCli(deps: SandboxDependencies, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<DependencyReport> {
     const git = await inspectFirstAvailableCommand(["git"], deps, "git_cli", emitDebug, capabilities)
     const installCommand = "Install git using your system package manager."
@@ -901,11 +941,12 @@ async function inspectGitCli(deps: SandboxDependencies, emitDebug: DebugEmitter,
 }
 
 async function inspectOptionalDependencies(deps: SandboxDependencies, context: DependencyInspectionContext, emitDebug: DebugEmitter, capabilities: PlatformCapabilities): Promise<Record<string, DependencyReport>> {
-    const [chromeDevtoolsMcp, context7Mcp, excelMcp, websearchMcp, gitCli, browser] = await Promise.all([
+    const [chromeDevtoolsMcp, context7Mcp, excelMcp, websearchMcp, figmaMcp, gitCli, browser] = await Promise.all([
         safeInspectOptional("chrome-devtools MCP", "chrome_devtools_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[0], deps, context, emitDebug, capabilities), emitDebug),
         safeInspectOptional("Context7 MCP", "context7_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[1], deps, context, emitDebug, capabilities), emitDebug),
         safeInspectOptional("Excel MCP", "excel_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[2], deps, context, emitDebug, capabilities), emitDebug),
         safeInspectOptional("Websearch MCP", "websearch_mcp", () => inspectOptionalMcp(optionalMcpDefinitions[3], deps, context, emitDebug, capabilities), emitDebug),
+        safeInspectOptional("Figma MCP", "figma_mcp", () => inspectFigmaMcp(deps, context, emitDebug), emitDebug),
         safeInspectOptional("system git CLI", "git_cli", () => inspectGitCli(deps, emitDebug, capabilities), emitDebug),
         safeInspectOptional("browser availability", "browser", () => inspectBrowserAvailability(deps, emitDebug, capabilities), emitDebug),
     ])
@@ -915,6 +956,7 @@ async function inspectOptionalDependencies(deps: SandboxDependencies, context: D
         context7_mcp: context7Mcp,
         excel_mcp: excelMcp,
         websearch_mcp: websearchMcp,
+        figma_mcp: figmaMcp,
         git_cli: gitCli,
         browser,
     }

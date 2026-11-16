@@ -52,6 +52,7 @@ import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
 import { executeConfigPrompt } from "./prompts/execute_config";
 import { queryConfigPrompt } from "./prompts/query_config";
+import { queryFigmaPrompt } from "./prompts/query_figma";
 
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules | PermissionRule[]
@@ -408,6 +409,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-code": "allow",
                     "execute-os": "allow",
                     "query-code": "allow",
+                    "query-figma": "allow",
                     "query-git": "allow",
                     "query-text": "allow"
                 },
@@ -471,6 +473,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-code": "allow",
                     "execute-os": "allow",
                     "query-code": "allow",
+                    "query-figma": "allow",
                     "query-git": "allow",
                 },
             },
@@ -538,6 +541,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-os": "allow",
                     "query-browser": "allow",
                     "query-code": "allow",
+                    "query-figma": "allow",
                     "query-git": "allow",
                     "query-text": "allow",
                 },
@@ -1147,6 +1151,23 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 glob: "allow",
             },
             prompt: queryExcelPrompt,
+            temperature: 0.1,
+            tier: "context",
+        },
+       
+        "query-figma": {
+            description: "Use query-figma subagent to interact with Figma designs and projects.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "figma_export_*": "allow",
+                "figma_get_*": "allow",
+                "figma_list_*": "allow",
+                "figma_search_*": "allow",
+                figma_whoami: "allow",
+            },
+            prompt: queryFigmaPrompt,
             temperature: 0.1,
             tier: "context",
         },
