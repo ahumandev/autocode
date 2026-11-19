@@ -601,7 +601,7 @@ function parseGeneratedSkill(source: string, fallbackID: string): { id: string; 
     return { id, ...(description ? { description } : {}), content: match[2].trim() }
 }
 
-async function discoverGeneratedSkills(root: string): Promise<Array<{ id: string; name: string; description?: string; path: string; content: string }>> {
+export async function discoverGeneratedSkills(root: string, readSkill: (path: string) => Promise<string> = (path) => readFile(path, "utf8")): Promise<Array<{ id: string; name: string; description?: string; path: string; content: string }>> {
     const skills: Array<{ id: string; name: string; description?: string; path: string; content: string }> = []
     async function visit(directory: string): Promise<void> {
         let entries: Dirent[]
@@ -614,12 +614,20 @@ async function discoverGeneratedSkills(root: string): Promise<Array<{ id: string
         for (const entry of entries) {
             const entryPath = join(directory, entry.name)
             if (entry.isDirectory()) {
+                if (directory === root && /^\..+\.stage-/.test(entry.name)) continue
                 await visit(entryPath)
                 continue
             }
             if (!entry.isFile() || entry.name !== "SKILL.md") continue
             const fallbackID = entryPath.slice(root.length + 1, -"/SKILL.md".length).replaceAll("\\", "/")
-            const parsed = parseGeneratedSkill(await readFile(entryPath, "utf8"), fallbackID)
+            let source: string
+            try {
+                source = await readSkill(entryPath)
+            } catch (error) {
+                console.warn(`autocode: unable to read skill ${entryPath}: ${error instanceof Error ? error.message : String(error)}`)
+                continue
+            }
+            const parsed = parseGeneratedSkill(source, fallbackID)
             skills.push({
                 id: parsed.id,
                 name: parsed.id,

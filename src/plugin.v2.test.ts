@@ -1,5 +1,5 @@
 import { afterAll, expect, mock, test } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Agent, type Plugin } from "@opencode/plugin"
@@ -95,7 +95,7 @@ mock.module("./hooks/agent_restart_coordinator", () => ({
     },
 }))
 
-const { default: autocode } = await import("./plugin")
+const { default: autocode, discoverGeneratedSkills } = await import("./plugin")
 
 afterAll(() => {
     mock.restore()
@@ -165,6 +165,29 @@ test("V2 native depth config preserves user limits; runtime config patch cannot 
     }
     expect(() => Schema.decodeUnknownSync(V2Config.Info)({ experimental: { subagent_depth: 1.5 } })).toThrow()
     expect(Object.keys(V2Config.Patch.fields)).toEqual(["shell"])
+})
+
+test("generated skill discovery skips staging directories and unreadable files", async (): Promise<void> => {
+    const root = await mkdtemp(join(tmpdir(), "autocode-discovery-"))
+    try {
+        for (const directory of ["good", "unreadable", ".test-jest.stage-abc/test-jest"]) {
+            await mkdir(join(root, directory), { recursive: true })
+            await writeFile(join(root, directory, "SKILL.md"), `---\nname: ${directory}\n---\n\nContent.\n`)
+        }
+        const reads: string[] = []
+        const skills = await discoverGeneratedSkills(root, async (path): Promise<string> => {
+            reads.push(path)
+            if (path === join(root, "unreadable", "SKILL.md")) {
+                throw Object.assign(new Error("operation not permitted"), { code: "EPERM" })
+            }
+            return readFile(path, "utf8")
+        })
+        expect(skills.map((skill) => skill.id)).toEqual(["good"])
+        expect(reads).not.toContain(join(root, ".test-jest.stage-abc", "test-jest", "SKILL.md"))
+        expect(reads).toContain(join(root, "unreadable", "SKILL.md"))
+    } finally {
+        await rm(root, { recursive: true, force: true })
+    }
 })
 
 test.each(["linux", "win32"])("V2 setup honors native registration contracts and modeled host discovery without broadening permissions (%s)", async (platform): Promise<void> => {
