@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { applyExternalDirectoryPolicy, buildAgents, toV2Permissions } from "./agents"
 import { collectExternalDirectories, loadAutocodeConfig } from "./config"
 import type { ConfigFileSystem, ModelTier, TierConfig } from "./config"
 import { createPlatformCapabilities } from "./utils/platform"
+import { resolveMemoryDirectory, resolveMemoryIndexPath } from "./utils/memory_directory"
 import { resolveOpenCodePaths } from "./utils/paths"
 import { permissionEffect, type PermissionRule } from "./utils/permissions"
 
@@ -61,6 +61,106 @@ function getTaskPermissionRule(permission: unknown, key: string): unknown {
     const task = getPermissionRule(permission, Array.isArray(permission) ? "subagent" : "task")
     return typeof task === "object" && task !== null ? (task as Record<string, unknown>)[key] : undefined
 }
+
+describe("memory config", () => {
+    test("creates and advertises the default memory directory", async () => {
+        const files: Record<string, string> = {}
+        const createdPaths: string[] = []
+        const result = await loadAutocodeConfig("/wt", "/wt", makeFs(files, createdPaths))
+
+        expect(result.memory.directory).toBe(".opencode/autocode/memory")
+        expect(createdPaths).toEqual([globalAutocodeConfigPath()])
+        expect(JSON.parse(files[globalAutocodeConfigPath()]).autocode.memory.directory).toBe(".opencode/autocode/memory")
+    })
+
+    test("defaults memory when an existing global config omits it", async () => {
+        const content = JSON.stringify({ autocode: { skills: { freeze: false } } })
+        const files = { [globalAutocodeConfigPath()]: content }
+        const createdPaths: string[] = []
+        const result = await loadAutocodeConfig("/wt", "/wt", makeFs(files, createdPaths))
+
+        expect(result.memory.directory).toBe(".opencode/autocode/memory")
+        expect(createdPaths).toEqual([])
+        expect(files[globalAutocodeConfigPath()]).toBe(content)
+    })
+
+    test.each([".opencode/autocode/memory", ".opencode/memory"])("preserves and resolves explicitly configured memory directory %s", async (directory) => {
+        const content = JSON.stringify({ autocode: { skills: { freeze: false }, memory: { directory } } })
+        const files = { [globalAutocodeConfigPath()]: content }
+        const createdPaths: string[] = []
+
+        const result = await loadAutocodeConfig("/wt", "/wt", makeFs(files, createdPaths))
+
+        expect(result.memory.directory).toBe(directory)
+        expect(resolveMemoryDirectory("/project", result.memory.directory)).toBe(`/project/${directory}`)
+        expect(resolveMemoryIndexPath("/project", result.memory.directory)).toBe(`/project/${directory}/INDEX.md`)
+        const stored = JSON.parse(files[globalAutocodeConfigPath()])
+        expect(stored.autocode.memory.directory).toBe(directory)
+        expect(stored.autocode.skills.freeze).toBe(false)
+        expect(createdPaths).toEqual([])
+    })
+
+    test.each([".opencode/autocode/memory", ".opencode/memory"])("preserves memory directory %s during global config normalization", async (directory) => {
+        const root = mkdtempSync(join(tmpdir(), "autocode-memory-config-"))
+        const previousConfig = process.env.OPENCODE_CONFIG_DIR
+        const globalDirectory = join(root, "config")
+        const project = join(root, "project")
+        try {
+            mkdirSync(globalDirectory)
+            mkdirSync(project)
+            process.env.OPENCODE_CONFIG_DIR = globalDirectory
+            const configPath = join(globalDirectory, "autocode.jsonc")
+            writeFileSync(configPath, JSON.stringify({ autocode: { memory: { directory } } }))
+
+            const result = await loadAutocodeConfig(project, project)
+
+            const stored = JSON.parse(readFileSync(configPath, "utf8"))
+            expect(result.memory.directory).toBe(directory)
+            expect(stored.autocode.memory.directory).toBe(directory)
+            expect(stored.autocode.skills.freeze).toBe(false)
+        } finally {
+            if (previousConfig === undefined) delete process.env.OPENCODE_CONFIG_DIR
+            else process.env.OPENCODE_CONFIG_DIR = previousConfig
+            rmSync(root, { recursive: true, force: true })
+        }
+    })
+
+    test("applies global, worktree, and project memory precedence", async () => {
+        const worktree = resolve("/wt")
+        const project = resolve("/wt/packages/app")
+        const files: Record<string, string> = {
+            [globalAutocodeConfigPath()]: JSON.stringify({ autocode: { skills: {}, memory: { directory: "global" } } }),
+        }
+
+        expect((await loadAutocodeConfig(worktree, project, makeFs(files))).memory.directory).toBe("global")
+        files[localAutocodeConfigPath(worktree)] = JSON.stringify({ autocode: { memory: { directory: "worktree" } } })
+        expect((await loadAutocodeConfig(worktree, project, makeFs(files))).memory.directory).toBe("worktree")
+        files[localAutocodeConfigPath(project)] = JSON.stringify({ autocode: { memory: { directory: "project" } } })
+        expect((await loadAutocodeConfig(worktree, project, makeFs(files))).memory.directory).toBe("project")
+    })
+
+    test("preserves explicit memory paths without resolving or trimming them", async () => {
+        for (const directory of ["/shared/../memory", "../notes/./memory", "C:\\shared\\..\\memory", "\\\\server\\share\\memory", " notes "]) {
+            const fs = makeFs({
+                [globalAutocodeConfigPath()]: JSON.stringify({ autocode: { skills: {}, memory: { directory } } }),
+            })
+            expect((await loadAutocodeConfig("/wt", "/wt", fs)).memory.directory).toBe(directory)
+        }
+    })
+
+    test("ignores invalid later memory values without erasing earlier values", async () => {
+        const worktree = resolve("/wt")
+        const project = resolve("/wt/packages/app")
+        for (const memory of [undefined, null, false, [], {}, { directory: null }, { directory: 42 }, { directory: false }, { directory: [] }, { directory: "" }, { directory: " \t\n" }]) {
+            const fs = makeFs({
+                [globalAutocodeConfigPath()]: JSON.stringify({ autocode: { skills: {}, memory: { directory: "global/../memory" } } }),
+                [localAutocodeConfigPath(worktree)]: JSON.stringify({ autocode: { memory } }),
+                [localAutocodeConfigPath(project)]: JSON.stringify({ autocode: { memory } }),
+            })
+            expect((await loadAutocodeConfig(worktree, project, fs)).memory.directory).toBe("global/../memory")
+        }
+    })
+})
 
 describe("external directory config", () => {
     test("loadAutocodeConfig creates the missing global config file", async () => {
@@ -596,64 +696,6 @@ describe("agent workflow wiring", () => {
     })
 })
 
-describe("learned config", () => {
-    test("freshly created global config file contains skills.learned default max=10", async () => {
-        const files: Record<string, string> = {}
-        const createdPaths: string[] = []
-
-        await loadAutocodeConfig("/wt", "/wt", makeFs(files, createdPaths))
-
-        expect(createdPaths).toEqual([globalAutocodeConfigPath()])
-        const content = files[globalAutocodeConfigPath()]
-        expect(content).toContain('"learned"')
-        expect(content).toContain('"max": 10')
-    })
-
-    test("loadAutocodeConfig returns skills.learned.max from local config", async () => {
-        const fs = makeFs({
-            [localAutocodeConfigPath("/wt")]: JSON.stringify({
-                autocode: {
-                    skills: { learned: { max: 3 } },
-                },
-            }),
-        })
-
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
-
-        expect(result.skills?.learned).toEqual({ max: 3 })
-    })
-
-    test("loadAutocodeConfig falls back to default max=10 when max is invalid", async () => {
-        for (const invalid of ["oops", 0, -2, 2.5, null]) {
-            const fs = makeFs({
-                [localAutocodeConfigPath("/wt")]: JSON.stringify({
-                    autocode: {
-                        skills: { learned: { max: invalid } },
-                    },
-                }),
-            })
-
-            const result = await loadAutocodeConfig("/wt", "/wt", fs)
-
-            expect(result.skills?.learned).toEqual({ max: 10 })
-        }
-    })
-
-    test("loadAutocodeConfig defaults skills.learned when absent from local config", async () => {
-        const fs = makeFs({
-            [localAutocodeConfigPath("/wt")]: JSON.stringify({
-                autocode: {
-                    sandbox: { sync_method: "copy" },
-                },
-            }),
-        })
-
-        const result = await loadAutocodeConfig("/wt", "/wt", fs)
-
-        expect(result.skills?.learned).toEqual({ max: 10 })
-    })
-})
-
 describe("model tier config", () => {
     test("loadAutocodeConfig accepts directly configured spy tier", async () => {
         const result = await loadAutocodeConfig("/wt", "/wt", makeFs({
@@ -1006,7 +1048,7 @@ describe("credential config policy", () => {
                         credentials: { provider },
                         autocode: {
                             sandbox: { sync_method: "copy", distro: { cache_path: "/global/cache", expire: "never" } },
-                            skills: { freeze: true, learned: { max: 4 } },
+                            skills: { freeze: true },
                             ...autocode,
                         },
                         permissions: [{ action: "external_directory", resource: "/global/*", effect: "deny" }],
@@ -1015,7 +1057,7 @@ describe("credential config policy", () => {
                         autocode: {
                             tiers: { cheap: { variant: "project" } },
                             sandbox: { sync_method: "reflink" },
-                            skills: { learned: { max: 2 } },
+                            skills: {},
                         },
                         permissions: [{ action: "external_directory", resource: "/project/*", effect: "ask" }],
                     }),
@@ -1026,7 +1068,7 @@ describe("credential config policy", () => {
                 expect(result.credentials).toEqual({ provider })
                 expect(result.tiers).toEqual({ cheap: { model: "opencode/cheap", variant: "project" }, ...expectedTiers })
                 expect(result.sandbox).toEqual({ sync_method: "reflink", distro_cache_path: "/global/cache", distro_expire: "never" })
-                expect(result.skills).toEqual({ freeze: true, learned: { max: 2 } })
+                expect(result.skills).toEqual({ freeze: true })
                 expect(result.externalDirectories).toEqual({ "/opencode/*": "allow", "/global/*": "deny", "/project/*": "ask" })
             }
         })

@@ -6,7 +6,7 @@ import { normalizeContentBlock, normalizeHeadingText, serializeTree } from "./md
 import { validateMdPath } from "./md/validate"
 import { createErrorResponse } from "@/utils/tools"
 
-export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
+export function createAutocodeMdH1Tool(memoryDirectory?: string): ReturnType<typeof tool> {
     return tool({
         description: `Set Markdown title in md file: article title (H1 heading), preamble (text before H1), intro content (text directly after H1). If missing H1 section: creates new. If multiple H1 sections: update first H1 section. Subsections are preserved. Frontmatter untouched.`,
         args: {
@@ -17,7 +17,7 @@ export function createAutocodeMdH1Tool(): ReturnType<typeof tool> {
         },
         execute: async (args, context) => {
             try {
-                const validation = await validateMdPath(context, args.file_path, "autocode_md_h1")
+                const validation = await validateMdPath(context, args.file_path, "autocode_md_h1", { memory: { directory: memoryDirectory } })
                 if (!validation.ok) return validation.response
                 const filePath = validation.value
                 let raw: string

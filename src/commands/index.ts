@@ -4,7 +4,7 @@ import type { PlatformCapabilities } from "../utils/platform"
 import { authorArticleCommandTemplate } from "./author-article"
 import { createInstallCommand } from "./install"
 import { docsCommandTemplate } from "./docs"
-import { docsSubagentCommandTemplate } from "./docs-subagent"
+import { docsSubagentCommandTemplate as learnCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { gitConflictCommandTemplate } from "./git-conflict"
 import { jobConceptsCommandTemplate } from "./job-concepts"
@@ -48,15 +48,15 @@ Report to user:
 ` },
         "author": { agent: "execute-author", description: "✍️ Author a professional article/report.", subtask: false, template: authorArticleCommandTemplate },
         "docs": { agent: "execute-document", description: "📖 Document recent changes or project.", subtask: false, template: docsCommandTemplate },
-        "docs-conventions": { agent: "document-conventions", description: "📖 Document recently updated naming conventions and terminology.", subtask: false, template: docsSubagentCommandTemplate },
-        "docs-code": { agent: "document-code", description: "🏗️ Document recently updated technical architecture and design decisions.", subtask: false, template: docsSubagentCommandTemplate },
-        "docs-env": { agent: "document-env", description: "🌐 Document external integrations in local development environment.", subtask: false, template: docsSubagentCommandTemplate },
-        "docs-prd": { agent: "document-prd", description: "📋 Document recently updated product requirements and user roles.", subtask: false, template: docsSubagentCommandTemplate },
-        "docs-ux": { agent: "document-ux", description: "🎨 Document recently updated UX flows, navigation, and styling patterns.", subtask: false, template: docsSubagentCommandTemplate },
         "explain": { agent: "query-code", description: "🔍 Explain code or project context", subtask: false, template: explainCommandTemplate },
         "git-conflict": { agent: "assist-git-conflict", description: "⚔️ Automatically handle git merge conflicts.", subtask: false, template: gitConflictCommandTemplate },
         "init": { agent: "execute-document", description: "📖 Document recent changes or project.", subtask: false, template: docsCommandTemplate },
-        // "learn": learnCommand,
+        "learn": { ...learnCommand, agent: "learn-memory" },
+        "learn-conventions": { agent: "learn-memory", description: "📖 Maintain project naming conventions and terminology in memory.", subtask: false, template: learnCommandTemplate("naming conventions, acronyms, and terms") },
+        "learn-code": { agent: "learn-memory", description: "🏗️ Maintain project technical knowledge in memory.", subtask: false, template: learnCommandTemplate("architecture, technology, models, APIs, errors, security, integrations, and risks") },
+        "learn-env": { agent: "learn-memory", description: "🌐 Maintain project and environment context in memory.", subtask: false, template: learnCommandTemplate("known project and environment context") },
+        "learn-prd": { agent: "learn-memory", description: "📋 Maintain product requirements and user roles in memory.", subtask: false, template: learnCommandTemplate("product requirements, roles, constraints, and success criteria") },
+        "learn-ux": { agent: "learn-memory", description: "🎨 Maintain project UX knowledge in memory.", subtask: false, template: learnCommandTemplate("UX flows, navigation, styling, and interactions") },
         "repeat-as-md": { description: "🔁 Repeat the last response inside a fenced Markdown code block.", subtask: false, template: repeatAsMdCommandTemplate },
         "repeat-as-wiki": { description: "🔁 Repeat last response in Atlassian Wiki Markup", subtask: false, template: repeatAsWikiCommandTemplate },
         "report": { description: "📊 Summarize session as report.", subtask: false, template: reportCommandTemplate },

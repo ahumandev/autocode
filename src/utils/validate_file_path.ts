@@ -3,6 +3,7 @@ import { isAbsolute, relative } from "node:path"
 import type { ToolContext } from "@opencode-ai/plugin"
 import { createRetryResponse } from "./tools"
 import { authorizeExternalContentPath } from "./external_directory"
+import { canonicalizeExistingOrMissingPath, classifyMemoryPath, isPathWithin } from "./memory_access"
 import { resolveFilePath } from "./resolve_file_path"
 
 /**
@@ -24,6 +25,7 @@ export type ValidateFilePathOptions = {
     failedAction: string
     context?: ToolContext
     existence?: ExistencePolicy
+    memory?: { directory?: string }
     /**
      * When true, reject paths outside cwd with a "must stay inside cwd" error
      * if no context is provided. When false (default), paths outside cwd
@@ -42,6 +44,7 @@ export async function validateFilePath(
         failedAction,
         context,
         existence = "off",
+        memory,
         requireContextForExternalPaths = false,
     } = options
 
@@ -59,18 +62,40 @@ export async function validateFilePath(
         { searchSubdirs: options.existence !== "off" },
     )
 
+    const memoryAccess = memory && context?.directory
+        ? await classifyMemoryPath(context.directory, memory.directory, absolutePath)
+        : "outside"
+    const denyMemoryPath = (): FilePathValidationResult => ({ ok: false, response: createRetryResponse(failedAction, `Path '${absolutePath}' is not allowed by memory directory policy.`, "Provide a path within the configured memory directory that does not escape it.") })
+    if (memoryAccess === "denied") {
+        if (!context || context.agent === "query-memory" || context.agent === "learn-memory") {
+            return denyMemoryPath()
+        }
+        let canonicalProject: string
+        let canonicalTarget: string
+        try {
+            canonicalProject = await canonicalizeExistingOrMissingPath(context.directory)
+            canonicalTarget = await canonicalizeExistingOrMissingPath(absolutePath)
+        } catch {
+            return denyMemoryPath()
+        }
+        if (!isPathWithin(canonicalProject, canonicalTarget)) {
+            const auth = await authorizeExternalContentPath(context, canonicalTarget, failedAction)
+            if (!auth.ok) return denyMemoryPath()
+        }
+    }
+
     const cwd = options.context?.directory ?? process.cwd()
     const rel = relative(cwd, absolutePath)
     const isInsideCwd = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel)
 
-    if (!isInsideCwd) {
+    if (memoryAccess !== "allowed" && !isInsideCwd) {
         if (!context) {
             if (requireContextForExternalPaths) {
                 return { ok: false, response: createRetryResponse(failedAction, new Error("path must stay inside the current working directory."), "Provide a relative path within the current working directory.") }
             }
         } else {
             const auth = await authorizeExternalContentPath(context, absolutePath, failedAction)
-            if (!auth.ok) return auth
+            if (!auth.ok) return memoryAccess === "denied" ? denyMemoryPath() : auth
         }
     }
 

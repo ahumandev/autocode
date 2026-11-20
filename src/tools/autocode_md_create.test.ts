@@ -133,6 +133,25 @@ describe("autocode_md_create", () => {
         expect(f).not.toMatch(/^# /m)
     })
 
+    test("query-memory cannot create a section in configured memory", async () => {
+        const p = join(dir, "INDEX.md")
+        expect(existsSync(p)).toBe(false)
+        const context = createToolContext({ directory: dir, worktree: dir, agent: "query-memory" })
+        const result = await createAutocodeMdCreateTool(dir).execute({ file_path: p, heading: "Denied", content: "new" } as never, context)
+        const response = JSON.parse(typeof result === "string" ? result : result.output)
+        expect(response.failedAction).toBeDefined()
+        expect(existsSync(p)).toBe(false)
+    })
+
+    test("learn-memory bootstraps the default index", async () => {
+        const p = join(dir, ".opencode", "autocode", "memory", "INDEX.md")
+        const context = createToolContext({ directory: dir, worktree: dir, agent: "learn-memory" })
+        const result = await tool.execute({ file_path: p, heading: "First", content: "Useful memory" } as never, context)
+        const response = JSON.parse(typeof result === "string" ? result : result.output)
+        expect(response.file_path).toBe(p)
+        expect(readFileSync(p, "utf8")).toContain("Useful memory")
+    })
+
     test("content omitted produces empty body section", async () => {
         const p = write("no-content.md", ["# Article", "intro", "", "## Existing", "body"])
         await call(p, { heading: "Stub" })

@@ -38,6 +38,13 @@ describe("autocode_md_read", () => {
     }
     const read = (glob: string, args: Record<string, unknown> = {}) =>
         tool.execute({ file_path_glob: glob, ...args } as never, createToolContext({ directory: dir })).then((s) => JSON.parse(s as string))
+    const readExternal = (glob: string, args: Record<string, unknown> = {}) =>
+        tool.execute({ file_path_glob: glob, ...args } as never, Object.assign(createToolContext({ directory: dir }), {
+            externalDirectoryPermissions: [
+                { action: "external_directory", resource: externalDir, effect: "allow" },
+                { action: "external_directory", resource: `${externalDir}/*`, effect: "allow" },
+            ] as const,
+        })).then((s) => JSON.parse(s as string))
 
     test("glob *.md returns file_paths with heading/anchor/line entries; counts correct (multiple -> outline only)", async () => {
         write("doc.md", [
@@ -138,27 +145,27 @@ describe("autocode_md_read", () => {
 
     test("absolute heading file returns outline", async () => {
         const path = writeExternal("absolute-heading.md", ["# Heading"])
-        const out = await read(path, { max_content_chars: 0, max_anchors: 100 })
+        const out = await readExternal(path, { max_content_chars: 0, max_anchors: 100 })
         expect(out.file_paths[path]).toEqual([{ anchor: "heading", line_of_heading: 1, line_count: 1, index: 0 }])
     })
 
     test("absolute headingless file returns empty outline", async () => {
         const path = writeExternal("absolute-headingless.md", "plain text")
-        const out = await read(path, { max_content_chars: 0, max_anchors: 100 })
+        const out = await readExternal(path, { max_content_chars: 0, max_anchors: 100 })
         expect(out.file_paths[path]).toEqual([])
     })
 
     test("absolute glob retains heading and headingless files in outline", async () => {
         const headingPath = writeExternal("absolute-mixed-heading.md", ["# Heading"])
         const headinglessPath = writeExternal("absolute-mixed-headingless.md", "plain text")
-        const out = await read(join(externalDir, "absolute-mixed-*.md"), { max_content_chars: 0, max_anchors: 100 })
+        const out = await readExternal(join(externalDir, "absolute-mixed-*.md"), { max_content_chars: 0, max_anchors: 100 })
         expect(out.file_paths[headingPath]).toEqual([{ anchor: "heading", line_of_heading: 1, line_count: 1, index: 0 }])
         expect(out.file_paths[headinglessPath]).toEqual([])
     })
 
     test("missing absolute path returns retry error", async () => {
         const path = join(externalDir, "missing.md")
-        const out = await read(path, { max_content_chars: 0, max_anchors: 100 })
+        const out = await readExternal(path, { max_content_chars: 0, max_anchors: 100 })
         expect(out.failedAction).toBe("Read md section")
         expect(out.error).toBe(`no files matched glob: ${path}`)
         expect(out.file_paths).toBeUndefined()
@@ -166,7 +173,7 @@ describe("autocode_md_read", () => {
 
     test("headingless absolute file with anchor_regex returns retry error", async () => {
         const path = writeExternal("absolute-headingless-anchor.md", "plain text")
-        const out = await read(path, { anchor_regex: "text", max_content_chars: 0, max_anchors: 100 })
+        const out = await readExternal(path, { anchor_regex: "text", max_content_chars: 0, max_anchors: 100 })
         expect(out.failedAction).toBe("Read md section")
         expect(out.error).toBe(`no readable md files/sections for glob: ${path}`)
         expect(out.file_paths).toBeUndefined()
@@ -174,7 +181,7 @@ describe("autocode_md_read", () => {
 
     test("headingless absolute file with content_regex returns retry error", async () => {
         const path = writeExternal("absolute-headingless-content.md", "plain text")
-        const out = await read(path, { content_regex: "text", max_content_chars: 0, max_anchors: 100 })
+        const out = await readExternal(path, { content_regex: "text", max_content_chars: 0, max_anchors: 100 })
         expect(out.failedAction).toBe("Read md section")
         expect(out.error).toBe(`no readable md files/sections for glob: ${path}`)
         expect(out.file_paths).toBeUndefined()

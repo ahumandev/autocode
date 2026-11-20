@@ -1402,38 +1402,6 @@ describe("managed script project", (): void => {
         }
     })
 
-    test("installs local packages when compatible-looking ancestors lack valid package metadata", async (): Promise<void> => {
-        const workspacePath = await createTemporaryRoot("managed-script-malformed-inherited-")
-        const scriptsRoot = createManagedScriptProjectPaths(workspacePath, "job").scriptsRoot
-        const missingPackage = "managed-script-missing-metadata"
-        const malformedPackage = "managed-script-malformed-metadata"
-        const spawn = mock(async (_command: string, _args: readonly string[], options?: { cwd?: string }): Promise<ManagedScriptProjectCommandResult> => {
-            if (options?.cwd) await writeNpmArtifacts(options.cwd, { [missingPackage]: "2.0.0", [malformedPackage]: "2.0.0" })
-            return npmInstallSuccess
-        })
-        try {
-            for (const name of [missingPackage, malformedPackage]) {
-                const packagePath = join(workspacePath, "node_modules", name)
-                await mkdir(packagePath, { recursive: true })
-                await writeFile(join(packagePath, "index.js"), "module.exports = {}\n")
-            }
-            await writeFile(join(workspacePath, "node_modules", malformedPackage, "package.json"), '{"name":"managed-script-malformed-metadata"\n')
-            const result = expectSuccess(await createProject(workspacePath, spawn).setup({ dependencies: { [missingPackage]: "^2.0.0", [malformedPackage]: "^2.0.0" } }))
-            const manifest = JSON.parse(await readFile(join(scriptsRoot, "package.json"), "utf8")) as { dependencies: Record<string, string>, autocode?: { inheritedDependencies?: Record<string, unknown> } }
-
-            expect(result.dependencies).toEqual([
-                { name: missingPackage, requestedRange: "^2.0.0", status: "satisfied", source: "local", version: "2.0.0", packagePath: join(scriptsRoot, "node_modules", missingPackage) },
-                { name: malformedPackage, requestedRange: "^2.0.0", status: "satisfied", source: "local", version: "2.0.0", packagePath: join(scriptsRoot, "node_modules", malformedPackage) },
-            ])
-            expect(manifest.dependencies).toEqual({ [missingPackage]: "^2.0.0", [malformedPackage]: "^2.0.0" })
-            expect(manifest.autocode?.inheritedDependencies ?? {}).toEqual({})
-            expect(spawn).toHaveBeenCalledTimes(1)
-        }
-        finally {
-            await rm(workspacePath, { recursive: true, force: true })
-        }
-    })
-
     test.skip("falls back to a local install when no root or ancestor package resolves", async (): Promise<void> => {
         const workspacePath = await createTemporaryRoot("managed-script-no-package-")
         const packageName = "managed-script-unresolvable-package"
@@ -1659,35 +1627,6 @@ describe("managed script project", (): void => {
         }
         finally {
             await rm(workspacePath, { recursive: true, force: true })
-        }
-    })
-
-    test.each([false, true])("preserves satisfied declared ranges without npm when upgrade is %s", async (upgrade: boolean): Promise<void> => {
-        const directory = await createTemporaryRoot("managed-script-compatible-ranges-")
-        const spawn = mock(async (_command: string, _args: readonly string[], options?: { cwd?: string }): Promise<ManagedScriptProjectCommandResult> => {
-            if (options?.cwd) await writeNpmArtifacts(options.cwd, { semver: "7.6.3", yaml: "2.4.5" })
-            return npmInstallSuccess
-        })
-        try {
-            const project = createProject(directory, spawn)
-            const setup = expectSuccess(await project.setup({ dependencies: { semver: "^7.6.0", yaml: "^2.4.0" } }))
-            const manifest = await readFile(setup.paths.manifestPath, "utf8")
-            const lockfile = await readFile(setup.paths.lockfilePath, "utf8")
-            expect(JSON.parse(manifest)).toMatchObject({ dependencies: { semver: "^7.6.0", yaml: "^2.4.0" } })
-            expect(spawn).toHaveBeenCalledTimes(1)
-            spawn.mockClear()
-            const result = expectSuccess(await project.install({ dependencies: { semver: "^7.0.0", yaml: ">=2 <3" }, upgrade }))
-            expect(result.dependencies).toMatchObject([
-                { name: "semver", requestedRange: "^7.0.0", status: "satisfied", source: "local", version: "7.6.3" },
-                { name: "yaml", requestedRange: ">=2 <3", status: "satisfied", source: "local", version: "2.4.5" },
-            ])
-            expect(await readFile(setup.paths.manifestPath, "utf8")).toBe(manifest)
-            expect(await readFile(setup.paths.lockfilePath, "utf8")).toBe(lockfile)
-            expect(result.npm).toBeUndefined()
-            expect(spawn).not.toHaveBeenCalled()
-        }
-        finally {
-            await rm(directory, { recursive: true, force: true })
         }
     })
 

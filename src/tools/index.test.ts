@@ -243,10 +243,9 @@ describe("auto resume wiring", () => {
         const sandboxGrep = tools.autocode_sandbox_grep as unknown as { description: string, args: Record<string, unknown> }
         const sandboxRead = tools.autocode_sandbox_read as unknown as { description: string, args: Record<string, unknown> }
         const sandboxCopy = tools.autocode_sandbox_copy as unknown as { description: string, args: Record<string, unknown> }
-        const learn = tools.learn as unknown as { description: string, args: Record<string, unknown> }
         const skill = tools.skill as unknown as { description: string, args: Record<string, unknown> }
 
-        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_create", "autocode_md_h1", "autocode_md_read", "autocode_md_remove", "autocode_md_update", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "learn", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(["autocode_dependencies", "autocode_kill", "autocode_rest", "autocode_config_read", "autocode_config_edit",             "autocode_config_remove", "autocode_md_create", "autocode_md_h1", "autocode_md_read", "autocode_md_remove", "autocode_md_update", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit", "autocode_ssh_config_read", "autocode_ssh_config_edit", "autocode_ssh_config_remove", "autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "skill", "git_status", "git_diff_unstaged", "git_diff_staged", "git_diff", "git_log", "git_show", "git_add", "git_commit", "git_reset", "git_create_branch", "git_checkout", "git_branch"]))
         expect(tools.skill).toBeDefined()
         expect(Object.keys((tools.autocode_dependencies as unknown as { args: Record<string, unknown> }).args)).toEqual([])
         expect(Object.keys(tools)).not.toContain("autocode_sandbox_list")
@@ -272,7 +271,6 @@ describe("auto resume wiring", () => {
         expect(sandboxRead.description).toContain("Read")
         expect(sandboxCopy.description).toContain("Copy")
         expect(Object.keys(tools)).not.toContain("skill_learn")
-        expect(Object.keys(learn.args)).toEqual(["memory", "id_keyword", "alias_keywords", "context_keywords", "positive_example", "negative_example", "references"])
         expect(skill.description).toContain("skill")
         expect(Object.keys(skill.args)).toEqual(["name", "reference"])
         expect(Object.keys(skill.args)).not.toContain("subjects")
@@ -334,28 +332,11 @@ describe("auto resume wiring", () => {
         ])
     })
 
-    test("registers callable manual memory tools with one required string input", () => {
+    test("omits legacy memory tools from the registry", () => {
         const tools = createTools(createMockClient())
-        const memoryTools = [
-            ["autocode_memory_recall", "keywords"],
-            ["autocode_memory_forget", "id_keyword"],
-        ] as const
-
-        for (const [toolName, fieldName] of memoryTools) {
-            const memoryTool = tools[toolName] as unknown as {
-                args: Record<string, { safeParse(input: unknown): { success: boolean } }>
-                execute: unknown
-            }
-            const field = memoryTool.args[fieldName]
-
-            expect(memoryTool).toBeDefined()
-            expect(typeof memoryTool.execute).toBe("function")
-            expect(Object.keys(memoryTool.args)).toEqual([fieldName])
-            expect(field?.safeParse("memory").success).toBe(true)
-            expect(field?.safeParse(undefined).success).toBe(false)
-            expect(field?.safeParse(1).success).toBe(false)
-        }
-        expect(typeof (tools.learn as unknown as { execute: unknown }).execute).toBe("function")
+        for (const name of ["learn", "autocode_memory_recall", "autocode_memory_forget"]) expect(tools).not.toHaveProperty(name)
+        expect(tools.skill).toBeDefined()
+        expect(tools.autocode_rest).toBeDefined()
     })
 
     test("createTools registers exact YouTube transcription tool name", () => {
@@ -808,8 +789,7 @@ describe("tool registrations", () => {
             const plugin = await autocode.server(createPluginInput(client))
             const cfg = createConfig()
             await configurePlugin(plugin, cfg)
-            const manualMemoryToolKeys: readonly string[] = ["autocode_memory_forget", "autocode_memory_recall"]
-            expect(Object.keys(plugin.tool ?? {}).filter((toolName: string): boolean => !manualMemoryToolKeys.includes(toolName)).sort()).toEqual([
+            expect(Object.keys(plugin.tool ?? {}).sort()).toEqual([
                 "autocode_concept_create",
                 "autocode_concept_list",
                 "autocode_concept_read",
@@ -851,7 +831,6 @@ describe("tool registrations", () => {
                 "autocode_script_service",
                 "autocode_session_create",
                 "autocode_youtube_transcribe",
-                "skill_edit",
                 "autocode_ssh_command",
                 "autocode_ssh_config_read",
                 "autocode_ssh_config_edit",
@@ -865,7 +844,6 @@ describe("tool registrations", () => {
                 "autocode_ssh_read_file",
                 "autocode_ssh_write_attributes",
                 "autocode_ssh_write_file",
-                "learn",
                 "skill_read",
                 "git_add",
                 "git_branch",
@@ -881,7 +859,8 @@ describe("tool registrations", () => {
                 "git_status",
                 "skill",
             ].sort())
-            expect(Object.keys(plugin.tool ?? {}).filter((toolName: string): boolean => toolName.startsWith("autocode_memory_")).sort()).toEqual([...manualMemoryToolKeys])
+            expect(plugin.tool).not.toHaveProperty("skill_edit")
+            for (const name of ["learn", "autocode_memory_recall", "autocode_memory_forget"]) expect(plugin.tool).not.toHaveProperty(name)
             expect(plugin.tool?.autocode_draft_job_create).toBeUndefined()
             expect(plugin.tool?.autocode_draft_job_update).toBeUndefined()
             expect(plugin.tool?.autocode_job_draft).toBeUndefined()
@@ -897,7 +876,6 @@ describe("tool registrations", () => {
             expect(plugin.tool?.autocode_act).toBeUndefined()
             expect(plugin.tool?.autocode_agent_execute).toBeUndefined()
             expect(plugin.tool?.autocode_session_create).toBeDefined()
-            expect(plugin.tool?.learn).toBeDefined()
             expect(plugin.tool?.skill_learn).toBeUndefined()
             expect(plugin.tool?.skill).toBeDefined()
             expect(toolSurfaceText(plugin.tool?.skill)).toContain("skill")
@@ -1114,7 +1092,8 @@ function makeFs(files: Record<string, string>): ConfigFileSystem {
 }
 
 function globalAutocodeConfigPath() {
-    return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode", "autocode.jsonc")
+    const configRoot = process.env.OPENCODE_CONFIG_DIR || join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode")
+    return join(configRoot, "autocode.jsonc")
 }
 
 describe("loadAutocodeConfig", () => {
@@ -1143,9 +1122,11 @@ describe("loadAutocodeConfig", () => {
 
     test("global config respects XDG_CONFIG_HOME", async () => {
         const oldXdgConfigHome = process.env.XDG_CONFIG_HOME
+        const oldOpenCodeConfigDir = process.env.OPENCODE_CONFIG_DIR
         const xdgConfigHome = resolve("/xdg-config")
-        process.env.XDG_CONFIG_HOME = xdgConfigHome
         try {
+            process.env.XDG_CONFIG_HOME = xdgConfigHome
+            delete process.env.OPENCODE_CONFIG_DIR
             const fs = makeFs({
                 [join(xdgConfigHome, "opencode", "autocode.jsonc")]: JSON.stringify({
                     autocode: { tiers: { fast: { model: "xdg-fast" } } },
@@ -1157,6 +1138,8 @@ describe("loadAutocodeConfig", () => {
         } finally {
             if (oldXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME
             else process.env.XDG_CONFIG_HOME = oldXdgConfigHome
+            if (oldOpenCodeConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
+            else process.env.OPENCODE_CONFIG_DIR = oldOpenCodeConfigDir
         }
     })
 

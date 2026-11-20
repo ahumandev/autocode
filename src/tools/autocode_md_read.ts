@@ -1,13 +1,16 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFileSync } from "node:fs"
-import { expandGlob } from "@/utils/glob"
+import path from "node:path"
+import { expandAuthorizedMarkdownGlob } from "./md/guarded_glob"
 import { ownText, parseMarkdown } from "./md/markdown"
+import { canonicalizeExistingOrMissingPath, isPathWithin } from "@/utils/memory_access"
+import { resolveMemoryIndexPath } from "@/utils/memory_directory"
 import { createRetryResponse } from "@/utils/tools"
 
 const DEFAULT_MAX_ANCHORS = 40
 const DEFAULT_MAX_CONTENT_CHARS = 0
 
-export function createAutocodeMdReadTool(): ReturnType<typeof tool> {
+export function createAutocodeMdReadTool(memoryDirectory?: string): ReturnType<typeof tool> {
     return tool({
         description: `Grep find content in md files or read markdown files by glob search pattern.
         
@@ -82,10 +85,41 @@ Example:
             if (!context.directory) {
                 throw new Error("autocode_md_read: context.directory (project directory) is required but was not provided by host")
             }
-            const cwd = context.directory
-            const matches = await expandGlob(String(args.file_path_glob), cwd, { dot: true })
+            const indexPath = resolveMemoryIndexPath(context.directory, memoryDirectory)
+            const inputPath = path.resolve(context.directory, args.file_path_glob)
+            const isIndexRequest = (context.agent === "query-memory" || context.agent === "learn-memory")
+                && isPathWithin(indexPath, inputPath) && isPathWithin(inputPath, indexPath)
+                && lineStart === 1 && lineEnd === Number.MAX_SAFE_INTEGER
+                && (args.max_anchors ?? DEFAULT_MAX_ANCHORS) === DEFAULT_MAX_ANCHORS
+                && (args.max_content_chars ?? DEFAULT_MAX_CONTENT_CHARS) === DEFAULT_MAX_CONTENT_CHARS
+                && args.anchor_regex === undefined && args.content_regex === undefined
+            let result: Awaited<ReturnType<typeof expandAuthorizedMarkdownGlob>>
+            try {
+                result = await expandAuthorizedMarkdownGlob(args.file_path_glob, context, "Read md section", memoryDirectory)
+            } catch (error) {
+                if (!isIndexRequest) throw error
+                return createRetryResponse("Read memory index", error, "Check the index path and access permissions.")
+            }
+            if (!result.ok) return result.response
+            const matches = result.matches
             if (matches.length === 0) {
                 return createRetryResponse("Read md section", new Error(`no files matched glob: ${args.file_path_glob}`), "Check the glob pattern and path.")
+            }
+
+            if (isIndexRequest) {
+                if (matches.length !== 1) {
+                    return createRetryResponse("Read memory index", new Error(`expected one index match, got ${matches.length}`), "Check the configured index path and glob pattern.")
+                }
+                try {
+                    const canonicalIndex = await canonicalizeExistingOrMissingPath(indexPath)
+                    const canonicalMatch = await canonicalizeExistingOrMissingPath(matches[0].absolute)
+                    if (!isPathWithin(canonicalIndex, canonicalMatch) || !isPathWithin(canonicalMatch, canonicalIndex)) {
+                        return createRetryResponse("Read memory index", new Error("Glob match does not resolve to the configured index."), "Check the configured index path and glob pattern.")
+                    }
+                    return JSON.stringify({ content: readFileSync(matches[0].absolute, "utf8") })
+                } catch (error) {
+                    return createRetryResponse("Read memory index", error, "Check the index path and access permissions.")
+                }
             }
 
             const maxKeys = args.max_anchors ?? DEFAULT_MAX_ANCHORS

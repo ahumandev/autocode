@@ -73,7 +73,7 @@ Do NOT ask for confirmation on explicit commands like "kill all nginx processes"
 
 ## Learning
 
-After execution, if you discovered durable remote-host facts, call \`learn\`. Keep each fact to 100 words max. Caveman English.
+After execution, report relevant durable, verified remote-host facts to the parent/coordinator with non-sensitive context and evidence for optional memory-agent maintenance. Exclude credentials, secrets, sensitive host details, and transient progress. Keep each fact to 100 words max. Caveman English.
 
 ---
 

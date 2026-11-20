@@ -6,7 +6,7 @@ import { serializeTree } from "./md/transform"
 import { validateMdPath } from "./md/validate"
 import { createErrorResponse } from "@/utils/tools"
 
-export function createAutocodeMdRemoveTool(): ReturnType<typeof tool> {
+export function createAutocodeMdRemoveTool(memoryDirectory?: string): ReturnType<typeof tool> {
     return tool({
         description: `Remove markdown section together with its entire subtree.
         
@@ -17,7 +17,7 @@ Unsure about file_path or anchors? Call autocode_md_read first to read outline.`
         },
         execute: async (args, context) => {
             try {
-                const validation = await validateMdPath(context, args.file_path, "autocode_md_remove", { requireExistence: true })
+                const validation = await validateMdPath(context, args.file_path, "autocode_md_remove", { requireExistence: true, memory: { directory: memoryDirectory } })
                 if (!validation.ok) return validation.response
                 const filePath = validation.value
                 const raw = readFileSync(filePath, "utf8")

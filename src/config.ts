@@ -6,6 +6,7 @@ import { resolveOpenCodePaths } from "./utils/paths"
 import { createJsoncDocumentEditor } from "./tools/config/json"
 import type { PermissionRule } from "./utils/permissions"
 import { CREDENTIAL_PROVIDER_POLICIES, isCredentialProviderPolicy, type CredentialPolicy } from "./credentials/types"
+import { DEFAULT_MEMORY_DIRECTORY } from "./utils/memory_directory"
 
 const MODEL_TIERS = ["cheap", "fast", "operator", "context", "balanced", "smart", "spy"] as const
 const PERMISSION_ACTIONS = ["ask", "allow", "deny"] as const
@@ -23,12 +24,11 @@ export type AutocodeSandboxConfig = {
     distro_cache_path?: string
     distro_expire?: string | number
 }
+export type AutocodeMemoryConfig = { directory: string }
 
 export type SkillCategory = "bash" | "code" | "design" | "test"
-export type LearnedConfig = { max?: number }
-export type SkillsConfig = Partial<Record<SkillCategory, string[]>> & { freeze?: boolean, learned?: LearnedConfig }
-const DEFAULT_LEARNED_MAX = 10
-const DEFAULT_SKILLS: SkillsConfig = { ...defaultAutocodeConfig.autocode.skills, learned: { max: DEFAULT_LEARNED_MAX } }
+export type SkillsConfig = Partial<Record<SkillCategory, string[]>> & { freeze?: boolean }
+const DEFAULT_SKILLS: SkillsConfig = { ...defaultAutocodeConfig.autocode.skills }
 
 export interface ConfigFileSystem {
     readFileSync(path: string, encoding: "utf-8"): string
@@ -67,6 +67,7 @@ type AutocodeJsoncNew = {
         tiers?: Record<string, unknown>
         sandbox?: unknown
         skills?: unknown
+        memory?: unknown
     }
     credentials?: unknown
     permissions?: unknown
@@ -87,6 +88,7 @@ type ParsedAutocodeConfig = {
     externalDirectoryPermissions?: PermissionRule[]
     sandbox?: AutocodeSandboxConfig
     skills?: SkillsConfig
+    memory?: AutocodeMemoryConfig
     credentials?: CredentialPolicy
 }
 
@@ -177,6 +179,11 @@ function collectSandboxConfig(value: unknown): AutocodeSandboxConfig | undefined
     return Object.keys(result).length > 0 ? result : undefined
 }
 
+function collectMemoryConfig(value: unknown): AutocodeMemoryConfig | undefined {
+    if (!isRecord(value) || typeof value.directory !== "string" || !value.directory.trim()) return undefined
+    return { directory: value.directory }
+}
+
 function collectSkills(value: unknown): SkillsConfig | undefined {
     if (value === undefined) return undefined
     if (!isRecord(value)) {
@@ -192,9 +199,6 @@ function collectSkills(value: unknown): SkillsConfig | undefined {
             result.freeze = value.freeze
         }
     }
-    const learned = collectLearned(value.learned)
-    if (learned) result.learned = learned
-
     if (SKILL_CATEGORIES.some((category) => Array.isArray(value[category]))) {
         warnLegacySkillsConfig()
     }
@@ -208,27 +212,6 @@ function warnLegacySkillsConfig(): void {
     if (didWarnLegacySkillsConfig) return
     didWarnLegacySkillsConfig = true
     console.warn("autocode: legacy skills category arrays are deprecated and ignored")
-}
-
-function collectLearned(value: unknown): LearnedConfig | undefined {
-    if (value === undefined) return undefined
-    if (!isRecord(value)) {
-        console.warn(`autocode: invalid skills.learned config (expected object, got ${Array.isArray(value) ? "array" : typeof value})`)
-        return undefined
-    }
-    const result: LearnedConfig = {}
-    if ("max" in value) {
-        const max = value.max
-        if (typeof max !== "number" || !Number.isFinite(max) || !Number.isInteger(max) || max <= 0) {
-            console.warn(
-                `autocode: invalid skills.learned.max (expected positive integer, got ${JSON.stringify(max)}); falling back to ${DEFAULT_LEARNED_MAX}`,
-            )
-            result.max = DEFAULT_LEARNED_MAX
-        } else {
-            result.max = max
-        }
-    }
-    return Object.keys(result).length > 0 ? result : undefined
 }
 
 export function mergeExternalDirectoryRules(base: ExternalDirectoryRules, next: ExternalDirectoryRules): ExternalDirectoryRules {
@@ -271,8 +254,9 @@ function parseAutocodeConfig(raw: string, path: string, parseCredentials: boolea
     const externalDirectoryPermissions = collectExternalDirectoryPermissions(parsed.permissions)
     const sandbox = collectSandboxConfig(ac?.sandbox)
     const skills = collectSkills(ac?.skills)
+    const memory = collectMemoryConfig(ac?.memory)
 
-    if (!ac) return { externalDirectories, externalDirectoryPermissions, sandbox, skills, credentials }
+    if (!ac) return { externalDirectories, externalDirectoryPermissions, sandbox, skills, memory, credentials }
 
     if (isRecord(ac.tiers)) {
         return {
@@ -282,12 +266,13 @@ function parseAutocodeConfig(raw: string, path: string, parseCredentials: boolea
             externalDirectoryPermissions,
             sandbox,
             skills,
+            memory,
             credentials,
         }
     }
 
     if (typeof ac.tier === "string") {
-        return { tier: ac.tier, externalDirectories, externalDirectoryPermissions, sandbox, skills, credentials }
+        return { tier: ac.tier, externalDirectories, externalDirectoryPermissions, sandbox, skills, memory, credentials }
     }
 
     // legacy shape: autocode.model.<tier> + optional autocode.variant.<tier>
@@ -299,10 +284,10 @@ function parseAutocodeConfig(raw: string, path: string, parseCredentials: boolea
                 result[tier] = { model, variant: ac.variant?.[tier] }
             }
         }
-        return { legacyTiers: result, externalDirectories, externalDirectoryPermissions, sandbox, skills, credentials }
+        return { legacyTiers: result, externalDirectories, externalDirectoryPermissions, sandbox, skills, memory, credentials }
     }
 
-    return { externalDirectories, externalDirectoryPermissions, sandbox, skills, credentials }
+    return { externalDirectories, externalDirectoryPermissions, sandbox, skills, memory, credentials }
 }
 
 function addCandidate(candidates: string[], path: string): void {
@@ -395,7 +380,7 @@ export async function loadAutocodeConfig(
     worktree: string,
     directory: string,
     fs: ConfigFileSystem = defaultFs,
-): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, externalDirectoryPermissions: PermissionRule[], sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined, credentials: CredentialPolicy }> {
+): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, externalDirectoryPermissions: PermissionRule[], sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined, memory: AutocodeMemoryConfig, credentials: CredentialPolicy }> {
     const globalConfigDirectory = resolveOpenCodePaths().globalConfigRoot
     const globalConfigPath = join(globalConfigDirectory, "autocode.jsonc")
     const candidates: string[][] = []
@@ -416,6 +401,7 @@ export async function loadAutocodeConfig(
     const externalDirectoryPermissions: PermissionRule[] = []
     let sandbox: AutocodeSandboxConfig = {}
     let skills: SkillsConfig | undefined
+    let memory: AutocodeMemoryConfig = { directory: DEFAULT_MEMORY_DIRECTORY }
     let credentials: CredentialPolicy = { provider: DEFAULT_CREDENTIAL_PROVIDER }
     for (const candidate of candidates) {
         const config = readFirstConfig(fs, candidate)
@@ -458,6 +444,9 @@ export async function loadAutocodeConfig(
         if (parsed.skills) {
             skills = { ...(skills ?? {}), ...parsed.skills }
         }
+        if (parsed.memory) {
+            memory = { ...memory, ...parsed.memory }
+        }
         if (parsed.legacyTiers) {
             tiers = mergeTiers(tiers, parsed.legacyTiers)
         }
@@ -497,6 +486,7 @@ export async function loadAutocodeConfig(
         externalDirectoryPermissions,
         sandbox,
         skills,
+        memory,
         credentials,
     }
 }

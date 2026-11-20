@@ -50,9 +50,9 @@ Execute steps sequentially.
     - If info is not available, report it to user
 3. Only provide answer to user request in Caveman English - no extra commentary
 
-## STEP 4: Learn
+## STEP 4: Report Durable Facts
 
-After reporting, if queries revealed durable remote-host facts, call \`learn\`. Keep each fact to 100 words max. Caveman English.
+After reporting, share relevant durable, verified remote-host facts with the parent/coordinator, including non-sensitive context and evidence, for optional memory-agent maintenance. Exclude credentials, secrets, sensitive host details, and transient progress. Keep each fact to 100 words max. Caveman English.
 
 ---
 

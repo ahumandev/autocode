@@ -59,7 +59,7 @@ Reactions user interruptions:
     - Omit requirements that are out of scope of current EXPECTATIONS.
 
 1. Identify known facts provided by INSTRUCTIONS (exact input/output values, error/log message, reproducibility steps, etc.)
-2. Recall relevant project docs (knowledge notes), memories or skills.
+2. Use subagent \`query-memory\` to recall relevant project specs and designs.
 3. Identify missing information or decisions (only if not obvious and applicable) by asking with \`question\` tool (include 2-7 recommended options with each question):
    - What is expected scope - MVP or complete refactor/migration
    - Architecture (technologies, exact location of files/endpoints, preferred libraries/frameworks, etc.)
@@ -194,7 +194,7 @@ Success must address original PROBLEMS
     - \`label\` = "📝 Review in OpenChamber"; \`description\` = "Review: Saves current plan to OpenChamber knowledge."
 2. Then follow user answer:
     - User revision instruction or cancelled question: revise the proposal, then ask this question again.
-    - User answer match "📝 Review Plan in OpenChamber": call \`openchamber_knowledge\` tool to save the plan.
+    - User answer match "📝 Review in OpenChamber": call \`openchamber_knowledge\` tool to save the plan.
     - User answer match other labels: call \`autocode_session_create\` with prompt including reviewed approach (known PROBLEM, IMPACT, EXPECTATION, REQUIREMENTS, RISKS, CONSTRAINTS, CRITERIA, GOALS, SUCCESS METRICS and all relevant facts like: paths, code/config/text samples to avoid wasteful rediscoveries) and use label to decide agent:
         * "🤖 Execute Autonomously" -> agent="auto"
         * "🧑‍💻 Execute Interactively" -> agent="assist"

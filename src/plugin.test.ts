@@ -1,7 +1,9 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { existsSync } from "node:fs";
+import * as promiseFileSystem from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type {
 	Config as PluginHookConfig,
 	PluginInput,
@@ -22,7 +24,9 @@ import {
 	type ManagedScriptLifecycle,
 } from "./hooks/managed_script_lifecycle";
 import { createNoopAsk } from "./tools/test_context";
-import { managedSkills } from "./skills";
+import { createTools } from "./tools";
+import * as skillModule from "./tools/skill";
+import { getBundledSkillsRoot, managedSkills } from "./skills";
 import { initializeAutocodeGitExclude as initializeActualAutocodeGitExclude } from "./utils/git_exclude";
 import { createPlatformCapabilities } from "./utils/platform";
 import { permissionEffect, type PermissionRule } from "./utils/permissions";
@@ -103,9 +107,6 @@ type PluginRestartHooks = PluginConfigHook & {
 	tool?: {
 		autocode_session_create?: CreateTool;
 	};
-};
-type PluginLocalMemoryHooks = PluginConfigHook & {
-	"chat.message"?: (input: unknown, output: unknown) => Promise<void>;
 };
 type PluginInputWithSandboxSupportOverride = PluginInput & {
 	sandboxSupportOverride?: SandboxPlatformSupportOptions;
@@ -273,6 +274,83 @@ afterEach(async () => {
 });
 
 describe("autocode plugin config", () => {
+	test("split memory agents retain loaded directory snapshot across config callbacks", async (): Promise<void> => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		const directory = join(worktree, "project");
+		const configPath = join(worktree, ".opencode", "autocode.jsonc");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await mkdir(directory, { recursive: true });
+		const writeConfig = async (memoryDirectory: string): Promise<void> => {
+			await writeFile(configPath, JSON.stringify({ autocode: { skills: { freeze: true }, memory: { directory: memoryDirectory } } }));
+		};
+		await writeConfig("first-memory");
+
+		await withEnv({ HOME: root, XDG_CONFIG_HOME: join(root, "xdg"), PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL }, async (): Promise<void> => {
+			const input = { ...createInput(worktree), directory, homeOverride: root };
+			const hooks = await autocode.server(input);
+			try {
+				if (!hooks.config) throw new Error("plugin config hook unavailable");
+				const first: PluginConfig = {};
+				await hooks.config(first as unknown as PluginHookConfig);
+				expect(first.agent?.memory).toBeUndefined();
+				for (const name of ["query-memory", "learn-memory"] as const) {
+					expect(first.agent?.[name]?.prompt).toContain(join(directory, "first-memory", "INDEX.md"));
+					expect(first.agent?.[name]?.prompt).not.toContain(join(worktree, "first-memory", "INDEX.md"));
+					expect(first.agent?.[name]?.prompt).not.toContain(join(process.cwd(), "first-memory", "INDEX.md"));
+				}
+				await writeConfig("second-memory");
+				for (let attempt = 0; attempt < 2; attempt++) {
+					const repeated: PluginConfig = {};
+					await hooks.config(repeated as unknown as PluginHookConfig);
+					expect(repeated.agent?.memory).toBeUndefined();
+					for (const name of ["query-memory", "learn-memory"] as const) {
+						expect(repeated.agent?.[name]?.prompt).toContain(join(directory, "first-memory", "INDEX.md"));
+						expect(repeated.agent?.[name]?.prompt).not.toContain(join(directory, "second-memory", "INDEX.md"));
+					}
+				}
+				const fresh = await autocode.server(input);
+				try {
+					if (!fresh.config) throw new Error("fresh plugin config hook unavailable");
+					const updated: PluginConfig = {};
+					await fresh.config(updated as unknown as PluginHookConfig);
+					expect(updated.agent?.memory).toBeUndefined();
+					for (const name of ["query-memory", "learn-memory"] as const) {
+						expect(updated.agent?.[name]?.prompt).toContain(join(directory, "second-memory", "INDEX.md"));
+					}
+				} finally {
+					await fresh.dispose?.();
+				}
+			} finally {
+				await hooks.dispose?.();
+			}
+		});
+	});
+
+	test("split memory agents preserve standard disable and prompt overrides", async (): Promise<void> => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze: true }, memory: { directory: "configured-memory" } } }));
+		await withEnv({ HOME: root, XDG_CONFIG_HOME: join(root, "xdg"), PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL }, async (): Promise<void> => {
+			const input: PluginInputWithSandboxSupportOverride = { ...createInput(worktree), homeOverride: root };
+			const hooks = await autocode.server(input);
+			try {
+				if (!hooks.config) throw new Error("plugin config hook unavailable");
+				const overridden: PluginConfig = { agent: {
+					"query-memory": { disable: true, prompt: "Custom query memory prompt" },
+					"learn-memory": { disable: true, prompt: "Custom learn memory prompt" },
+				} };
+				await hooks.config(overridden as unknown as PluginHookConfig);
+				expect(overridden.agent?.memory).toBeUndefined();
+				expect(overridden.agent?.["query-memory"]).toEqual(expect.objectContaining({ disable: true, prompt: "Custom query memory prompt" }));
+				expect(overridden.agent?.["learn-memory"]).toEqual(expect.objectContaining({ disable: true, prompt: "Custom learn memory prompt" }));
+			} finally {
+				await hooks.dispose?.();
+			}
+		});
+	});
+
 	test.each(["V1", "V2"])("%s initializes Git exclude once using cwd, not project root", async (version: string): Promise<void> => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");
@@ -317,6 +395,8 @@ describe("autocode plugin config", () => {
 				expect(hooks.tool?.autocode_md_read?.args).toBeDefined();
 				expect(hooks.tool?.autocode_md_read).not.toHaveProperty("options");
 				expect(hooks.tool?.skill?.args).toBeDefined();
+				expect(Object.keys(hooks.tool ?? {}).sort()).toEqual(Object.keys(createTools(input.client, {}, undefined, createPlatformCapabilities("linux", process.env))).sort());
+				for (const name of ["learn", "autocode_memory_recall", "autocode_memory_forget"]) expect(hooks.tool).not.toHaveProperty(name);
 				expect(Object.keys(hooks.tool ?? {})).toEqual(expect.arrayContaining([
 					"autocode_ssh_command",
 					"autocode_ssh_config_read",
@@ -833,6 +913,8 @@ describe("autocode plugin config", () => {
 				XDG_CONFIG_HOME: configHome,
 				OPENCODE_CONFIG_DIR: join(configHome, "opencode"),
 				HOME: root,
+				PATH: process.env.PATH,
+				BUN_INSTALL: process.env.BUN_INSTALL,
 			},
 			async () => {
 				const cfg: PluginConfig & { permissions?: PermissionRule[] } = {
@@ -875,20 +957,25 @@ describe("autocode plugin config", () => {
 					"autocode-version",
 					"author",
 					"docs",
-					"docs-conventions",
-					"docs-code",
-					"docs-env",
-					"docs-prd",
-					"docs-ux",
 					"explain",
 					"git-conflict",
 					"init",
+					"learn",
+					"learn-conventions",
+					"learn-code",
+					"learn-env",
+					"learn-prd",
+					"learn-ux",
 					"repeat-as-md",
 					"repeat-as-wiki",
 					"report",
 					"tests",
 				]);
 				for (const [name, commandDef] of Object.entries(commands)) expect(cfg.command?.[name]).toEqual(commandDef);
+				for (const domain of ["conventions", "code", "env", "prd", "ux"]) {
+					expect(cfg.command?.[`learn-${domain}`]?.agent).toBe("learn-memory");
+					expect(cfg.command?.[`docs-${domain}`]).toBeUndefined();
+				}
 				expect(cfg.agent?.assist?.model).toBe("user-model");
 				expect(cfg.agent?.assist?.variant).toBe("balanced-variant");
 				expect(cfg.agent?.["execute-code"]?.model).toBe("user-worker-model");
@@ -908,14 +995,7 @@ describe("autocode plugin config", () => {
 				expect(permissionEffect(assistPermission, "external_directory", "/configured/file.md")).toBe("allow");
 				expect(permissionEffect(assistPermission, "external_directory", "/unconfigured/file.md")).toBe("ask");
 				const registeredSkills = await registerGeneratedSkills(input);
-				expect(registeredSkills.some((skill) => skill.path === join(
-					root,
-					".agents",
-					"skills",
-					"autocode",
-					"code-typescript",
-					"SKILL.md",
-				))).toBe(true);
+				expect(registeredSkills.some((skill) => skill.path === join(getBundledSkillsRoot(), "code-typescript", "SKILL.md"))).toBe(true);
 
 				const explicitTitleConfig: PluginConfig = {
 					agent: {
@@ -935,7 +1015,7 @@ describe("autocode plugin config", () => {
 		);
 	});
 
-	test("registers generated root but skips existing learned permissions root at startup", async () => {
+	test("registers bundled root but skips existing learned permissions root at startup", async () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");
 		const learnedSkillsRoot = join(worktree, ".agents", "skills");
@@ -948,13 +1028,13 @@ describe("autocode plugin config", () => {
 		await writeFile(join(unrelatedSkillDir, "SKILL.md"), "unrelated skill");
 
 		await withEnv(
-			{},
+			{ HOME: root, XDG_CONFIG_HOME: join(root, "xdg"), PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL },
 			async () => {
 				const input = { ...createInput(worktree), homeOverride: root };
 				const sources = await registerGeneratedSkills(input);
 
 				expect(sources.length).toBeGreaterThan(0);
-				expect(sources.every((skill) => skill.path.startsWith(join(root, ".agents", "skills", "autocode")))).toBe(true);
+				expect(sources.every((skill) => skill.path.startsWith(getBundledSkillsRoot()))).toBe(true);
 				expect(sources.some((skill) => skill.path.startsWith(learnedPermissionsRoot))).toBe(false);
 				expect(sources.some((skill) => skill.path.startsWith(join(learnedSkillsRoot, "unrelated")))).toBe(false);
 			},
@@ -1183,7 +1263,7 @@ describe("autocode plugin config", () => {
 		);
 	});
 
-	test("startup reconciliation makes no network calls", async () => {
+	test("startup makes no network calls", async () => {
 		const root = await createTempRoot();
 		const originalFetch = globalThis.fetch;
 		let fetchCalls = 0;
@@ -1197,7 +1277,7 @@ describe("autocode plugin config", () => {
 
 		try {
 			await withEnv(
-				{ XDG_CONFIG_HOME: join(root, "xdg"), HOME: root },
+				{ XDG_CONFIG_HOME: join(root, "xdg"), HOME: root, PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL },
 				async () => {
 					const input: PluginInputWithSandboxSupportOverride = {
 						...createInput(join(root, "worktree")),
@@ -1243,7 +1323,7 @@ describe("autocode plugin config", () => {
 		);
 
 		try {
-			await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root }, async () => {
+			await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root, PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL }, async () => {
 				const input = { ...createInput(worktree), homeOverride: root };
 				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				const cfg: PluginConfig = {};
@@ -1292,7 +1372,7 @@ describe("autocode plugin config", () => {
 		);
 
 		try {
-			await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root }, async () => {
+			await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root, PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL }, async () => {
 				const input = { ...createInput(worktree), homeOverride: root };
 				const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
 				const cfg: PluginConfig = {};
@@ -1301,7 +1381,7 @@ describe("autocode plugin config", () => {
 				expect(
 					skillPermissions(cfg, "execute-os")?.["legacy-startup-url"],
 				).toBeUndefined();
-				expect(await registerGeneratedSkills(input)).toEqual([]);
+				expect((await registerGeneratedSkills(input)).some((skill) => skill.id === "legacy-startup-url")).toBe(false);
 			});
 		} finally {
 			globalThis.fetch = originalFetch;
@@ -1313,12 +1393,24 @@ describe("autocode plugin config", () => {
 		).toEqual([]);
 	});
 
-	test.each([false, true])("registers only bundled skills while retaining static grants with freeze=%s", async (freeze: boolean): Promise<void> => {
+	test.each([false, true])("legacy bundled skill lookup retains static grants with freeze=%s", async (freeze: boolean): Promise<void> => {
 		const root = await createTempRoot();
 		const configHome = join(root, "xdg");
 		const worktree = join(root, "worktree");
+		const userSkill = join(root, ".agents", "skills", "user", "SKILL.md");
+		const userSkillText = "---\nname: user-canary\ndescription: User fixture\n---\nPreserve this skill.\n";
+		const generatedRoot = join(root, ".agents", "skills", "autocode");
+		const bundledSkill = managedSkills.find((skill) => skill.name === "code-typescript");
+		if (!bundledSkill) throw new Error("bundled TypeScript skill unavailable");
+		const bundledFiles = await Promise.all(managedSkills.map(async (skill) => {
+			const path = join(getBundledSkillsRoot(), skill.directory, "SKILL.md");
+			return { path, content: await readFile(path, "utf8"), mtimeMs: (await stat(path)).mtimeMs };
+		}));
 		await mkdir(join(configHome, "opencode"), { recursive: true });
 		await mkdir(join(worktree, ".opencode"), { recursive: true });
+		await mkdir(join(root, ".agents", "skills", "user"), { recursive: true });
+		await writeFile(userSkill, userSkillText);
+		const userMtime = (await stat(userSkill)).mtimeMs;
 		await writeFile(
 			join(configHome, "opencode", "autocode.jsonc"),
 			JSON.stringify({ autocode: { skills: { freeze: false } } }),
@@ -1328,36 +1420,101 @@ describe("autocode plugin config", () => {
 			JSON.stringify({ autocode: { skills: { freeze } } }),
 		);
 
-		await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root }, async () => {
-			const input: PluginInputWithSandboxSupportOverride = {
-				...createInput(worktree),
-				homeOverride: root,
-			};
-			const hooks = (await autocode.server(input)) as unknown as PluginConfigHook;
-			const cfg: PluginConfig = {};
-			await hooks.config?.(cfg);
+		await withEnv({ XDG_CONFIG_HOME: configHome, OPENCODE_CONFIG_DIR: join(configHome, "opencode"), HOME: root, PATH: process.env.PATH, BUN_INSTALL: process.env.BUN_INSTALL }, async () => {
+			const archivePath = join(worktree, ".opencode", "autocode", "memory-archive");
+			const outsidePath = join(`${root}-outside`, ".agents", "skills");
+			const allowedRoots = [root, getBundledSkillsRoot()].map((path) => resolve(path));
+			const deniedPaths: string[] = [];
+			const realPaths: string[] = [];
+			const originalReaddir = promiseFileSystem.readdir;
+			const guard = spyOn(promiseFileSystem, "readdir").mockImplementation((async (directory: Parameters<typeof promiseFileSystem.readdir>[0], options: Parameters<typeof promiseFileSystem.readdir>[1]) => {
+				const path = typeof directory === "string" ? resolve(directory) : undefined;
+				const within = (base: string): boolean => {
+					if (path === undefined) return false;
+					const fromBase = relative(base, path);
+					return fromBase === "" || (fromBase !== ".." && !fromBase.startsWith(`..${sep}`) && !isAbsolute(fromBase));
+				};
+				if (path === undefined || within(archivePath) || !allowedRoots.some(within)) {
+					deniedPaths.push(String(directory));
+					throw Object.assign(new Error("Blocked directory access"), { code: "ENOENT" });
+				}
+				realPaths.push(path);
+				return originalReaddir(directory, options);
+			}) as unknown as typeof promiseFileSystem.readdir);
+			const originalCreateSkillTool = skillModule.createSkillTool;
+			const skillGuard = spyOn(skillModule, "createSkillTool").mockImplementation((client, fileSystem, runtime, trace, activeSessionContext) => {
+				if (fileSystem !== undefined) throw new Error("Expected default skill filesystem");
+				return originalCreateSkillTool(client, {
+					readFile: (path, encoding) => promiseFileSystem.readFile(path, encoding),
+					readdir: (path, options) => promiseFileSystem.readdir(path, options),
+				}, runtime, trace, activeSessionContext);
+			});
+			let hooks: Awaited<ReturnType<typeof autocode.server>> | undefined;
+			try {
+				const input: PluginInputWithSandboxSupportOverride = {
+					...createInput(worktree),
+					homeOverride: root,
+				};
+				hooks = await autocode.server(input);
+				const cfg: PluginConfig = {};
+				await hooks.config?.(cfg as unknown as PluginHookConfig);
 
-			expect(skillPermissions(cfg, "execute-code")?.["angular-developer"]).toBeUndefined();
-			expect(skillPermissions(cfg, "execute-code")?.["code*"]).toBe("allow");
-			expect(
-				skillPermissions(cfg, "execute-os")?.["angular-developer"],
-			).toBeUndefined();
-			expect(skillPermissions(cfg, "auto-test")?.vitest).toBeUndefined();
-			expect(skillPermissions(cfg, "auto-test")?.["test*"]).toBe("allow");
-			expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBeUndefined();
-			expect(skillPermissions(cfg, "auto")?.["codebase-design"]).toBeUndefined();
-			expect(skillPermissions(cfg, "design")?.["codebase-design"]).toBeUndefined();
-			const grants = Object.keys(skillPermissions(cfg, "execute-code") ?? {});
-			expect(new Set(grants).size).toBe(grants.length);
-			const registeredSkills = await registerGeneratedSkills(input);
-			expect(registeredSkills.map((skill) => skill.id).sort()).toEqual(
-				freeze ? [] : managedSkills.map((skill) => skill.name).sort(),
-			);
-			expect(await readdir(join(root, ".agents", "skills")).catch(() => [])).toEqual(freeze ? [] : ["autocode"]);
+				expect(skillPermissions(cfg, "execute-code")?.["angular-developer"]).toBeUndefined();
+				expect(skillPermissions(cfg, "execute-code")?.["code*"]).toBe("allow");
+				expect(
+					skillPermissions(cfg, "execute-os")?.["angular-developer"],
+				).toBeUndefined();
+				expect(skillPermissions(cfg, "auto-test")?.vitest).toBeUndefined();
+				expect(skillPermissions(cfg, "auto-test")?.["test*"]).toBe("allow");
+				expect(skillPermissions(cfg, "assist")?.["codebase-design"]).toBeUndefined();
+				expect(skillPermissions(cfg, "auto")?.["codebase-design"]).toBeUndefined();
+				expect(skillPermissions(cfg, "design")?.["codebase-design"]).toBeUndefined();
+				const grants = Object.keys(skillPermissions(cfg, "execute-code") ?? {});
+				expect(new Set(grants).size).toBe(grants.length);
+				expect(hooks.tool).not.toHaveProperty("skill_edit");
+				const skillTool = hooks.tool?.skill;
+				if (!skillTool) throw new Error("legacy skill tool unavailable");
+				expect(skillGuard).toHaveBeenCalled();
+				const result = await skillTool.execute({ name: bundledSkill.name }, {
+					sessionID: `bundled-v1-${freeze}`,
+					messageID: "bundled-v1-message",
+					agent: "execute-code",
+					directory: worktree,
+					worktree,
+					abort: new AbortController().signal,
+					metadata() {},
+					ask: createNoopAsk(),
+				});
+				expect(result).toContain(bundledSkill.content);
+				await expect(readdir(archivePath)).rejects.toMatchObject({ code: "ENOENT" });
+				await expect(readdir(outsidePath)).rejects.toMatchObject({ code: "ENOENT" });
+				expect(deniedPaths).toContain(archivePath);
+				expect(deniedPaths).toContain(outsidePath);
+				expect(realPaths).toContain(resolve(getBundledSkillsRoot()));
+				expect(realPaths).not.toContain(archivePath);
+				expect(realPaths).not.toContain(outsidePath);
+				expect(deniedPaths.every((path) => !realPaths.includes(resolve(path)))).toBe(true);
+				for (const file of bundledFiles) {
+					expect(await readFile(file.path, "utf8")).toBe(file.content);
+					expect((await stat(file.path)).mtimeMs).toBe(file.mtimeMs);
+				}
+				expect(await readFile(userSkill, "utf8")).toBe(userSkillText);
+				expect((await stat(userSkill)).mtimeMs).toBe(userMtime);
+				expect(await readdir(join(root, ".agents", "skills"))).toEqual(["user"]);
+				expect(existsSync(generatedRoot)).toBe(false);
+				expect(existsSync(join(worktree, ".opencode", "skills"))).toBe(false);
+			} finally {
+				try {
+					await hooks?.dispose?.();
+				} finally {
+					skillGuard.mockRestore();
+					guard.mockRestore();
+				}
+			}
 		});
 	});
 
-	test("refreshes smart agents before tier stripping without resetting local-memory claims", async () => {
+	test("refreshes smart agents before tier stripping without legacy chat hooks", async () => {
 		const root = await createTempRoot();
 		const worktree = join(root, "worktree");
 		await mkdir(join(worktree, ".opencode"), { recursive: true });
@@ -1365,29 +1522,74 @@ describe("autocode plugin config", () => {
 			join(worktree, ".opencode", "autocode.jsonc"),
 			JSON.stringify({ autocode: { skills: { freeze: true }, tiers: { smart: { model: "smart-model" } } } }),
 		);
-		const messages = mock(async () => ({ data: [] }));
-
 		await withEnv({ XDG_CONFIG_HOME: join(root, "xdg"), HOME: root }, async () => {
-			const hooks = (await autocode.server({
-				...createInput(worktree),
-				client: { session: { messages } } as unknown as OpencodeClient,
-			})) as unknown as PluginLocalMemoryHooks;
-			if (!hooks.config || !hooks["chat.message"])
-				throw new Error("local-memory hooks unavailable");
-			const cfg: PluginConfig = {};
-			await hooks.config(cfg);
-			await hooks["chat.message"](
-				{ sessionID: "session-one" },
-				{ message: { id: "first", role: "user", agent: "auto" }, parts: [{ type: "text", text: "deploy" }] },
-			);
-			await hooks.config(cfg);
-			await hooks["chat.message"](
-				{ sessionID: "session-one" },
-				{ message: { id: "retry", role: "user", agent: "auto" }, parts: [{ type: "text", text: "deploy" }] },
-			);
+			const input: PluginInputWithSandboxSupportOverride = { ...createInput(worktree), homeOverride: root };
+			const hooks = await autocode.server(input);
+			try {
+				if (!hooks.config) throw new Error("plugin config hook unavailable");
+				expect(hooks).not.toHaveProperty("chat.message");
+				expect(hooks).not.toHaveProperty("chat.params");
+				expect(hooks).not.toHaveProperty("experimental.chat.messages.transform");
+				expect(hooks).not.toHaveProperty("experimental.chat.system.transform");
+				const cfg: PluginConfig = {};
+				await hooks.config(cfg as unknown as PluginHookConfig);
+				await hooks.config(cfg as unknown as PluginHookConfig);
 
-			expect(cfg.agent?.auto).not.toHaveProperty("tier");
-			expect(messages).toHaveBeenCalledTimes(1);
+				expect(cfg.agent?.auto).not.toHaveProperty("tier");
+			} finally {
+				await hooks.dispose?.();
+			}
 		});
+	});
+
+	test("default migration leaves existing memory folders unchanged", async (): Promise<void> => {
+		const root = await createTempRoot();
+		const worktree = join(root, "worktree");
+		const memoryDir = join(worktree, ".opencode", "autocode", "memories");
+		const sentinel = join(memoryDir, "sentinel.md");
+		const formerDefault = join(worktree, ".opencode", "autocode", "memory");
+		const formerSentinel = join(formerDefault, "sentinel.md");
+		const content = "Synthetic legacy memory: do not inject 🧪\n";
+		await mkdir(memoryDir, { recursive: true });
+		await mkdir(formerDefault, { recursive: true });
+		await writeFile(sentinel, content);
+		await writeFile(formerSentinel, content);
+		await withEnv({ HOME: root, XDG_CONFIG_HOME: join(root, "xdg") }, async (): Promise<void> => {
+			const input: PluginInputWithSandboxSupportOverride = { ...createInput(worktree), homeOverride: root };
+			const hooks = await autocode.server(input);
+			try {
+				expect(hooks).not.toHaveProperty("chat.message");
+				expect(hooks).not.toHaveProperty("chat.params");
+				expect(hooks).not.toHaveProperty("experimental.chat.messages.transform");
+				expect(hooks).not.toHaveProperty("experimental.chat.system.transform");
+				const cfg: PluginConfig = {};
+				await hooks.config?.(cfg as unknown as PluginHookConfig);
+				expect(cfg.agent?.memory).toBeUndefined();
+				for (const name of ["query-memory", "learn-memory"] as const) {
+					expect(cfg.agent?.[name]?.prompt).toContain(join(worktree, ".opencode", "autocode", "memory", "INDEX.md"));
+				}
+				await hooks.event?.({ event: { type: "session.idle", properties: { sessionID: "sentinel-session" } } });
+			} finally {
+				await hooks.dispose?.();
+			}
+		});
+		expect(await readdir(memoryDir)).toEqual(["sentinel.md"]);
+		expect(await readFile(sentinel, "utf8")).toBe(content);
+		expect(await readdir(formerDefault)).toEqual(["sentinel.md"]);
+		expect(await readFile(formerSentinel, "utf8")).toBe(content);
+	});
+
+	test("plugin, tool registry, and event handlers do not import legacy memory runtime modules", async (): Promise<void> => {
+		for (const url of [
+			new URL("./plugin.ts", import.meta.url),
+			new URL("./tools/index.ts", import.meta.url),
+			new URL("./hooks/agent_restart_coordinator.ts", import.meta.url),
+			new URL("./hooks/managed_script_lifecycle.ts", import.meta.url),
+			new URL("./hooks/root_session_title.ts", import.meta.url),
+		]) {
+			const source = await readFile(url, "utf8");
+			const imports = [...source.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*|\brequire\s*\(\s*)["']([^"']+)["']/g)].map((match) => match[1]);
+			for (const specifier of imports) expect(specifier.replaceAll("\\", "/")).not.toMatch(/(?:^|\/)(?:local[_-]memory|memory(?:[_-]runtime)?|autocode[_-]memory[_-](?:recall|forget)|learn)(?:[./_-]|$)/i);
+		}
 	});
 });

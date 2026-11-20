@@ -20,7 +20,7 @@ export const toolTaskRules = `
 * Save the \`sessionID\` returned by \`subagent\` for followups.
 * Continue, correct, ask more detailed info, answer questions -> call \`subagent\` again with that returned \`sessionID\`.
 * NEVER call \`subagent\` to re-scan, re-search, or re-read what user already supplied: files, paths, line numbers, error messages, stack traces, conventions, or requirements
-* ONLY call \`subagent\` to find critically missing info to complete current ASSIGNMENT
+    - Exception is \`query-memory\` subagent to recall or \`learn-memory\` subagent to update or organize project knowledge
 * When searching for info:
    - next search subject related to previous finding: call \`subagent\` again with returned \`sessionID\`
    - next search subject unique: start new subagent without \`sessionID\`

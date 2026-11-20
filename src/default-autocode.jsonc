@@ -2,6 +2,9 @@
     "autocode": {
         "skills": {
             "freeze": false
+        },
+        "memory": {
+            "directory": ".opencode/autocode/memory"
         }
     }
 }

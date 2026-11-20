@@ -3,10 +3,13 @@ import { docsCommandTemplate } from "./docs"
 import { docsSubagentCommandTemplate } from "./docs-subagent"
 import { explainCommandTemplate } from "./explain"
 import { createCommands } from "./index"
+import { learnCommand } from "./learn"
 import { newSessionTemplate } from "./new-session"
 import { testsCommandTemplate } from "./tests"
 import { buildAgents } from "../agents"
+import { createTools } from "../tools"
 import { createPlatformCapabilities } from "../utils/platform"
+import type { OpencodeClient } from "@opencode-ai/sdk"
 
 const commands = createCommands(createPlatformCapabilities("linux"))
 
@@ -33,14 +36,15 @@ describe("commands", () => {
             "autocode-version",
             "author",
             "docs",
-            "docs-conventions",
-            "docs-code",
-            "docs-env",
-            "docs-prd",
-            "docs-ux",
             "explain",
             "git-conflict",
             "init",
+            "learn",
+            "learn-conventions",
+            "learn-code",
+            "learn-env",
+            "learn-prd",
+            "learn-ux",
             "repeat-as-md",
             "repeat-as-wiki",
             "report",
@@ -104,22 +108,25 @@ describe("commands", () => {
         const targets = Object.entries(commands)
             .flatMap(([commandName, command]) => "agent" in command && typeof command.agent === "string" ? [[commandName, command.agent] as const] : [])
 
-        expect(targets).toHaveLength(13)
+        expect(targets).toHaveLength(14)
         expect(Object.fromEntries(targets)).toEqual({
             "job-concepts": "design",
             "autocode-install": "execute-os",
             author: "execute-author",
             docs: "execute-document",
-            "docs-conventions": "document-conventions",
-            "docs-code": "document-code",
-            "docs-env": "document-env",
-            "docs-prd": "document-prd",
-            "docs-ux": "document-ux",
             explain: "query-code",
             "git-conflict": "assist-git-conflict",
             init: "execute-document",
+            learn: "learn-memory",
+            "learn-conventions": "learn-memory",
+            "learn-code": "learn-memory",
+            "learn-env": "learn-memory",
+            "learn-prd": "learn-memory",
+            "learn-ux": "learn-memory",
             tests: "auto-test",
         })
+        expect(targets.some(([, agentId]) => agentId === "memory")).toBe(false)
+        expect(agents.memory).toBeUndefined()
         for (const [commandName, agentId] of targets) {
             expect(agents[agentId], `${commandName} targets registered agent ${agentId}`).toBeDefined()
         }
@@ -144,53 +151,70 @@ describe("commands", () => {
         expect(commandsWithoutOptionalAgents.docs).toBeDefined()
     })
 
-    test("keeps renamed docs command objects stable", () => {
-        expect(commands.docs).toMatchObject({
-            agent: "execute-document",
-            subtask: false,
-            template: docsCommandTemplate,
-        })
-        expect(commands["docs-conventions"]).toMatchObject({
-            agent: "document-conventions",
-            subtask: false,
-            template: docsSubagentCommandTemplate,
-        })
-        expect(commands["docs-code"]).toMatchObject({
-            agent: "document-code",
-            subtask: false,
-            template: docsSubagentCommandTemplate,
-        })
-        expect(commands["docs-prd"]).toMatchObject({
-            agent: "document-prd",
-            subtask: false,
-            template: docsSubagentCommandTemplate,
-        })
-        expect(commands["docs-ux"]).toMatchObject({
-            agent: "document-ux",
-            subtask: false,
-            template: docsSubagentCommandTemplate,
-        })
+    test("registers docs and init alongside five direct memory maintenance commands", () => {
+        for (const commandName of ["docs", "init"] as const) {
+            expect(commands[commandName]).toMatchObject({
+                agent: "execute-document",
+                subtask: false,
+                template: docsCommandTemplate,
+            })
+        }
 
-        for (const commandName of ["docs", "docs-conventions", "docs-code", "docs-env", "docs-prd", "docs-ux"] as const) {
-            expect(commands[commandName]?.agent).not.toBe("advise")
+        const domains = {
+            "learn-conventions": "naming conventions, acronyms, and terms",
+            "learn-code": "architecture, technology, models, APIs, errors, security, integrations, and risks",
+            "learn-env": "known project and environment context",
+            "learn-prd": "product requirements, roles, constraints, and success criteria",
+            "learn-ux": "UX flows, navigation, styling, and interactions",
+        }
+        expect(new Set(Object.values(domains)).size).toBe(5)
+        expect(new Set(Object.keys(domains).map((commandName) => commands[commandName]?.template)).size).toBe(5)
+        for (const [commandName, domain] of Object.entries(domains)) {
+            expect(commands[commandName.replace("learn-", "docs-")]).toBeUndefined()
+            expect(commands[commandName]).toMatchObject({
+                agent: "learn-memory",
+                subtask: false,
+                template: docsSubagentCommandTemplate(domain),
+            })
+            const template = commands[commandName]?.template ?? ""
+            expect(template).toContain(`Perform maintenance directly on active project memory for ${domain}, using the request below to scope the work:\n\n<advise>\n$ARGUMENTS\n</advise>`)
+            expect(template).not.toMatch(/\bdelegat(?:e|es|ed|ing|ion)\b/i)
+            expect(template).not.toMatch(/\bprompt\b/i)
+            expect(template).toContain("Add missing facts and prune outdated facts only when supported by evidence; otherwise report uncertainty")
+            expect(template).toContain("Record only verified, relevant facts")
+            expect(template).toContain("Research narrowly only when critical information is missing or needs verification; do not scan the full project by default")
+            expect(template).toContain("Exclude secrets, credentials, transient progress, and legacy data")
+            expect(template).toContain("Do not edit skills or external/user skill folders")
+            expect(template).toContain("Preserve concurrent memory changes and avoid overwriting other work")
+            expect(template).toContain("Report exact updated paths or no change")
+            expect(template).toContain("If maintenance fails, report it as pending, not successful")
         }
     })
 
     test("does not register removed commands", () => {
-        for (const commandName of ["commit", "learn", "resume"]) {
+        for (const commandName of ["commit", "resume"]) {
             expect(commands[commandName]).toBeUndefined()
         }
     })
 
-    test("keeps init documentation-only", () => {
-        const template = commands.init?.template ?? ""
+    test("delegates one learn request with relevant context and safe failure reporting", () => {
+        expect(commands.learn).toEqual({ ...learnCommand, agent: "learn-memory" })
+        expect(commands.learn?.subtask).toBe(false)
+        const template = commands.learn?.template ?? ""
+        expect(template).toContain("If <user-guidance> block is empty: Gather corrections, research results, overall feature design decisions, user requirements, project insights")
+        expect(template).toContain("Honor explicit remember requests")
+        expect(template).toContain("$ARGUMENTS")
+        expect(template).toContain("Exclude secrets, credentials, and transient progress")
+        expect(template).not.toContain("`subagent` `memory`")
+        expect(template).toContain("<user-guidance>\n$ARGUMENTS\n</user-guidance>")
+    })
 
-        expect(commands.init?.agent).toBe("execute-document")
-        expect(template).toContain("Only task `document-agents` *AFTER*")
-        expect(template).not.toContain("autocode_dependencies")
-        expect(template).not.toContain("preflight")
-        expect(template).not.toContain("bwrap")
-        expect(template).not.toContain("opencode upgrade")
+    test("keeps retired memory tools out of the runtime registry", () => {
+        const tools = createTools({} as OpencodeClient)
+
+        expect(tools.learn).toBeUndefined()
+        expect(Object.keys(tools).filter((name) => name.startsWith("autocode_memory_"))).toEqual([])
+        expect(tools.skill).toBeDefined()
     })
 
     test("keeps install dependency remediation-only", () => {

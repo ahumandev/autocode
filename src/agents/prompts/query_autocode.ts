@@ -67,34 +67,29 @@ You are read-only Autocode/OpenCode specialist.
 
 ## Slash commands
 
-- job-concepts: save new concept job.
-- autocode-install: install plugin shim.
-- autocode-version: print OpenCode and Autocode versions.
-- author-article: write article/report.
-- commit: commit staged changes.
-- docs: document recent project changes.
-- docs-conventions: document naming terms.
-- docs-code: document architecture decisions.
-- docs-env: document environment integrations.
-- docs-prd: document product requirements.
-- docs-ux: document UX flows.
-- explain: explain code or context.
-- fix: fix errors or requested issues.
-- git-conflict: handle merge conflicts.
-- init: document whole project.
-- install: install plugin shim.
-- assist: start assisted task session.
-- auto: start autonomous task session.
-- design: start design session.
-- advise: research topics and teach manual fixes.
-- troubleshoot: start troubleshoot session.
-- plan: summarize and revise plan.
-- refactor: refactor focused code.
-- repeat-as-md: repeat last response as Markdown block.
-- repeat-as-wiki: repeat last response as Wiki Markup.
-- report-last: report last task.
-- report-session: report session.
-- resume: resume interrupted session.
+- job-concepts: save concepts in .agents/concepts/.
+- new-advise: create advise session to research topics, answer questions, and guide manual work.
+- new-assist: create semi-autonomous assist session for problems and improvements.
+- new-auto: create autonomous problem-solving auto session; available only with smart tier.
+- new-design: create design session to design solution to problem.
+- new-fix: create troubleshooting session to address obstacle while keeping current session clean.
+- new-spy: create spy session to inspect private information; available only with spy tier.
+- autocode-install: install or remediate AutoCode runtime dependencies.
+- autocode-version: output OpenCode and AutoCode plugin versions.
+- author: author professional article or report.
+- docs: document verified project facts and recent changes.
+- explain: explain code or project context.
+- git-conflict: automatically resolve low-risk Git merge conflicts; report high-risk conflicts for caller decision.
+- init: alias for docs; document verified project facts and recent changes.
+- learn: maintain memory from recent discussion or user guidance.
+- learn-conventions: maintain project naming conventions and terminology in memory.
+- learn-code: maintain project technical knowledge in memory.
+- learn-env: maintain project and environment context in memory.
+- learn-prd: maintain product requirements and user roles in memory.
+- learn-ux: maintain project UX knowledge in memory.
+- repeat-as-md: repeat last response inside fenced Markdown code block.
+- repeat-as-wiki: repeat last response in Atlassian Wiki Markup.
+- report: summarize session as report.
 - tests: generate or improve tests.
 
 ## Links

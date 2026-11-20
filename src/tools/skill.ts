@@ -3,7 +3,7 @@ import { tool } from "@opencode-ai/plugin"
 import { createHash } from "node:crypto"
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
-import { getGeneratedSkillsRoot } from "@/skills"
+import { getBundledSkillsRoot, getGeneratedSkillsRoot } from "@/skills"
 import { isMissingFile, resolveAgentsStorageRoot } from "@/utils/jobs"
 import { createAbortResponse, createRetryResponse, flattenError } from "@/utils/tools"
 
@@ -347,6 +347,7 @@ async function loadSkill(fileSystem: FileSystem, context: SkillLoadContext, name
         { path: path.resolve(resolveAgentsStorageRoot(context), ".agents", "skills"), inferNestedNames: true },
         { path: path.resolve(resolveAgentsStorageRoot(context), ".opencode", "skills"), inferNestedNames: false },
         { path: path.resolve(resolveAgentsStorageRoot(context), ".opencode", "autocode", "memory-archive"), inferNestedNames: true },
+        { path: path.resolve(getBundledSkillsRoot()), inferNestedNames: true },
     ]
     for (const root of roots) {
         const skill = (await loadSkillsFromRoot(fileSystem, root.path, root.inferNestedNames, trace)).find((candidate) => candidate.name === name)

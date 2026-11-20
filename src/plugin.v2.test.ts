@@ -1,7 +1,9 @@
-import { afterAll, expect, mock, test } from "bun:test"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { afterAll, expect, mock, spyOn, test } from "bun:test"
+import { existsSync } from "node:fs"
+import * as promiseFileSystem from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { isAbsolute, join, relative, resolve, sep } from "node:path"
 import { Agent, type Plugin } from "@opencode/plugin"
 import { Config as V2Config } from "@opencode/schema/config"
 import { Session } from "@opencode/schema/session"
@@ -15,7 +17,10 @@ import { createManagedScriptLifecycle as createActualManagedScriptLifecycle, typ
 import type { ManagedScriptRuntime, ManagedScriptServiceCleanupResult } from "./utils/managed_script_runtime"
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import { createTools } from "./tools"
+import { getBundledSkillsRoot, managedSkills } from "./skills"
+import * as skillModule from "./tools/skill"
 import { clearAutocodeSkillLoadLiveCacheForTest } from "./tools/skill"
+import * as gitExclude from "./utils/git_exclude"
 import { permissionEffect, type PermissionRule } from "./utils/permissions"
 import { createPlatformCapabilities } from "./utils/platform"
 
@@ -158,6 +163,134 @@ function createRegistration(): Registration {
     return { async dispose(): Promise<void> {} }
 }
 
+test.each([false, true])("V2 bundled skill lookup is read-only without legacy memory access (freeze=%s)", async (freeze): Promise<void> => {
+    const root = await mkdtemp(join(tmpdir(), "autocode-v2-static-skills-"))
+    const worktree = join(root, "worktree")
+    const userSkillPath = join(root, ".agents", "skills", "user", "SKILL.md")
+    const generatedRoot = join(root, ".agents", "skills", "autocode")
+    const archivePath = join(worktree, ".opencode", "autocode", "memory-archive")
+    const canary = "---\nname: user-canary\ndescription: User fixture\n---\nPreserve this skill.\n"
+    const bundledSkill = managedSkills.find((skill) => skill.name === "code-typescript")
+    if (!bundledSkill) throw new Error("bundled TypeScript skill unavailable")
+    const bundledPath = join(getBundledSkillsRoot(), bundledSkill.directory, "SKILL.md")
+    const bundledSource = await readFile(bundledPath, "utf8")
+    const originals = new Map(["HOME", "XDG_CONFIG_HOME", "OPENCODE_CONFIG_DIR", "PATH", "BUN_INSTALL"].map((key) => [key, process.env[key]]))
+    const originalReaddir = promiseFileSystem.readdir
+    const deniedPaths: string[] = []
+    const realPaths: string[] = []
+    const allowedRoots = [root, getBundledSkillsRoot()].map((path) => resolve(path))
+    const outsidePath = join(`${root}-outside`, ".agents", "skills")
+    let cleanup: Plugin.Cleanup | void = undefined
+    let readdirGuard: { mockRestore(): void } | undefined
+    let gitGuard: { mockRestore(): void } | undefined
+    let skillGuard: { mockRestore(): void } | undefined
+    try {
+        await mkdir(join(worktree, ".opencode"), { recursive: true })
+        await mkdir(join(userSkillPath, ".."), { recursive: true })
+        await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({ autocode: { skills: { freeze } } }))
+        await writeFile(userSkillPath, canary)
+        const canaryMtime = (await stat(userSkillPath)).mtimeMs
+        process.env.HOME = root
+        process.env.XDG_CONFIG_HOME = join(root, "xdg")
+        process.env.OPENCODE_CONFIG_DIR = join(root, "config")
+        gitGuard = spyOn(gitExclude, "initializeAutocodeGitExclude").mockImplementation(async (): Promise<void> => {})
+        readdirGuard = spyOn(promiseFileSystem, "readdir").mockImplementation((async (directory: Parameters<typeof promiseFileSystem.readdir>[0], options: Parameters<typeof promiseFileSystem.readdir>[1]) => {
+            const path = typeof directory === "string" ? resolve(directory) : undefined
+            const within = (base: string): boolean => {
+                if (path === undefined) return false
+                const fromBase = relative(base, path)
+                return fromBase === "" || (fromBase !== ".." && !fromBase.startsWith(`..${sep}`) && !isAbsolute(fromBase))
+            }
+            if (path === undefined || within(archivePath) || !allowedRoots.some(within)) {
+                deniedPaths.push(String(directory))
+                throw Object.assign(new Error("Blocked directory access"), { code: "ENOENT" })
+            }
+            realPaths.push(path)
+            return originalReaddir(directory, options)
+        }) as unknown as typeof promiseFileSystem.readdir)
+        const originalCreateSkillTool = skillModule.createSkillTool
+        skillGuard = spyOn(skillModule, "createSkillTool").mockImplementation((client, fileSystem, runtime, trace, activeSessionContext) => {
+            if (fileSystem !== undefined) throw new Error("Expected default skill filesystem")
+            return originalCreateSkillTool(client, {
+                readFile: (path, encoding) => promiseFileSystem.readFile(path, encoding),
+                readdir: (path, options) => promiseFileSystem.readdir(path, options),
+            }, runtime, trace, activeSessionContext)
+        })
+
+        const agents = new Map<string, AgentDefinition>()
+        const skills: SkillDefinition[] = []
+        const tools = new Map<string, ToolDefinition>()
+        const registration = createRegistration()
+        const transform = async (callback: (editor: unknown) => void, editor: unknown): Promise<Registration> => {
+            callback(editor)
+            return registration
+        }
+        const context = {
+            homeOverride: root,
+            platformOverride: "linux",
+            sandboxSupportOverride: { platform: "linux", env: {}, bwrapUsable: true },
+            location: { directory: worktree, project: { id: "project", directory: worktree, canonical: worktree } },
+            agent: { transform: async (callback: (editor: unknown) => void): Promise<Registration> => transform(callback, {
+                get: (id: string): AgentDefinition | undefined => agents.get(id),
+                remove: (id: string): void => { agents.delete(id) },
+                update: (id: string, update: (agent: AgentDefinition) => void): void => {
+                    const agent = agents.get(id) ?? createAgent(id)
+                    update(agent)
+                    agents.set(id, agent)
+                },
+            }) },
+            skill: { transform: async (callback: (editor: unknown) => void): Promise<Registration> => transform(callback, { add(skill: SkillDefinition): void { skills.push(skill) } }) },
+            command: { transform: async (callback: (editor: unknown) => void): Promise<Registration> => transform(callback, { add(): void {} }) },
+            tool: { transform: async (callback: (editor: unknown) => void): Promise<Registration> => transform(callback, { add(tool: ToolDefinition): void { tools.set(tool.name, tool) } }) },
+            session: { hook: async (): Promise<Registration> => registration, context: async (): Promise<unknown[]> => [] },
+            shell: { hook: async (): Promise<Registration> => registration },
+            event: { async *subscribe(): AsyncIterable<never> {} },
+        }
+        cleanup = await (autocode as unknown as { setup(input: unknown): Promise<Plugin.Cleanup | void> }).setup(context)
+        expect(deniedPaths).not.toContain(archivePath)
+        expect(skills.find((skill) => skill.id === bundledSkill.name)).toEqual(expect.objectContaining({ path: bundledPath, content: bundledSkill.content }))
+        expect(tools.has("skill_edit")).toBe(false)
+        const skillTool = tools.get("skill")
+        if (!skillTool) throw new Error("V2 skill tool unavailable")
+        expect(skillGuard).toHaveBeenCalled()
+        const result = await skillTool.execute({ name: bundledSkill.name }, {
+            sessionID: Session.ID.make(`ses_static_${freeze}`),
+            messageID: SessionMessage.ID.make("msg_static"),
+            agent: Agent.ID.make("execute-code"),
+            signal: new AbortController().signal,
+            id: Tool.CallID.make("call-static"),
+            progress: async (): Promise<void> => {},
+        } satisfies V2ToolContext)
+        expect(result.content).toEqual(expect.stringContaining(bundledSkill.content))
+        await expect(readdir(archivePath)).rejects.toMatchObject({ code: "ENOENT" })
+        await expect(readdir(outsidePath)).rejects.toMatchObject({ code: "ENOENT" })
+        expect(deniedPaths).toContain(archivePath)
+        expect(deniedPaths).toContain(outsidePath)
+        expect(realPaths).toContain(resolve(getBundledSkillsRoot()))
+        expect(realPaths).not.toContain(archivePath)
+        expect(realPaths).not.toContain(outsidePath)
+        expect(deniedPaths.every((path) => !realPaths.includes(resolve(path)))).toBe(true)
+        expect(existsSync(generatedRoot)).toBe(false)
+        expect(await readdir(join(root, ".agents", "skills"))).toEqual(["user"])
+        expect(await readFile(userSkillPath, "utf8")).toBe(canary)
+        expect((await stat(userSkillPath)).mtimeMs).toBe(canaryMtime)
+        expect(await readFile(bundledPath, "utf8")).toBe(bundledSource)
+    } finally {
+        try {
+            await cleanup?.()
+        } finally {
+            skillGuard?.mockRestore()
+            readdirGuard?.mockRestore()
+            gitGuard?.mockRestore()
+            for (const [key, value] of originals) {
+                if (value === undefined) delete process.env[key]
+                else process.env[key] = value
+            }
+            await rm(root, { recursive: true, force: true })
+        }
+    }
+})
+
 test("V2 native depth config preserves user limits; runtime config patch cannot set depth", () => {
     for (const depth of [0, 1, 5, 8]) {
         const config = Schema.decodeUnknownSync(V2Config.Info)({ experimental: { subagent_depth: depth } })
@@ -167,39 +300,32 @@ test("V2 native depth config preserves user limits; runtime config patch cannot 
     expect(Object.keys(V2Config.Patch.fields)).toEqual(["shell"])
 })
 
-test("generated skill discovery skips staging directories and unreadable files", async (): Promise<void> => {
-    const root = await mkdtemp(join(tmpdir(), "autocode-discovery-"))
-    try {
-        for (const directory of ["good", "unreadable", ".test-jest.stage-abc/test-jest"]) {
-            await mkdir(join(root, directory), { recursive: true })
-            await writeFile(join(root, directory, "SKILL.md"), `---\nname: ${directory}\n---\n\nContent.\n`)
-        }
-        const reads: string[] = []
-        const skills = await discoverGeneratedSkills(root, async (path): Promise<string> => {
-            reads.push(path)
-            if (path === join(root, "unreadable", "SKILL.md")) {
-                throw Object.assign(new Error("operation not permitted"), { code: "EPERM" })
-            }
-            return readFile(path, "utf8")
-        })
-        expect(skills.map((skill) => skill.id)).toEqual(["good"])
-        expect(reads).not.toContain(join(root, ".test-jest.stage-abc", "test-jest", "SKILL.md"))
-        expect(reads).toContain(join(root, "unreadable", "SKILL.md"))
-    } finally {
-        await rm(root, { recursive: true, force: true })
-    }
-})
-
 test.each(["linux", "win32"])("V2 setup honors native registration contracts and modeled host discovery without broadening permissions (%s)", async (platform): Promise<void> => {
     const root = await mkdtemp(join(tmpdir(), "autocode-plugin-v2-"))
     const worktree = join(root, "worktree")
     const generatedSkillPath = join(root, ".agents", "skills", "autocode", "example", "SKILL.md")
+    const userSkillPath = join(root, ".agents", "skills", "user", "SKILL.md")
+    const generatedSkillText = "---\nname: example\ndescription: Example generated skill.\n---\n\nUse the example.\n"
+    const userSkillText = "---\nname: user-canary\ndescription: User fixture\n---\nPreserve this skill.\n"
+    const bundledSkill = managedSkills.find((skill) => skill.name === "code-typescript")
+    if (!bundledSkill) throw new Error("bundled TypeScript skill unavailable")
+    const bundledPath = join(getBundledSkillsRoot(), bundledSkill.directory, "SKILL.md")
+    const bundledFiles = await Promise.all(managedSkills.map(async (skill) => {
+        const path = join(getBundledSkillsRoot(), skill.directory, "SKILL.md")
+        return { path, content: await readFile(path, "utf8"), mtimeMs: (await stat(path)).mtimeMs }
+    }))
+    const memoryDir = join(worktree, ".opencode", "autocode", "memories")
+    const sentinelPath = join(memoryDir, "sentinel.md")
+    const sentinelText = "Synthetic legacy memory: do not inject 🧪\n"
     await mkdir(join(worktree, ".opencode"), { recursive: true })
+    await mkdir(memoryDir, { recursive: true })
+    await writeFile(sentinelPath, sentinelText)
     await mkdir(join(worktree, "docs"), { recursive: true })
     await mkdir(join(generatedSkillPath, ".."), { recursive: true })
+    await mkdir(join(userSkillPath, ".."), { recursive: true })
     await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
         autocode: {
-            skills: { freeze: true },
+            skills: { freeze: platform === "win32" },
             tiers: {
                 smart: { model: "openai/smart#default", variant: "high" },
                 balanced: { model: "openai/balanced", variant: "medium" },
@@ -208,7 +334,10 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
         },
     }))
     await writeFile(join(worktree, "docs", "guide.md"), "# Guide\n\nRuntime behavior.\n")
-    await writeFile(generatedSkillPath, "---\nname: example\ndescription: Example generated skill.\n---\n\nUse the example.\n")
+    await writeFile(generatedSkillPath, generatedSkillText)
+    await writeFile(userSkillPath, userSkillText)
+    const generatedMtime = (await stat(generatedSkillPath)).mtimeMs
+    const userMtime = (await stat(userSkillPath)).mtimeMs
 
     const agents = new Map<string, AgentDefinition>([
         ["build", createAgent("build")],
@@ -374,6 +503,34 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
         expect([...registeredNames].sort()).toEqual(expectedNames.sort())
         expect(new Set(registeredNames).size).toBe(registeredNames.length)
         expect(registeredNames).toContain("autocode_session_create")
+        expect(registeredNames).not.toContain("skill_edit")
+        expect(skills).toContainEqual(expect.objectContaining({
+            id: bundledSkill.name,
+            name: bundledSkill.name,
+            path: bundledPath,
+            content: bundledSkill.content,
+        }))
+        const bundledResult = await tools.get("skill")?.execute({ name: bundledSkill.name }, {
+            sessionID: Session.ID.make(`ses_bundled_${platform}`),
+            messageID: SessionMessage.ID.make("msg_bundled"),
+            agent: Agent.ID.make("execute-code"),
+            signal: new AbortController().signal,
+            id: Tool.CallID.make("call-bundled"),
+            progress: async (): Promise<void> => {},
+        } satisfies V2ToolContext)
+        expect(bundledResult?.content).toEqual(expect.stringContaining(bundledSkill.content))
+        for (const file of bundledFiles) {
+            expect(await readFile(file.path, "utf8")).toBe(file.content)
+            expect((await stat(file.path)).mtimeMs).toBe(file.mtimeMs)
+        }
+        expect(await readFile(generatedSkillPath, "utf8")).toBe(generatedSkillText)
+        expect((await stat(generatedSkillPath)).mtimeMs).toBe(generatedMtime)
+        expect(await readFile(userSkillPath, "utf8")).toBe(userSkillText)
+        expect((await stat(userSkillPath)).mtimeMs).toBe(userMtime)
+        expect((await readdir(join(root, ".agents", "skills"))).sort()).toEqual(["autocode", "user"])
+        expect(await readdir(join(root, ".agents", "skills", "autocode"))).toEqual(["example"])
+        expect(existsSync(join(worktree, ".opencode", "skills"))).toBe(false)
+        for (const name of ["learn", "autocode_memory_recall", "autocode_memory_forget"]) expect(registeredNames).not.toContain(name)
         expect(registeredNames).toEqual(expect.arrayContaining([
             "autocode_ssh_command",
             "autocode_ssh_config_read",
@@ -385,6 +542,32 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
         ]))
         for (const tool of tools.values()) expect(tool.options?.codemode).toBe(false)
         expect(registeredNames.some((name) => name.startsWith("autocode_sandbox_"))).toBe(platform !== "win32")
+        expect([...commands.keys()].sort()).toEqual([
+            "job-concepts",
+            "new-advise",
+            "new-assist",
+            "new-auto",
+            "new-design",
+            "new-fix",
+            "new-spy",
+            "autocode-install",
+            "autocode-version",
+            "author",
+            "docs",
+            "explain",
+            "git-conflict",
+            "init",
+            "learn",
+            "learn-conventions",
+            "learn-code",
+            "learn-env",
+            "learn-prd",
+            "learn-ux",
+            "repeat-as-md",
+            "repeat-as-wiki",
+            "report",
+            "tests",
+        ].sort())
         // Remaining execution and event contracts exercise the Linux sandbox fixture.
         if (platform === "win32") return
 
@@ -477,7 +660,7 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
         }
         expect(agents.get("query-text")).toEqual(expect.objectContaining({ mode: "subagent", hidden: true }))
         expect(agents.get("auto-general")).toEqual(expect.objectContaining({ mode: "all", hidden: true }))
-        for (const [parent, child] of [["auto", "auto-author"], ["auto-author", "document-env"], ["document-env", "query-os"]]) {
+        for (const [parent, child] of [["auto", "auto-feature"], ["auto-feature", "auto-test"], ["auto-test", "query-code"]]) {
             expect(permissionEffect(agents.get(parent)?.permissions as PermissionRule[], "subagent", child)).toBe("allow")
             expect(agents.get(child)).toEqual(expect.objectContaining({ mode: "subagent", hidden: false }))
         }
@@ -486,7 +669,8 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
             const advertised = [...agents.entries()]
                 .filter(([name, agent]) => agent.mode !== "primary" && !agent.hidden && permissionEffect(rules, "subagent", name) !== "deny")
                 .map(([name]) => name)
-            expect(advertised).toContain("query-code")
+            expect(advertised).toContain("learn-memory")
+            expect(advertised).toContain("query-memory")
             expect(advertised).not.toContain("query-text")
         }
         const primaryMenu = [...agents.entries()].filter(([, agent]) => agent.mode !== "subagent" && !agent.hidden).map(([name]) => name)
@@ -496,18 +680,42 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
         expect(sessionHooks.has("prompt")).toBe(true)
         expect(shellHooks.has("create.before")).toBe(true)
 
-        const promptEvent: Record<string, unknown> = {
-            sessionID: "session-memory",
-            messageID: "message-memory",
-            prompt: { text: "Remember this", files: [], agents: [], skills: [] },
-            delivery: "steer",
+        for (const agent of ["assist", undefined]) {
+            const promptEvent: Record<string, unknown> = {
+                sessionID: "session-memory",
+                messageID: "message-memory",
+                ...(agent === undefined ? {} : { agent }),
+                prompt: { text: "  Héllo 🧪\n第二行\r\n", files: [{ path: "fixture.txt" }], agents: ["query-code"], skills: ["fixture"] },
+                delivery: "steer",
+                metadata: { existing: "preserve" },
+            }
+            const expected = structuredClone(promptEvent)
+            await sessionHooks.get("prompt")?.(promptEvent)
+            expect(promptEvent).toEqual(expected)
+            expect(JSON.stringify(promptEvent)).not.toContain(sentinelText)
         }
-        await sessionHooks.get("prompt")?.(promptEvent)
-        expect(promptEvent.prompt).toEqual(expect.objectContaining({ text: "Remember this" }))
-        expect(promptEvent.metadata).toEqual(expect.objectContaining({
-            "autocode.local_memory.original_text": "Remember this",
-            "autocode.local_memory.parts": [expect.objectContaining({ text: "" })],
-        }))
+        const missingMetadata: Record<string, unknown> = { sessionID: "session-memory", prompt: { text: "No metadata\n🧪" } }
+        await sessionHooks.get("prompt")?.(missingMetadata)
+        expect(missingMetadata).toEqual({ sessionID: "session-memory", prompt: { text: "No metadata\n🧪" } })
+
+        activeMessages = [
+            { id: "msg_user", type: "user", text: "Original 🧪\ntext", time: { created: 1 }, metadata: {
+                "autocode.local_memory.original_text": "Replacement text",
+                "autocode.local_memory.parts": [{ type: "text", text: sentinelText }],
+            } },
+            { id: "msg_switch", type: "agent-switched", agent: "assist" },
+            { id: "msg_switched_user", type: "user", text: "Switched agent", time: { created: 2 } },
+            { id: "msg_assistant", type: "assistant", agent: "query-code", time: { created: 2 }, finish: "stop", content: [{ type: "text", text: "Assistant\nresponse" }] },
+            { id: "msg_user_next", type: "user", text: "Next user", time: { created: 3 } },
+        ]
+        const converted = await activeClient.session.messages({ path: { id: "ses_conversion" }, query: { directory: worktree } })
+        expect(converted.data as unknown).toEqual([
+            { info: { id: "msg_user", role: "user", agent: "auto", time: { created: 1 } }, parts: [{ id: "msg_user-text", messageID: "msg_user", type: "text", text: "Original 🧪\ntext" }] },
+            { info: { id: "msg_switched_user", role: "user", agent: "assist", time: { created: 2 } }, parts: [{ id: "msg_switched_user-text", messageID: "msg_switched_user", type: "text", text: "Switched agent" }] },
+            { info: { id: "msg_assistant", role: "assistant", agent: "query-code", time: { created: 2 }, finish: "stop" }, parts: [{ id: "msg_assistant-0", messageID: "msg_assistant", type: "text", text: "Assistant\nresponse" }] },
+            { info: { id: "msg_user_next", role: "user", agent: "query-code", time: { created: 3 } }, parts: [{ id: "msg_user_next-text", messageID: "msg_user_next", type: "text", text: "Next user" }] },
+        ])
+        expect(contextCalls).toContainEqual({ sessionID: "ses_conversion" })
 
         await commands.get("explain")?.execute({
             sessionID: "session-1",
@@ -851,6 +1059,8 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
         cleanup = undefined
         expect(lifecycleDisposed).toBe(true)
         expect(restartDisposed).toBe(true)
+        expect(await readdir(memoryDir)).toEqual(["sentinel.md"])
+        expect(await readFile(sentinelPath, "utf8")).toBe(sentinelText)
     }
     finally {
         resolveEventHandled = undefined

@@ -204,3 +204,4 @@ Also ensure the Surefire plugin version supports JUnit 5:
 - JUnit 5 test classes and methods do NOT need to be `public` — package-private is preferred
 - `assertThrows` returns the thrown exception — use it to assert the exception message too: `assertEquals("msg", ex.getMessage())`
 - Do not mix JUnit 4 (`org.junit.*`) and JUnit 5 (`org.junit.jupiter.*`) imports in the same file
+- Never write tests for Spring Boot Configuration classes; By default only create tests for business logic and utility classes.

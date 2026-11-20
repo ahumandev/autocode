@@ -1,6 +1,6 @@
 import { Plugin as OpenCodePlugin, type Agent } from "@opencode/plugin"
 import type { Dirent } from "node:fs"
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises"
+import { readFile, readdir } from "node:fs/promises"
 import { homedir } from "node:os"
 import { posix, win32 } from "node:path"
 import { join } from "node:path"
@@ -17,13 +17,12 @@ import { collectExternalDirectories, loadAutocodeConfig, mergeExternalDirectoryR
 import type { ExternalDirectoryRules, ModelTier, TierConfig } from "./config"
 import { createCommands } from "./commands"
 import { createRuntimeCredentialResolver } from "./credentials/runtime"
-import { reconcileGeneratedSkills } from "./skills"
+import { getBundledSkillsRoot, getGeneratedSkillsRoot } from "./skills"
 import { createTools } from "./tools"
 import { createPlatformCapabilities, type PlatformCapabilities } from "./utils/platform"
 import { createPendingAgentRestartCoordinator } from "./hooks/agent_restart_coordinator"
 import { createManagedScriptLifecycle } from "./hooks/managed_script_lifecycle"
 import { createRootSessionTitleHook } from "./hooks/root_session_title"
-import { createLocalMemoryRecallHook, createOpenCodeLocalMemorySessionContextLoader } from "./hooks/local_memory_recall"
 import type { SandboxPlatformSupportOptions } from "@/utils/sandbox"
 import { isSandboxPlatformSupported } from "@/utils/sandbox"
 import { permissionEffect, type PermissionRule } from "./utils/permissions"
@@ -50,9 +49,6 @@ type V2ContextWithRuntimeOverrides = V2Context & {
     sandboxSupportOverride?: SandboxPlatformSupportOptions
     serverUrl?: URL
 }
-
-const v2LocalMemoryPartsMetadataKey = "autocode.local_memory.parts"
-const v2LocalMemoryOriginalTextMetadataKey = "autocode.local_memory.original_text"
 
 function mergePluginAgentConfig(
     agentDef: PluginAgentConfig,
@@ -116,7 +112,6 @@ async function mergeConfig(
     autocodeConfig: Awaited<ReturnType<typeof loadAutocodeConfig>>,
     capabilities: PlatformCapabilities,
     commandDefinitions: CommandMap,
-    refreshSmartAgentNames: (agents: ReturnType<typeof buildAgents>) => void,
 ): Promise<void> {
     const { tiers, externalDirectories } = autocodeConfig
     const nativeExternalDirectories = collectExternalDirectories((cfg as Config & { permissions?: unknown }).permissions)
@@ -132,8 +127,10 @@ async function mergeConfig(
 
     cfg.agent = cfg.agent ?? {}
     if (capabilities.isWindows) delete (cfg.agent as Record<string, unknown>)["execute-sandbox"]
-    const agents = buildAgents(capabilities, agentExternalDirectories, input.sandboxSupportOverride, tiers)
-    refreshSmartAgentNames(agents)
+    const agents = buildAgents(capabilities, agentExternalDirectories, input.sandboxSupportOverride, tiers, {
+        projectDirectory: input.directory,
+        memoryDirectory: autocodeConfig.memory.directory,
+    })
     for (const agentName of ["spy", "auto"] as const) {
         if (agents[agentName] === undefined) {
             delete (cfg.agent as Record<string, unknown>)[agentName]
@@ -176,12 +173,15 @@ async function preparePluginSkills(
     registerSkills?: (path: string) => void,
 ): Promise<{
     autocodeConfig: Awaited<ReturnType<typeof loadAutocodeConfig>>
-    generatedSkills: Awaited<ReturnType<typeof reconcileGeneratedSkills>>
+    generatedSkills: { root: string }
+    bundledSkillsRoot: string
 }> {
     const autocodeConfig = await loadAutocodeConfig(input.worktree, input.directory)
-    const generatedSkills = await reconcileGeneratedSkills({ home, skipExtraction: autocodeConfig.skills?.freeze === true })
+    const generatedSkills = { root: getGeneratedSkillsRoot({ home }) }
+    const bundledSkillsRoot = getBundledSkillsRoot()
     registerSkills?.(generatedSkills.root)
-    return { autocodeConfig, generatedSkills }
+    registerSkills?.(bundledSkillsRoot)
+    return { autocodeConfig, generatedSkills, bundledSkillsRoot }
 }
 
 async function createPluginHooks(
@@ -192,22 +192,6 @@ async function createPluginHooks(
     const restartCoordinator = createPendingAgentRestartCoordinator()
     const managedScriptLifecycle = createManagedScriptLifecycle({ client: input.client })
     const rootSessionTitleHook = createRootSessionTitleHook(input.client, input.directory)
-    const smartAgentNames = new Set<string>()
-    const localMemoryRecallHook = createLocalMemoryRecallHook({
-        context: { directory: input.directory, worktree: input.worktree },
-        fileSystem: {
-            mkdir: async (directoryPath: string, options?: { recursive?: boolean }): Promise<string | undefined> => await mkdir(directoryPath, options),
-            readFile: async (filePath: string, encoding: "utf8"): Promise<string> => await readFile(filePath, encoding),
-            readdir: async (directoryPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | Dirent[]> => options?.withFileTypes ? await readdir(directoryPath, { withFileTypes: true }) : await readdir(directoryPath),
-            rename: async (oldPath: string, newPath: string): Promise<void> => await rename(oldPath, newPath),
-            rm: async (filePath: string, options?: { recursive?: boolean, force?: boolean }): Promise<void> => await rm(filePath, options),
-            writeFile: async (filePath: string, content: string): Promise<void> => await writeFile(filePath, content),
-        },
-        loadSessionContext: createOpenCodeLocalMemorySessionContextLoader(input.client, input.directory),
-        isSmartAgent(agentName: string): boolean {
-            return smartAgentNames.has(agentName)
-        },
-    })
     const path = capabilities.isWindows ? win32 : posix
     const home = input.homeOverride ?? homedir()
     const bunRoot = path.join(home, ".bun")
@@ -225,7 +209,6 @@ async function createPluginHooks(
             const results = await Promise.allSettled([
                 managedScriptLifecycle.dispose(),
                 (async (): Promise<void> => { restartCoordinator.dispose() })(),
-                (async (): Promise<void> => { await localMemoryRecallHook.dispose?.() })(),
             ])
             for (const result of results) {
                 if (result.status === "rejected") {
@@ -234,7 +217,6 @@ async function createPluginHooks(
             }
         },
         async event({ event }): Promise<void> {
-            await localMemoryRecallHook.event?.({ event })
             await managedScriptLifecycle.handleEvent(event)
             try {
                 await restartCoordinator.handleEvent(event)
@@ -247,12 +229,7 @@ async function createPluginHooks(
             const originalPath = process.env.PATH
             process.env.BUN_INSTALL = bunRoot
             process.env.PATH = originalPath ? `${bunBin}${path.delimiter}${originalPath}` : bunBin
-            await mergeConfig(cfg, input, autocodeConfig, capabilities, commandDefinitions, (agents: ReturnType<typeof buildAgents>): void => {
-                smartAgentNames.clear()
-                for (const [name, agent] of Object.entries(agents)) {
-                    if (agent.tier === "smart") smartAgentNames.add(name)
-                }
-            })
+            await mergeConfig(cfg, input, autocodeConfig, capabilities, commandDefinitions)
         },
         tool: createTools(input.client, autocodeConfig.sandbox, {
             home,
@@ -263,11 +240,7 @@ async function createPluginHooks(
             managedScriptLifecycle,
         }, capabilities),
     }
-    return {
-        ...hooks,
-        "chat.message": localMemoryRecallHook["chat.message"],
-        "experimental.chat.messages.transform": localMemoryRecallHook["experimental.chat.messages.transform"],
-    }
+    return hooks
 }
 
 function getRecord(value: unknown): Record<string, unknown> | undefined {
@@ -322,26 +295,10 @@ function toLegacyMessages(messages: readonly unknown[], fallbackAgent?: string):
             continue
         }
         if (type === "user") {
-            const metadata = getRecord(message.metadata)
-            const originalText = metadata?.[v2LocalMemoryOriginalTextMetadataKey]
-            const text = typeof originalText === "string" ? originalText : typeof message.text === "string" ? message.text : ""
-            const retainedParts = Array.isArray(metadata?.[v2LocalMemoryPartsMetadataKey])
-                ? metadata[v2LocalMemoryPartsMetadataKey]
-                    .map((part) => getRecord(part))
-                    .filter((part): part is Record<string, unknown> => part !== undefined && typeof part.text === "string")
-                : []
+            const text = typeof message.text === "string" ? message.text : ""
             result.push({
                 info: { id, role: "user", agent: selectedAgent, time: message.time },
-                parts: [
-                    { id: `${id}-text`, messageID: id, type: "text", text },
-                    ...retainedParts.map((part, index) => ({
-                        id: `${id}-autocode-memory-${index}`,
-                        messageID: id,
-                        type: "text",
-                        text: part.text,
-                        metadata: part.metadata,
-                    })),
-                ],
+                parts: [{ id: `${id}-text`, messageID: id, type: "text", text }],
             })
             continue
         }
@@ -717,28 +674,13 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
     const restartCoordinator = createPendingAgentRestartCoordinator()
     const managedScriptLifecycle = createManagedScriptLifecycle({ client })
     const rootSessionTitleHook = createRootSessionTitleHook(client, directory)
-    const { autocodeConfig, generatedSkills } = await preparePluginSkills(input, home)
-    const smartAgentNames = new Set<string>()
+    const { autocodeConfig, generatedSkills, bundledSkillsRoot } = await preparePluginSkills(input, home)
     const runtimePermissions = new Map<string, V2PermissionRule[]>()
-    const localMemoryRecallHook = createLocalMemoryRecallHook({
-        context: { directory, worktree },
-        fileSystem: {
-            mkdir: async (directoryPath: string, options?: { recursive?: boolean }): Promise<string | undefined> => await mkdir(directoryPath, options),
-            readFile: async (filePath: string, encoding: "utf8"): Promise<string> => await readFile(filePath, encoding),
-            readdir: async (directoryPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | Dirent[]> => options?.withFileTypes ? await readdir(directoryPath, { withFileTypes: true }) : await readdir(directoryPath),
-            rename: async (oldPath: string, newPath: string): Promise<void> => await rename(oldPath, newPath),
-            rm: async (filePath: string, options?: { recursive?: boolean, force?: boolean }): Promise<void> => await rm(filePath, options),
-            writeFile: async (filePath: string, content: string): Promise<void> => await writeFile(filePath, content),
-        },
-        loadSessionContext: createOpenCodeLocalMemorySessionContextLoader(client, directory),
-        isSmartAgent(agentName: string): boolean {
-            return smartAgentNames.has(agentName)
-        },
-    })
 
-    const builtAgents = buildAgents(capabilities, autocodeConfig.externalDirectoryPermissions, runtimeContext.sandboxSupportOverride, autocodeConfig.tiers)
-    smartAgentNames.clear()
-    for (const [name, agent] of Object.entries(builtAgents)) if (agent.tier === "smart") smartAgentNames.add(name)
+    const builtAgents = buildAgents(capabilities, autocodeConfig.externalDirectoryPermissions, runtimeContext.sandboxSupportOverride, autocodeConfig.tiers, {
+        projectDirectory: directory,
+        memoryDirectory: autocodeConfig.memory.directory,
+    })
     const finalAgents = enforceSpyLearnDenial(preparePluginAgentsAfterOverrides(
         Object.fromEntries(Object.entries(builtAgents).map(([name, definition]) => [
             name,
@@ -768,8 +710,14 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
     })
 
     const generatedSkillDefinitions = await discoverGeneratedSkills(generatedSkills.root)
+    const bundledSkillDefinitions = await discoverGeneratedSkills(bundledSkillsRoot)
     await context.skill.transform((editor) => {
-        for (const skill of generatedSkillDefinitions) editor.add(skill as never)
+        const registeredIDs = new Set<string>()
+        for (const skill of [...generatedSkillDefinitions, ...bundledSkillDefinitions]) {
+            if (registeredIDs.has(skill.id)) continue
+            registeredIDs.add(skill.id)
+            editor.add(skill as never)
+        }
     })
 
     const commands = createCommands(capabilities, autocodeConfig.tiers.spy !== undefined, autocodeConfig.tiers.smart !== undefined)
@@ -829,35 +777,7 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
         }
     })
 
-    await context.session.hook("prompt", async (event) => {
-        const session = await context.session.get({ sessionID: event.sessionID })
-        const agent = session.agent
-        if (typeof agent !== "string") return
-        const originalText = event.prompt.text
-        const output = {
-            message: { id: event.messageID, role: "user", agent },
-            parts: [{ id: `${event.messageID}-text`, sessionID: event.sessionID, messageID: event.messageID, type: "text", text: originalText }],
-        }
-        await localMemoryRecallHook["chat.message"]?.({ sessionID: event.sessionID } as never, output as never)
-        const retainedMemoryParts = output.parts
-            .map((part) => getRecord(part))
-            .filter((part): part is Record<string, unknown> => part !== undefined
-                && typeof part.text === "string"
-                && getRecord(part.metadata)?.["autocode.local_memory"] === "v1")
-            .map((part) => ({ text: part.text, metadata: part.metadata }))
-        if (retainedMemoryParts.length > 0) {
-            event.metadata = {
-                ...event.metadata,
-                [v2LocalMemoryOriginalTextMetadataKey]: originalText,
-                [v2LocalMemoryPartsMetadataKey]: retainedMemoryParts,
-            }
-        }
-        event.prompt.text = output.parts
-            .filter((part): part is typeof output.parts[number] & { text: string } => part.type === "text" && typeof part.text === "string")
-            .map((part) => part.text)
-            .filter(Boolean)
-            .join("\n")
-    })
+    await context.session.hook("prompt", async (): Promise<void> => {})
 
     await context.shell.hook("create.before", (event) => {
         event.env.BUN_INSTALL = bunRoot
@@ -870,7 +790,6 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
             const normalizedEvent = normalizeV2Event(event)
             if (normalizedEvent === undefined) continue
             const normalized = normalizedEvent as never
-            await localMemoryRecallHook.event?.({ event: normalized })
             await managedScriptLifecycle.handleEvent(normalized)
             try {
                 await restartCoordinator.handleEvent(normalized)
@@ -891,7 +810,6 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
         const results = await Promise.allSettled([
             managedScriptLifecycle.dispose(),
             Promise.resolve(restartCoordinator.dispose()),
-            Promise.resolve(localMemoryRecallHook.dispose?.()),
         ])
         for (const result of results) {
             if (result.status === "rejected") console.warn(`autocode: plugin lifecycle cleanup failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`)

@@ -1,5 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs"
-import { cp, mkdir, mkdtemp, rename, rm } from "node:fs/promises"
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { resolveOpenCodePaths, type OpenCodePathResolverDependencies } from "@/utils/paths"
@@ -9,20 +8,6 @@ export type ManagedSkillDefinition = {
     description: string
     directory: string
     content: string
-}
-
-export type GeneratedSkillsOptions = OpenCodePathResolverDependencies & {
-    skipExtraction?: boolean
-}
-
-export type GeneratedSkillsResult = {
-    root: string
-    changedPaths: string[]
-}
-
-type ManagedBundleItem = {
-    relativePath: string
-    sourcePath: string
 }
 
 const managedSkillDirectories = [
@@ -109,61 +94,10 @@ export const managedSkills: ManagedSkillDefinition[] = managedSkillDirectories.m
     parseSkillSource(skillSourceFile(skillSourceRoot, directory), directory)
 ))
 
+export function getBundledSkillsRoot(): string {
+    return skillSourceRoot
+}
+
 export function getGeneratedSkillsRoot(dependencies: OpenCodePathResolverDependencies = {}): string {
     return resolveOpenCodePaths(dependencies).generatedSkillsRoot
-}
-
-function skillRootExists(destination: string): boolean {
-    try {
-        return statSync(destination).isDirectory()
-    } catch {
-        return false
-    }
-}
-
-async function extractMissingSkill(source: ManagedBundleItem, destination: string): Promise<void> {
-    await mkdir(path.dirname(destination), { recursive: true })
-    const stagingRoot = await mkdtemp(path.join(path.dirname(destination), `.${path.basename(destination)}.stage-`))
-    const stagingPath = path.join(stagingRoot, path.basename(destination))
-    try {
-        await cp(source.sourcePath, stagingPath, { recursive: true, dereference: false })
-        await rename(stagingPath, destination)
-    } catch (error) {
-        await rm(stagingRoot, { recursive: true, force: true })
-        throw error
-    }
-    await rm(stagingRoot, { recursive: true, force: true })
-}
-
-function managedBundleItems(): ManagedBundleItem[] {
-    return managedSkillDirectories.map((directory) => ({
-        relativePath: directory,
-        sourcePath: path.join(skillSourceRoot, directory),
-    }))
-}
-
-export async function reconcileGeneratedSkills(options: GeneratedSkillsOptions = {}): Promise<GeneratedSkillsResult> {
-    const paths = resolveOpenCodePaths(options)
-    const root = paths.generatedSkillsRoot
-    const items = managedBundleItems()
-    if (options.skipExtraction) return { root, changedPaths: [] }
-
-    await mkdir(root, { recursive: true })
-    const changedPaths: string[] = []
-
-    for (const item of items) {
-        const destination = path.join(root, item.relativePath)
-        if (skillRootExists(destination)) continue
-        try {
-            await extractMissingSkill(item, destination)
-            changedPaths.push(destination)
-        } catch (error) {
-            console.warn(`autocode: skill extraction failed for ${item.relativePath}: ${error instanceof Error ? error.message : String(error)}`)
-        }
-    }
-    return { root, changedPaths }
-}
-
-export async function ensureGeneratedSkills(options: GeneratedSkillsOptions = {}): Promise<string> {
-    return (await reconcileGeneratedSkills(options)).root
 }

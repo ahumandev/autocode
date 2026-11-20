@@ -3,6 +3,7 @@ import type { AgentConfig } from "@opencode-ai/sdk/v2"
 import type { ExternalDirectoryRules, ModelTier, PermissionAction, TierConfig } from "@/config"
 import type { PlatformCapabilities } from "@/utils/platform"
 import type { PermissionRule } from "@/utils/permissions"
+import { resolveMemoryIndexPath } from "@/utils/memory_directory"
 import { assistBrowserPrompt } from "./prompts/assist_browser";
 import { assistGitConflictPrompt } from "./prompts/assist_git_conflict";
 import { assistPrompt } from "./prompts/assist";
@@ -18,12 +19,6 @@ import { buildReviewUiPrompt } from "./prompts/auto_review_ui";
 import { buildTestPrompt } from "./prompts/auto_test";
 import { buildTroubleshootPrompt } from "./prompts/auto_troubleshoot";
 import { designPrompt } from "./prompts/design";
-import { documentAgentsPrompt } from "./prompts/document_agents"
-import { documentCodePrompt } from "./prompts/document_code"
-import { documentConventionsPrompt } from "./prompts/document_conventions"
-import { documentInstallPrompt } from "./prompts/document_install"
-import { documentPrdPrompt } from "./prompts/document_prd"
-import { documentUxPrompt } from "./prompts/document_ux"
 import { executeAuthorPrompt } from "./prompts/execute_author";
 import { executeCodePrompt } from "./prompts/execute_code";
 import { executeDebugPrompt } from "./prompts/execute_debug";
@@ -41,18 +36,18 @@ import { queryDbPrompt } from "./prompts/query_db";
 import { queryExcelPrompt } from "./prompts/query_excel";
 import { queryGitPrompt } from "./prompts/query_git";
 import { queryOsPrompt as buildQueryOsPrompt } from "./prompts/query_os";
-import { queryDocsPrompt } from "./prompts/query_docs";
 import { queryTextPrompt } from "./prompts/query_text";
 import { queryWebPrompt } from "./prompts/query_web";
 import { queryYoutubePrompt } from "./prompts/query_youtube";
 import { advisePrompt } from "./prompts/advise";
 import { spyPrompt } from "./prompts/spy";
-import { documentEnvPrompt } from "./prompts/document_env";
 import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
 import { executeConfigPrompt } from "./prompts/execute_config";
 import { queryConfigPrompt } from "./prompts/query_config";
 import { queryFigmaPrompt } from "./prompts/query_figma";
+import { buildLearnMemoryPrompt } from "./prompts/learn_memory";
+import { buildQueryMemoryPrompt } from "./prompts/query_memory";
 
 type PermissionTargetRules = Record<string, PermissionAction>
 type AutocodePermissionRule = PermissionAction | PermissionTargetRules | PermissionRule[]
@@ -68,6 +63,7 @@ type AgentMap = Record<string, LegacyAgentConfig>
 type V2AgentMap = Record<string, AutocodeAgentConfig>
 type PermissionObject = AutocodePermissionObject
 type SandboxPlatformPolicyOptions = NodeJS.Platform | SandboxPlatformSupportOptions
+type AgentProjectContext = { projectDirectory: string; memoryDirectory?: string }
 
 const sandboxCopyTargetPermission: PermissionTargetRules = {
     sandbox_target: "allow",
@@ -76,8 +72,10 @@ const sandboxCopyTargetPermission: PermissionTargetRules = {
 
 const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"] as const
 const sandboxLinuxCapabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" }
+const optionalOpenChamberContextPolicy = "OpenChamber knowledge notes and saved plans are optional context. Consult them only when the user explicitly asks for or activates them; activation does not make them mandatory. They do not replace any required memory librarian recall."
 
-function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
+function createBaseAgents(capabilities: PlatformCapabilities, projectContext: AgentProjectContext = { projectDirectory: process.cwd() }): AgentMap {
+
     return {
 
         // Build-in opencode
@@ -114,13 +112,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_config_read: "allow",
                 autocode_md_frontmatter_read: "allow",
                 autocode_md_read: "allow",
-                // autocode_memory_recall: "allow",
-                // autocode_memory_forget: "allow",
                 autocode_session_create: "allow",
                 doom_loop: "ask",
                 "git-commit": "ask",
-                // learn: "allow",
-                openchamber_memory: "allow",
                 openchamber_render: "allow",
                 question: "allow",
                 skill: {
@@ -133,6 +127,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 subagent: {
                     "*": "deny",
                     "auto-research": "allow",
+                    "learn-memory": "allow",
                     "query*": "allow",
                 }
             },
@@ -149,16 +144,12 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 "autocode_config_*": "allow",
                 "autocode_md_*": "allow",
-                // autocode_memory_recall: "allow",
-                // autocode_memory_forget: "allow",
                 autocode_sandbox_create: "ask",
                 autocode_sandbox_delete: "allow",
                 autocode_session_create: "allow",
                 doom_loop: "ask",
                 edit: "allow",
                 "git-commit": "allow",
-                // learn: "allow",
-                openchamber_memory: "allow",
                 openchamber_schedule: "allow",
                 openchamber_render: "allow",
                 question: "allow",
@@ -175,7 +166,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "auto-research": "allow",
                     build: "deny",
                     "document*": "deny",
+                    "learn-memory": "allow",
                     plan: "deny",
+                    "query*": "allow",
                     "execute-document": "allow",
                 },
             },
@@ -190,12 +183,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             mode: "primary",
             permission: {
                 "*": "deny",
-                // autocode_memory_recall: "allow",
-                // autocode_memory_forget: "allow",
                 autocode_session_create: "allow",
                 "git-commit": "allow",
-                // learn: "allow",
-                openchamber_memory: "allow",
                 openchamber_notify: "allow",
                 skill: {
                     "*": "deny",
@@ -205,7 +194,8 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 subagent: {
                     "*": "deny",
                     "auto-*": "allow",
-                    "query-*": "allow"
+                    "learn-memory": "allow",
+                    "query-memory": "allow",
                 }
             },
             prompt: autoPrompt,
@@ -229,15 +219,11 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_concept_list: "allow",
                 autocode_concept_read: "allow",
                 autocode_job_list: "allow",
-                // autocode_memory_recall: "allow",
-                // autocode_memory_forget: "allow",
                 autocode_session_create: "allow",
                 doom_loop: "ask",
                 external_directory: "ask",
-                // learn: "allow",
                 question: "allow",
                 openchamber_knowledge: "allow",
-                openchamber_memory: "allow",
                 openchamber_render: "allow",
                 skill: {
                     "*": "deny",
@@ -245,6 +231,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 subagent: {
                     "*": "deny",
                     "auto-research": "allow",
+                    "learn-memory": "allow",
                     "query*": "allow",
                 },
             },
@@ -266,7 +253,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_db_tables: "allow",
                 autocode_md_frontmatter_read: "allow",
                 autocode_md_read: "allow",
-                // autocode_memory_forget: "allow",
                 autocode_ssh_config_read: "allow",
                 autocode_ssh_glob: "allow",
                 autocode_ssh_grep_file: "allow",
@@ -299,7 +285,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "*": "deny",
                     "execute-ux": "allow",
                 },
-                // learn: "allow",
             },
             prompt: assistBrowserPrompt,
             temperature: 0.3,
@@ -350,13 +335,13 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 "autocode_md_*": "allow",
                 edit: "allow",
-                openchamber_memory: "allow",
                 subagent: {
                     "*": "deny",
-                    "document-*": "allow",
                     "execute-author": "allow",
                     "execute-document": "allow",
                     "execute-script": "allow",
+                    "learn-memory": "allow",
+                    "query-memory": "allow",
                     "query-text": "allow",
                     "query-web": "allow",
                     "query-youtube": "allow",
@@ -377,9 +362,10 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 read: "allow",
                 question: "allow",
                 openchamber_knowledge: "allow",
-                openchamber_memory: "allow",
                 subagent: {
                     "*": "deny",
+                    "auto-research": "allow",
+                    "learn-memory": "allow",
                     "query*": "allow",
                 },
             },
@@ -396,7 +382,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 autocode_sandbox_copy: sandboxCopyTargetPermission,
                 autocode_sandbox_delete: "allow",
-                openchamber_memory: "allow",
                 skill: {
                     "*": "deny",
                     "code*": "allow",
@@ -404,14 +389,17 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 },
                 subagent: {
                     "*": "deny",
+                    "auto-research": "allow",
                     "auto-test": "allow",
                     "auto-troubleshoot": "allow",
                     "execute-code": "allow",
                     "execute-os": "allow",
+                    "learn-memory": "allow",
                     "query-code": "allow",
                     "query-figma": "allow",
                     "query-git": "allow",
-                    "query-text": "allow"
+                    "query-memory": "allow",
+                    "query-text": "allow",
                 },
             },
             prompt: autoFeaturePrompt,
@@ -446,7 +434,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     report: "deny",
                     session: "deny",
                     spy: "deny",
-                    "temp*": "deny"
                 },
             },
             prompt: autoGeneralPrompt,
@@ -461,7 +448,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 autocode_sandbox_create: "allow",
                 autocode_sandbox_delete: "allow",
-                openchamber_memory: "allow",
                 skill: {
                     "*": "deny",
                     "code*": "allow",
@@ -472,9 +458,11 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "auto-troubleshoot": "allow",
                     "execute-code": "allow",
                     "execute-os": "allow",
+                    "learn-memory": "allow",
                     "query-code": "allow",
                     "query-figma": "allow",
                     "query-git": "allow",
+                    "query-memory": "allow",
                 },
             },
             prompt: buildRefactorPrompt,
@@ -488,9 +476,9 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             mode: "subagent",
             permission: {
                 "*": "deny",
-                openchamber_memory: "allow",
                 subagent: {
                     "*": "deny",
+                    "learn-memory": "allow",
                     "query*": "allow",
                 },
             },
@@ -507,7 +495,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 autocode_sandbox_create: "allow",
                 autocode_sandbox_delete: "allow",
-                openchamber_memory: "allow",
                 subagent: {
                     "*": "deny",
                     "execute-code": "allow",
@@ -515,8 +502,10 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-script": "allow",
                     "execute-os": "allow",
                     "execute-rest": "allow",
+                    "learn-memory": "allow",
                     "query-code": "allow",
                     "query-git": "allow",
+                    "query-memory": "allow",
                     "query-text": "allow",
                 },
             },
@@ -533,16 +522,17 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 "*": "deny",
                 autocode_sandbox_create: "allow",
                 autocode_sandbox_delete: "allow",
-                openchamber_memory: "allow",
                 subagent: {
                     "*": "deny",
                     "execute-code": "allow",
                     "execute-sandbox": "allow",
                     "execute-os": "allow",
+                    "learn-memory": "allow",
                     "query-browser": "allow",
                     "query-code": "allow",
                     "query-figma": "allow",
                     "query-git": "allow",
+                    "query-memory": "allow",
                     "query-text": "allow",
                 },
             },
@@ -558,7 +548,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             permission: {
                 "*": "deny",
                 edit: "allow",
-                openchamber_memory: "allow",
                 skill: {
                     "*": "deny",
                     "test*": "allow",
@@ -569,9 +558,11 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-config": "allow",
                     "execute-script": "allow",
                     "execute-os": "allow",
+                    "learn-memory": "allow",
                     "query-code": "allow",
                     "query-config": "allow",
                     "query-git": "allow",
+                    "query-memory": "allow",
                 },
             },
             prompt: buildTestPrompt,
@@ -588,14 +579,10 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_sandbox_create: "allow",
                 autocode_sandbox_delete: "allow",
                 "context7*": "allow",
-                openchamber_memory: "allow",
                 skill: {
                     "*": "deny",
                     "skill-write": "allow",
                 },
-                // learn: "allow",
-                // autocode_memory_recall: "allow",
-                // autocode_memory_forget: "allow",
                 subagent: {
                     "*": "deny",
                     "execute-code": "allow",
@@ -606,169 +593,13 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-sandbox": "allow",
                     "execute-script": "allow",
                     "execute-ssh": "allow",
+                    "learn-memory": "allow",
                     "query*": "allow",
                 },
             },
             prompt: buildTroubleshootPrompt,
             temperature: 0.5,
             tier: "smart",
-        },
-
-        // Document Workers
-
-        "document-agents": {
-            description: "Use document-agents subagent to convert latest `README.md` to `AGENTS.md`.",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                "*": "deny",
-                "autocode_md_create": "allow",
-                "autocode_md_h1": "allow",
-                "autocode_md_read": "allow",
-                "autocode_md_update": "allow",
-                skill: {
-                    "*": "deny",
-                    "author-rules": "allow"
-                }
-            },
-            prompt: documentAgentsPrompt,
-            temperature: 0.3,
-            tier: "balanced",
-        },
-
-        "document-conventions": {
-            description: "Use document-conventions subagent to document naming conventions and project terminology.",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                "*": "deny",
-                "autocode_config_read": "allow",
-                glob: "allow",
-                grep: "allow",
-                lsp: "allow",
-                read: "allow",
-                skill: {
-                    "*": "deny",
-                    "skill-write": "allow"
-                },
-                skill_edit: "allow",
-            },
-            prompt: documentConventionsPrompt,
-            temperature: 0.3,
-            tier: "balanced",
-        },
-
-        "document-code": {
-            description: "Use document-code subagent to document technical architecture and design decisions or source code/config locations.",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                "*": "deny",
-                "autocode_config_read": "allow",
-                glob: "allow",
-                grep: "allow",
-                lsp: "allow",
-                read: "allow",
-                skill: {
-                    "*": "deny",
-                    "skill-write": "allow"
-                },
-                skill_edit: "allow",
-            },
-            prompt: documentCodePrompt,
-            temperature: 0.3,
-            tier: "balanced",
-        },
-
-        "document-env": {
-            description: "Use document-env subagent to document related project to current project.",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                "*": "deny",
-                "autocode_config_read": "allow",
-                grep: "allow",
-                read: "allow",
-                skill: {
-                    "*": "deny",
-                    "skill-write": "allow",
-                },
-                skill_edit: "allow",
-                // learn: "allow",
-                subagent: {
-                    "*": "deny",
-                    "query-os": "allow",
-                    "query-ssh": "allow"
-                }
-            },
-            prompt: documentEnvPrompt,
-            temperature: 0.3,
-            tier: "balanced",
-        },
-
-        "document-install": {
-            description: "Use document-install subagent to document project installation and usage guide.",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                "*": "deny",
-                "autocode_md_*": "allow",
-                glob: "allow",
-                grep: "allow",
-                read: "allow",
-                skill: {
-                    "*": "deny",
-                    "skill-write": "allow"
-                },
-                skill_edit: "allow",
-            },
-            prompt: documentInstallPrompt,
-            temperature: 0.3,
-            tier: "balanced",
-        },
-
-        "document-prd": {
-            description: "Use document-prd subagent to document product requirements and user roles.",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                "*": "deny",
-                "autocode_config_read": "allow",
-                glob: "allow",
-                grep: "allow",
-                lsp: "allow",
-                read: "allow",
-                skill: {
-                    "*": "deny",
-                    "skill-write": "allow"
-                },
-                skill_edit: "allow",
-            },
-            prompt: String(documentPrdPrompt),
-            temperature: 0.3,
-            tier: "balanced",
-        },
-
-        "document-ux": {
-            description: "Use document-ux subagent to document UX flows, navigation, and styling patterns",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                "*": "deny",
-                "autocode_config_read": "allow",
-                glob: "allow",
-                grep: "allow",
-                lsp: "allow",
-                read: "allow",
-                skill: {
-                    "*": "deny",
-                    "skill-write": "allow"
-                },
-                skill_edit: "allow",
-            },
-            prompt: documentUxPrompt,
-            temperature: 0.3,
-            tier: "balanced",
         },
 
         // Execute workers
@@ -843,7 +674,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "*": "deny",
                     "skill-write": "allow"
                 },
-                // learn: "allow",
             },
             prompt: executeDebugPrompt,
             temperature: 0.6,
@@ -851,23 +681,28 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
         },
 
         "execute-document": {
-            description: "Use execute-document subagent to update `AGENTS.md`, `README.md`, skills, remember architectural/design decisions or specs.",
+            description: "Use execute-document subagent to update cwd `AGENTS.md` and `README.md` and coordinate project memory.",
             mode: "subagent",
             permission: {
                 "*": "deny",
                 autocode_logo_find: "allow",
                 "autocode_md_*": "allow",
+                read: "allow",
                 skill: {
                     "*": "deny",
                     "author-readme": "allow",
+                    "author-rules": "allow",
                 },
                 subagent: {
                     "*": "deny",
-                    "document-*": "allow"
+                    "learn-memory": "allow",
+                    "query-code": "allow",
+                    "query-memory": "allow",
+                    "query-text": "allow",
                 },
             },
             prompt: executeDocumentPrompt,
-            temperature: 0.1,
+            temperature: 0.5,
             tier: "balanced",
         },
 
@@ -882,7 +717,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 subagent: {
                     "*": "deny",
                     "query-excel": "allow",
-                    "query-text": "allow"
+                    "query-text": "allow",
                 },
             },
             prompt: executeExcelPrompt,
@@ -934,7 +769,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-install": "allow",
                     "execute-sandbox": "allow",
                 },
-                // learn: "allow",
             },
             prompt: buildExecuteOsPrompt(capabilities),
             temperature: 0.1,
@@ -950,7 +784,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_config_read: "allow",
                 autocode_rest: "allow",
                 grep: "allow",
-                // learn: "allow",
                 read: "allow",
             },
             prompt: executeRestPrompt,
@@ -978,7 +811,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "execute-sandbox": "allow",
                     "skill-write": "allow"
                 },
-                // learn: "allow",
             },
             prompt: buildExecuteOsPrompt(sandboxLinuxCapabilities),
             temperature: 0.1,
@@ -997,7 +829,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 edit: "allow",
                 glob: "allow",
                 grep: "allow",
-                // learn: "allow",
                 read: "allow",
                 skill: {
                     "*": "deny",
@@ -1020,11 +851,30 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                     "*": "deny",
                     "execute-install": "allow"
                 },
-                // learn: "allow",
             },
             prompt: executeSshPrompt,
             temperature: 0.1,
             tier: "balanced",
+        },
+
+        // Learn memory subagent
+
+        "learn-memory": {
+            description: "Use learn-memory subagent when user say you must \"remember\" / \"learn\" or to record *NEW* info when you learned new specs, designs, architecture decisions, external integrations, project conventions/standards/structure, non-obvious corrections from mistakes, how to start/use project, ux style rules, environment setup, user preferences. NEVER for obvious, opinions, trivial info or session specific updates - instead future agents should benefit from memory.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_md_*": "allow",
+                edit: "allow",
+                glob: "allow",
+                grep: "allow",
+                read: "allow",
+                shell: "allow"
+            },
+            prompt: buildLearnMemoryPrompt(resolveMemoryIndexPath(projectContext.projectDirectory, projectContext.memoryDirectory)),
+            temperature: 0.2,
+            tier: "context",
         },
 
         // Query workers
@@ -1120,25 +970,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "context",
         },
 
-        "query-docs": {
-            description: "Use query-docs subagent to ask questions about project architecture / design / PRD / conventions / technologies / documentation or development environment / user preferences / dangerous operations / how previous mistakes were corrected.",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                '*': "deny",
-                openchamber_knowledge: "allow",
-                openchamber_memory: "allow",
-                skill: {
-                    "*": "deny",
-                    "customize-opencode": "allow", // Build-in to OpenCode
-                    "design*": "allow",
-                    "execute*": "allow",
-                },
-            },
-            prompt: queryDocsPrompt,
-            tier: "context",
-        },
-
         "query-excel": {
             description: "Use query-excel subagent to read excel files.",
             hidden: true,
@@ -1171,7 +1002,7 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             temperature: 0.1,
             tier: "context",
         },
-
+       
         "query-git": {
             description: "Use query-git subagent to inspect Git repos (status, diff, log, show), recent project file changes, file history.",
             hidden: true,
@@ -1192,6 +1023,23 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
             tier: "fast",
         },
 
+        "query-memory": {
+            description: "Use query-memory subagent to recall project specs, designs, architecture decisions, external integrations, project conventions/standards/structure, corrections, how to start/use project, ux style rules, environment setup, user preferences.",
+            hidden: true,
+            mode: "subagent",
+            permission: {
+                "*": "deny",
+                "autocode_md_frontmatter_read": "allow",
+                "autocode_md_read": "allow",
+                glob: "allow",
+                grep: "allow",
+                read: "allow"
+            },
+            prompt: buildQueryMemoryPrompt(resolveMemoryIndexPath(projectContext.projectDirectory, projectContext.memoryDirectory)),
+            temperature: 0.1,
+            tier: "fast",
+        },
+
         "query-os": {
             description: "Use query-os subagent to find OS provided info like: local host hardware, software, system, network, service, process, versions, help-command info, status.",
             hidden: true,
@@ -1204,7 +1052,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 external_directory: "allow",
                 glob: "allow",
                 grep: "allow",
-                // learn: "allow",
                 lsp: "allow",
                 read: "allow",
                 shell: "allow",
@@ -1227,7 +1074,6 @@ function createBaseAgents(capabilities: PlatformCapabilities): AgentMap {
                 autocode_ssh_list: "allow",
                 "autocode_ssh_read_*": "allow",
                 doom_loop: "deny",
-                // learn: "allow",
             },
             prompt: querySshPrompt,
             temperature: 0.1,
@@ -1514,14 +1360,24 @@ export function buildAgents(
     externalDirectories: ExternalDirectoryRules | PermissionRule[] = {},
     sandboxSupportOverride?: SandboxPlatformSupportOptions,
     tiers: Partial<Record<ModelTier, TierConfig>> = {},
+    projectContext?: AgentProjectContext,
 ): V2AgentMap {
     const agents = applyManagedAgentTierRegistration(
-        applyBundledAgentPolicy(createBaseAgents(capabilities), externalDirectories, sandboxSupportOverride),
+        applyBundledAgentPolicy(createBaseAgents(capabilities, projectContext), externalDirectories, sandboxSupportOverride),
         tiers,
     )
     return Object.fromEntries(Object.entries(applyWindowsSandboxPolicy(agents, capabilities)).map(([name, agent]) => {
         const { permission, ...definition } = agent
-        return [name, { ...definition, permissions: toV2Permissions(permission) }]
+        return [name, {
+            ...definition,
+            ...(typeof definition.prompt === "string" && definition.prompt.length > 0
+                ? { prompt: `${definition.prompt}\n\n${optionalOpenChamberContextPolicy}` }
+                : {}),
+            permissions: [
+                ...toV2Permissions(permission).filter((rule) => rule.action !== "openchamber_memory"),
+                { action: "openchamber_memory", resource: "*", effect: "deny" },
+            ],
+        }]
     }))
 }
 
