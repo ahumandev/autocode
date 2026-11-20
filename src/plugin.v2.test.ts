@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, spyOn, test } from "bun:test"
 import { existsSync } from "node:fs"
 import * as promiseFileSystem from "node:fs/promises"
-import { mkdir, mkdtemp, readFile, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { isAbsolute, join, relative, resolve, sep } from "node:path"
 import { Agent, type Plugin } from "@opencode/plugin"
