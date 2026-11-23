@@ -155,7 +155,7 @@ Run `opencode plugin remove @ahumandev/autocode@latest`, or remove `@ahumandev/a
 
 - [Configuration](configuration.md) — config locations, keys, model tiers, and DB/SSH environment variables.
 - [Usage](usage.md) — more details on how to use AutoCode.
-- [Local Memory](skill.md) — local memories and reusable guidance that extend AutoCode behavior.
+- [Memory Librarian](memory-librarian.md) — memory repository organization and librarian instructions.
 - [Terminology](terminology.md) — glossary of AutoCode concepts.
 
 ## Development & Distribution

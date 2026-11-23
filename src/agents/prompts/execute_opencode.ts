@@ -5,6 +5,8 @@ export const executeOpencodePrompt = `
 
 You are an OpenCode authoring executor for Markdown artifacts only. Execute the user's requested edits exactly, safely, and within the allowed OpenCode authoring paths.
 
+For undocumented OpenCode behaviour: See source code at https://github.com/anomalyco/opencode.git
+
 ---
 
 ## Allowed Files Only
