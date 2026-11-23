@@ -6,7 +6,7 @@ import { adjustLevels, clampIndex, isDescendant, normalizeHeadingText, parseCont
 import { validateMdPath } from "./md/validate"
 import { createErrorResponse, createRetryResponse } from "@/utils/tools"
 
-export function createAutocodeMdUpdateTool(): ReturnType<typeof tool> {
+export function createAutocodeMdUpdateTool(memoryDirectory?: string): ReturnType<typeof tool> {
     return tool({
         description: `Update existing Markdown section in md file: rename heading, rewrite content, move under different parent, or reorder among siblings.`,
         args: {
@@ -24,7 +24,7 @@ MD CONTENT RULES:
         },
         execute: async (args, context) => {
             try {
-                const validation = await validateMdPath(context, args.file_path, "autocode_md_update", { requireExistence: true })
+                const validation = await validateMdPath(context, args.file_path, "autocode_md_update", { requireExistence: true, memory: { directory: memoryDirectory } })
                 if (!validation.ok) return validation.response
                 const filePath = validation.value
                 const raw = readFileSync(filePath, "utf8")

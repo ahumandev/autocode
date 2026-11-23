@@ -80,7 +80,7 @@ Formulate 1-4 competing CAUSE hypotheses considering possible events leading to 
 
 Each formulated hypothesis need 1 or more follow up actions to confirm hypothesis in this preferred order (skip irrelevant/impractical actions):
 
-1. Recall previous solutions \`autocode_memory_recall\`
+1. Ask \`query-memory\` subagent to recall how similar issues were resolved in past.
 2. Check configs, env vars, input data (cheapest, try first)
 3. Search keywords in logs, local or sftp remote
 4. Compare Git versions, last working version - what changed?
@@ -114,8 +114,7 @@ Choose simplest APPROACHE that will solve hypothesis (ROOT CAUSE) with least unw
 
 ### STEP 7: Memorize Solution
 
-- Misleading/outdated memory? Call \`autocode_memory_forget\`
-- Learned from mistake? Call \`learn\`
+Ask \`learn-memory\` subagent to record issue, solution and correct previous misleading or outdated info.
 
 ### STEP 8: Report RCA Summary
 

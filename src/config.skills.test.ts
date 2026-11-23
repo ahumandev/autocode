@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { parse as parseJsonc } from "jsonc-parser"
 import { loadAutocodeConfig, type ConfigFileSystem } from "./config"
 
-const DEFAULT_SKILLS = { freeze: false, learned: { max: 10 } }
+const DEFAULT_SKILLS = { freeze: false }
 
 function makeFs(initialFiles: Record<string, string> = {}): {
     fs: ConfigFileSystem
@@ -117,7 +117,6 @@ describe("skills config parsing and seeding", () => {
         expect(parsed.autocode.skills).toEqual(DEFAULT_SKILLS)
         // Other sections MUST be preserved verbatim - never replaced.
         expect(parsed.autocode.sandbox).toEqual({ sync_method: "copy" })
-        expect(parsed.autocode.skills.learned).toEqual({ max: 10 })
         // No other top-level keys should appear inside autocode.
         const autocodeKeys = Object.keys(parsed.autocode).sort()
         expect(autocodeKeys).toEqual(["sandbox", "skills"])

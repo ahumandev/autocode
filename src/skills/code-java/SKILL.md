@@ -111,6 +111,15 @@ if (user != null && user.isActive()) {
 String name = user.getName();  // No null check
 ```
 
+### Records
+
+Only create records for lambda expressions; never for DTO classes.
+
+### Lombok
+
+- Never create constructors on classes in Lombok enabled projects; use Lombok annotations like @AllArgsConstructor, @NoArgsConstructor, or @RequiredArgsConstructor instead.
+- Multiple constructors required? Create specific beans instead of adding multiple constructors.
+
 ---
 
 ## Javadoc Requirements (Mandatory)
@@ -128,7 +137,6 @@ ALL public classes and methods REQUIRE Javadoc with complete tags:
  * @return true if auth successful, false if invalid
  * @throws AuthenticationException if service unavailable
  * @throws IllegalArgumentException if username/password null/empty
- * @since 1.0
  */
 public boolean authenticate(String username, String password) 
     throws AuthenticationException { }

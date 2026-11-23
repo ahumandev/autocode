@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { resolveOpenCodePaths } from "../../utils/paths"
+import { createPlatformCapabilities } from "../../utils/platform"
+import { createCommands } from "../../commands"
 import { queryAutocodePrompt } from "./query_autocode"
 
 const runtimePaths = resolveOpenCodePaths()
@@ -9,35 +11,6 @@ const requiredAgentKeys = [
     "auto",
     "design",
     "advise",
-]
-
-const requiredSlashCommands = [
-    "job-concepts",
-    "commit",
-    "autocode-install",
-    "autocode-version",
-    "author-article",
-    "docs",
-    "docs-conventions",
-    "docs-code",
-    "docs-env",
-    "docs-prd",
-    "docs-ux",
-    "explain",
-    "fix",
-    "commit",
-    "git-conflict",
-    "init",
-    "install",
-    "advise",
-    "plan",
-    "refactor",
-    "repeat-as-md",
-    "repeat-as-wiki",
-    "report-last",
-    "report-session",
-    "resume",
-    "tests",
 ]
 
 const requiredLookupRules = [
@@ -107,8 +80,25 @@ describe("queryAutocodePrompt", () => {
         expectPromptContainsAll(requiredAgentKeys)
     })
 
-    test("includes every slash command", () => {
-        expectPromptContainsAll(requiredSlashCommands)
+    test("documents registered slash commands without retired commands", () => {
+        const commands = createCommands(createPlatformCapabilities("linux"), true, true)
+        const section = queryAutocodePrompt.split("## Slash commands\n")[1]?.split("\n## Links")[0] ?? ""
+        const documented = [...section.matchAll(/^- ([\w-]+):/gm)].map((match) => match[1]).sort()
+
+        expect(documented).toEqual(Object.keys(commands).sort())
+    })
+
+    test("lists current documentation and memory commands without retired domain aliases", () => {
+        const commands = createCommands(createPlatformCapabilities("linux"))
+        expect(queryAutocodePrompt).toContain("- docs: document verified project facts and recent changes.")
+        expect(queryAutocodePrompt).toContain("- init: alias for docs; document verified project facts and recent changes.")
+        expect(queryAutocodePrompt).toContain("- learn: maintain memory from recent discussion or user guidance.")
+        for (const domain of ["conventions", "code", "env", "prd", "ux"]) {
+            expect(commands[`learn-${domain}`]?.agent).toBe("learn-memory")
+            expect(commands[`docs-${domain}`]).toBeUndefined()
+            expect(queryAutocodePrompt).toContain(`- learn-${domain}:`)
+            expect(queryAutocodePrompt).not.toContain(`- docs-${domain}:`)
+        }
     })
 
     test("includes lookup behavior rules", () => {

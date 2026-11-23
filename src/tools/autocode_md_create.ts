@@ -1,12 +1,43 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync } from "node:fs"
+import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
+import path from "node:path"
 import { buildOutline, ownText, parseMarkdown, rebuildFile, resolveSection, slugifyHeading } from "./md/markdown"
 import type { MdHeading } from "./md/markdown"
 import { clampIndex, normalizeHeadingText, parseContentBlocks, serializeTree } from "./md/transform"
 import { validateMdPath } from "./md/validate"
 import { createErrorResponse } from "@/utils/tools"
+import { canonicalizeExistingOrMissingPath, isPathWithin } from "@/utils/memory_access"
+import { DEFAULT_MEMORY_DIRECTORY, resolveMemoryDirectory, resolveMemoryIndexPath } from "@/utils/memory_directory"
 
-export function createAutocodeMdCreateTool(): ReturnType<typeof tool> {
+async function bootstrapDefaultMemory(projectDirectory: string): Promise<boolean> {
+    const root = resolveMemoryDirectory(projectDirectory)
+    try {
+        lstatSync(root)
+        return false
+    } catch (error) {
+        if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "ENOENT") throw error
+    }
+
+    const project = realpathSync(projectDirectory)
+    const canonicalRoot = await canonicalizeExistingOrMissingPath(root)
+    if (!isPathWithin(project, canonicalRoot)) throw new Error("Default memory directory escapes the project.")
+
+    let parent = project
+    for (const segment of [".opencode", "autocode", "memory"]) {
+        const directory = path.join(parent, segment)
+        try {
+            lstatSync(directory)
+        } catch (error) {
+            if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "ENOENT") throw error
+            mkdirSync(directory)
+        }
+        parent = realpathSync(directory)
+        if (!isPathWithin(project, parent)) throw new Error("Default memory directory escapes the project.")
+    }
+    return true
+}
+
+export function createAutocodeMdCreateTool(memoryDirectory?: string): ReturnType<typeof tool> {
     return tool({
         description: `Add Markdown section (heading + content text) in md file.`,
         args: {
@@ -18,7 +49,7 @@ export function createAutocodeMdCreateTool(): ReturnType<typeof tool> {
         },
         execute: async (args, context) => {
             try {
-                const validation = await validateMdPath(context, args.file_path, "autocode_md_create")
+                const validation = await validateMdPath(context, args.file_path, "autocode_md_create", { memory: { directory: memoryDirectory } })
                 if (!validation.ok) return validation.response
                 const filePath = validation.value
                 let raw: string
@@ -84,7 +115,19 @@ export function createAutocodeMdCreateTool(): ReturnType<typeof tool> {
                 model.headings.push(S)
                 const newBody = serializeTree(model, overrides)
                 const out = rebuildFile(model, newBody)
-                if (out !== raw) writeFileSync(filePath, out)
+                if (out !== raw) {
+                    if (context.agent === "learn-memory"
+                        && (!memoryDirectory?.trim() || memoryDirectory === DEFAULT_MEMORY_DIRECTORY)
+                        && filePath === resolveMemoryIndexPath(context.directory)
+                        && await bootstrapDefaultMemory(context.directory)) {
+                        const revalidation = await validateMdPath(context, args.file_path, "autocode_md_create", { memory: { directory: memoryDirectory } })
+                        if (!revalidation.ok) return revalidation.response
+                        const project = realpathSync(context.directory)
+                        const root = realpathSync(resolveMemoryDirectory(context.directory))
+                        if (!isPathWithin(project, root)) throw new Error("Default memory directory escapes the project.")
+                    }
+                    writeFileSync(filePath, out)
+                }
                 return JSON.stringify({ file_path: filePath, outline: buildOutline(parseMarkdown(out)) })
             } catch (error) {
                 return createErrorResponse("autocode_md_create", error, `Could not create section in ${args.file_path}. Verify path is writable.`)

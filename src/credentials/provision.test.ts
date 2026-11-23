@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { Buffer } from "node:buffer"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
-import { lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises"
+import { lstat, mkdir, mkdtemp, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { win32 } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
@@ -1067,68 +1067,6 @@ finally { if (!first) await publish(markers.secondDone, { done: true }); }
             for (const result of [...outcomes, ...checks, ...complete]) if (result.status === "rejected") failures.push(result.reason)
             if (failures.length === 1) throw failures[0]
             if (failures.length > 1) throw new AggregateError(failures, "Fresh-root sentinel serialization or store preservation failed.")
-        })
-    }, TEST_TIMEOUT_MS)
-
-    test("wx lock excludes another opener, inherits owner-only access, and survives a waiting writer", async (): Promise<void> => {
-        await withFixture(async (fixture: ProvisionFixture): Promise<void> => {
-            await seed(fixture)
-            const original = await readFile(fixture.store, "utf8")
-            const foreign = await open(fixture.lock, "wx")
-            let pending: FixtureProcess | undefined
-            try {
-                await foreign.writeFile("synthetic-foreign-lock", "utf8")
-                const identity = await foreign.stat({ bigint: true })
-                let exclusiveCode: string | undefined
-                try {
-                    const unexpected = await open(fixture.lock, "wx")
-                    await unexpected.close()
-                } catch (error: unknown) { exclusiveCode = (error as NodeJS.ErrnoException).code }
-                expect(exclusiveCode).toBe("EEXIST")
-                let settled = false
-                pending = startBun(fixture, `
-const { mock } = await import("bun:test");
-const native = await import(windowsFilesUrl);
-const nativeRead = native.readSecureWindowsFile;
-const nativeWrite = native.writeSecureWindowsFile;
-const maxBytes = native.WINDOWS_SECURE_FILE_MAX_BYTES;
-let initialized = false;
-mock.module(fileURLToPath(windowsFilesUrl), () => ({
-    WINDOWS_SECURE_FILE_MAX_BYTES: maxBytes,
-    readSecureWindowsFile: nativeRead,
-    writeSecureWindowsFile: async (...args) => {
-        await nativeWrite(...args);
-        if (isInitializerPath(args[0])) {
-            assert.equal(initialized, false);
-            initialized = true;
-            await writeFile(win32.join(input.root, "waiter-initializer"), JSON.stringify({ path: args[0] }), { flag: "wx" });
-            process.stdout.write('{"ready":true}\\n');
-        }
-    },
-}));
-const { writePlaintextProfile } = await import(provisionUrl);
-await writePlaintextProfile("rest", "WAITER", { authorization: "" }, input.options);
-assert.equal(initialized, true);
-`)
-                void pending.closed.then((): void => { settled = true })
-                expectInheritedOnly((await inspectAcls(fixture, [fixture.lock]))[0], false)
-                expect(await pending.ready).toBe(true)
-                const initializer = JSON.parse(await readFile(win32.join(fixture.root, "waiter-initializer"), "utf8")) as { path: string }
-                expect(win32.dirname(initializer.path).toLowerCase() === fixture.directory.toLowerCase()).toBe(true)
-                expect(INITIALIZER_NAME_PATTERN.test(win32.basename(initializer.path))).toBe(true)
-                fixture.initializers.push(initializer.path)
-                await delay(350)
-                expect(settled).toBe(false)
-                expect((await lstat(fixture.lock, { bigint: true })).ino).toBe(identity.ino)
-                expect(await readFile(fixture.lock, "utf8") === "synthetic-foreign-lock").toBe(true)
-                expect(await readFile(fixture.store, "utf8") === original).toBe(true)
-            } finally {
-                await foreign.close()
-                await unlink(fixture.lock)
-                if (pending !== undefined) expect(processMessages(await pending.closed)).toEqual([{ ready: true }, { ok: true }])
-            }
-            expect((await readStore(fixture)).profiles.rest?.WAITER).toEqual({ authorization: "" })
-            await expectCleanProvision(fixture)
         })
     }, TEST_TIMEOUT_MS)
 

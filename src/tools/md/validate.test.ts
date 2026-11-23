@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { ToolContext } from "@opencode-ai/plugin"
+import { createToolContext } from "../test_context"
 import { validateMdPath } from "./validate"
 
 const tempPaths: string[] = []
@@ -75,5 +77,25 @@ describe("validate md path", () => {
         const input = `./md-nonexistent-${randomUUID()}.md`
         const result = await validateMdPath(ctx, input, "test", { requireExistence: true })
         expect(result.ok).toBe(true)
+    })
+
+    test("learn-memory validates only configured memory paths", async () => {
+        const root = track(await mkdtemp(join(tmpdir(), "md-validate-memory-")))
+        const project = join(root, "project")
+        const memory = join(root, "memory")
+        await mkdir(project)
+        await mkdir(memory)
+        const allowed = join(memory, "entry.md")
+        const outside = join(project, "outside.md")
+        await writeFile(allowed, "# Memory")
+        await writeFile(outside, "# Outside")
+        const context = Object.assign(createToolContext({ directory: project, worktree: project, agent: "learn-memory" }), {
+            externalDirectoryPermissions: [{ action: "external_directory", resource: "*", effect: "deny" }] as const,
+        })
+        const options = { memory: { directory: memory } }
+        const accepted = await validateMdPath(context, allowed, "test", options)
+        expect(accepted).toEqual({ ok: true, value: allowed })
+        const rejected = await validateMdPath(context, outside, "test", options)
+        expect(rejected.ok).toBe(false)
     })
 })

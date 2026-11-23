@@ -47,7 +47,6 @@
     "install:shim": "bun src/install.ts",
     "watch": "bun scripts/build.ts watch",
     "copy:skills": "bun scripts/copy-skill-sources.ts",
-    "bench:local-memory": "bun scripts/benchmark-local-memory.ts",
     "test": "bun run typecheck && bun test src --isolate --reporter=dots",
     "tests": "bun test src --isolate --reporter=dots",
     "typecheck": "bun x tsc --noEmit",

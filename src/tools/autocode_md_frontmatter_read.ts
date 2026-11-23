@@ -1,9 +1,9 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFile } from "node:fs/promises"
 import { createRetryResponse } from "@/utils/tools"
-import { expandGlob } from "@/utils/glob"
 import { configRead, formatPath } from "@/tools/config/core"
 import { yamlParser } from "@/tools/config/yaml"
+import { expandAuthorizedMarkdownGlob } from "@/tools/md/guarded_glob"
 
 function splitFrontmatter(raw: string): { block: string; content: string; body: string; hasFrontmatter: boolean } {
     const firstNewline = raw.indexOf("\n")
@@ -33,7 +33,7 @@ function splitFrontmatter(raw: string): { block: string; content: string; body: 
     }
 }
 
-export function createAutocodeMdFrontmatterReadTool(): ReturnType<typeof tool> {
+export function createAutocodeMdFrontmatterReadTool(memoryDirectory?: string): ReturnType<typeof tool> {
     return tool({
         description: "Grep find frontmatter values in local Markdown (.md) files or read frontmatter by glob.",
         args: {
@@ -62,8 +62,9 @@ export function createAutocodeMdFrontmatterReadTool(): ReturnType<typeof tool> {
             if (!context.directory) {
                 throw new Error("autocode_md_frontmatter_read: context.directory (project directory) is required but was not provided by host")
             }
-            const cwd = context.directory
-            const matches = await expandGlob(String(args.file_path_glob), cwd, { dot: true })
+            const result = await expandAuthorizedMarkdownGlob(String(args.file_path_glob), context, failedAction, memoryDirectory)
+            if (!result.ok) return result.response
+            const matches = result.matches
             if (matches.length === 0) {
                 return createRetryResponse(failedAction, new Error(`no files matched glob: ${args.file_path_glob}`), "Check the glob pattern and path.")
             }

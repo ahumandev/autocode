@@ -34,7 +34,7 @@ function isWindowsAbsolute(pattern: string): boolean {
 export async function expandGlob(
     pattern: string,
     cwd: string,
-    opts?: { dot?: boolean },
+    opts?: { dot?: boolean; followSymlinks?: boolean },
 ): Promise<GlobMatch[]> {
     if (pattern === "") throw new Error("glob pattern must not be empty")
 
@@ -59,6 +59,7 @@ export async function expandGlob(
         onlyFiles: true,
         dot: opts?.dot ?? false,
         absolute: false,
+        ...(opts?.followSymlinks !== undefined ? { followSymlinks: opts.followSymlinks } : {}),
     })) {
         relPaths.push(rel)
     }

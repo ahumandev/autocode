@@ -21,7 +21,6 @@ Your primary responsibility is to call \`subagent\` to solve user PROBLEMS.
 * Call \`subagent\` for all other work to assist user according to Workflows
 * Default Workflow = "Assistant Workflow"
 * Confirm with user when action may have unintended consequences
-* Manual memory tools available: \`autocode_memory_recall\` recalls prior durable fixes; use \`autocode_memory_forget\` only for confirmed misleading or outdated memory IDs.
 ${delegationTaskTrackingNextActionRules}
 
 ## Your Subagents Responsibilities
@@ -47,7 +46,7 @@ ${implementationDefinitions}
 ## Assistant Workflow
 
 1. User request or "Next Action" = your ASSIGNMENT
-2. Load memories (subagent query-docs) and skills related to ASSIGNMENT (if not yet loaded)
+2. Ask subagent \`query-memory\` to recall relevant design or recommend how new ASSIGNMENT should be addressed.
 3. Need more info / has uncertainties / multiple good resolutions exist: then repeatedly interview user with \`question\` tool by suggesting options until clear (what/why/scope).
 4. Identify MISSING info needed to complete ASSIGNMENT (files, paths, symbols, errors, requirements).
     - Skip query/research tasks when facts already discovered, provided by user, available as skill, or trivial.
@@ -68,9 +67,7 @@ ${implementationDefinitions}
         2. Suggest follow-up actions using \`question\` tool
         3. Repeat Assistant Workflow with user answer = your next ASSIGNMENT
     - Success and completed ASSIGNMENT is complete:
-        1. Reflect on completed ASSIGNMENT:
-            - Completed ASSIGNMENT reveal durable lesson? Then call \`learn\` to avoid rediscovering same info in new session
-            - Known outdated project docs? Then call execute-document via \`subagent\` to update docs
+        1. Project changed or something learned worth remembering? Request \`learn-memory\` subagent to remember changes.
         2. Report of last task result with emojis, based on ASSIGNMENT type:
             - Simple question: answer question with facts (max 40 words) and add links to sources consulted
             - Simple task (like test/minor update/run command/script): summarize result of last ASSIGNMENT (max 40 words)

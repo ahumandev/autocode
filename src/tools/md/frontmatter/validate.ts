@@ -1,7 +1,7 @@
 import path from "node:path"
 import type { ToolContext } from "@opencode-ai/plugin"
 import { createRetryResponse } from "@/utils/tools"
-import { validateFilePath } from "@/utils/validate_file_path"
+import { validateMarkdownFilePath } from "../validate"
 
 export type ContentMode = "markdown" | "json" | "yaml" | "env" | "ini" | "toml"
 
@@ -32,6 +32,7 @@ export async function validateContentPath(
     input: unknown,
     context?: ToolContext,
     failedAction: string = "validate content path",
+    options?: { memory?: { directory?: string } },
 ): Promise<ContentPathValidationResult> {
     if (typeof input === "string" && input.includes("\0")) {
         return { ok: false, response: createRetryResponse(failedAction, "path must not contain NUL bytes.", "Provide a relative .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf file path within the current working directory.") }
@@ -40,11 +41,12 @@ export async function validateContentPath(
     if (typeof input === "string" && input.trim() !== "" && !mode) {
         return { ok: false, response: createRetryResponse(failedAction, "path must use .md, .json, .jsonc, .yaml, .yml, .toml, .env, .ini, .properties, or .conf extension/name.", "Retry with a Markdown, JSON, JSONC, YAML, TOML, .env, INI, properties, or .conf file path.") }
     }
-    const result = await validateFilePath(input, {
+    const result = await validateMarkdownFilePath(input, {
         failedAction,
         context,
         existence: "always",
         requireContextForExternalPaths: true,
+        memory: options?.memory,
     })
     if (!result.ok) return result
     if (typeof input !== "string" || !mode) return { ok: false, response: createRetryResponse(failedAction, "path must use a supported extension/name.", "Retry with a supported content file path.") }

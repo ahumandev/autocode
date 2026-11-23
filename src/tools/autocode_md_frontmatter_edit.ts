@@ -43,7 +43,7 @@ function toErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
 }
 
-export function createAutocodeMdFrontmatterEditTool(): ReturnType<typeof tool> {
+export function createAutocodeMdFrontmatterEditTool(memoryDirectory?: string): ReturnType<typeof tool> {
     return tool({
         description: `Write or remove raw Markdown frontmatter text to local file.`,
         args: {
@@ -58,7 +58,7 @@ export function createAutocodeMdFrontmatterEditTool(): ReturnType<typeof tool> {
                 if (typeof args.frontmatter !== "string" && (typeof args.frontmatter !== "object" || args.frontmatter === null || Array.isArray(args.frontmatter))) {
                     return createRetryResponse("write markdown frontmatter", "frontmatter must be a string or object.", "Retry with raw frontmatter text or an object.")
                 }
-                const target = await validateContentPath(args.path, context, "write markdown frontmatter")
+                const target = await validateContentPath(args.path, context, "write markdown frontmatter", { memory: { directory: memoryDirectory } })
                 if (!target.ok) return target.response
                 if (target.value.mode === "json") return createRetryResponse("write markdown frontmatter", "frontmatter is not supported for JSON/JSONC files.", "Use JSON content tools to edit JSON/JSONC files.")
                 if (target.value.mode === "yaml") return createRetryResponse("write markdown frontmatter", "frontmatter is not supported for YAML files.", "Use YAML content tools to edit YAML files.")

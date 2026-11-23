@@ -693,10 +693,10 @@ describe("skill tool", () => {
 
     test("missing generated skill returns retry error", async () => {
         await withTempSkillRoots(async ({ worktree }) => {
-            const result = await executeSkillLoad(worktree)
+            const result = await executeSkillLoad(worktree, undefined, { name: "unavailable-synthetic-xyz" })
 
             expect(result.failedAction).toBe("load skill")
-            expect(result.error).toBe("Unable to load skill code-typescript")
+            expect(result.error).toBe("Unable to load skill unavailable-synthetic-xyz")
             expect(result.instruction).toBe("Retry with a skill name from the available skills list.")
         })
     })

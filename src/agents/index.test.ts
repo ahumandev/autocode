@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, applyWindowsSandboxPolicy, buildAgents as buildV2Agents, getAgentPermission as getV2AgentPermission, toV2Permissions, type AutocodeAgentConfig } from "./index"
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { applyExternalDirectoryPolicy, applySandboxPlatformPolicy, applyWindowsSandboxPolicy, buildAgents as buildV2Agents, getAgentPermission as getV2AgentPermission, getAgentTier, toV2Permissions, type AutocodeAgentConfig } from "./index"
 import { executeOpencodePrompt } from "./prompts/execute_opencode"
 import { buildExecuteOsPrompt } from "./prompts/execute_os"
 import { queryAutocodePrompt } from "./prompts/query_autocode"
@@ -15,6 +18,10 @@ import { buildTroubleshootPrompt } from "./prompts/auto_troubleshoot"
 import { createPlatformCapabilities } from "../utils/platform"
 import { permissionEffect, type PermissionRule } from "../utils/permissions"
 import { matchExternalDirectoryAction } from "../utils/external_directory"
+import { resolveMemoryIndexPath } from "../utils/memory_directory"
+import { createAutocodeMdCreateTool } from "../tools/autocode_md_create"
+import { createAutocodeMdReadTool } from "../tools/autocode_md_read"
+import { createToolContext } from "../tools/test_context"
 
 function permissionRule(permission: unknown, key: string): unknown {
     if (!permission) return undefined
@@ -80,13 +87,6 @@ const managedAgentTiers = {
     "auto-review-ui": "smart",
     "auto-test": "balanced",
     "auto-troubleshoot": "smart",
-    "document-agents": "balanced",
-    "document-conventions": "balanced",
-    "document-code": "balanced",
-    "document-env": "balanced",
-    "document-install": "balanced",
-    "document-prd": "balanced",
-    "document-ux": "balanced",
     "execute-author": "balanced",
     "execute-code": "balanced",
     "execute-debug": "balanced",
@@ -99,10 +99,12 @@ const managedAgentTiers = {
     "execute-opencode": "operator",
     "execute-rest": "operator",
     "execute-sandbox": "operator",
+    "learn-memory": "context",
     "query-autocode": "fast",
     "query-browser": "fast",
     "query-config": "fast",
     "query-git": "fast",
+    "query-memory": "fast",
     "query-os": "fast",
     "query-ssh": "fast",
     "query-code": "context",
@@ -121,6 +123,7 @@ const legacyAgentIds = [
 ] as const
 
 const unaffectedAgentIds = ["build", "compaction", "explore", "general", "plan", "title", "advise", "assist", "auto", "design", "spy"] as const
+const removedAgentIds = ["document-agents", "document-conventions", "document-code", "document-env", "document-install", "document-prd", "document-ux", "query-docs", "memory"] as const
 
 const configuredManagedAgentTiers = { balanced: {}, smart: {}, spy: {} }
 
@@ -141,13 +144,16 @@ describe("agent policies", () => {
     test("auto registers V2 new and resumed subagent guidance without changing delegation access", () => {
         const auto = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, configuredManagedAgentTiers).auto
 
-        expect(auto?.prompt).toBe(autoPrompt)
+        expect(auto?.prompt).toContain(autoPrompt)
         expect(auto?.prompt).toContain("New task: call `subagent` with `agent`, `description`, and `prompt`; omit `sessionID`.")
         expect(auto?.prompt).toContain("Save the `sessionID` returned by `subagent` for followups.")
         expect(auto?.prompt).toContain("call `subagent` again with that returned `sessionID`.")
         expect(auto?.prompt).not.toContain("task_id")
         expect(permissionEffect(auto?.permissions, "subagent", "auto-feature")).toBe("allow")
-        expect(permissionEffect(auto?.permissions, "subagent", "query-code")).toBe("allow")
+        expect(permissionEffect(auto?.permissions, "subagent", "learn-memory")).toBe("allow")
+        expect(permissionEffect(auto?.permissions, "subagent", "query-memory")).toBe("allow")
+        expect(permissionEffect(auto?.permissions, "subagent", "memory")).toBe("deny")
+        expect(permissionEffect(auto?.permissions, "subagent", "query-code")).toBe("deny")
         expect(permissionEffect(auto?.permissions, "subagent", "execute-code")).toBe("deny")
         expect(auto?.permissions?.some((rule) => rule.action === "task")).toBe(false)
     })
@@ -156,7 +162,7 @@ describe("agent policies", () => {
         const agents = buildV2Agents(createPlatformCapabilities("linux"))
         const permissions = agents["query-config"]?.permissions
 
-        expect(agents["query-config"]?.prompt).toBe(queryConfigPrompt)
+        expect(agents["query-config"]?.prompt).toContain(queryConfigPrompt)
         expect(permissionEffect(permissions, "autocode_config_read", "*")).toBe("allow")
         for (const action of ["autocode_config_edit", "autocode_config_remove", "autocode_config_unknown", "edit"]) {
             expect(permissionEffect(permissions, action, "*")).toBe("deny")
@@ -171,20 +177,24 @@ describe("agent policies", () => {
         expect(permissionEffect(agents.advise?.permissions, "subagent", "execute-document")).toBe("deny")
         expect(permissionEffect(agents["auto-general"]?.permissions, "subagent", "auto-troubleshoot")).toBe("deny")
         expect(permissionEffect(agents["auto-general"]?.permissions, "subagent", "query-code")).toBe("allow")
-        expect(permissionEffect(agents["execute-document"]?.permissions, "subagent", "document-code")).toBe("allow")
-        expect(permissionEffect(agents["execute-document"]?.permissions, "subagent", "query-code")).toBe("deny")
+        expect(permissionEffect(agents["execute-document"]?.permissions, "subagent", "document-code")).toBe("deny")
+        expect(permissionEffect(agents["execute-document"]?.permissions, "subagent", "query-code")).toBe("allow")
         for (const agent of Object.values(agents)) {
             expect(agent.permissions?.some((rule) => rule.action === "subagent" && rule.resource === "query_architect")).toBe(false)
         }
     })
 
-    test("delegation prompts reference permitted workers only", () => {
+    test("delegation prompts reference permitted document research workers", () => {
         const agents = buildV2Agents(createPlatformCapabilities("linux"))
+        const document = agents["execute-document"]
 
         expect(agents.advise?.prompt).not.toContain("call execute-document")
         expect(agents["auto-general"]?.prompt).not.toContain("delegate to `auto-troubleshoot`")
-        expect(agents["execute-document"]?.prompt).not.toContain("call `query-*` subagents")
-        expect(agents["execute-document"]?.prompt).toContain("call `document-*` subagents")
+        for (const child of ["query-code", "query-text"]) {
+            expect(document?.prompt).toContain(`\`${child}\` subagent`)
+            expect(permissionEffect(document?.permissions, "subagent", child)).toBe("allow")
+        }
+        expect(permissionEffect(document?.permissions, "subagent", "auto-author")).toBe("deny")
     })
 
     test("auto delegation prompt uses V2 subagent arguments and returned session IDs", () => {
@@ -196,7 +206,10 @@ describe("agent policies", () => {
         expect(prompt).toContain("call `subagent` again with that returned `sessionID`")
         expect(prompt).not.toContain("task_id")
         expect(permissionEffect(agents.auto?.permissions, "subagent", "auto-feature")).toBe("allow")
-        expect(permissionEffect(agents.auto?.permissions, "subagent", "query-code")).toBe("allow")
+        expect(permissionEffect(agents.auto?.permissions, "subagent", "learn-memory")).toBe("allow")
+        expect(permissionEffect(agents.auto?.permissions, "subagent", "query-memory")).toBe("allow")
+        expect(permissionEffect(agents.auto?.permissions, "subagent", "memory")).toBe("deny")
+        expect(permissionEffect(agents.auto?.permissions, "subagent", "query-code")).toBe("deny")
         expect(permissionEffect(agents.auto?.permissions, "subagent", "execute-code")).toBe("deny")
     })
 
@@ -361,22 +374,213 @@ describe("agent policies", () => {
         const expectedAgentIds = [
             ...unaffectedAgentIds,
             "assist-browser", "assist-git-conflict", "auto-author", "auto-design", "auto-feature", "auto-general", "auto-refactor", "auto-research", "auto-review-api", "auto-review-ui", "auto-test", "auto-troubleshoot",
-            "document-agents", "document-conventions", "document-code", "document-env", "document-install", "document-prd", "document-ux",
             "execute-author", "execute-code", "execute-config", "execute-debug", "execute-document", "execute-excel", "execute-opencode", "execute-os", "execute-rest", "execute-sandbox", "execute-script", "execute-ssh",
-            "query-autocode", "query-browser", "query-code", "query-config", "query-db", "query-docs", "query-excel", "query-figma", "query-git", "query-os", "query-ssh", "query-text", "query-web", "query-youtube",
+            "learn-memory", "query-autocode", "query-browser", "query-code", "query-config", "query-db", "query-excel", "query-figma", "query-git", "query-memory", "query-os", "query-ssh", "query-text", "query-web", "query-youtube",
         ]
 
         expect(Object.keys(agents).sort()).toEqual(expectedAgentIds.sort())
         for (const agentId of legacyAgentIds) expect(agents[agentId]).toBeUndefined()
+        for (const agentId of removedAgentIds) expect(agents[agentId]).toBeUndefined()
         for (const agentId of unaffectedAgentIds) expect(agents[agentId]).toBeDefined()
     })
 
-    test("document-env allows skill_edit without broader permission grants", () => {
-        const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true }, configuredManagedAgentTiers)
-        const permission = agents["document-env"]?.permission
+    test("agents retain restricted child boundaries", () => {
+        const agents = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, configuredManagedAgentTiers)
 
-        expect(permissionRule(permission, "skill_edit")).toBe("allow")
-        expect(permissionEffect(agents["document-env"]?.permissions, "external_directory", "/unconfigured/file.md")).toBe("ask")
+        for (const name of ["advise", "auto", "design", "auto-author", "auto-design", "auto-feature", "auto-refactor", "auto-research", "auto-review-api", "auto-review-ui", "auto-test", "auto-troubleshoot", "execute-debug", "execute-document", "execute-excel"]) {
+            expect(permissionEffect(agents[name]?.permissions, "subagent", "unrelated-child")).toBe("deny")
+        }
+        expect(permissionEffect(agents.assist?.permissions, "subagent", "auto-feature")).toBe("deny")
+        expect(permissionEffect(agents["auto-general"]?.permissions, "subagent", "auto-test")).toBe("deny")
+        for (const child of ["query-code", "query-web"]) {
+            expect(permissionEffect(agents["auto-research"]?.permissions, "subagent", child)).toBe("allow")
+        }
+        expect(permissionEffect(agents["execute-debug"]?.permissions, "subagent", "query-code")).toBe("deny")
+    })
+
+    test("OpenChamber memory stays denied across agent types without changing other tools", () => {
+        for (const platform of ["linux", "win32"] as const) {
+            const agents = buildV2Agents(createPlatformCapabilities(platform), {}, undefined, configuredManagedAgentTiers)
+            for (const agent of Object.values(agents)) {
+                expect(agent.permissions?.at(-1)).toEqual({ action: "openchamber_memory", resource: "*", effect: "deny" })
+                expect(permissionEffect(agent.permissions, "openchamber_memory", "*")).toBe("deny")
+                expect(permissionEffect(agent.permissions, "openchamber_memory", "synthetic-note")).toBe("deny")
+                if (agent.prompt) {
+                    expect(agent.prompt).toContain("OpenChamber knowledge notes and saved plans are optional context")
+                    expect(agent.prompt).toContain("Consult them only when the user explicitly asks for or activates them; activation does not make them mandatory")
+                    expect(agent.prompt).toContain("They do not replace any required memory librarian recall")
+                }
+            }
+            expect(permissionEffect(agents.design?.permissions, "openchamber_knowledge", "*")).toBe("allow")
+            expect(permissionEffect(agents["auto-design"]?.permissions, "openchamber_knowledge", "*")).toBe("allow")
+            expect(permissionEffect(agents.assist?.permissions, "openchamber_render", "*")).toBe("allow")
+            expect(permissionEffect(agents.auto?.permissions, "openchamber_notify", "*")).toBe("allow")
+            expect(permissionEffect(agents["auto-general"]?.permissions, "openchamber_knowledge", "*")).toBe("allow")
+            expect(permissionEffect(agents["auto-general"]?.permissions, "openchamber_plans", "*")).toBe("allow")
+            expect(permissionEffect(agents["query-code"]?.permissions, "openchamber_knowledge", "*")).toBe("deny")
+        }
+    })
+
+    test("split memory agents register with their tiers across tier configurations", () => {
+        const capabilities = createPlatformCapabilities("linux")
+        expect(getAgentTier("query-memory")).toBe("fast")
+        expect(getAgentTier("learn-memory")).toBe("context")
+        expect(getAgentTier("memory")).toBeUndefined()
+
+        for (const tiers of [{}, { balanced: {} }, { smart: {} }, { spy: {} }, configuredManagedAgentTiers]) {
+            const agents = buildV2Agents(capabilities, {}, undefined, tiers)
+            expect(agents.memory).toBeUndefined()
+            for (const [name, tier] of [["query-memory", "fast"], ["learn-memory", "context"]] as const) {
+                expect(agents[name]).toBeDefined()
+                expect(agents[name]?.disable).not.toBe(true)
+                expect(agents[name]?.tier).toBe(tier)
+            }
+        }
+    })
+
+    test("split memory agents enforce Markdown read and write roles", () => {
+        const agents = buildV2Agents(createPlatformCapabilities("linux"))
+        const query = agents["query-memory"]?.permissions
+        const learn = agents["learn-memory"]?.permissions
+
+        expect(query?.[0]).toEqual({ action: "*", resource: "*", effect: "deny" })
+        expect(permissionEffect(query, "unconfigured_tool", "*")).toBe("deny")
+        expect(learn).toContainEqual({ action: "autocode_md_*", resource: "*", effect: "allow" })
+        for (const permissions of [query, learn]) {
+            for (const action of ["autocode_md_read", "autocode_md_frontmatter_read"]) {
+                expect(permissionEffect(permissions, action, "*")).toBe("allow")
+            }
+            for (const action of ["autocode_config_read", "autocode_config_edit", "subagent"]) {
+                expect(permissionEffect(permissions, action, "*")).toBe("deny")
+            }
+        }
+        for (const action of ["autocode_md_create", "autocode_md_h1", "autocode_md_update", "autocode_md_remove", "autocode_md_frontmatter_edit"]) {
+            expect(permissionEffect(query, action, "*")).toBe("deny")
+            expect(permissionEffect(learn, action, "*")).toBe("allow")
+        }
+    })
+
+    test("split memory prompts use the resolved default and configured index paths", () => {
+        const linux = createPlatformCapabilities("linux")
+        const projectDirectory = join(tmpdir(), "memory-registration", "project")
+        const cases = [undefined, join("notes", "memory"), join(tmpdir(), "shared-memory")]
+
+        for (const memoryDirectory of cases) {
+            const indexPath = resolveMemoryIndexPath(projectDirectory, memoryDirectory)
+            const agents = buildV2Agents(linux, {}, undefined, {}, { projectDirectory, memoryDirectory })
+            for (const name of ["query-memory", "learn-memory"] as const) {
+                expect(agents[name]?.prompt).toContain(indexPath)
+            }
+        }
+    })
+
+    test("execute-document grants Markdown tools and host reads without native edits on Linux", () => {
+        const agents = buildV2Agents(createPlatformCapabilities("linux"), {}, undefined, {}, { projectDirectory: "/project" })
+        const permissions = agents["execute-document"]?.permissions
+        expect(permissions?.[0]).toEqual({ action: "*", resource: "*", effect: "deny" })
+
+        for (const action of ["autocode_md_read", "autocode_md_create", "autocode_md_h1", "autocode_md_update", "autocode_md_remove", "autocode_md_frontmatter_read", "autocode_md_frontmatter_edit"]) {
+            expect(permissionEffect(permissions, action, "*")).toBe("allow")
+        }
+        for (const path of ["/project/AGENTS.md", "/project/docs/guide.md", "src/README.md", "/project/notes.md"]) {
+            expect(permissionEffect(permissions, "read", path)).toBe("allow")
+            expect(permissionEffect(permissions, "edit", path)).toBe("deny")
+        }
+        for (const action of ["shell", "execute", "autocode_config_edit", "autocode_sandbox_cli"]) expect(permissionEffect(permissions, action, "*")).toBe("deny")
+        expect(permissionEffect(permissions, "external_directory", "/other/README.md")).toBe("ask")
+    })
+
+    test("execute-document grants Markdown tools and host reads without native edits on Windows", () => {
+        const agents = buildV2Agents(createPlatformCapabilities("win32"), {}, undefined, {}, { projectDirectory: "C:\\Project" })
+        const permissions = agents["execute-document"]?.permissions
+
+        for (const action of ["autocode_md_read", "autocode_md_create", "autocode_md_update", "autocode_md_remove", "autocode_md_frontmatter_edit"]) {
+            expect(permissionEffect(permissions, action, "*")).toBe("allow")
+        }
+        for (const path of ["C:\\Project\\AGENTS.md", "C:\\Project\\docs\\guide.md", "src\\README.md"]) {
+            expect(permissionEffect(permissions, "read", path)).toBe("allow")
+            expect(permissionEffect(permissions, "edit", path)).toBe("deny")
+        }
+        for (const action of ["shell", "execute", "autocode_config_edit", "autocode_sandbox_cli"]) expect(permissionEffect(permissions, action, "*")).toBe("deny")
+        expect(permissionEffect(permissions, "external_directory", "C:\\Other\\README.md")).toBe("ask")
+    })
+
+    test("write aliases convert to scoped edit rules on Linux and Windows", () => {
+        const cases = [
+            { allowed: ["/project/AGENTS.md", "/project/README.md", "AGENTS.md", "README.md"], denied: ["/project/src/AGENTS.md", "src/README.md", "/project/other.md"] },
+            { allowed: ["C:\\Project\\AGENTS.md", "C:\\Project\\README.md", "AGENTS.md", "README.md"], denied: ["C:\\Project\\src\\AGENTS.md", "src\\README.md", "C:\\Project\\other.md"] },
+        ] as const
+
+        for (const { allowed, denied } of cases) {
+            const write = Object.fromEntries(allowed.map((path) => [path, "allow" as const]))
+            const converted = toV2Permissions({ "*": "deny", write })
+            expect(converted.filter((rule) => rule.action === "edit")).toEqual(allowed.map((resource) => ({ action: "edit", resource, effect: "allow" })))
+            for (const path of allowed) expect(permissionEffect(converted, "edit", path)).toBe("allow")
+            for (const path of denied) expect(permissionEffect(converted, "edit", path)).toBe("deny")
+        }
+    })
+
+    test("execute-document Markdown tools operate on nested workspace files and guard external paths", async () => {
+        const root = mkdtempSync(join(tmpdir(), "document-policy-"))
+        const projectDirectory = join(root, "project")
+        const docs = join(projectDirectory, "docs")
+        const external = join(root, "external.md")
+        mkdirSync(docs, { recursive: true })
+        writeFileSync(external, "# External\n")
+
+        try {
+            const permissions = buildV2Agents(createPlatformCapabilities(process.platform), {}, undefined, {}, { projectDirectory })["execute-document"]?.permissions
+            const context = Object.assign(createToolContext({
+                agent: "execute-document",
+                directory: projectDirectory,
+                worktree: projectDirectory,
+                ask: async () => { throw new Error("External access denied") },
+            }), { externalDirectoryPermissions: permissions })
+            const create = createAutocodeMdCreateTool()
+            const read = createAutocodeMdReadTool()
+            const nested = join(docs, "guide.md")
+
+            expect(permissionEffect(permissions, "autocode_md_create", "*")).toBe("allow")
+            expect(permissionEffect(permissions, "autocode_md_read", "*")).toBe("allow")
+            await create.execute({ file_path: nested, heading: "Guide", content: "Workspace content" } as never, context)
+            expect(readFileSync(nested, "utf8")).toContain("Workspace content")
+            const result = JSON.parse(await read.execute({ file_path_glob: "docs/guide.md", max_content_chars: 4000 } as never, context) as string)
+            expect(JSON.stringify(result)).toContain("Workspace content")
+
+            const blockedWrite = JSON.parse(await create.execute({ file_path: external, heading: "Blocked" } as never, context) as string)
+            const blockedRead = JSON.parse(await read.execute({ file_path_glob: external } as never, context) as string)
+            expect(blockedWrite.error).toContain("External access denied")
+            expect(blockedRead.error).toContain("External access denied")
+            expect(readFileSync(external, "utf8")).toBe("# External\n")
+        } finally {
+            rmSync(root, { recursive: true, force: true })
+        }
+    })
+
+    test("execute-document delegates scoped research and owns root edits", () => {
+        const agent = buildV2Agents(createPlatformCapabilities("linux"))["execute-document"]
+        for (const child of ["query-code", "query-text"]) {
+            expect(permissionEffect(agent?.permissions, "subagent", child)).toBe("allow")
+        }
+        for (const child of ["auto-author", "execute-code", "document-code"]) expect(permissionEffect(agent?.permissions, "subagent", child)).toBe("deny")
+        for (const skill of ["author-readme", "author-rules"]) expect(permissionEffect(agent?.permissions, "skill", skill)).toBe("allow")
+        expect(permissionEffect(agent?.permissions, "skill", "author-agent")).toBe("deny")
+        for (const action of ["autocode_md_read", "autocode_md_update", "autocode_md_create"]) {
+            expect(permissionEffect(agent?.permissions, action, "*")).toBe("allow")
+        }
+        const prompt = agent?.prompt ?? ""
+        expect(prompt).toContain("You directly read, create, and edit only `AGENTS.md` and `README.md` in cwd; NEVER create or edit other documents")
+        expect(prompt).toContain("Compose/Update README.md in cwd")
+        expect(prompt).toContain("Update AGENTS.md in cwd")
+        expect(prompt).not.toMatch(/before each assignment or recommendation/i)
+    })
+
+    test("removed document-agents cannot be delegated to by documentation workers", () => {
+        const agents = buildV2Agents(createPlatformCapabilities("linux"))
+        expect(agents["document-agents"]).toBeUndefined()
+        for (const name of ["execute-document", "auto-author"]) {
+            expect(permissionEffect(agents[name]?.permissions, "subagent", "document-agents")).toBe("deny")
+        }
     })
 
     test("buildAgents registers capability-aware OS prompts", () => {
@@ -387,8 +591,8 @@ describe("agent policies", () => {
         ] as const) {
             const agents = buildAgents(capabilities)
 
-            expect(agents["execute-os"]?.prompt).toBe(buildExecuteOsPrompt(capabilities))
-            expect(agents["query-os"]?.prompt).toBe(queryOsPrompt(capabilities))
+            expect(agents["execute-os"]?.prompt).toContain(buildExecuteOsPrompt(capabilities))
+            expect(agents["query-os"]?.prompt).toContain(queryOsPrompt(capabilities))
             expect(agents["execute-os"]?.prompt).toBeTruthy()
             expect(agents["query-os"]?.prompt).toBeTruthy()
             expect(agents["execute-os"]?.prompt).not.toMatch(wrongShellGuidance)
@@ -400,7 +604,7 @@ describe("agent policies", () => {
         }
 
         const sandboxAgents = buildAgents(createPlatformCapabilities("linux"))
-        expect(sandboxAgents["execute-sandbox"]?.prompt).toBe(buildExecuteOsPrompt({ isWindows: false, commandEnvironment: "linux" }))
+        expect(sandboxAgents["execute-sandbox"]?.prompt).toContain(buildExecuteOsPrompt({ isWindows: false, commandEnvironment: "linux" }))
         expect(sandboxAgents["execute-sandbox"]?.prompt).not.toMatch(/running on windows|cmd\.exe|powershell/i)
     })
 
@@ -483,15 +687,15 @@ describe("agent policies", () => {
         expect(agents.advise?.hidden).toBe(false)
         expect(agents.advise?.mode).toBe("primary")
         expect(agents.advise?.tier).toBe("balanced")
-        expect(agents.advise?.prompt).toBe(advisePrompt)
+        expect(agents.advise?.prompt).toContain(advisePrompt)
         expect(advisePrompt).toContain("Do not ask user to make a project change until solution is clear")
         expect(advisePrompt).toContain("Discover solution before giving implementation steps")
         expect(permissionRule(permission, "*")).toBe("deny")
-        expect(taskPermission).toEqual({
+        expect(taskPermission).toEqual(expect.objectContaining({
             "*": "deny",
             "query*": "allow",
             "auto-research": "allow",
-        })
+        }))
         for (const agentName of ["query-code", "query-autocode", "auto-research"]) {
             expect(resolvePermissionRule(taskPermission, agentName)).toBe("allow")
         }
@@ -523,7 +727,7 @@ describe("agent policies", () => {
         expect(spy?.hidden).toBe(false)
         expect(spy?.mode).toBe("primary")
         expect(spy?.tier).toBe("spy")
-        expect(spy?.prompt).toBe(spyPrompt)
+        expect(spy?.prompt).toContain(spyPrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
         for (const toolName of ["autocode_config_read", "autocode_md_frontmatter_read", "autocode_md_read"]) {
             expect(resolvePermissionRule(rules, toolName)).toBe("allow")
@@ -650,7 +854,7 @@ describe("agent policies", () => {
 
         expect(agents["query-autocode"]?.hidden).toBe(true)
         expect(agents["query-autocode"]?.mode).toBe("subagent")
-        expect(agents["query-autocode"]?.prompt).toBe(queryAutocodePrompt)
+        expect(agents["query-autocode"]?.prompt).toContain(queryAutocodePrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
         expect(permissionRule(permission, "doom_loop")).toBeUndefined()
         expect(Object.entries(permissionObject(permission))
@@ -680,9 +884,9 @@ describe("agent policies", () => {
 
         expect(agents["query-youtube"]?.hidden).toBe(true)
         expect(agents["query-youtube"]?.mode).toBe("subagent")
-        expect(agents["query-youtube"]?.prompt).toBe(queryYoutubePrompt)
+        expect(agents["query-youtube"]?.prompt).toContain(queryYoutubePrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
-        expect(Object.keys(rules).sort()).toEqual(["*", "autocode_youtube_transcribe", "external_directory"])
+        expect(Object.keys(rules).sort()).toEqual(["*", "autocode_youtube_transcribe", "external_directory", "openchamber_memory"])
         expect(Object.entries(rules).filter(([, action]) => action === "allow").map(([key]) => key)).toEqual(["autocode_youtube_transcribe"])
         expect(permissionEffect(agents["query-youtube"]?.permissions, "external_directory", "/unconfigured/file.md")).toBe("ask")
         for (const toolName of [
@@ -723,7 +927,7 @@ describe("agent policies", () => {
         expect(Object.keys(agents)).toContain("execute-opencode")
         expect(agents["execute-opencode"]).toBeDefined()
         expect(agents["execute-opencode"]?.mode).toBe("subagent")
-        expect(agents["execute-opencode"]?.prompt).toBe(executeOpencodePrompt)
+        expect(agents["execute-opencode"]?.prompt).toContain(executeOpencodePrompt)
         expect(permissionRule(permission, "*")).toBe("deny")
         for (const key of executeOpencodeAllowedPermissionKeys) {
             expect(permissionRule(permission, key)).toBe("allow")
@@ -803,9 +1007,9 @@ describe("agent policies", () => {
         expect(prompt).not.toContain("rest_key")
     })
 
-    test("execute-author and query-skills prompt learned skill loading guidance is current", () => {
+    test("execute-author prompt learned skill loading guidance is current", () => {
         const agents = buildAgents(createPlatformCapabilities("linux"), {}, { platform: "linux", env: {}, bwrapUsable: true })
-        const prompts = [String(agents["execute-author"]?.prompt ?? ""), String(agents["query-docs"]?.prompt ?? "")]
+        const prompts = [String(agents["execute-author"]?.prompt ?? "")]
 
         for (const prompt of prompts) {
             expect(prompt).toContain("skill")

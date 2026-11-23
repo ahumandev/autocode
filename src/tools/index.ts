@@ -1,6 +1,6 @@
 import type { OpencodeClient } from "@opencode-ai/sdk"
 import type { ToolDefinition } from "@opencode-ai/plugin"
-import type { AutocodeSandboxConfig } from "../config"
+import type { AutocodeMemoryConfig, AutocodeSandboxConfig } from "../config"
 import { createRuntimeCredentialResolver } from "../credentials/runtime"
 import type { CredentialResolver } from "../credentials/types"
 import type { PlatformCapabilities } from "../utils/platform"
@@ -31,8 +31,6 @@ import { createAutocodeJobListTool } from "./autocode_job_list"
 import { createAutocodeKillTool } from "./autocode_kill"
 import { createAutocodeProcessKillTool } from "./autocode_process_kill"
 import { createAutocodeLogoFindTool } from "./autocode_logo_find"
-import { createAutocodeMemoryForgetTool } from "./autocode_memory_forget"
-import { createAutocodeMemoryRecallTool } from "./autocode_memory_recall"
 import { createAutocodeRestTool } from "./autocode_rest"
 import { createAutocodeSandboxCliTool } from "./autocode_sandbox_cli"
 import { createAutocodeSandboxCreateTool } from "./autocode_sandbox_create"
@@ -44,9 +42,7 @@ import { createAutocodeScriptProjectTool } from "./autocode_script_project"
 import { createAutocodeScriptRunTool } from "./autocode_script_run"
 import { createAutocodeScriptServiceTool } from "./autocode_script_service"
 import { createAutocodeSessionCreateTool } from "./autocode_session_create"
-import { createAutocodeSkillEditTool } from "./skill_edit"
 import { createAutocodeSkillReadTool } from "./skill_read"
-import { createLearnTool } from "./learn"
 import { createAutocodeSshCommandTool, createAutocodeSshEditFileTool, createAutocodeSshGlobTool, createAutocodeSshGrepFileTool, createAutocodeSshListTool, createAutocodeSshPatchFileTool, createAutocodeSshReadAttributesTool, createAutocodeSshReadFileTool, createAutocodeSshWriteAttributesTool, createAutocodeSshWriteFileTool } from "./autocode_ssh"
 import { createSkillTool, type ActiveSessionContext } from "./skill"
 
@@ -68,6 +64,7 @@ export function createTools(
     sandboxConfig: AutocodeSandboxConfig = {},
     runtime?: ToolRuntime,
     capabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" },
+    memoryConfig?: AutocodeMemoryConfig,
 ): ToolMap {
     const credentialResolver = runtime?.credentialResolver ?? createRuntimeCredentialResolver()
     const sandboxTools: ToolMap = capabilities.isWindows ? {} : {
@@ -103,15 +100,13 @@ export function createTools(
         autocode_kill: createAutocodeKillTool(client),
         autocode_process_kill: createAutocodeProcessKillTool(),
         autocode_logo_find: createAutocodeLogoFindTool(),
-        autocode_md_create: createAutocodeMdCreateTool(),
-        autocode_md_frontmatter_edit: createAutocodeMdFrontmatterEditTool(),
-        autocode_md_frontmatter_read: createAutocodeMdFrontmatterReadTool(),
-        autocode_md_h1: createAutocodeMdH1Tool(),
-        autocode_md_read: createAutocodeMdReadTool(),
-        autocode_md_remove: createAutocodeMdRemoveTool(),
-        autocode_md_update: createAutocodeMdUpdateTool(),
-        autocode_memory_forget: createAutocodeMemoryForgetTool(),
-        autocode_memory_recall: createAutocodeMemoryRecallTool(),
+        autocode_md_create: createAutocodeMdCreateTool(memoryConfig?.directory),
+        autocode_md_frontmatter_edit: createAutocodeMdFrontmatterEditTool(memoryConfig?.directory),
+        autocode_md_frontmatter_read: createAutocodeMdFrontmatterReadTool(memoryConfig?.directory),
+        autocode_md_h1: createAutocodeMdH1Tool(memoryConfig?.directory),
+        autocode_md_read: createAutocodeMdReadTool(memoryConfig?.directory),
+        autocode_md_remove: createAutocodeMdRemoveTool(memoryConfig?.directory),
+        autocode_md_update: createAutocodeMdUpdateTool(memoryConfig?.directory),
         autocode_rest: createAutocodeRestTool(client, undefined, credentialResolver),
         autocode_script_install: createAutocodeScriptInstallTool(client),
         autocode_script_project: createAutocodeScriptProjectTool(client),
@@ -132,9 +127,7 @@ export function createTools(
         autocode_ssh_write_attributes: createAutocodeSshWriteAttributesTool({ credentialResolver }),
         autocode_ssh_write_file: createAutocodeSshWriteFileTool({ credentialResolver }),
         autocode_youtube_transcribe: createAutocodeYoutubeTranscribeTool(),
-        learn: createLearnTool(),
         skill: createSkillTool(client, undefined, runtime, undefined, runtime?.activeSessionContext),
-        skill_edit: createAutocodeSkillEditTool(),
         skill_read: createAutocodeSkillReadTool(),
     }
 }
