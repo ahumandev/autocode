@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { realpath } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { isPathWithin } from "@/utils/memory_access"
 import { resetRetryCounts } from "@/utils/tools"
 import { createAutocodeMdReadTool } from "./autocode_md_read"
 import { createToolContext } from "./test_context"
@@ -31,6 +33,21 @@ function supportsLink(kind: "file" | "dir" | "hard"): boolean {
 const supportsFileLink = supportsLink("file")
 const supportsDirectoryLink = supportsLink("dir")
 const supportsHardLink = supportsLink("hard")
+async function resolvesHardLinkInsideMemory(): Promise<boolean> {
+    const root = mkdtempSync(path.join(temporaryDirectory, "md-read-hardlink-probe-"))
+    try {
+        const memory = path.join(root, "memory")
+        const target = path.join(root, "outside.md")
+        const link = path.join(memory, "INDEX.md")
+        mkdirSync(memory)
+        writeFileSync(target, "synthetic")
+        linkSync(target, link)
+        return isPathWithin(await realpath(memory), await realpath(link))
+    } finally {
+        rmSync(root, { recursive: true, force: true })
+    }
+}
+const hardLinkResolvesInsideMemory = supportsHardLink && await resolvesHardLinkInsideMemory()
 const denyExternal = [{ action: "external_directory", resource: "*", effect: "deny" }] as const
 
 describe("dynamic Markdown reads and configured memory index", () => {
@@ -242,12 +259,24 @@ describe("dynamic Markdown reads and configured memory index", () => {
         expect(denied.content).toBeUndefined()
     })
 
-    test.skipIf(!supportsHardLink)("reads an in-root hardlink as an in-root file", async (): Promise<void> => {
+    test.skipIf(!hardLinkResolvesInsideMemory)("reads an in-root hardlink as an in-root file", async (): Promise<void> => {
         const outside = path.join(root, "outside.md")
         const index = path.join(memory, "INDEX.md")
         writeFileSync(outside, "synthetic hardlink target")
         linkSync(outside, index)
         expect(await read(index)).toEqual({ content: "synthetic hardlink target" })
+        expect(readFileSync(outside, "utf8")).toBe("synthetic hardlink target")
+    })
+
+    test.skipIf(!supportsHardLink || hardLinkResolvesInsideMemory)("denies a hardlink resolving outside memory", async (): Promise<void> => {
+        const outside = path.join(root, "outside.md")
+        const index = path.join(memory, "INDEX.md")
+        writeFileSync(outside, "synthetic hardlink target")
+        linkSync(outside, index)
+        const result = await read(index)
+        expect(result.error).toContain("cannot be accessed safely")
+        expect(result.content).toBeUndefined()
+        expect(result.file_paths).toBeUndefined()
         expect(readFileSync(outside, "utf8")).toBe("synthetic hardlink target")
     })
 
