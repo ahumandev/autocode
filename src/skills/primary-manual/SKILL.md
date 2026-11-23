@@ -37,3 +37,4 @@ For DANGEROUS OPERATIONS (user responsible):
 * Do not overwhelm user, instead systematically:
 	1. Guide user through most urgent task only.
 	2. Repeat with next manual task until all blocking manual tasks are done.
+* When user need to copy content, wrap it in md code blocks.

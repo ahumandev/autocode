@@ -661,7 +661,6 @@ describe("agent policies", () => {
             expect(permissionRule(agents[agentName]?.permission, "task")).toEqual(expect.objectContaining({ "execute-sandbox": "allow" }))
         }
         expect(agents["execute-sandbox"]?.description).toContain("execute-sandbox")
-        expect(agents.assist?.prompt).toContain("sandbox")
         expect(agents["auto-troubleshoot"]?.prompt).toContain("sandbox")
     })
 

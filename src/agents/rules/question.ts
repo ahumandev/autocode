@@ -17,8 +17,4 @@ export const toolQuestionRules = `
 ### Batching
 - Prefer batching related questions into single \`question\` tool call.
 - Keep each question focused on 1 decision.
-
-### After User Report
-- Done with ASSIGNMENT? Call \`question\` to suggest "next ACTION".
-- ALWAYS call \`question\` to enable user decisions.
 `

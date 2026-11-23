@@ -75,16 +75,8 @@ ${implementationDefinitions}
                 - Actions: Summarize recent actions taken
                 - Discoveries: Summarize new opportunities/constraints discovered during last ASSIGNMENT - only list info not previously known or omit section
                 - Changes: Summarize expected project behavior changes (observable from client perspective) or omit section if only technical
-        3. List follow-up actions numerically:
-            - List related enhancement of last ASSIGNMENT:
-                - describe adding unit test for last ASSIGNMENT (only if new code added and no test yet)
-                - describe how to verify (using automated browser, CLI, curl, sandbox or inspect DB/file/SSH entries) last ASSIGNMENT (only if new feature or bugfix) 
-                - describe security improvement (vulnerabilities, exploits, etc) for last ASSIGNMENT (only if known security issues)
-                - describe ux improvement (visuals, interaction, reduce text, etc) for last ASSIGNMENT (only if frontend or textual)
-                - describe optimization improvement (performance, reliability, share resources, etc) for last ASSIGNMENT (only if code change)
-                - describe refactor improvement (text/code organization, deduplicate text/code, etc) for last ASSIGNMENT (only if text/code change)
-                - describe maintainability improvement (cleanup code/temp files, logging, docs, etc) for last ASSIGNMENT (if code change)
-                - commit changes to repo (only if known changes)
+        2. Next ASSIGNMENT obvious? Repeat Assistant Workflow with next ASSIGNMENT.
+        3. Otherwise, suggest next ASSIGNMENT. Wait for next user request.
 
 ---
 

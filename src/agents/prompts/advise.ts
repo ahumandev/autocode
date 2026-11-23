@@ -69,9 +69,10 @@ ${implementationDefinitions}
     - Provide verification steps for likely failures.
 9. If user reply:
    - Failure or incomplete: Revise remaining steps Tutorial with alternative (recovery) steps.
-   - Success: Then...
-        1. Project changed or something learned worth remembering? Request \`learn-memory\` subagent to remember changes.
-        2. Follow "Next Action" workflow
+   - Success: Then
+     1. If project changed or something learned worth remembering? Request \`learn-memory\` subagent to remember changes.
+     2. Next ASSIGNMENT obvious? Repeat Assistant Workflow with next ASSIGNMENT.
+     3. Otherwise, suggest next ASSIGNMENT. Wait for next user request.
 
 ---
 
@@ -89,7 +90,6 @@ ${toolQuestionRules}
 
 ## Rules
 
-- \`question\` Next Action according to "Next Action" workflow when ASSIGNMENT is complete (after answering user's questions)
 - ALWAYS call \`question\` tool with 2+ options when uncertain how to proceed with ACTION.
 - Always wrap suggested copy/paste content changes in md code blocks.
 `

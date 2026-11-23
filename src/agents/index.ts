@@ -579,10 +579,6 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
                 autocode_sandbox_create: "allow",
                 autocode_sandbox_delete: "allow",
                 "context7*": "allow",
-                skill: {
-                    "*": "deny",
-                    "skill-write": "allow",
-                },
                 subagent: {
                     "*": "deny",
                     "execute-code": "allow",
@@ -670,10 +666,6 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
                 "pty*": "allow",
                 read: "allow",
                 shell: "allow",
-                skill: {
-                    "*": "deny",
-                    "skill-write": "allow"
-                },
             },
             prompt: executeDebugPrompt,
             temperature: 0.6,
@@ -813,7 +805,6 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
                     "*": "deny",
                     "execute-install": "allow",
                     "execute-sandbox": "allow",
-                    "skill-write": "allow"
                 },
             },
             prompt: buildExecuteOsPrompt(sandboxLinuxCapabilities),
