@@ -320,12 +320,15 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
     await mkdir(join(worktree, ".opencode"), { recursive: true })
     await mkdir(memoryDir, { recursive: true })
     await writeFile(sentinelPath, sentinelText)
+    await mkdir(join(worktree, "configured-memory"), { recursive: true })
+    await writeFile(join(worktree, "configured-memory", "INDEX.md"), "# Configured memory\n")
     await mkdir(join(worktree, "docs"), { recursive: true })
     await mkdir(join(generatedSkillPath, ".."), { recursive: true })
     await mkdir(join(userSkillPath, ".."), { recursive: true })
     await writeFile(join(worktree, ".opencode", "autocode.jsonc"), JSON.stringify({
         autocode: {
             skills: { freeze: platform === "win32" },
+            memory: { directory: "configured-memory" },
             tiers: {
                 smart: { model: "openai/smart#default", variant: "high" },
                 balanced: { model: "openai/balanced", variant: "medium" },
@@ -745,6 +748,18 @@ test.each(["linux", "win32"])("V2 setup honors native registration contracts and
             } satisfies V2ToolContext,
         )
         expect(toolResult?.content).toEqual(expect.stringContaining("guide"))
+        const memoryResult = await tools.get("autocode_md_read")?.execute(
+            { file_path_glob: "configured-memory/INDEX.md" },
+            {
+                sessionID: Session.ID.make("ses_memory_index"),
+                messageID: SessionMessage.ID.make("msg_memory_index"),
+                agent: Agent.ID.make("query-memory"),
+                signal: new AbortController().signal,
+                id: Tool.CallID.make("call-memory-index"),
+                progress: async (): Promise<void> => {},
+            } satisfies V2ToolContext,
+        )
+        expect(memoryResult?.content).toBe(JSON.stringify({ content: "# Configured memory\n" }))
         const approvalResult = await tools.get("autocode_sandbox_copy")?.execute(
             { sandbox_name: "uncreated", sandbox_source: "source.txt", local_target: "target.txt" },
             {

@@ -23,7 +23,7 @@ import {
 	createManagedScriptLifecycle as createActualManagedScriptLifecycle,
 	type ManagedScriptLifecycle,
 } from "./hooks/managed_script_lifecycle";
-import { createNoopAsk } from "./tools/test_context";
+import { createNoopAsk, createToolContext } from "./tools/test_context";
 import { createTools } from "./tools";
 import * as skillModule from "./tools/skill";
 import { getBundledSkillsRoot, managedSkills } from "./skills";
@@ -281,6 +281,10 @@ describe("autocode plugin config", () => {
 		const configPath = join(worktree, ".opencode", "autocode.jsonc");
 		await mkdir(join(worktree, ".opencode"), { recursive: true });
 		await mkdir(directory, { recursive: true });
+		for (const name of ["first-memory", "second-memory"]) {
+			await mkdir(join(directory, name), { recursive: true });
+			await writeFile(join(directory, name, "INDEX.md"), `# ${name}\n`);
+		}
 		const writeConfig = async (memoryDirectory: string): Promise<void> => {
 			await writeFile(configPath, JSON.stringify({ autocode: { skills: { freeze: true }, memory: { directory: memoryDirectory } } }));
 		};
@@ -300,6 +304,9 @@ describe("autocode plugin config", () => {
 					expect(first.agent?.[name]?.prompt).not.toContain(join(process.cwd(), "first-memory", "INDEX.md"));
 				}
 				await writeConfig("second-memory");
+				const toolContext = createToolContext({ directory, worktree, agent: "query-memory" });
+				expect(await hooks.tool?.autocode_md_read.execute({ file_path_glob: "first-memory/INDEX.md" }, toolContext))
+					.toBe(JSON.stringify({ content: "# first-memory\n" }));
 				for (let attempt = 0; attempt < 2; attempt++) {
 					const repeated: PluginConfig = {};
 					await hooks.config(repeated as unknown as PluginHookConfig);
@@ -318,6 +325,8 @@ describe("autocode plugin config", () => {
 					for (const name of ["query-memory", "learn-memory"] as const) {
 						expect(updated.agent?.[name]?.prompt).toContain(join(directory, "second-memory", "INDEX.md"));
 					}
+					expect(await fresh.tool?.autocode_md_read.execute({ file_path_glob: "second-memory/INDEX.md" }, toolContext))
+						.toBe(JSON.stringify({ content: "# second-memory\n" }));
 				} finally {
 					await fresh.dispose?.();
 				}

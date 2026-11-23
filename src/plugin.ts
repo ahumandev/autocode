@@ -238,7 +238,7 @@ async function createPluginHooks(
             getWebUrl: () => process.env.AUTOCODE_WEB_URL,
             restartCoordinator,
             managedScriptLifecycle,
-        }, capabilities),
+        }, capabilities, autocodeConfig.memory),
     }
     return hooks
 }
@@ -747,7 +747,7 @@ async function setupV2(context: V2Context): Promise<OpenCodePlugin.Cleanup> {
         getWebUrl: () => process.env.AUTOCODE_WEB_URL,
         restartCoordinator,
         managedScriptLifecycle,
-    }, capabilities)
+    }, capabilities, autocodeConfig.memory)
     await context.tool.transform((editor) => {
         for (const [name, definition] of Object.entries(tools)) {
             editor.add({
