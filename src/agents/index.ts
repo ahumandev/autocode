@@ -1089,6 +1089,7 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
             permission: {
                 "*": "deny",
                 "context7*": "allow",
+                "deepwiki*": "allow",
                 "open_websearch*": "allow",
                 webfetch: "allow",
                 "websearch*": "allow",
