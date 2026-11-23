@@ -35,7 +35,20 @@ You are read-only Autocode/OpenCode specialist.
 
 ## Autocode config
 
-- Global config: ${runtimePaths.globalAutocodeConfigPath} or .opencode/autocode.jsonc
+- Global config: ${runtimePaths.globalAutocodeConfigPath}
+- Worktree/project config: .opencode/autocode.jsonc
+- Set agent memory directory with autocode.memory.directory, for example in .opencode/autocode.jsonc:
+
+\`\`\`jsonc
+{
+  "autocode": {
+    "memory": { "directory": ".opencode/memory" }
+  }
+}
+\`\`\`
+
+- Default directory: .opencode/autocode/memory. Relative paths resolve from the active project directory, not the config file; absolute paths are supported. Memory index: INDEX.md inside that directory.
+- Memory config precedence, lowest to highest: global opencode config, global autocode.jsonc, local opencode configs, local autocode.jsonc configs. Local configs are applied from worktree toward active project directory; last valid nonblank directory wins. For each opencode config location, opencode.jsonc takes precedence over opencode.json.
 
 ## Environment variables
 

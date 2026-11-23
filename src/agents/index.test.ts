@@ -375,7 +375,7 @@ describe("agent policies", () => {
             ...unaffectedAgentIds,
             "assist-browser", "assist-git-conflict", "auto-author", "auto-design", "auto-feature", "auto-general", "auto-refactor", "auto-research", "auto-review-api", "auto-review-ui", "auto-test", "auto-troubleshoot",
             "execute-author", "execute-code", "execute-config", "execute-debug", "execute-document", "execute-excel", "execute-opencode", "execute-os", "execute-rest", "execute-sandbox", "execute-script", "execute-ssh",
-            "learn-memory", "query-autocode", "query-browser", "query-code", "query-config", "query-db", "query-excel", "query-figma", "query-git", "query-memory", "query-os", "query-ssh", "query-text", "query-web", "query-youtube",
+            "learn-memory", "query-autocode", "query-browser", "query-code", "query-config", "query-db", "query-excel", "query-git", "query-memory", "query-os", "query-ssh", "query-text", "query-web", "query-youtube",
         ]
 
         expect(Object.keys(agents).sort()).toEqual(expectedAgentIds.sort())

@@ -150,8 +150,8 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
                 doom_loop: "ask",
                 edit: "allow",
                 "git-commit": "allow",
-                openchamber_schedule: "allow",
                 openchamber_render: "allow",
+                openchamber_schedule: "allow",
                 question: "allow",
                 skill: {
                     "*": "deny",
@@ -982,23 +982,6 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
                 glob: "allow",
             },
             prompt: queryExcelPrompt,
-            temperature: 0.1,
-            tier: "context",
-        },
-       
-        "query-figma": {
-            description: "Use query-figma subagent to interact with Figma designs and projects.",
-            hidden: true,
-            mode: "subagent",
-            permission: {
-                "*": "deny",
-                "figma_export_*": "allow",
-                "figma_get_*": "allow",
-                "figma_list_*": "allow",
-                "figma_search_*": "allow",
-                figma_whoami: "allow",
-            },
-            prompt: queryFigmaPrompt,
             temperature: 0.1,
             tier: "context",
         },

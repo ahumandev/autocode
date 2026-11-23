@@ -76,6 +76,21 @@ describe("queryAutocodePrompt", () => {
         ])
     })
 
+    test("documents memory configuration and path precedence", () => {
+        expectPromptContainsAll([
+            `Global config: ${runtimePaths.globalAutocodeConfigPath}`,
+            "Worktree/project config: .opencode/autocode.jsonc",
+            "autocode.memory.directory",
+            '"autocode": {\n    "memory": { "directory": ".opencode/memory" }\n  }',
+            "Default directory: .opencode/autocode/memory.",
+            "Relative paths resolve from the active project directory, not the config file; absolute paths are supported.",
+            "Memory index: INDEX.md inside that directory.",
+            "global opencode config, global autocode.jsonc, local opencode configs, local autocode.jsonc configs",
+            "Local configs are applied from worktree toward active project directory; last valid nonblank directory wins.",
+            "opencode.jsonc takes precedence over opencode.json",
+        ])
+    })
+
     test("includes every agent key", () => {
         expectPromptContainsAll(requiredAgentKeys)
     })
