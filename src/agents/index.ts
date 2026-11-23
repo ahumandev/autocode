@@ -740,6 +740,10 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
                     "author-rules": "allow",
                     "customize-opencode": "allow" // Build-in to OpenCode
                 },
+                subagent: {
+                    "*": "deny",
+                    "query-autocode": "allow",
+                },
                 skill_edit: "allow",
             },
             prompt: executeOpencodePrompt,
@@ -894,6 +898,7 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
                     "*": "deny",
                     "author-agent": "allow",
                     "author-command": "allow",
+                    "customize-opencode": "allow", // Build-in to OpenCode
                     "skill-write": "allow",
                 },
                 webfetch: "allow",

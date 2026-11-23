@@ -66,7 +66,7 @@ const executeOpencodeForbiddenToolKeys = ["apply_patch", "bash", "execute", "pat
 const executeOpencodeAllowedSkillNames = ["author-agent", "author-command", "customize-opencode", "skill-write", "author-rules"]
 const queryAutocodeAllowedPermissionKeys = ["autocode_config_read", "autocode_md_read", "autocode_md_frontmatter_read", "open_websearch*", "webfetch", "websearch*"]
 const queryAutocodeForbiddenWritePermissionKeys = ["apply_patch", "bash", "edit", "execute", "patch", "task", "write"]
-const queryAutocodeAllowedSkillNames = ["author-agent", "author-command", "skill-write"]
+const queryAutocodeAllowedSkillNames = ["author-agent", "author-command", "customize-opencode", "skill-write"]
 const managedAgentTiers = {
     compaction: "context",
     title: "cheap",
