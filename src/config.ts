@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
+import { Buffer } from "node:buffer"
 
 import defaultAutocodeConfig from "./default-autocode.jsonc" with { type: "json" }
 import { resolveOpenCodePaths } from "./utils/paths"
@@ -29,6 +30,56 @@ export type AutocodeMemoryConfig = { directory: string }
 export type SkillCategory = "bash" | "code" | "design" | "test"
 export type SkillsConfig = Partial<Record<SkillCategory, string[]>> & { freeze?: boolean }
 const DEFAULT_SKILLS: SkillsConfig = { ...defaultAutocodeConfig.autocode.skills }
+
+export type AutocodeConfig = {
+    tiers: Partial<Record<ModelTier, TierConfig>>
+    externalDirectories: ExternalDirectoryRules
+    externalDirectoryPermissions: PermissionRule[]
+    sandbox: AutocodeSandboxConfig
+    skills: SkillsConfig | undefined
+    memory: AutocodeMemoryConfig
+    credentials: CredentialPolicy
+}
+export type AutocodeConfigRole = "global" | "worktree" | "intermediate" | "active"
+export type AutocodeConfigCandidate = {
+    path: string
+    scopeRoot: string
+    roles: AutocodeConfigRole[]
+    kind: "autocode"
+}
+export type AutocodeConfigCandidateDetail = AutocodeConfigCandidate & (
+    | { state: "missing" | "unreadable" }
+    | { state: "invalid"; bytes: Buffer; raw: string; document?: unknown }
+    | { state: "valid"; bytes: Buffer; raw: string; document: unknown }
+)
+export type AutocodeConfigOrigin = { file: string; path: (string | number)[] }
+export type AutocodeConfigTraceEvent = {
+    target: (string | number)[]
+    action: "set" | "clear" | "replace" | "append" | "ignored"
+    origin?: AutocodeConfigOrigin
+    cause?: AutocodeConfigOrigin
+    permission?: { resource: string; effect: PermissionAction }
+}
+export type AutocodeTierSource = {
+    file: string
+    tier?: unknown
+    tiers?: unknown
+    model?: unknown
+    variant?: unknown
+}
+export type AutocodeTierResolution = {
+    selectedProvider?: string
+    selectedProviderOrigin?: AutocodeConfigOrigin
+    providerTiers: Record<string, Partial<Record<ModelTier, TierConfig>>>
+}
+export type AutocodeConfigDetails = {
+    config?: AutocodeConfig
+    candidates: AutocodeConfigCandidateDetail[]
+    trace: AutocodeConfigTraceEvent[]
+    tierSources: AutocodeTierSource[]
+    tierResolution?: AutocodeTierResolution
+    failure?: { kind: "invalid" | "unreadable"; file: string }
+}
 
 export interface ConfigFileSystem {
     readFileSync(path: string, encoding: "utf-8"): string
@@ -184,22 +235,22 @@ function collectMemoryConfig(value: unknown): AutocodeMemoryConfig | undefined {
     return { directory: value.directory }
 }
 
-function collectSkills(value: unknown): SkillsConfig | undefined {
+function collectSkills(value: unknown, quiet: boolean = false): SkillsConfig | undefined {
     if (value === undefined) return undefined
     if (!isRecord(value)) {
-        console.warn(`autocode: invalid skills config (expected object, got ${Array.isArray(value) ? "array" : typeof value})`)
+        if (!quiet) console.warn(`autocode: invalid skills config (expected object, got ${Array.isArray(value) ? "array" : typeof value})`)
         return undefined
     }
     const result: SkillsConfig = {}
     if ("freeze" in value) {
         if (typeof value.freeze !== "boolean") {
-            console.warn(`autocode: invalid skills.freeze (expected boolean, got ${JSON.stringify(value.freeze)}); falling back to false`)
+            if (!quiet) console.warn(`autocode: invalid skills.freeze (expected boolean, got ${JSON.stringify(value.freeze)}); falling back to false`)
             result.freeze = false
         } else {
             result.freeze = value.freeze
         }
     }
-    if (SKILL_CATEGORIES.some((category) => Array.isArray(value[category]))) {
+    if (!quiet && SKILL_CATEGORIES.some((category) => Array.isArray(value[category]))) {
         warnLegacySkillsConfig()
     }
 
@@ -238,7 +289,16 @@ function collectCredentialPolicy(value: unknown): CredentialPolicy {
     throw new Error(`autocode: invalid global autocode.jsonc credentials policy; supported top-level credentials.provider values: ${CREDENTIAL_PROVIDER_POLICIES.join(", ")}`)
 }
 
-function parseAutocodeConfig(raw: string, path: string, parseCredentials: boolean = false): ParsedAutocodeConfig {
+export function validateGlobalCredentialDocument(document: unknown): CredentialPolicy {
+    const root = document as (AutocodeJsoncNew & AutocodeJsoncLegacy) | null | undefined
+    const ac = root?.autocode
+    if (isRecord(ac) && Object.hasOwn(ac, "credentials")) {
+        throw new Error("autocode: global autocode.jsonc does not support autocode.credentials; move policy to top-level credentials.provider.")
+    }
+    return collectCredentialPolicy(root?.credentials)
+}
+
+function parseAutocodeConfig(raw: string, path: string, parseCredentials: boolean = false, quiet: boolean = false): ParsedAutocodeConfig {
     let parsed: AutocodeJsoncNew & AutocodeJsoncLegacy
     try {
         parsed = JSON.parse(stripJsoncComments(raw))
@@ -246,14 +306,11 @@ function parseAutocodeConfig(raw: string, path: string, parseCredentials: boolea
         throw new Error(`autocode: malformed JSONC in ${path}: ${(err as Error).message}`)
     }
     const ac = parsed?.autocode
-    if (parseCredentials && isRecord(ac) && Object.hasOwn(ac, "credentials")) {
-        throw new Error("autocode: global autocode.jsonc does not support autocode.credentials; move policy to top-level credentials.provider.")
-    }
-    const credentials = parseCredentials ? collectCredentialPolicy(parsed?.credentials) : undefined
+    const credentials = parseCredentials ? validateGlobalCredentialDocument(parsed) : undefined
     const externalDirectories = collectExternalDirectories(parsed.permissions)
     const externalDirectoryPermissions = collectExternalDirectoryPermissions(parsed.permissions)
     const sandbox = collectSandboxConfig(ac?.sandbox)
-    const skills = collectSkills(ac?.skills)
+    const skills = collectSkills(ac?.skills, quiet)
     const memory = collectMemoryConfig(ac?.memory)
 
     if (!ac) return { externalDirectories, externalDirectoryPermissions, sandbox, skills, memory, credentials }
@@ -343,6 +400,51 @@ function collectLocalOpencodeConfigCandidates(worktree: string, directory: strin
     })
 }
 
+type ConfigCandidateGroup = { paths: string[]; editable?: AutocodeConfigCandidate }
+
+export type AutocodeConfigContext =
+    | { worktree: string; directory: string }
+    | { worktree?: null | undefined; directory?: null | undefined }
+
+function configCoordinates(context: AutocodeConfigContext): [string, string] | undefined {
+    if ((context.worktree === null || context.worktree === undefined)
+        && (context.directory === null || context.directory === undefined)) return undefined
+    if (typeof context.worktree === "string" && typeof context.directory === "string") return [context.worktree, context.directory]
+    throw new Error("Invalid config context")
+}
+
+function configCandidateGroups(worktree: string | undefined, directory: string | undefined): ConfigCandidateGroup[] {
+    const globalRoot = resolveOpenCodePaths().globalConfigRoot
+    if (worktree === undefined && !isAbsolute(globalRoot)) throw new Error("Invalid global config root")
+    const globalPath = join(globalRoot, "autocode.jsonc")
+    const localPaths = worktree !== undefined && directory !== undefined ? collectLocalConfigCandidates(worktree, directory) : []
+    const globalAbsolute = resolve(globalPath)
+    const worktreeAbsolute = worktree === undefined ? undefined : resolve(worktree)
+    const directoryAbsolute = directory === undefined ? undefined : resolve(directory)
+    const editable = (path: string, global: boolean): AutocodeConfigCandidate => {
+        const absolute = resolve(path)
+        const root = resolve(dirname(dirname(path)))
+        const roles: AutocodeConfigRole[] = []
+        if (absolute === globalAbsolute) roles.push("global")
+        if (worktree !== undefined && root === worktreeAbsolute && (!global || absolute === resolve(join(worktree, ".opencode", "autocode.jsonc")))) roles.push("worktree")
+        if (directory !== undefined && root === directoryAbsolute && (!global || absolute === resolve(join(directory, ".opencode", "autocode.jsonc")))) roles.push("active")
+        if (!global && !roles.includes("worktree") && !roles.includes("active")) roles.push("intermediate")
+        return { path: absolute, scopeRoot: global ? resolve(globalRoot) : root, roles, kind: "autocode" }
+    }
+    return [
+        { paths: [join(globalRoot, "opencode.jsonc"), join(globalRoot, "opencode.json")] },
+        { paths: [globalPath], editable: editable(globalPath, true) },
+        ...(worktree !== undefined && directory !== undefined ? collectLocalOpencodeConfigCandidates(worktree, directory) : []).map((paths) => ({ paths })),
+        ...localPaths.map((path) => ({ paths: [path], editable: editable(path, false) })),
+    ]
+}
+
+export function enumerateAutocodeConfigCandidates(context: AutocodeConfigContext): AutocodeConfigCandidate[] {
+    const coordinates = configCoordinates(context)
+    return configCandidateGroups(coordinates?.[0], coordinates?.[1])
+        .flatMap((group) => group.editable ? [group.editable] : [])
+}
+
 function readFirstConfig(fs: ConfigFileSystem, paths: readonly string[]): { path: string, raw: string } | undefined {
     for (const path of paths) {
         try {
@@ -376,79 +478,245 @@ function mergeProviderTiers(
     return merged
 }
 
+type ProviderOrigins = Record<string, Partial<Record<ModelTier, Partial<Record<"model" | "variant", AutocodeConfigOrigin>>>>>
+type TraceRecorder = (target: (string | number)[], action: AutocodeConfigTraceEvent["action"], source?: AutocodeConfigOrigin, cause?: AutocodeConfigOrigin, permission?: AutocodeConfigTraceEvent["permission"]) => void
+
+function traceDirectTiers(tiers: Partial<Record<ModelTier, TierConfig>>, file: string, record: TraceRecorder): void {
+    for (const tier of MODEL_TIERS) {
+        const value = tiers[tier]
+        if (!value) continue
+        for (const field of ["model", "variant"] as const) {
+            if (Object.hasOwn(value, field)) {
+                record(["tiers", tier, field], "set", { file: resolve(file), path: ["autocode", "tiers", tier, field] })
+            }
+        }
+    }
+}
+
+function traceSelectedTiers(
+    provider: string,
+    tiers: Partial<Record<ModelTier, TierConfig>>,
+    origins: ProviderOrigins,
+    cause: AutocodeConfigOrigin,
+    record: TraceRecorder,
+): void {
+    for (const tier of MODEL_TIERS) {
+        const value = tiers[tier]
+        if (!value) continue
+        for (const field of ["model", "variant"] as const) {
+            record(["tiers", tier, field], Object.hasOwn(value, field) ? "replace" : "clear", origins[provider]?.[tier]?.[field], cause)
+        }
+    }
+}
+
 export async function loadAutocodeConfig(
     worktree: string,
     directory: string,
     fs: ConfigFileSystem = defaultFs,
-): Promise<{ tiers: Partial<Record<ModelTier, TierConfig>>, externalDirectories: ExternalDirectoryRules, externalDirectoryPermissions: PermissionRule[], sandbox: AutocodeSandboxConfig, skills: SkillsConfig | undefined, memory: AutocodeMemoryConfig, credentials: CredentialPolicy }> {
+): Promise<AutocodeConfig> {
+    const result = await resolveAutocodeConfig(worktree, directory, fs)
+    return result.config as AutocodeConfig
+}
+
+export async function loadAutocodeConfigDetails(context: AutocodeConfigContext): Promise<AutocodeConfigDetails> {
+    const coordinates = configCoordinates(context)
+    return resolveAutocodeConfig(coordinates?.[0], coordinates?.[1], defaultFs, true)
+}
+
+async function resolveAutocodeConfig(
+    worktree: string | undefined,
+    directory: string | undefined,
+    fs: ConfigFileSystem,
+    detailed: boolean = false,
+): Promise<AutocodeConfigDetails> {
     const globalConfigDirectory = resolveOpenCodePaths().globalConfigRoot
     const globalConfigPath = join(globalConfigDirectory, "autocode.jsonc")
-    const candidates: string[][] = []
+    const groups = configCandidateGroups(worktree, directory)
+    const candidates: AutocodeConfigCandidateDetail[] = []
+    const trace: AutocodeConfigTraceEvent[] = []
+    const tierSources: AutocodeTierSource[] = []
+    let failure: AutocodeConfigDetails["failure"]
 
     // global defaults
     const globalExisted = existsSync(globalConfigPath)
-    fs.ensureFileSync(globalConfigPath, DEFAULT_AUTOCODE_CONFIG)
-    candidates.push([join(globalConfigDirectory, "opencode.jsonc"), join(globalConfigDirectory, "opencode.json")])
-    candidates.push([globalConfigPath])
-
-    candidates.push(...collectLocalOpencodeConfigCandidates(worktree, directory))
-    candidates.push(...collectLocalConfigCandidates(worktree, directory).map((path) => [path]))
+    if (!detailed) {
+        fs.ensureFileSync(globalConfigPath, DEFAULT_AUTOCODE_CONFIG)
+    }
 
     let tiers: Partial<Record<ModelTier, TierConfig>> = {}
     let providerTiers: Record<string, Partial<Record<ModelTier, TierConfig>>> = {}
     let selectedProvider: string | undefined
+    let selectedProviderOrigin: AutocodeConfigOrigin | undefined
     let externalDirectories: ExternalDirectoryRules = {}
     const externalDirectoryPermissions: PermissionRule[] = []
     let sandbox: AutocodeSandboxConfig = {}
     let skills: SkillsConfig | undefined
     let memory: AutocodeMemoryConfig = { directory: DEFAULT_MEMORY_DIRECTORY }
     let credentials: CredentialPolicy = { provider: DEFAULT_CREDENTIAL_PROVIDER }
-    for (const candidate of candidates) {
-        const config = readFirstConfig(fs, candidate)
+    const providerOrigins: ProviderOrigins = Object.create(null) as ProviderOrigins
+    const origin = (file: string, ...path: (string | number)[]): AutocodeConfigOrigin => ({ file: resolve(file), path })
+    let synthetic = false
+    const record: TraceRecorder = (target, action, source, cause, permission): void => {
+        if (detailed && !synthetic) trace.push({ target, action, ...(source ? { origin: source } : {}), ...(cause ? { cause } : {}), ...(permission ? { permission } : {}) })
+    }
+    for (const group of groups) {
+        synthetic = false
+        let config: { path: string; raw: string } | undefined
+        let bytes: Buffer | undefined
+        if (detailed && group.editable) {
+            try {
+                bytes = readFileSync(group.paths[0])
+                config = { path: group.paths[0], raw: bytes.toString("utf8") }
+            } catch (error) {
+                const missing = isRecord(error) && error.code === "ENOENT"
+                candidates.push({ ...group.editable, state: missing ? "missing" : "unreadable" })
+                if (missing && !globalExisted && group.editable.path === resolve(globalConfigPath)) {
+                    config = { path: group.paths[0], raw: DEFAULT_AUTOCODE_CONFIG }
+                    synthetic = true
+                }
+            }
+        } else {
+            config = readFirstConfig(fs, group.paths)
+        }
         if (!config) continue
+        let document: unknown
+        let documentParsed = false
+        let parsed: ParsedAutocodeConfig
+        try {
+            if (detailed) {
+                document = JSON.parse(stripJsoncComments(config.raw))
+                documentParsed = true
+            }
+            parsed = parseAutocodeConfig(config.raw, config.path, config.path === globalConfigPath, detailed)
+            if (detailed && group.editable && !synthetic) candidates.push({ ...group.editable, state: "valid", bytes: bytes as Buffer, raw: config.raw, document })
+        } catch (error) {
+            if (!detailed) throw error
+            if (group.editable && !synthetic) candidates.push({ ...group.editable, state: "invalid", bytes: bytes as Buffer, raw: config.raw, ...(documentParsed ? { document } : {}) })
+            failure ??= { kind: "invalid", file: resolve(config.path) }
+            continue
+        }
+        if (failure) continue
         // Provider definitions merge field-wise; selecting one replaces each defined tier.
-        const parsed = parseAutocodeConfig(config.raw, config.path, config.path === globalConfigPath)
-        if (parsed.credentials) credentials = parsed.credentials
+        const doc = isRecord(document) ? document : undefined
+        const ac = isRecord(doc?.autocode) ? doc.autocode : undefined
+        if (detailed && !synthetic && ac && ["tier", "tiers", "model", "variant"].some((key) => Object.hasOwn(ac, key))) {
+            tierSources.push({
+                file: resolve(config.path),
+                ...(Object.hasOwn(ac, "tier") ? { tier: ac.tier } : {}),
+                ...(Object.hasOwn(ac, "tiers") ? { tiers: ac.tiers } : {}),
+                ...(Object.hasOwn(ac, "model") ? { model: ac.model } : {}),
+                ...(Object.hasOwn(ac, "variant") ? { variant: ac.variant } : {}),
+            })
+        }
+        if (parsed.credentials) {
+            credentials = parsed.credentials
+            if (isRecord(doc?.credentials) && Object.hasOwn(doc.credentials, "provider")) {
+                record(["credentials", "provider"], "set", origin(config.path, "credentials", "provider"))
+            } else if (detailed) {
+                record(["credentials", "provider"], "clear", undefined, origin(config.path, "credentials"))
+            }
+        }
         if (parsed.tiers) {
             const directTiers = collectTiers(parsed.tiers) ?? {}
             providerTiers = mergeProviderTiers(providerTiers, parsed.tiers)
+            if (detailed && !synthetic) {
+                for (const [provider, value] of Object.entries(parsed.tiers)) {
+                    const providerTier = collectTiers(value)
+                    if (!providerTier) continue
+                    const providerOrigin = providerOrigins[provider] ??= {}
+                    for (const tier of MODEL_TIERS) {
+                        const entry = providerTier[tier]
+                        if (!entry) continue
+                        const tierOrigin = providerOrigin[tier] ??= {}
+                        for (const field of ["model", "variant"] as const) {
+                            if (Object.hasOwn(entry, field)) {
+                                tierOrigin[field] = origin(config.path, "autocode", "tiers", provider, tier, field)
+                                record(["providers", provider, tier, field], "set", tierOrigin[field])
+                            }
+                        }
+                    }
+                }
+            }
 
             if (parsed.tier) {
                 const selectedTiers = providerTiers[parsed.tier]
                 if (selectedTiers) {
                     selectedProvider = parsed.tier
+                    if (detailed) selectedProviderOrigin = origin(config.path, "autocode", "tier")
                     tiers = { ...tiers, ...selectedTiers }
+                    record(["selectedProvider"], "set", origin(config.path, "autocode", "tier"))
+                    if (detailed) traceSelectedTiers(parsed.tier, selectedTiers, providerOrigins, origin(config.path, "autocode", "tier"), record)
                 } else {
                     tiers = mergeTiers(tiers, directTiers)
+                    if (detailed) traceDirectTiers(directTiers, config.path, record)
                 }
             } else {
                 tiers = mergeTiers(tiers, directTiers)
+                if (detailed) traceDirectTiers(directTiers, config.path, record)
                 if (selectedProvider && collectTiers(parsed.tiers[selectedProvider])) {
                     tiers = { ...tiers, ...providerTiers[selectedProvider] }
+                    if (detailed) traceSelectedTiers(selectedProvider, providerTiers[selectedProvider], providerOrigins, origin(config.path, "autocode", "tiers", selectedProvider), record)
                 }
             }
         } else if (parsed.tier) {
             const selectedTiers = providerTiers[parsed.tier]
             if (selectedTiers) {
                 selectedProvider = parsed.tier
+                if (detailed) selectedProviderOrigin = origin(config.path, "autocode", "tier")
                 tiers = { ...tiers, ...selectedTiers }
+                record(["selectedProvider"], "set", origin(config.path, "autocode", "tier"))
+                if (detailed) traceSelectedTiers(parsed.tier, selectedTiers, providerOrigins, origin(config.path, "autocode", "tier"), record)
             }
         }
+        if (typeof ac?.tier === "string") record(["tier"], parsed.tier && providerTiers[parsed.tier] ? "set" : "ignored", origin(config.path, "autocode", "tier"))
         if (parsed.externalDirectories) {
             externalDirectories = mergeExternalDirectoryRules(externalDirectories, parsed.externalDirectories)
         }
         externalDirectoryPermissions.push(...parsed.externalDirectoryPermissions ?? [])
+        if (Array.isArray(doc?.permissions)) {
+            const lastIndices = new Map<string, number>()
+            doc.permissions.forEach((rule: unknown, index: number) => {
+                if (collectExternalDirectoryPermissions([rule]).length === 0 || !isRecord(rule)) return
+                lastIndices.set(rule.resource as string, index)
+                record(["externalDirectoryPermissions"], "append", origin(config.path, "permissions", index), undefined, { resource: rule.resource as string, effect: rule.effect as PermissionAction })
+            })
+            for (const [pattern, effect] of Object.entries(parsed.externalDirectories ?? {})) {
+                record(["externalDirectories", pattern], "replace", origin(config.path, "permissions", lastIndices.get(pattern) as number, "effect"), undefined, { resource: pattern, effect })
+            }
+        }
         if (parsed.sandbox) {
             sandbox = { ...sandbox, ...parsed.sandbox }
+            for (const key of Object.keys(parsed.sandbox)) {
+                const path = key === "sync_method" ? ["sync_method"] : ["distro", key === "distro_cache_path" ? "cache_path" : "expire"]
+                record(["sandbox", key], "set", origin(config.path, "autocode", "sandbox", ...path))
+            }
         }
         if (parsed.skills) {
             skills = { ...(skills ?? {}), ...parsed.skills }
+            record(["skills", "freeze"], "set", origin(config.path, "autocode", "skills", "freeze"))
         }
         if (parsed.memory) {
             memory = { ...memory, ...parsed.memory }
+            record(["memory", "directory"], "set", origin(config.path, "autocode", "memory", "directory"))
         }
         if (parsed.legacyTiers) {
             tiers = mergeTiers(tiers, parsed.legacyTiers)
+            for (const tier of MODEL_TIERS) {
+                if (!parsed.legacyTiers[tier]) {
+                    if (isRecord(ac?.variant) && Object.hasOwn(ac.variant, tier)) record(["tiers", tier, "variant"], "ignored", origin(config.path, "autocode", "variant", tier))
+                    continue
+                }
+                record(["tiers", tier, "model"], "set", origin(config.path, "autocode", "model", tier))
+                const hasVariant = isRecord(ac?.variant) && Object.hasOwn(ac.variant, tier)
+                record(["tiers", tier, "variant"], hasVariant ? "set" : "clear", hasVariant ? origin(config.path, "autocode", "variant", tier) : undefined, origin(config.path, "autocode", "model", tier))
+            }
+        } else if (ac) {
+            for (const field of ["model", "variant"] as const) {
+                if (!isRecord(ac[field])) continue
+                for (const tier of MODEL_TIERS) {
+                    if (Object.hasOwn(ac[field], tier)) record(["tiers", tier, field], "ignored", origin(config.path, "autocode", field, tier))
+                }
+            }
         }
     }
 
@@ -462,7 +730,18 @@ export async function loadAutocodeConfig(
     // If `skills` already exists with any value (including null / arrays / scalars),
     // it is left alone. If `autocode` is not a record, seeding is skipped entirely
     // so the user's custom configuration can never be replaced.
-    if (globalExisted) {
+    synthetic = false
+    if (detailed && globalExisted && !failure) {
+        const globalCandidate = candidates[0]
+        if (globalCandidate?.state === "valid" && isRecord(globalCandidate.document)
+            && isRecord(globalCandidate.document.autocode) && !("skills" in globalCandidate.document.autocode)) {
+            const seeded = collectSkills(DEFAULT_SKILLS, true)
+            if (seeded) {
+                skills = { ...(skills ?? {}), ...seeded }
+                record(["skills", "freeze"], "set", undefined, origin(globalConfigPath, "autocode", "skills"))
+            }
+        }
+    } else if (!detailed && globalExisted && !failure) {
         try {
             const raw = fs.readFileSync(globalConfigPath, "utf-8")
             const parsed = JSON.parse(stripJsoncComments(raw)) as { autocode?: Record<string, unknown> }
@@ -471,9 +750,13 @@ export async function loadAutocodeConfig(
                 const defaultSkills = DEFAULT_SKILLS
                 const editor = createJsoncDocumentEditor(raw)
                 editor.apply({ kind: "create", path: ["autocode", "skills"], value: defaultSkills, index: null })
-                fs.writeFileSync(globalConfigPath, editor.toString())
+                const updated = editor.toString()
+                fs.writeFileSync(globalConfigPath, updated)
                 const seeded = collectSkills(defaultSkills)
-                if (seeded) skills = { ...(skills ?? {}), ...seeded }
+                if (seeded) {
+                    skills = { ...(skills ?? {}), ...seeded }
+                    record(["skills", "freeze"], "set", origin(globalConfigPath, "autocode", "skills", "freeze"))
+                }
             }
         } catch (err) {
             console.error(`autocode: failed to seed default skills: ${(err as Error).message}`)
@@ -481,12 +764,12 @@ export async function loadAutocodeConfig(
     }
 
     return {
-        tiers,
-        externalDirectories,
-        externalDirectoryPermissions,
-        sandbox,
-        skills,
-        memory,
-        credentials,
+        ...(failure ? { failure } : {
+            config: { tiers, externalDirectories, externalDirectoryPermissions, sandbox, skills, memory, credentials },
+            ...(detailed ? { tierResolution: { selectedProvider, selectedProviderOrigin, providerTiers } } : {}),
+        }),
+        candidates,
+        trace,
+        tierSources,
     }
 }

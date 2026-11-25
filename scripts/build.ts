@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn as spawnChild } from "node:child_process"
 import { type FSWatcher, watch as watchPath } from "node:fs"
-import { copyFile, rm as removePath } from "node:fs/promises"
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm as removePath, stat, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -12,6 +12,7 @@ export type BuildDependencies = {
     watch: typeof watchPath
     spawn: typeof spawnChild
     registerSignalHandler: (signal: NodeJS.Signals, handler: () => void) => () => void
+    buildAutoChamber?: () => Promise<void>
 }
 
 type WatchExit = {
@@ -38,7 +39,8 @@ const declarationConfig = join(repositoryRoot, "tsconfig.build.json")
 const copySkillSourcesScript = join(repositoryRoot, "scripts", "copy-skill-sources.ts")
 // Alias cpu-features to project shim so Bun never loads its Node/NAN addon.
 const cpuFeaturesShim = join(repositoryRoot, "scripts", "shims", "cpu-features.js")
-const projectRequire = createRequire(join(repositoryRoot, "package.json"))
+const rootPackagePath = join(repositoryRoot, "package.json")
+const projectRequire = createRequire(rootPackagePath)
 
 function registerProcessSignalHandler(signal: NodeJS.Signals, handler: () => void): () => void {
     process.once(signal, handler)
@@ -54,6 +56,7 @@ export const defaultBuildDependencies: BuildDependencies = {
     watch: watchPath,
     spawn: spawnChild,
     registerSignalHandler: registerProcessSignalHandler,
+    buildAutoChamber,
 }
 
 export function resolveTypeScriptCli(): string {
@@ -96,8 +99,89 @@ function waitForCommand(child: ChildProcess): Promise<void> {
     })
 }
 
-export async function build(deps: BuildDependencies = defaultBuildDependencies): Promise<void> {
-    await runBuild(false, deps)
+export async function build(deps: BuildDependencies = defaultBuildDependencies, runtimeOnly: boolean = false): Promise<void> {
+    await runBuild(false, deps, runtimeOnly)
+    await deps.buildAutoChamber?.()
+}
+
+async function bundleAutoChamber(entry: string, outdir: string, target: "browser" | "node"): Promise<void> {
+    const result = await Bun.build({
+        entrypoints: [entry],
+        outdir,
+        target,
+        format: target === "browser" ? "iife" : "esm",
+        packages: "bundle",
+        splitting: false,
+        sourcemap: "none",
+        env: "disable",
+        minify: { whitespace: true },
+        naming: "main.js",
+        throw: false,
+    })
+    if (!result.success) {
+        throw new Error(`AutoChamber bundle failed for ${entry}:\n${result.logs.map((log): string => String(log)).join("\n")}`)
+    }
+    if (result.outputs.length !== 1 || resolve(result.outputs[0].path) !== join(outdir, "main.js")) {
+        throw new Error(`AutoChamber bundle for ${entry} did not produce only ${join(outdir, "main.js")}.`)
+    }
+    if (!(await stat(join(outdir, "main.js"))).isFile()) {
+        throw new Error(`AutoChamber bundle is not a file: ${join(outdir, "main.js")}`)
+    }
+}
+
+async function publishAutoChamber(staging: string, output: string): Promise<void> {
+    const backup = join(staging, "previous")
+    let hasPrevious = false
+    try {
+        await rename(output, backup)
+        hasPrevious = true
+    }
+    catch (error) {
+        if (!(typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")) throw error
+    }
+    try {
+        await rename(join(staging, "package"), output)
+    }
+    catch (error) {
+        if (hasPrevious) await rename(backup, output)
+        throw error
+    }
+}
+
+export async function writeAutoChamberPackageManifest(rootPackagePath: string, templatePath: string, outputPath: string): Promise<void> {
+    const rootPackage = JSON.parse(await readFile(rootPackagePath, "utf8")) as { version?: unknown } | null
+    const version = rootPackage?.version
+    if (typeof version !== "string" || version.trim().length === 0) {
+        throw new Error(`Root package version must be a nonempty string: ${rootPackagePath}`)
+    }
+    const template = JSON.parse(await readFile(templatePath, "utf8")) as Record<string, unknown>
+    await writeFile(outputPath, `${JSON.stringify({ ...template, version }, null, 2)}\n`, "utf8")
+}
+
+export async function buildAutoChamber(): Promise<void> {
+    const source = join(repositoryRoot, "src", "autochamber")
+    await mkdir(distDirectory, { recursive: true })
+    const staging = await mkdtemp(join(distDirectory, ".autochamber-"))
+    const packageDirectory = join(staging, "package")
+    const panel = join(packageDirectory, "panel")
+    const service = join(packageDirectory, "service")
+    try {
+        await mkdir(panel, { recursive: true })
+        await mkdir(service, { recursive: true })
+        await bundleAutoChamber(join(source, "ui", "main.ts"), panel, "browser")
+        await bundleAutoChamber(join(source, "service", "main.ts"), service, "node")
+        await copyFile(join(source, "ui", "index.html"), join(panel, "index.html"))
+        await copyFile(join(source, "ui", "styles.css"), join(panel, "styles.css"))
+        await writeAutoChamberPackageManifest(rootPackagePath, join(source, "manifest.json"), join(packageDirectory, "package.json"))
+        await copyFile(windowsHelperSource, join(service, windowsHelperFilename))
+        await publishAutoChamber(staging, join(distDirectory, "autochamber"))
+    }
+    catch (error) {
+        throw new Error(`AutoChamber build failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
+    }
+    finally {
+        await removePath(staging, { recursive: true, force: true })
+    }
 }
 
 function hasClosed(child: ChildProcess): boolean {
@@ -144,7 +228,7 @@ function createWatchExitController(): WatchExitController {
     return { promise, stop: (error: Error): void => settle({ error }), observe }
 }
 
-async function runBuild(watchMode: boolean, deps: BuildDependencies): Promise<void> {
+async function runBuild(watchMode: boolean, deps: BuildDependencies, runtimeOnly: boolean = false): Promise<void> {
     const children: ChildProcess[] = []
     let helperWatcher: FSWatcher | undefined
     let helperCopies = Promise.resolve()
@@ -186,7 +270,7 @@ async function runBuild(watchMode: boolean, deps: BuildDependencies): Promise<vo
         throwIfStopped()
         const preparationArgs = watchMode
             ? [[copySkillSourcesScript]]
-            : [createBundleArgs(false), createCredentialsBundleArgs(false), createDeclarationArgs(false), [copySkillSourcesScript]]
+            : [createBundleArgs(false), createCredentialsBundleArgs(false), ...(runtimeOnly ? [] : [createDeclarationArgs(false)]), [copySkillSourcesScript]]
         for (const args of preparationArgs) {
             const child = spawnProcess(deps.execPath, args, deps)
             children.push(child)
@@ -236,13 +320,15 @@ export async function watch(deps: BuildDependencies = defaultBuildDependencies):
 }
 
 export async function runCli(args: readonly string[], deps: BuildDependencies = defaultBuildDependencies): Promise<number> {
-    if (args.length !== 1 || (args[0] !== "build" && args[0] !== "watch")) {
+    // Internal `bun run build --runtime-only` skips declarations, leaves old declarations, and writes to the isolated checkout's dist.
+    const runtimeOnly = args.length === 2 && args[0] === "build" && args[1] === "--runtime-only"
+    if (!runtimeOnly && (args.length !== 1 || (args[0] !== "build" && args[0] !== "watch"))) {
         console.error('Invalid build mode. Use "build" or "watch".')
         return 1
     }
 
     try {
-        if (args[0] === "build") await build(deps)
+        if (args[0] === "build") await build(deps, runtimeOnly)
         else await watch(deps)
         return 0
     }

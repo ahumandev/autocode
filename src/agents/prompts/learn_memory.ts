@@ -1,7 +1,5 @@
 export function buildLearnMemoryPrompt(indexPath: string): string {
   return `
-# Memory Librarian
-
 Your purpose is to maintain memory repo with accurate info.
 
 ## Definitions
@@ -82,6 +80,7 @@ Content for the subsection.
 - ONLY update MEMORY FILES, NEVER other project files.
 - NEVER create new MEMORY FILES outside MEMORY REPO.
 - ALWAYS ensure new MEMORY FILES are linked from MEMORY INDEX or another MEMORY FILE.
+- ALWAYS store md content in Caveman English, except quoted text.
 - Prefer updating existing MEMORY FILES over new files.
 - Prefer keeping original MEMORY FILE structure, style, and formatting.
 - Prefer separate sub-MEMORY FILES for large complex topics and link to original MEMORY FILE.
@@ -89,6 +88,7 @@ Content for the subsection.
 - Location of MEMORY FILES must match MEMORY CATEGORIES in MEMORY INDEX, e.g. if MEMORY INDEX section \`a.b.c\` contains an md link to \`x.md\` then MEMORY FILES should be moved to \`{MEMORY_REPO}/a/b/c/x.md\`.
 - NEVER duplicate memory content. Instead update or improve content quality.
 - NEVER store legacy notes in memories about previously updated memories. Only record current system state. No confusing content about previous system state.
+- NEVER store comments about missing info or stuff not being validated yet. It is useless info and waste context.
 - NEVER link LOCAL-ENV file from MEMORY INDEX.
 - NEVER create Local Environment CATEGORY. Instead use LOCAL-ENV file.
 - NEVER write local environment related content to any other MEMORY FILE because it should not be shared in source control.

@@ -110,22 +110,13 @@ Unsupported hosts include macOS, Windows, Android or Termux, non-Linux systems, 
 
 Local setup targets repository development, not public npm installation.
 
-1. Install repository dependencies needed for build:
+1. Install dependencies and build from the repository root using the [OpenCode and AutoChamber build](#opencode-and-autochamber-build).
+
+2. Validate the local plugin before loading:
 
    ```bash
-   bun install
-   ```
-
-   Dependency versions come from [`package.json`](../package.json).
-
-2. Build and validate local plugin before loading:
-
-   ```bash
-   bun run build
    bun run verify:package
    ```
-
-   Build preserves the live `dist` entrypoint, bundles [`src/plugin.ts`](../src/plugin.ts), emits declarations, and copies bundled local skills into `dist/skills` with `.bundle-manifest.json`. Expected outputs: `dist/plugin.js`, `dist/plugin.d.ts`, and validated skill assets. Build does not install shim.
 
 3. Install local shim so OpenCode loads repository build:
 
@@ -136,6 +127,19 @@ Local setup targets repository development, not public npm installation.
    Shim path: `~/.config/opencode/plugins/autocode.js`.
 
 4. Load plugin in OpenCode through the installed global shim; build must exist first. Do not add a repository-local shim for the same plugin: OpenCode discovers both and rejects the second with `Duplicate plugin ID: autocode`. Use `/reload` to reload the completed build.
+
+### OpenCode and AutoChamber build
+
+Install Bun, then run from the repository root:
+
+```bash
+bun install --frozen-lockfile
+bun run build
+```
+
+The build preserves the live `dist` entrypoint, bundles [`src/plugin.ts`](../src/plugin.ts), emits `dist/plugin.js` and `dist/plugin.d.ts`, and copies bundled local skills into `dist/skills` with `.bundle-manifest.json`. It also emits `dist/autochamber/` with `package.json`, `panel/`, and `service/`. The installed, locked `@openchamber/sdk` is bundled; no sibling checkout is needed. The build does not install the shim.
+
+Share the entire `dist/autochamber/` folder as the installable guest, not as a separate project. See the [AutoChamber installation guide](autochamber.md).
 
 ## Development commands
 

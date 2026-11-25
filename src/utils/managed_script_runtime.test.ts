@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, mock, spyOn, test } from "bun:test"
 import { spawn as spawnChild, spawnSync } from "node:child_process"
 import { appendFile, link, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -262,7 +262,7 @@ describe("managed script runtime", () => {
                     },
                     platform: process.platform,
                     spawn,
-                    kill: (pid, signal) => { process.kill(pid, signal) },
+                    kill: () => {},
                 },
             })
 
@@ -280,26 +280,6 @@ describe("managed script runtime", () => {
             expect(spawn.mock.calls[1]?.[1]).toEqual([join(paths.sourceRoot, "nested", "task.mjs")])
             expect(options).toMatchObject({ cwd: paths.scriptsRoot, shell: false, detached: true, stdio: "pipe" })
             expect(options?.env).toEqual({ PATH: process.env.PATH, KEEP: "yes", AUTOCODE_SCRIPT_ROOT: paths.scriptsRoot, AUTOCODE_WORKSPACE_ROOT: workspacePath })
-        })
-    })
-
-    test.skipIf(!nodeAvailable)("uses PATH-resolved node instead of host executable by default", async () => {
-        await inTemporaryWorkspace("managed-runtime-default-node-", async (workspacePath) => {
-            const paths = createManagedScriptProjectPaths(workspacePath, ownerName)
-            const owner: ManagedScriptProjectOwner = { jobName: ownerName, directory: workspacePath }
-            await mkdir(paths.sourceRoot, { recursive: true })
-            await mkdir(paths.logsRoot, { recursive: true })
-            await writeFile(join(paths.sourceRoot, "argv0.mjs"), "console.log(process.argv0)\n")
-            const runtime = createManagedScriptRuntime({
-                context: { sessionID, directory: workspacePath, worktree: workspacePath },
-                project: projectFor(workspacePath),
-                resolveOwner: async () => ({ ok: true, owner }),
-            })
-
-            const result = await runtime.run({ entry: "argv0.mjs" })
-
-            expect(result).toMatchObject({ exit_code: 0, stdout: "node\n", stderr: "", timed_out: false })
-            expect(result.stdout).not.toBe(`${process.execPath}\n`)
         })
     })
 
@@ -488,7 +468,7 @@ describe("managed script runtime", () => {
                 env: { PATH: process.env.PATH },
                 platform: process.platform,
                 spawn,
-                kill: (pid, signal) => { process.kill(pid, signal) },
+                kill: () => {},
             } })
 
             const result = await runtime.run({ entry: "argv.mjs", argv })

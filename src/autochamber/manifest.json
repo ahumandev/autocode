@@ -1,0 +1,19 @@
+{
+  "name": "autochamber",
+  "type": "module",
+  "openchamber": {
+    "apiVersion": 1,
+    "contributes": {
+      "panel": {
+        "id": "autochamber",
+        "name": "AutoChamber",
+        "icon": "robot-2",
+        "entry": "panel/index.html"
+      },
+      "service": {
+        "entry": "service/main.js",
+        "runtime": "host"
+      }
+    }
+  }
+}

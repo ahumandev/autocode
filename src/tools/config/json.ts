@@ -1,5 +1,70 @@
-import { parse as jsoncParse, modify, applyEdits, parseTree, findNodeAtLocation, type ParseError, type FormattingOptions } from "jsonc-parser"
+import { parse as jsoncParse, modify, applyEdits, parseTree, findNodeAtLocation, createScanner, SyntaxKind, type Node, type ParseError, type FormattingOptions } from "jsonc-parser/lib/esm/main.js"
 import type { ConfigFormatParser, ConfigDocumentEditor, EditOperation } from "./types"
+
+export function findUniqueJsoncNode(root: Node, path: readonly (string | number)[]): Node | undefined {
+    let current: Node | undefined = root
+    for (const segment of path) {
+        if (current.type === "object" && typeof segment === "string") {
+            const matches: Node[] = current.children?.filter((property: Node): boolean => property.children?.[0]?.value === segment) ?? []
+            if (matches.length > 1) throw new Error("Ambiguous JSONC path")
+            current = matches[0]?.children?.[1]
+        } else if (current.type === "array" && typeof segment === "number" && Number.isInteger(segment) && segment >= 0) {
+            current = current.children?.[segment]
+        } else {
+            return undefined
+        }
+        if (!current) return undefined
+    }
+    return current
+}
+
+export function removeJsoncNodePreservingComments(raw: string, path: readonly (string | number)[]): string {
+    if (path.length === 0) throw new Error("JSONC removal path must not be empty")
+    const errors: ParseError[] = []
+    const root = parseTree(raw, errors, { allowTrailingComma: true, disallowComments: false })
+    if (!root || errors.length > 0) throw new Error("Invalid JSONC document")
+
+    const parent = findUniqueJsoncNode(root, path.slice(0, -1))
+    if (!parent) return raw
+    const node = findUniqueJsoncNode(parent, [path[path.length - 1]])
+    if (!node) return raw
+    const member = parent.type === "object" ? node.parent : node
+    if (!member || (parent.type !== "object" && parent.type !== "array")) throw new Error("Invalid JSONC node")
+    const siblings = parent.children ?? []
+    const index = siblings.indexOf(member)
+    if (index < 0) throw new Error("Invalid JSONC node")
+
+    const scanner = createScanner(raw, true)
+    const ranges: { offset: number, length: number }[] = []
+    const end = member.offset + member.length
+    let previousComma: number | undefined
+    let followingComma: number | undefined
+    let token = scanner.scan()
+    while (token !== SyntaxKind.EOF) {
+        const offset = scanner.getTokenOffset()
+        if (offset < member.offset) {
+            previousComma = token === SyntaxKind.CommaToken ? offset : undefined
+        } else if (offset < end) {
+            ranges.push({ offset, length: scanner.getTokenLength() })
+        } else {
+            if (token === SyntaxKind.CommaToken) followingComma = offset
+            break
+        }
+        token = scanner.scan()
+    }
+    const comma = followingComma ?? (index > 0 ? previousComma : undefined)
+    if (comma !== undefined) ranges.push({ offset: comma, length: 1 })
+    else if (siblings.length > 1) throw new Error("Invalid JSONC separator")
+
+    ranges.sort((a, b) => a.offset - b.offset)
+    let result = ""
+    let cursor = 0
+    for (const range of ranges) {
+        result += raw.slice(cursor, range.offset)
+        cursor = range.offset + range.length
+    }
+    return result + raw.slice(cursor)
+}
 
 export const jsonParser: ConfigFormatParser = {
     parse(raw: string): unknown {

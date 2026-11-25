@@ -407,8 +407,6 @@ describe("agent policies", () => {
                 expect(permissionEffect(agent.permissions, "openchamber_memory", "synthetic-note")).toBe("deny")
                 if (agent.prompt) {
                     expect(agent.prompt).toContain("OpenChamber knowledge notes and saved plans are optional context")
-                    expect(agent.prompt).toContain("Consult them only when the user explicitly asks for or activates them; activation does not make them mandatory")
-                    expect(agent.prompt).toContain("They do not replace any required memory librarian recall")
                 }
             }
             expect(permissionEffect(agents.design?.permissions, "openchamber_knowledge", "*")).toBe("allow")

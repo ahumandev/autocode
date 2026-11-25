@@ -1,12 +1,11 @@
 import { describe, expect, mock, test } from "bun:test"
 import { spawn as spawnChild, type ChildProcessWithoutNullStreams } from "node:child_process"
-import { randomUUID } from "node:crypto"
-import { link, lstat, mkdtemp, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
+import { link, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
-import { basename, join, sep } from "node:path"
+import { basename, join } from "node:path"
 import { createManagedScriptProject, createManagedScriptProjectPaths, isManagedScriptDependencySpec, resolveManagedScriptProjectOwner, satisfiesManagedScriptRange, type ManagedScriptProject, type ManagedScriptProjectCommandResult, type ManagedScriptProjectDependencies, type ManagedScriptProjectFileSystem, type ManagedScriptProjectInstallInput, type ManagedScriptProjectResult, type ManagedScriptProjectSpawn } from "./managed_script_project"
-import { acquireInstallerLock, inspectInstallerLock } from "./managed_script_install_lock"
+import { acquireInstallerLock, inspectInstallerLock, type InstallerLockProcessProbe } from "./managed_script_install_lock"
 
 const npmInstallSuccess: ManagedScriptProjectCommandResult = { exitCode: 0, stdout: "installed\n", stderr: "" }
 const npmInstallArgs = ["install", "--ignore-scripts", "--no-audit", "--no-fund"] as const
@@ -27,6 +26,12 @@ const managedAgentsContent = [
 ].join("\n")
 
 const scratchRoot = join(tmpdir(), "opencode")
+
+function readFixtureProcessIdentity(pid: number): InstallerLockProcessProbe {
+    return pid === process.pid
+        ? { state: "alive", identity: { kind: "windows", creationTimeTicks: "1" } }
+        : { state: "unknown" }
+}
 
 async function createTemporaryRoot(prefix: string): Promise<string> {
     await mkdir(scratchRoot, { recursive: true })
@@ -62,7 +67,7 @@ async function exists(filePath: string): Promise<boolean> {
 
 async function expectReleasedInstallerLock(fileSystem: ManagedScriptProjectFileSystem, lockPath: string): Promise<void> {
     expect((await stat(lockPath)).isDirectory()).toBe(true)
-    expect(await inspectInstallerLock(fileSystem, lockPath)).toEqual({ state: "free" })
+    expect(await inspectInstallerLock(fileSystem, lockPath, { readProcessIdentity: readFixtureProcessIdentity })).toEqual({ state: "free" })
     const generationPattern = /^generation-\d{16}$/
     const ownerFile = "owner.json"
     const releasedFile = "released.json"
@@ -75,16 +80,16 @@ async function expectReleasedInstallerLock(fileSystem: ManagedScriptProjectFileS
     if (!latest) throw new Error("Expected retained installer lock generation")
     const owner = JSON.parse(latest.owner) as Record<string, unknown>
     expect(JSON.parse(latest.released)).toMatchObject({ protocol: owner.protocol, claimId: owner.claimId, token: owner.token })
-    const acquired = await acquireInstallerLock(fileSystem, lockPath, { waitTimeoutMs: 0 })
+    const acquired = await acquireInstallerLock(fileSystem, lockPath, { waitTimeoutMs: 0, readProcessIdentity: readFixtureProcessIdentity })
     if (!acquired.ok) throw new Error("Expected released installer lock to allow reacquisition")
     try {
-        expect(await inspectInstallerLock(fileSystem, lockPath)).toMatchObject({ state: "active", owner: { token: acquired.lock.token } })
+        expect(await inspectInstallerLock(fileSystem, lockPath, { readProcessIdentity: readFixtureProcessIdentity })).toMatchObject({ state: "active", owner: { token: acquired.lock.token } })
         expect((await readdir(lockPath)).filter((entry: string): boolean => generationPattern.test(entry))).toHaveLength(generations.length + 1)
     }
     finally {
         await acquired.lock.release()
     }
-    expect(await inspectInstallerLock(fileSystem, lockPath)).toEqual({ state: "free" })
+    expect(await inspectInstallerLock(fileSystem, lockPath, { readProcessIdentity: readFixtureProcessIdentity })).toEqual({ state: "free" })
     for (const snapshot of retained) {
         expect(await readFile(join(snapshot.directory, ownerFile), "utf8")).toBe(snapshot.owner)
         expect(await readFile(join(snapshot.directory, releasedFile), "utf8")).toBe(snapshot.released)
@@ -139,6 +144,7 @@ function createProject(directory: string, spawn: ManagedScriptProjectSpawn, over
         resolveOwner: async (): Promise<Awaited<ReturnType<typeof resolveManagedScriptProjectOwner>>> => ({ ok: true, owner: { jobName: "job", directory } }),
         resolvePackage: async (): Promise<undefined> => undefined,
         ...overrides,
+        installerLock: { ...overrides.installerLock, readProcessIdentity: readFixtureProcessIdentity },
     })
 }
 
@@ -254,18 +260,9 @@ class IncrementalManifestDenial extends Error {
     }
 }
 
-type IncrementalFixtureScenario = {
-    sharingDenial: boolean
-    firstDirectory?: string
-    initialDenial?: IncrementalManifestDenial
-    groups?: { source: string, destination: string, calls: number, codes: string[] }[]
-    retryRemainingWorkMs?: number
-}
-
-function withIncrementalFixtureRetry(attempt: (budget: IncrementalWorkBudget, attemptNumber: number, scenario: IncrementalFixtureScenario) => Promise<void>): (name: string, sharingDenial: boolean) => Promise<void> {
-    return async (_name: string, sharingDenial: boolean): Promise<void> => {
+function withIncrementalFixtureRetry(attempt: (budget: IncrementalWorkBudget) => Promise<void>): () => Promise<void> {
+    return async (): Promise<void> => {
         const windows = process.platform === "win32"
-        const scenario: IncrementalFixtureScenario = { sharingDenial }
         const startedAt = performance.now()
         // Leave 10 seconds of the unchanged 60-second Windows timeout for awaited cleanup.
         const workBudgetMs = 50_000
@@ -284,48 +281,23 @@ function withIncrementalFixtureRetry(attempt: (budget: IncrementalWorkBudget, at
             },
         }
         let originalDenial: IncrementalManifestDenial | undefined
-        let completedAttempts = 0
         const maximumAttempts = windows ? 2 : 1
         for (let attemptNumber = 1; attemptNumber <= maximumAttempts; attemptNumber++) {
             try {
                 check()
-                await attempt(budget, attemptNumber, scenario)
-                completedAttempts++
+                await attempt(budget)
             }
             catch (error) {
                 if (originalDenial) throw new AggregateError([originalDenial, error], "Incremental fresh-fixture retry failed")
                 if (!windows || !(error instanceof IncrementalManifestDenial)) throw error
-                if (sharingDenial && error !== scenario.initialDenial) throw new AggregateError([error], "Sharing-denial scenario failed outside its initial held install")
-                completedAttempts++
-                scenario.retryRemainingWorkMs = remainingMs()
-                if (attemptNumber === maximumAttempts || scenario.retryRemainingWorkMs < retryMinimumWorkMs) {
+                if (attemptNumber === maximumAttempts || remainingMs() < retryMinimumWorkMs) {
                     throw new AggregateError([error], "Incremental manifest denial unrecovered: insufficient work budget for fresh fixture")
                 }
                 originalDenial = error
                 continue
             }
-            if (sharingDenial) {
-                expect(attemptNumber).toBe(2)
-                expect(completedAttempts).toBe(2)
-                expect(scenario.initialDenial).toBeDefined()
-                expect(scenario.initialDenial).toBe(originalDenial)
-                const groups = scenario.groups
-                if (!groups || !scenario.firstDirectory) throw new Error("Expected recorded sharing-denial groups and first fixture root")
-                const manifestPath = join(scenario.firstDirectory, ".opencode", "autocode", "scripts", "package.json")
-                const callsPerGroup = 20
-                expect(groups).toHaveLength(2)
-                expect(new Set(groups.map((group): string => group.source)).size).toBe(2)
-                for (const group of groups) {
-                    expect(group.destination).toBe(manifestPath)
-                    expect(isIncrementalAtomicSource(group.source, manifestPath)).toBe(true)
-                    expect(group.calls).toBe(callsPerGroup)
-                    expect(group.codes).toEqual(Array<string>(callsPerGroup).fill("EPERM"))
-                }
-                expect(scenario.retryRemainingWorkMs).toBeGreaterThanOrEqual(retryMinimumWorkMs)
-            }
             if (originalDenial) {
-                const witness = sharingDenial ? `; sharing witness: ${JSON.stringify({ attempts: completedAttempts, groups: scenario.groups, retryRemainingWorkMs: scenario.retryRemainingWorkMs })}` : ""
-                process.stderr.write(`Incremental fixture passed after ${attemptNumber} complete attempts; original OS denial: ${originalDenial.message}${witness}\n`)
+                process.stderr.write(`Incremental fixture passed after ${attemptNumber} complete attempts; original OS denial: ${originalDenial.message}\n`)
             }
             return
         }
@@ -346,256 +318,6 @@ async function readIncrementalSnapshot(filePath: string, budget: IncrementalWork
 function isIncrementalAtomicSource(source: string, destination: string): boolean {
     const prefix = `${destination}.autocode-tmp-`
     return source.startsWith(prefix) && /^\d+-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(source.slice(prefix.length))
-}
-
-const incrementalHolderFrameLimitBytes = 4_096
-// The child owns its lease clock even when the Bun event loop cannot service timers.
-const incrementalManifestHolderSource = String.raw`
-$ErrorActionPreference = 'Stop'
-$PSModuleAutoLoadingPreference = 'None'
-$ProgressPreference = 'SilentlyContinue'
-$clock = [Diagnostics.Stopwatch]::StartNew()
-$leaseMs = 20000
-$frameLimit = ${incrementalHolderFrameLimitBytes}
-$inputStream = [Console]::OpenStandardInput()
-$outputStream = [Console]::OpenStandardOutput()
-$utf8 = [Text.UTF8Encoding]::new($false, $true)
-$held = $null
-$exitCode = 1
-$phase = 'initialization'
-function Remaining-Milliseconds {
-    $remaining = $leaseMs - $clock.ElapsedMilliseconds
-    if ($remaining -le 0) { throw 'Holder lease expired' }
-    return [int]$remaining
-}
-function Read-Exact([byte[]]$buffer) {
-    $offset = 0
-    while ($offset -lt $buffer.Length) {
-        $remaining = Remaining-Milliseconds
-        $task = $inputStream.ReadAsync($buffer, $offset, $buffer.Length - $offset)
-        if (-not $task.Wait($remaining)) { throw 'Holder lease expired' }
-        $count = $task.GetAwaiter().GetResult()
-        if ($count -le 0) { throw 'Holder input closed' }
-        $offset += $count
-    }
-}
-function Read-Frame {
-    $header = Microsoft.PowerShell.Utility\New-Object byte[] 4
-    Read-Exact $header
-    $length = [BitConverter]::ToUInt32($header, 0)
-    if ($length -lt 2 -or $length -gt $frameLimit) { throw 'Invalid frame length' }
-    $body = Microsoft.PowerShell.Utility\New-Object byte[] ([int]$length)
-    Read-Exact $body
-    return Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject ($utf8.GetString($body))
-}
-function Write-Status([string]$kind) {
-    $json = Microsoft.PowerShell.Utility\ConvertTo-Json -Compress -InputObject @{ kind = $kind; path = $path; token = $token }
-    $bytes = $utf8.GetBytes($json + [char]10)
-    if ($bytes.Length -gt $frameLimit) { throw 'Oversized status frame' }
-    $remaining = Remaining-Milliseconds
-    $task = $outputStream.WriteAsync($bytes, 0, $bytes.Length)
-    if (-not $task.Wait($remaining)) { throw 'Holder lease expired' }
-    [void]$task.GetAwaiter().GetResult()
-}
-try {
-    if ($PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSVersion.Minor -ne 1) { throw 'PowerShell 5.1 required' }
-    $utilityManifest = [IO.Path]::GetFullPath([IO.Path]::Combine($PSHOME, 'Modules', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Utility.psd1'))
-    if ($utilityManifest -cnotmatch '^[A-Za-z]:\\') { throw 'Local PowerShell Utility manifest required' }
-    $null = Microsoft.PowerShell.Core\Import-Module -Name $utilityManifest -Cmdlet ConvertFrom-Json,ConvertTo-Json,New-Object -ErrorAction Stop
-    $init = Read-Frame
-    if (@($init.PSObject.Properties).Count -ne 4 -or $init.action -cne 'hold' -or $init.path -isnot [string] -or $init.root -isnot [string] -or $init.token -isnot [string] -or $init.token -cnotmatch '^[0-9a-f-]{36}$') { throw 'Invalid initialization frame' }
-    $root = [IO.Path]::GetFullPath($init.root)
-    $path = [IO.Path]::GetFullPath($init.path)
-    $token = $init.token
-    $temp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $expected = [IO.Path]::Combine($root, '.opencode', 'autocode', 'scripts')
-    $expected = [IO.Path]::Combine($expected, 'package.json')
-    if ($root -cne $init.root -or $path -cne $init.path -or $path -cne $expected -or -not $root.StartsWith($temp + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or -not [string]::Equals([IO.Path]::GetDirectoryName($root), [IO.Path]::Combine($temp, 'opencode'), [StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($root) -cnotmatch '^managed-script-incremental-[a-zA-Z0-9_-]+$') { throw 'Manifest ownership rejected' }
-    $current = $path
-    while ($true) {
-        if (([IO.File]::GetAttributes($current) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Fixture reparse point rejected' }
-        if ($current -ceq $root) { break }
-        $current = [IO.Path]::GetDirectoryName($current)
-    }
-    $phase = 'open'
-    $null = Remaining-Milliseconds
-    $held = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, ([IO.FileShare]::Read -bor [IO.FileShare]::Write))
-    Write-Status 'ready'
-    $phase = 'release'
-    $release = Read-Frame
-    if (@($release.PSObject.Properties).Count -ne 4 -or $release.action -cne 'release' -or $release.path -cne $path -or $release.root -cne $root -or $release.token -cne $token) { throw 'Invalid release frame' }
-    $held.Dispose()
-    $held = $null
-    Write-Status 'released'
-    $exitCode = 0
-}
-catch {
-    $exitCode = 1
-}
-finally {
-    if ($null -ne $held) { $held.Dispose() }
-}
-if ($exitCode -ne 0) { [Console]::Error.WriteLine('Fixture sharing holder failed during ' + $phase) }
-exit $exitCode
-`
-
-async function startIncrementalManifestHolder(directory: string, manifestPath: string, cwd: string, budget: IncrementalWorkBudget): Promise<{ ready: Promise<void>, release: () => Promise<void> }> {
-    budget.check()
-    const canonicalTemp = await realpath(tmpdir())
-    budget.check()
-    const ownedRoot = await realpath(directory)
-    budget.check()
-    const canonicalManifest = await realpath(manifestPath)
-    budget.check()
-    const ownedParent = await realpath(scratchRoot)
-    if (process.platform !== "win32" || !ownedRoot.startsWith(`${canonicalTemp}${sep}`) || ownedRoot !== join(ownedParent, basename(directory)) || !/^managed-script-incremental-[a-zA-Z0-9_-]+$/.test(basename(ownedRoot)) || canonicalManifest !== join(ownedRoot, ".opencode", "autocode", "scripts", "package.json")) throw new Error("Manifest holder requires the exact canonical temporary fixture manifest")
-    const powerShellHome = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0")
-    if (!/^[A-Za-z]:\\/.test(powerShellHome) || powerShellHome.includes(";")) throw new Error("Manifest holder requires a local Windows PowerShell directory")
-    const holderEnv = { ...process.env }
-    for (const key of Object.keys(holderEnv)) {
-        if (key.toLowerCase() === "psmodulepath") delete holderEnv[key]
-    }
-    holderEnv.PSModulePath = join(powerShellHome, "Modules")
-    const token = randomUUID()
-    const frame = (action: "hold" | "release"): Buffer => {
-        const body = Buffer.from(JSON.stringify({ action, path: canonicalManifest, root: ownedRoot, token }))
-        if (body.length > incrementalHolderFrameLimitBytes) throw new Error("Manifest holder input frame exceeds limit")
-        const header = Buffer.alloc(4)
-        header.writeUInt32LE(body.length)
-        return Buffer.concat([header, body])
-    }
-    const initializationFrame = frame("hold")
-    const releaseFrame = frame("release")
-    budget.check()
-    const readyTimeoutMs = Math.min(3_000, budget.remainingMs())
-    const readyDeadline = performance.now() + readyTimeoutMs
-    let isClosed = false
-    let readyReceived = false
-    let released = false
-    let releaseRequested = false
-    let killed = false
-    let exitCode: number | null | undefined
-    let exitSignal: NodeJS.Signals | null | undefined
-    let failure: Error | undefined
-    let stdout: Buffer = Buffer.alloc(0)
-    let stdoutBytes = 0
-    let stderr: Buffer = Buffer.alloc(0)
-    let stderrTruncated = false
-    let readyTimer: ReturnType<typeof setTimeout> | undefined
-    let readySettled = false
-    let resolveReady!: () => void
-    let rejectReady!: (error: Error) => void
-    const ready = new Promise<void>((resolve, reject): void => { resolveReady = resolve; rejectReady = reject })
-    void ready.catch((): void => {})
-    let resolveClosed!: () => void
-    const closed = new Promise<void>((resolve): void => { resolveClosed = resolve })
-    const child = spawnChild(join(powerShellHome, "powershell.exe"), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(incrementalManifestHolderSource, "utf16le").toString("base64")], { cwd, windowsHide: true, env: holderEnv })
-    const diagnostic = (reason: string): Error => new Error(`Manifest holder ${reason}; root=${ownedRoot}; manifest=${canonicalManifest}; pid=${child.pid ?? "unspawned"}; closed=${isClosed}; exitCode=${exitCode === undefined ? "pending" : exitCode}; signal=${exitSignal === undefined ? "pending" : exitSignal}; stderrTruncated=${stderrTruncated}; stderr=${JSON.stringify(stderr.toString("utf8"))}`)
-    const fail = (reason: string): void => {
-        failure ??= diagnostic(reason)
-        if (!readySettled) {
-            readySettled = true
-            clearTimeout(readyTimer)
-            rejectReady(failure)
-        }
-    }
-    const stop = (): void => {
-        if (isClosed) return
-        killed = true
-        try { child.kill("SIGKILL") }
-        catch (error) { fail(`kill failed (${(error as NodeJS.ErrnoException).code ?? "unknown"})`) }
-    }
-    child.once("close", (code: number | null, signal: NodeJS.Signals | null): void => {
-        isClosed = true
-        exitCode = code
-        exitSignal = signal
-        clearTimeout(readyTimer)
-        child.stdout.removeListener("data", onStdout)
-        child.stderr.removeListener("data", onStderr)
-        child.removeListener("error", onError)
-        child.stdin.removeListener("error", onInputError)
-        if (!readyReceived || !released || !releaseRequested || stdout.length !== 0 || code !== 0 || signal !== null) fail(`unexpected close (exit=${code}, signal=${signal})`)
-        if (failure) failure.cause = diagnostic("final close")
-        esmTaskChildren.delete(child)
-        resolveClosed()
-    })
-    esmTaskChildren.set(child, { cwd, closed, stop })
-    const onError = (error: NodeJS.ErrnoException): void => { fail(`spawn error (${error.code ?? "unknown"})`) }
-    const onInputError = (error: NodeJS.ErrnoException): void => { fail(`input error (${error.code ?? "unknown"})`) }
-    const onStderr = (chunk: Buffer): void => {
-        const remaining = incrementalHolderFrameLimitBytes - stderr.length
-        stderr = Buffer.concat([stderr, chunk.subarray(0, Math.max(0, remaining))])
-        if (chunk.length > remaining) { stderrTruncated = true; fail("stderr exceeds capture limit") }
-    }
-    const onStdout = (chunk: Buffer): void => {
-        stdoutBytes += chunk.length
-        if (stdoutBytes > incrementalHolderFrameLimitBytes * 2) { fail("stdout exceeds protocol limit"); return }
-        stdout = Buffer.concat([stdout, chunk])
-        let newline = stdout.indexOf(10)
-        while (newline !== -1) {
-            if (newline + 1 > incrementalHolderFrameLimitBytes) { fail("status frame exceeds limit"); return }
-            const line = stdout.subarray(0, newline)
-            stdout = stdout.subarray(newline + 1)
-            try {
-                const message = JSON.parse(line.toString("utf8")) as Record<string, unknown>
-                if (Object.keys(message).sort().join(",") !== "kind,path,token") throw new Error("Holder status keys mismatch")
-                if (message.path !== canonicalManifest) throw new Error("Holder status path mismatch")
-                if (message.token !== token) throw new Error("Holder status token mismatch")
-                if (message.kind === "ready" && !readyReceived && !releaseRequested) {
-                    if (performance.now() > readyDeadline) fail(`readiness exceeded ${readyTimeoutMs}ms`)
-                    else {
-                        readyReceived = true
-                        if (!readySettled) { readySettled = true; clearTimeout(readyTimer); resolveReady() }
-                    }
-                }
-                else if (message.kind === "released" && readyReceived && releaseRequested && !released) released = true
-                else throw new Error("Expected ready && !readyReceived && !releaseRequested, or released && readyReceived && releaseRequested && !released")
-            }
-            catch (error) {
-                const reason = error instanceof Error ? error.message.slice(0, 512) : "Unknown status parser exception"
-                fail(`invalid status frame: ${JSON.stringify({ rawLine: line.toString("utf8"), reason, readyReceived, releaseRequested, released })}`)
-            }
-            newline = stdout.indexOf(10)
-        }
-        if (stdout.length > incrementalHolderFrameLimitBytes) fail("unterminated status frame exceeds limit")
-    }
-    child.on("error", onError)
-    child.stdin.on("error", onInputError)
-    child.stdout.on("data", onStdout)
-    child.stderr.on("data", onStderr)
-    readyTimer = setTimeout((): void => { fail(`readiness exceeded ${readyTimeoutMs}ms`) }, Math.max(0, readyDeadline - performance.now()))
-    try { child.stdin.write(initializationFrame, (error?: Error | null): void => { if (error) fail("initialization write failed") }) }
-    catch { fail("initialization write failed") }
-    const waitForClose = (timeoutMs: number): Promise<boolean> => {
-        if (isClosed) return Promise.resolve(true)
-        return new Promise<boolean>((resolve): void => {
-            let timer: ReturnType<typeof setTimeout> | undefined
-            const finish = (didClose: boolean): void => { clearTimeout(timer); child.removeListener("close", onClose); resolve(didClose) }
-            const onClose = (): void => { finish(true) }
-            child.once("close", onClose)
-            timer = setTimeout((): void => { finish(false) }, timeoutMs)
-        })
-    }
-    return {
-        ready,
-        release: async (): Promise<void> => {
-            releaseRequested = true
-            if (!isClosed) {
-                try { child.stdin.end(releaseFrame, (error?: Error | null): void => { if (error) fail("release write failed") }) }
-                catch { fail("release write failed") }
-            }
-            if (!await waitForClose(1_000)) {
-                stop()
-                const reaped = await waitForClose(2_000)
-                const releaseError = diagnostic(reaped ? "required kill after release grace" : "unreaped after kill; fixture remains owned")
-                if (failure) throw new AggregateError([failure, releaseError], "Manifest holder protocol and release failed")
-                failure = releaseError
-                throw releaseError
-            }
-            if (failure) throw failure
-            if (killed || !readyReceived || !released || exitCode !== 0 || exitSignal !== null) throw diagnostic("did not close after a clean acknowledged release")
-        },
-    }
 }
 
 describe("managed script project", (): void => {
@@ -1630,7 +1352,7 @@ describe("managed script project", (): void => {
         }
     })
 
-    const runIncrementalFixture = withIncrementalFixtureRetry(async (budget: IncrementalWorkBudget, attemptNumber: number, scenario: IncrementalFixtureScenario): Promise<void> => {
+    const runIncrementalFixture = withIncrementalFixtureRetry(async (budget: IncrementalWorkBudget): Promise<void> => {
         budget.check()
         const directory = await createTemporaryRoot("managed-script-incremental-")
         const paths = createManagedScriptProjectPaths(directory, "inspect_data")
@@ -1712,13 +1434,6 @@ describe("managed script project", (): void => {
         })
         let attemptFailure: { error: unknown } | undefined
         try {
-            if (scenario.sharingDenial) {
-                if (attemptNumber === 1) scenario.firstDirectory = directory
-                else {
-                    expect(scenario.firstDirectory).toBeDefined()
-                    expect(directory).not.toBe(scenario.firstDirectory)
-                }
-            }
             const sharedFileSystem: ManagedScriptProjectFileSystem = {
                 ...fileSystem,
                 link: observeIo("link", fileSystem.link),
@@ -1898,39 +1613,6 @@ describe("managed script project", (): void => {
             renameSpy.mockClear()
             rmSpy.mockClear()
 
-            if (scenario.sharingDenial && attemptNumber === 1) {
-                const initialRenameStart = renames.length
-                const holder = await startIncrementalManifestHolder(directory, paths.manifestPath, paths.scriptsRoot, budget)
-                let initialFailure: { error: unknown } | undefined
-                try {
-                    await holder.ready
-                    budget.check()
-                    await expectInstallSuccess("initial semver install", (input): Promise<ManagedScriptProjectResult> => firstProject.install(input), { dependencies: { semver: "^7.6.0" } })
-                    throw new Error("Held initial semver install unexpectedly succeeded without a qualified real denial")
-                }
-                catch (error) {
-                    const replacements = renames.slice(initialRenameStart).filter((entry): boolean => entry.newPath === paths.manifestPath && isIncrementalAtomicSource(entry.oldPath, paths.manifestPath))
-                    scenario.groups = [...new Set(replacements.map((entry): string => entry.oldPath))].map((source): NonNullable<IncrementalFixtureScenario["groups"]>[number] => {
-                        const calls = replacements.filter((entry): boolean => entry.oldPath === source)
-                        return { source, destination: paths.manifestPath, calls: calls.length, codes: calls.map((entry): string => entry.outcome.ok ? "success" : entry.outcome.code ?? "unknown") }
-                    })
-                    const failure = error instanceof IncrementalManifestDenial
-                        ? error
-                        : new AggregateError([error], `Held initial install did not qualify: ${JSON.stringify(scenario.groups)}`)
-                    initialFailure = { error: failure }
-                    if (error instanceof IncrementalManifestDenial) scenario.initialDenial = error
-                    throw failure
-                }
-                finally {
-                    try {
-                        await holder.release()
-                    }
-                    catch (releaseError) {
-                        if (initialFailure) throw new AggregateError([initialFailure.error, releaseError], "Held initial install and holder release failed")
-                        throw releaseError
-                    }
-                }
-            }
             const installed = await expectInstallSuccess("initial semver install", (input): Promise<ManagedScriptProjectResult> => firstProject.install(input), { dependencies: { semver: "^7.6.0" } })
             expect(spawn).toHaveBeenCalledTimes(1)
             expect(installOperations).toBe(1)
@@ -2104,16 +1786,7 @@ describe("managed script project", (): void => {
             }
         }
     })
-    test.each([
-        ["incrementally installs into one shared tree, reuses satisfied ranges, and upgrades only explicit conflicts", false],
-    ] as const)("%s", runIncrementalFixture, esmTaskTestTimeoutMs)
-    if (process.platform === "win32") {
-        // Measured slow test stays available for future opt-in/slow runs, not the fast suite.
-        test.skip("incrementally installs into one shared tree, reuses satisfied ranges, and upgrades only explicit conflicts (real Windows sharing denial)", (): Promise<void> => runIncrementalFixture(
-            "incrementally installs into one shared tree, reuses satisfied ranges, and upgrades only explicit conflicts (real Windows sharing denial)",
-            true,
-        ), esmTaskTestTimeoutMs)
-    }
+    test("incrementally installs into one shared tree, reuses satisfied ranges, and upgrades only explicit conflicts", runIncrementalFixture, esmTaskTestTimeoutMs)
 
     test.each([
         ["1.9.0", "^1.2.3 || ^2.4.0", true],

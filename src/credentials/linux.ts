@@ -15,6 +15,7 @@ import { parseCredentialEnvelope } from "./validation"
 
 export interface LinuxSecretServiceProviderOptions {
     timeoutMs?: number
+    strictInventory?: boolean
 }
 
 const DEFAULT_TIMEOUT_MS = 5000
@@ -992,9 +993,10 @@ function validateAttributes(value: unknown, attributes: Record<string, string>):
     }
 }
 
-function listedItemPaths(body: unknown[]): string[] {
+function listedItemPaths(body: unknown[], strictInventory: boolean): string[] {
     const [unlocked, locked] = body
-    if (!Array.isArray(unlocked) || !Array.isArray(locked) || unlocked.length > MAX_LINUX_ENUMERATED_PROFILES) {
+    if (!Array.isArray(unlocked) || !Array.isArray(locked)
+        || (strictInventory ? unlocked.length + locked.length : unlocked.length) > MAX_LINUX_ENUMERATED_PROFILES) {
         throw new CredentialError("too_large")
     }
     for (const itemPath of [...unlocked, ...locked]) {
@@ -1004,6 +1006,9 @@ function listedItemPaths(body: unknown[]): string[] {
     }
     if (new Set([...unlocked, ...locked]).size !== unlocked.length + locked.length) {
         throw new CredentialError("invalid")
+    }
+    if (strictInventory && locked.length !== 0) {
+        throw new CredentialError("locked")
     }
     return unlocked as string[]
 }
@@ -1246,6 +1251,7 @@ async function enumerateLinuxCredentialIds(
     kind: CredentialKind,
     address: string,
     timeoutMs: number,
+    strictInventory: boolean,
 ): Promise<string[]> {
     const deadline = performance.now() + timeoutMs
     const require = createRequire(import.meta.url)
@@ -1302,7 +1308,7 @@ async function enumerateLinuxCredentialIds(
             replySignature: "aoao",
             replyLength: 2,
         })
-        const itemPaths = listedItemPaths(search)
+        const itemPaths = listedItemPaths(search, strictInventory)
         const ids = new Set<string>()
         for (const itemPath of itemPaths) {
             const itemAttributes = await bus.call({
@@ -1315,7 +1321,11 @@ async function enumerateLinuxCredentialIds(
                 replySignature: "v",
                 replyLength: 1,
             })
-            ids.add(listedProfileId(variantValue(itemAttributes[0], "a{ss}"), kind))
+            const id = listedProfileId(variantValue(itemAttributes[0], "a{ss}"), kind)
+            if (strictInventory && ids.has(id)) {
+                throw new CredentialError("invalid")
+            }
+            ids.add(id)
         }
         bus.assertPrimary()
         result = [...ids].sort()
@@ -1341,6 +1351,7 @@ async function enumerateLinuxCredentialIds(
 // System services may have a different identity/session bus; this provider does not select one for them.
 export function createLinuxSecretServiceProvider(options?: LinuxSecretServiceProviderOptions): CredentialProvider {
     const timeoutMs = resolveTimeout(options)
+    const strictInventory = options?.strictInventory === true
     return {
         async read(kind: CredentialKind, normalizedId: string): Promise<CredentialReadResult> {
             validateIdentity(kind, normalizedId)
@@ -1373,7 +1384,7 @@ export function createLinuxSecretServiceProvider(options?: LinuxSecretServicePro
                 if (address === undefined || address === "") {
                     throw new CredentialError("unavailable")
                 }
-                return await enumerateLinuxCredentialIds(kind, parseBusAddress(address), timeoutMs)
+                return await enumerateLinuxCredentialIds(kind, parseBusAddress(address), timeoutMs, strictInventory)
             } catch (error: unknown) {
                 throw sanitizedError(error)
             }

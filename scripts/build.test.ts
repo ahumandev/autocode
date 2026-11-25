@@ -1,7 +1,10 @@
 import { expect, spyOn, test } from "bun:test"
+import { parseManifestJson } from "@openchamber/sdk/schemas"
 import type { ChildProcess, SpawnOptions } from "node:child_process"
 import { EventEmitter } from "node:events"
 import type { FSWatcher, WatchEventType } from "node:fs"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
     type BuildDependencies,
@@ -13,6 +16,7 @@ import {
     resolveTypeScriptCli,
     runCli,
     watch,
+    writeAutoChamberPackageManifest,
 } from "./build"
 
 type FakeChild = Omit<ChildProcess, "exitCode" | "signalCode"> & {
@@ -220,6 +224,26 @@ function expectCleanup(environment: TestEnvironment): void {
     expect(environment.signalHandlers.size).toBe(0)
     for (const call of environment.watchCalls) expect(call.watcher.closeCount).toBe(1)
 }
+
+test("AutoChamber package manifest uses root release version", async (): Promise<void> => {
+    const rootPackagePath = join(repositoryRoot, "package.json")
+    const templatePath = join(repositoryRoot, "src", "autochamber", "manifest.json")
+    const directory = await mkdtemp(join(tmpdir(), "autochamber-manifest-"))
+    try {
+        const rootPackage = JSON.parse(await readFile(rootPackagePath, "utf8")) as { version: string }
+        const template = JSON.parse(await readFile(templatePath, "utf8")) as Record<string, unknown>
+        const outputPath = join(directory, "package.json")
+        await writeAutoChamberPackageManifest(rootPackagePath, templatePath, outputPath)
+        const output = await readFile(outputPath, "utf8")
+        expect(typeof rootPackage.version).toBe("string")
+        expect(rootPackage.version.trim().length).toBeGreaterThan(0)
+        expect(JSON.parse(output)).toEqual({ ...template, version: rootPackage.version })
+        const parsed = parseManifestJson(output)
+        expect({ ok: parsed.ok, packageVersion: parsed.ok ? parsed.version : undefined }).toEqual({ ok: true, packageVersion: rootPackage.version })
+    } finally {
+        await rm(directory, { recursive: true, force: true })
+    }
+})
 
 test("creates exact portable bundle and declaration arguments", (): void => {
     expect(resolveTypeScriptCli()).toBe(join(repositoryRoot, "node_modules", "typescript", "bin", "tsc"))

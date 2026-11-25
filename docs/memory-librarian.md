@@ -1,6 +1,6 @@
 # Memory Librarian
 
-This guide describes the `learn_memory.ts` memory librarian's instructions for organizing a memory repository. These are prompt instructions for the librarian, not runtime-enforced guarantees.
+This guide describes the memory librarian's instructions for organizing a memory repository. These are prompt instructions for the librarian, not runtime-enforced guarantees.
 
 ## Repository layout
 

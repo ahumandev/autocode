@@ -1,24 +1,15 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { randomUUID } from "node:crypto"
 import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { extname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { MAX_PLAINTEXT_STORE_BYTES, serializePlaintextCredentialStore, type PlaintextCredentialStore } from "./plaintext"
-import { createCredentialResolver } from "./resolver"
-import { createRuntimeCredentialResolver } from "./runtime"
 import {
-    CredentialError,
     PLAINTEXT_CREDENTIAL_WARNING,
-    WINDOWS_CREDENTIAL_MAX_BYTES,
-    type CredentialErrorCode,
     type CredentialKind,
     type CredentialProfileMap,
     type CredentialProviderPolicy,
-    type CredentialReadResult,
 } from "./types"
-import { createWindowsCredentialProvider, deleteWindowsProfile, getWindowsCredentialIdentity, writeWindowsProfile } from "./windows"
-import { writeSecureWindowsFile } from "./windows-files"
 
 const TEST_TIMEOUT_MS = 60_000
 const CHILD_TIMEOUT_MS = 30_000
@@ -26,7 +17,6 @@ const MAX_CHILD_OUTPUT_BYTES = 65_536
 const TEMP_ROOT = tmpdir()
 const SECRET = "runtime-credential-secret-canary"
 const UNSAFE_LOCATION_MESSAGE = "Plaintext credential storage must use a private global configuration directory outside workspaces and Git repositories. Set OPENCODE_CONFIG_DIR to a private user directory."
-const NATIVE_OPTIONS = { timeoutMs: 15_000 }
 const KINDS: CredentialKind[] = ["ssh", "db", "rest"]
 const PROFILES = {
     ssh: { host: "  hôte.example.test  ", username: "plaintext-user", port: "0022", password: `${SECRET}:漢🧪\r\n\0` },
@@ -68,6 +58,14 @@ const isolatedNativeProvider = `
     }))
 `
 
+const isolatedWindowsFiles = `
+    let fileResult = { status: "missing" }
+    const fileReads = []
+    mock.module(${JSON.stringify(fileURLToPath(new URL("./windows-files.ts", import.meta.url)))}, () => ({
+        async readSecureWindowsFile(path) { fileReads.push(path); return fileResult },
+    }))
+`
+
 function uniqueId(): string {
     return `AUTOCODE_RUNTIME_${randomUUID().replaceAll("-", "").toUpperCase()}`
 }
@@ -79,16 +77,6 @@ async function withTemporaryRoot(action: (root: string) => Promise<void>): Promi
     } finally {
         await rm(root, { recursive: true, force: true })
     }
-}
-
-async function writeStore(root: string, profiles: PlaintextCredentialStore["profiles"]): Promise<void> {
-    const identity = await getWindowsCredentialIdentity(NATIVE_OPTIONS)
-    await writeSecureWindowsFile(
-        join(root, "credentials", "profiles.json"),
-        serializePlaintextCredentialStore({ version: 1, profiles }),
-        MAX_PLAINTEXT_STORE_BYTES,
-        { ...NATIVE_OPTIONS, expectedSid: identity.sid },
-    )
 }
 
 async function snapshotTree(root: string): Promise<string> {
@@ -104,34 +92,6 @@ async function snapshotTree(root: string): Promise<string> {
         }
     }))
     return JSON.stringify({ mode: metadata.mode, mtimeMs: metadata.mtimeMs, ctimeMs: metadata.ctimeMs, contents })
-}
-
-async function expectCredentialError(
-    action: () => Promise<unknown>,
-    code: CredentialErrorCode,
-    markers: readonly string[],
-): Promise<CredentialError> {
-    let caught: unknown
-    try {
-        await action()
-    } catch (error: unknown) {
-        caught = error
-    }
-    expect(caught).toBeInstanceOf(CredentialError)
-    if (!(caught instanceof CredentialError)) {
-        throw new Error("Expected a credential rejection.")
-    }
-    expect(caught.code).toBe(code)
-    expect(caught.name).toBe("CredentialError")
-    expect(caught.message).toBe(new CredentialError(code).message)
-    expect(Object.hasOwn(caught, "cause")).toBe(false)
-    expect(caught.cause).toBeUndefined()
-    for (const surface of [String(caught), caught.stack ?? "", JSON.stringify(caught)]) {
-        for (const marker of [SECRET, ...markers]) {
-            expect(surface).not.toContain(marker)
-        }
-    }
-    return caught
 }
 
 async function readChildOutput(stream: ReadableStream<Uint8Array>): Promise<string> {
@@ -277,106 +237,49 @@ describe("runtime credential resolver on Windows", (): void => {
         `)
     }, TEST_TIMEOUT_MS)
 
-    // Measured slow tests are skipped from the fast suite; retained for future opt-in/slow testing.
-    test.skip("native SSH profile resolves through auto abstraction without plaintext reads", async (): Promise<void> => {
-        const id = uniqueId()
-        const nativeOptions = { timeoutMs: 8_000 }
-        const native = createWindowsCredentialProvider(nativeOptions)
-        const fields = {
-            host: "  native-resolver.invalid  ",
-            port: "0022",
-            username: "synthetic-native-user",
-            keyfile: "C:\\synthetic-native\\unused-key",
-            agent: "false",
-            password: `${SECRET}:native-password`,
-            keypass: `${SECRET}:native-keypass`,
-        } satisfies CredentialProfileMap["ssh"]
-        const envKeys = ["HOST", "PORT", "USERNAME", "KEYFILE", "AGENT", "PASSWORD", "KEYPASS"]
-            .map((field: string): string => `AUTOCODE_SSH_${id}_${field}`)
-        const plaintextRead = mock(async (): Promise<CredentialReadResult> => ({ status: "missing" }))
-        const resolver = createCredentialResolver({
-            providers: { "windows-credential-manager": native, plaintext: { read: plaintextRead } },
-            provider: "auto",
-            platform: "win32",
-        })
-        const failures: string[] = []
-        let phase = "Native SSH envelope bound failed."
-        let owned = false
-        try {
-            expect(Buffer.byteLength(JSON.stringify({ version: 1, kind: "ssh", fields }), "utf8") < WINDOWS_CREDENTIAL_MAX_BYTES).toBe(true)
-            phase = "Native SSH env check before resolve failed."
-            expect(envKeys.every((key: string): boolean => !Object.hasOwn(process.env, key))).toBe(true)
-            phase = "Native SSH initial missing check failed."
-            expect((await native.read("ssh", id)).status === "missing").toBe(true)
-            owned = true
-            phase = "Native SSH write failed."
-            await writeWindowsProfile("ssh", id, fields, nativeOptions)
-
-            phase = "Native SSH auto resolve failed."
-            const resolved = await resolver.resolve("ssh", id)
-            phase = "Native SSH exact result assertion failed."
-            expect(
-                Reflect.ownKeys(resolved).length === 3
-                && ["kind", "provider", "profile"].every((key: string): boolean => Object.hasOwn(resolved, key))
-                && resolved.kind === "ssh"
-                && resolved.provider === "windows-credential-manager"
-                && Reflect.ownKeys(resolved.profile).length === Object.keys(fields).length
-                && Object.entries(fields).every(([key, value]: [string, string]): boolean =>
-                    Object.getOwnPropertyDescriptor(resolved.profile, key)?.value === value),
-            ).toBe(true)
-            phase = "Native SSH plaintext zero assertion failed."
-            expect(plaintextRead.mock.calls.length).toBe(0)
-            phase = "Native SSH env check after resolve failed."
-            expect(envKeys.every((key: string): boolean => !Object.hasOwn(process.env, key))).toBe(true)
-        } catch {
-            failures.push(phase)
-        } finally {
-            if (owned) {
-                try {
-                    await deleteWindowsProfile("ssh", id, nativeOptions)
-                } catch {
-                    failures.push("Native SSH cleanup delete failed.")
-                }
-                try {
-                    expect((await native.read("ssh", id)).status === "missing").toBe(true)
-                } catch {
-                    failures.push("Native SSH cleanup missing verification failed.")
-                }
-            }
-        }
-        if (failures.length > 0) {
-            throw new Error(failures.join(" "))
-        }
-    }, 55_000)
-
     for (const kind of KINDS) {
-        test(`pinned plaintext securely round-trips ${kind} without changing storage`, async (): Promise<void> => {
+        test(`pinned plaintext reads ${kind} from a mocked secure file without changing storage`, async (): Promise<void> => {
             await withTemporaryRoot(async (root: string): Promise<void> => {
                 const id = uniqueId()
-                await writeStore(root, { [kind]: { [id]: PROFILES[kind] } })
                 const before = await snapshotTree(root)
-                const warn = mock((_message: string): void => {})
-                const resolver = createRuntimeCredentialResolver({ provider: "plaintext", globalConfigRoot: root, warn })
-
-                expect(await resolver.resolve(kind, ` ${id.toLowerCase()} `)).toEqual({ kind, provider: "plaintext", profile: PROFILES[kind] })
-                expect(warn).toHaveBeenCalledTimes(1)
-                expect(warn).toHaveBeenCalledWith(PLAINTEXT_CREDENTIAL_WARNING)
+                await runIsolated(`
+                    ${isolatedNativeProvider}
+                    ${isolatedWindowsFiles}
+                    const root = ${JSON.stringify(root)}
+                    const id = ${JSON.stringify(id)}
+                    const kind = ${JSON.stringify(kind)}
+                    fileResult = { status: "found", contents: JSON.stringify({ version: 1, profiles: { [kind]: { [id]: profiles[kind] } } }) }
+                    const { createRuntimeCredentialResolver } = await import(runtimePath)
+                    const warnings = []
+                    const resolver = createRuntimeCredentialResolver({ provider: "plaintext", globalConfigRoot: root, warn: (message) => warnings.push(message) })
+                    expect(await resolver.resolve(kind, " " + id.toLowerCase() + " ")).toEqual({ kind, provider: "plaintext", profile: profiles[kind] })
+                    expect(warnings).toEqual([plaintextWarning])
+                    expect(nativeReads).toEqual([])
+                    expect(fileReads).toHaveLength(1)
+                `)
                 expect(await snapshotTree(root)).toBe(before)
             })
         }, TEST_TIMEOUT_MS)
 
-        test.skip(`auto falls back from an actual native ${kind} miss to plaintext`, async (): Promise<void> => {
+        test(`auto falls back from a mocked native ${kind} miss to plaintext`, async (): Promise<void> => {
             await withTemporaryRoot(async (root: string): Promise<void> => {
                 const id = uniqueId()
-                await writeStore(root, { [kind]: { [id]: PROFILES[kind] } })
                 const before = await snapshotTree(root)
-                expect(await createWindowsCredentialProvider(NATIVE_OPTIONS).read(kind, id)).toEqual({ status: "missing" })
-                const warn = mock((_message: string): void => {})
-                const resolver = createRuntimeCredentialResolver({ provider: "auto", globalConfigRoot: root, warn })
-
-                expect(await resolver.resolve(kind, id)).toEqual({ kind, provider: "plaintext", profile: PROFILES[kind] })
-                expect(warn).toHaveBeenCalledTimes(1)
-                expect(warn).toHaveBeenCalledWith(PLAINTEXT_CREDENTIAL_WARNING)
+                await runIsolated(`
+                    ${isolatedNativeProvider}
+                    ${isolatedWindowsFiles}
+                    const root = ${JSON.stringify(root)}
+                    const id = ${JSON.stringify(id)}
+                    const kind = ${JSON.stringify(kind)}
+                    fileResult = { status: "found", contents: JSON.stringify({ version: 1, profiles: { [kind]: { [id]: profiles[kind] } } }) }
+                    const { createRuntimeCredentialResolver } = await import(runtimePath)
+                    const warnings = []
+                    const resolver = createRuntimeCredentialResolver({ provider: "auto", globalConfigRoot: root, warn: (message) => warnings.push(message) })
+                    expect(await resolver.resolve(kind, id)).toEqual({ kind, provider: "plaintext", profile: profiles[kind] })
+                    expect(nativeReads).toEqual([{ kind, id }])
+                    expect(fileReads).toHaveLength(1)
+                    expect(warnings).toEqual([plaintextWarning])
+                `)
                 expect(await snapshotTree(root)).toBe(before)
             })
         }, TEST_TIMEOUT_MS)
@@ -385,26 +288,23 @@ describe("runtime credential resolver on Windows", (): void => {
     test("pinned native miss cannot read a populated plaintext store", async (): Promise<void> => {
         await withTemporaryRoot(async (root: string): Promise<void> => {
             const id = uniqueId()
-            await writeStore(root, { ssh: { [id]: PROFILES.ssh } })
             const before = await snapshotTree(root)
-            const warn = mock((_message: string): void => {})
-            const resolver = createRuntimeCredentialResolver({ provider: "windows-credential-manager", globalConfigRoot: root, warn })
-
-            await expectCredentialError((): Promise<unknown> => resolver.resolve("ssh", id), "missing", [id, root])
-            expect(warn).not.toHaveBeenCalled()
             await runIsolated(`
                 ${isolatedIoGuard}
                 ${isolatedNativeProvider}
+                ${isolatedWindowsFiles}
                 forbidIo(true)
                 const { createRuntimeCredentialResolver } = await import(runtimePath)
                 const warnings = []
                 const root = ${JSON.stringify(root)}
                 const id = ${JSON.stringify(id)}
+                fileResult = { status: "found", contents: JSON.stringify({ version: 1, profiles: { ssh: { [id]: profiles.ssh } } }) }
                 const resolver = createRuntimeCredentialResolver({
                     provider: "windows-credential-manager", globalConfigRoot: root, warn: (message) => warnings.push(message),
                 })
                 await expectFailure(() => resolver.resolve("ssh", id), "missing", [id, root])
                 expect(nativeReads).toEqual([{ kind: "ssh", id }])
+                expect(fileReads).toEqual([])
                 expect(warnings).toEqual([])
                 expect(ioCalls).toEqual([])
             `)
@@ -419,27 +319,39 @@ describe("runtime credential resolver on Windows", (): void => {
             const policies: CredentialProviderPolicy[] = ["auto", "plaintext"]
             for (const provider of policies) {
                 const id = uniqueId()
-                const warn = mock((_message: string): void => {})
-                const resolver = createRuntimeCredentialResolver({ provider, globalConfigRoot: configRoot, warn })
-
-                await expectCredentialError((): Promise<unknown> => resolver.resolve("ssh", id), "missing", [id, configRoot])
-                expect(warn).not.toHaveBeenCalled()
+                await runIsolated(`
+                    ${isolatedNativeProvider}
+                    ${isolatedWindowsFiles}
+                    const { createRuntimeCredentialResolver } = await import(runtimePath)
+                    const warnings = []
+                    const root = ${JSON.stringify(configRoot)}
+                    const id = ${JSON.stringify(id)}
+                    const provider = ${JSON.stringify(provider)}
+                    const resolver = createRuntimeCredentialResolver({ provider, globalConfigRoot: root, warn: (message) => warnings.push(message) })
+                    await expectFailure(() => resolver.resolve("ssh", id), "missing", [id, root])
+                    expect(nativeReads).toEqual(provider === "auto" ? [{ kind: "ssh", id }] : [])
+                    expect(fileReads).toHaveLength(1)
+                    expect(warnings).toEqual([])
+                `)
                 expect(await snapshotTree(root)).toBe(before)
             }
         })
     }, TEST_TIMEOUT_MS)
 
-    test.skip("native incomplete profiles fall back as whole profiles without merging fields", async (): Promise<void> => {
+    test("native incomplete profiles fall back as whole profiles without merging fields", async (): Promise<void> => {
         await withTemporaryRoot(async (root: string): Promise<void> => {
             const id = uniqueId()
             const fallback = { ssh: { host: "fallback.example.test" }, db: { connection: "Server=fallback.example.test" }, rest: PROFILES.rest }
-            await writeStore(root, { ssh: { [id]: fallback.ssh }, db: { [id]: fallback.db }, rest: { [id]: fallback.rest } })
             const before = await snapshotTree(root)
             await runIsolated(`
                 ${isolatedNativeProvider}
+                ${isolatedWindowsFiles}
                 const { createRuntimeCredentialResolver } = await import(runtimePath)
                 const fallback = ${JSON.stringify(fallback)}
                 const id = ${JSON.stringify(id)}
+                fileResult = { status: "found", contents: JSON.stringify({ version: 1, profiles: {
+                    ssh: { [id]: fallback.ssh }, db: { [id]: fallback.db }, rest: { [id]: fallback.rest },
+                } }) }
                 const warnings = []
                 const resolver = createRuntimeCredentialResolver({
                     provider: "auto", globalConfigRoot: ${JSON.stringify(root)}, warn: (message) => warnings.push(message),
@@ -450,6 +362,7 @@ describe("runtime credential resolver on Windows", (): void => {
                     expect(await resolver.resolve(kind, id)).toEqual({ kind, provider: "plaintext", profile: fallback[kind] })
                 }
                 expect(nativeReads).toEqual(["ssh", "db", "rest"].map((kind) => ({ kind, id })))
+                expect(fileReads).toHaveLength(3)
                 expect(warnings).toEqual([plaintextWarning, plaintextWarning, plaintextWarning])
             `)
             expect(await snapshotTree(root)).toBe(before)
@@ -459,18 +372,20 @@ describe("runtime credential resolver on Windows", (): void => {
     test("complementary native and plaintext REST fragments remain incomplete without warnings", async (): Promise<void> => {
         await withTemporaryRoot(async (root: string): Promise<void> => {
             const id = uniqueId()
-            await writeStore(root, { rest: { [id]: { password: SECRET } } })
             const before = await snapshotTree(root)
             await runIsolated(`
                 ${isolatedNativeProvider}
+                ${isolatedWindowsFiles}
                 nativeResult = { status: "found", profile: { username: "native-only-user" } }
                 const { createRuntimeCredentialResolver } = await import(runtimePath)
                 const warnings = []
                 const root = ${JSON.stringify(root)}
                 const id = ${JSON.stringify(id)}
+                fileResult = { status: "found", contents: JSON.stringify({ version: 1, profiles: { rest: { [id]: { password: secret } } } }) }
                 const resolver = createRuntimeCredentialResolver({ globalConfigRoot: root, warn: (message) => warnings.push(message) })
                 await expectFailure(() => resolver.resolve("rest", id), "incomplete", [id, root])
                 expect(nativeReads).toEqual([{ kind: "rest", id }])
+                expect(fileReads).toHaveLength(1)
                 expect(warnings).toEqual([])
             `)
             expect(await snapshotTree(root)).toBe(before)
@@ -481,24 +396,27 @@ describe("runtime credential resolver on Windows", (): void => {
         await withTemporaryRoot(async (root: string): Promise<void> => {
             const id = uniqueId()
             const completeId = uniqueId()
-            await writeStore(root, { rest: { [id]: { password: SECRET }, [completeId]: PROFILES.rest } })
             const before = await snapshotTree(root)
             await runIsolated(`
                 ${isolatedNativeProvider}
+                ${isolatedWindowsFiles}
                 nativeResult = { status: "found", profile: profiles.rest }
                 const { createRuntimeCredentialResolver } = await import(runtimePath)
                 const warnings = []
                 const root = ${JSON.stringify(root)}
                 const id = ${JSON.stringify(id)}
                 const completeId = ${JSON.stringify(completeId)}
+                fileResult = { status: "found", contents: JSON.stringify({ version: 1, profiles: { rest: { [id]: { password: secret }, [completeId]: profiles.rest } } }) }
                 const resolver = createRuntimeCredentialResolver({
                     provider: "plaintext", globalConfigRoot: root, warn: (message) => warnings.push(message),
                 })
                 await expectFailure(() => resolver.resolve("rest", id), "incomplete", [id, root])
                 expect(nativeReads).toEqual([])
+                expect(fileReads).toHaveLength(1)
                 expect(warnings).toEqual([])
                 expect(await resolver.resolve("rest", completeId)).toEqual({ kind: "rest", provider: "plaintext", profile: profiles.rest })
                 expect(nativeReads).toEqual([])
+                expect(fileReads).toHaveLength(2)
                 expect(warnings).toEqual([plaintextWarning])
             `)
             expect(await snapshotTree(root)).toBe(before)

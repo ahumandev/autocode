@@ -5,30 +5,24 @@ import { randomUUID } from "node:crypto"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { CredentialReadResult } from "./credentials/types"
-import {
-    createWindowsCredentialProvider,
-    deleteWindowsProfile,
-    getWindowsCredentialIdentity,
-    type WindowsCredentialIdentity,
-} from "./credentials/windows"
 
 const TEMP_ROOT = tmpdir()
 const WINDOWS_ROOT = "C:\\Windows"
-const NATIVE_TIMEOUT_MS = 15_000
+const TEST_SID = "S-1-5-21-123"
 const CHILD_TIMEOUT_MS = 60_000
 const TEST_TIMEOUT_MS = 120_000
 const MAX_OUTPUT_BYTES = 16_384
 const SUCCESS_MARKER = "HELPER_ENV_ISOLATED\n"
 const PROBE_SOURCE = String.raw`
 import { mock } from "bun:test"
+import { EventEmitter } from "node:events"
+import { PassThrough, Writable } from "node:stream"
 import { fileURLToPath } from "node:url"
 
 let passed = false
 try {
     const childProcess = await import("node:child_process")
     const realExports = { ...childProcess }
-    const realSpawn = childProcess.spawn
     const sourceUrl = process.env.CLI_HELPER_ENV_SOURCE_URL
     const id = process.env.CLI_HELPER_ENV_ID
     const sid = process.env.CLI_HELPER_ENV_SID
@@ -39,14 +33,15 @@ try {
     const expectedExecutable = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
     const allowedKeys = new Set(["SystemRoot", "WINDIR", "TEMP", "TMP"])
     const captures = []
+    const requests = []
 
     function observedSpawn(command, args, options) {
-        const capture = { helper: false, safe: false, spawned: false, closed: false }
+        const capture = { helper: false, safe: false, closed: false }
         captures.push(capture)
         try {
             capture.helper = typeof command === "string"
                 && command.toLowerCase() === expectedExecutable.toLowerCase()
-                && Array.isArray(args) && args.includes("-File") && args.at(-1) === expectedHelper
+                && JSON.stringify(args) === JSON.stringify(["-NoLogo", "-NoProfile", "-NonInteractive", "-File", expectedHelper])
             const environment = options?.env
             if (environment && typeof environment === "object" && !Array.isArray(environment)) {
                 const keys = Object.keys(environment)
@@ -56,9 +51,35 @@ try {
                     && typeof environment[key] === "string" && !environment[key].includes(authorization))
             }
         } catch { }
-        const child = realSpawn(command, args, options)
-        child.once("spawn", () => { capture.spawned = true })
-        child.once("close", (code, signal) => { capture.closed = code === 0 && signal === null })
+        const child = new EventEmitter()
+        child.stdout = new PassThrough()
+        child.stderr = new PassThrough()
+        child.kill = () => true
+        child.unref = () => {}
+        let input = ""
+        child.stdin = new Writable({
+            write(chunk, encoding, callback) {
+                input += chunk.toString("utf8")
+                callback()
+            },
+            final(callback) {
+                const request = JSON.parse(input)
+                requests.push(request)
+                const response = request.operation === "identity"
+                    ? { version: 1, status: "ok", identity: { sid, account: "synthetic-account" } }
+                    : { version: 1, status: "ok" }
+                callback()
+                setImmediate(() => {
+                    child.stdout.end(JSON.stringify(response) + "\n")
+                    child.stderr.end()
+                    child.stdout.once("end", () => setImmediate(() => {
+                        capture.closed = true
+                        child.emit("exit", 0, null)
+                        child.emit("close", 0, null)
+                    }))
+                })
+            },
+        })
         return child
     }
 
@@ -69,8 +90,13 @@ try {
         "import-env", "--provider", "windows-credential-manager", "--kind", "rest",
         "--key", id, "--expected-sid", sid,
     ]) : 1
-    passed = code === 0 && captures.length >= 2
-        && captures.every((capture) => capture.helper && capture.safe && capture.spawned && capture.closed)
+    const write = requests[1]
+    passed = code === 0 && captures.length === 2
+        && captures.every((capture) => capture.helper && capture.safe && capture.closed)
+        && requests[0]?.operation === "identity" && requests[0]?.expectedSid === sid
+        && write?.operation === "write" && write?.expectedSid === sid
+        && write?.target === "AutoCode/v1/rest/" + id
+        && JSON.parse(write.payload).fields.authorization === authorization
 } catch { }
 process.stdout.write(passed ? "HELPER_ENV_ISOLATED\n" : "HELPER_ENV_PROBE_FAILED\n")
 process.exitCode = passed ? 0 : 1
@@ -160,46 +186,33 @@ async function runProbe(environment: NodeJS.ProcessEnv, authorization: string): 
         try { child.stdin.end() } catch { fail("stdin") }
         return await result
     } finally {
-        // Native cleanup must wait for child close, including timeout and output-limit failures.
+        // Wait for child close, including timeout and output-limit failures.
         killChild()
         await result.catch((): void => { })
     }
 }
 
-describe.skipIf(process.platform !== "win32")("Windows CLI native helper environment", (): void => {
-    // Measured slow tests are skipped from the fast suite; retained for future opt-in/slow testing.
-    test.skip("real import-env helper spawns exclude credential and probe environment", async (): Promise<void> => {
+describe.skipIf(process.platform !== "win32")("Windows CLI helper environment", (): void => {
+    test("fake import-env helper spawns exclude credential and probe environment", async (): Promise<void> => {
         const root = await safely("temporary-root", (): Promise<string> =>
             mkdtemp(join(TEMP_ROOT, "autocode-cli-helper-env-")))
         const id = `AUTOCODE_CLI_HELPER_ENV_${randomUUID().replaceAll("-", "").toUpperCase()}`
         const authorization = `synthetic-helper-env-${randomUUID()}`
         try {
-            const identity = await safely("identity", (): Promise<WindowsCredentialIdentity> =>
-                getWindowsCredentialIdentity({ timeoutMs: NATIVE_TIMEOUT_MS }))
-            const options = { timeoutMs: NATIVE_TIMEOUT_MS, expectedSid: identity.sid }
-            try {
-                const result = await runProbe({
-                    SystemRoot: WINDOWS_ROOT,
-                    WINDIR: WINDOWS_ROOT,
-                    TEMP: root,
-                    TMP: root,
-                    OPENCODE_CONFIG_DIR: root,
-                    CLI_HELPER_ENV_SOURCE_URL: new URL("./credentials-cli.ts", import.meta.url).href,
-                    CLI_HELPER_ENV_ID: id,
-                    CLI_HELPER_ENV_SID: identity.sid,
-                    [`AUTOCODE_REST_${id}_AUTHORIZATION`]: authorization,
-                }, authorization)
-                expect(result.privateOutput, "Child output must not expose synthetic authorization.").toBe(true)
-                expect(result.isolatedMarker, "Probe must intercept at least two safe real native helper launches.").toBe(true)
-                expect(result.successfulExit, "CLI helper environment probe must exit successfully.").toBe(true)
-                const stored = await safely("native-read", (): Promise<CredentialReadResult> =>
-                    createWindowsCredentialProvider(options).read("rest", id))
-                const matches = stored.status === "found" && typeof stored.profile === "object" && stored.profile !== null
-                    && Object.getOwnPropertyDescriptor(stored.profile, "authorization")?.value === authorization
-                expect(matches, "Native REST authorization must match synthetic input.").toBe(true)
-            } finally {
-                await safely("native-cleanup", (): Promise<boolean> => deleteWindowsProfile("rest", id, options))
-            }
+            const result = await runProbe({
+                SystemRoot: WINDOWS_ROOT,
+                WINDIR: WINDOWS_ROOT,
+                TEMP: root,
+                TMP: root,
+                OPENCODE_CONFIG_DIR: root,
+                CLI_HELPER_ENV_SOURCE_URL: new URL("./credentials-cli.ts", import.meta.url).href,
+                CLI_HELPER_ENV_ID: id,
+                CLI_HELPER_ENV_SID: TEST_SID,
+                [`AUTOCODE_REST_${id}_AUTHORIZATION`]: authorization,
+            }, authorization)
+            expect(result.privateOutput, "Child output must not expose synthetic authorization.").toBe(true)
+            expect(result.isolatedMarker, "Probe must intercept two safe fake helper launches.").toBe(true)
+            expect(result.successfulExit, "CLI helper environment probe must exit successfully.").toBe(true)
         } finally {
             await safely("temporary-cleanup", (): Promise<void> =>
                 rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))

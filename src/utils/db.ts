@@ -2,13 +2,15 @@ import { SQL } from "bun"
 import { createRuntimeCredentialResolver } from "@/credentials/runtime"
 import type { CredentialResolver, DbCredentialProfile } from "@/credentials/types"
 import { normalizeCredentialId, resolveCredentialProfile } from "@/credentials/lookup"
+import { detectDbAdapter, normalizeConnectionString, type DbAdapter } from "./db-connection"
+
+export { detectDbAdapter, normalizeConnectionString } from "./db-connection"
+export type { DbAdapter } from "./db-connection"
 
 export const DB_KEY_PATTERN = /^[A-Za-z0-9_]+$/
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const BINARY_TYPE = "Buffer"
 const REDACTED_CONNECTION = "[REDACTED_CONNECTION]"
-
-export type DbAdapter = "postgres" | "mysql" | "mariadb" | "sqlite"
 
 export type DbConfig = {
     adapter: DbAdapter
@@ -82,34 +84,6 @@ export function normalizeDbKey(dbKey: string): string {
         errorMessage: "Invalid db_key. Use only ASCII letters, digits, and underscores.",
         label: "db_key",
     })
-}
-
-export function normalizeConnectionString(connection: string): string {
-    // Strip JDBC-style prefix (e.g. "jdbc:postgresql://" → "postgresql://")
-    return connection.replace(/^jdbc:/i, "")
-}
-
-export function detectDbAdapter(connection: string): DbAdapter {
-    const normalized = connection.trim().toLowerCase()
-
-    if (normalized.startsWith("postgres://") || normalized.startsWith("postgresql://")
-        || normalized.startsWith("jdbc:postgres://") || normalized.startsWith("jdbc:postgresql://")) {
-        return "postgres"
-    }
-
-    if (normalized.startsWith("mysql://")) {
-        return "mysql"
-    }
-
-    if (normalized.startsWith("mariadb://")) {
-        return "mariadb"
-    }
-
-    if (normalized.startsWith("sqlite://") || normalized.startsWith("sqlite:") || normalized.startsWith("file:")) {
-        return "sqlite"
-    }
-
-    throw new Error("Unsupported database protocol. Use PostgreSQL, MySQL, MariaDB, or SQLite connection formats.")
 }
 
 export async function loadDbConfig(dbKey: string, credentialResolver: CredentialResolver = createRuntimeCredentialResolver()): Promise<DbConfig> {

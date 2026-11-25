@@ -1,23 +1,38 @@
 import { randomBytes, randomUUID } from "node:crypto"
+import { constants, type BigIntStats } from "node:fs"
 import { lstat, mkdir, open, rename, unlink, type FileHandle } from "node:fs/promises"
 import { posix, win32 } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
-import { types } from "node:util"
+import { TextDecoder, types } from "node:util"
+import { parseTree, type Node, type ParseError } from "jsonc-parser/lib/esm/main.js"
 import { normalizeEnvKey } from "../utils/envkey"
 import {
     MAX_PLAINTEXT_STORE_BYTES,
+    parsePlaintextCredentialStore,
     readPlaintextCredentialStore,
     resolvePlaintextCredentialStorePath,
     serializePlaintextCredentialStore,
     type PlaintextCredentialOptions,
     type PlaintextCredentialStore,
+    type PlaintextCredentialStoreReadResult,
 } from "./plaintext"
 import { CredentialError, type CredentialKind } from "./types"
 import { validateCredentialProfile } from "./validation"
-import { writeSecureWindowsFile } from "./windows-files"
+import { readSecureWindowsFile, writeSecureWindowsFile, type SecureWindowsFileReadResult } from "./windows-files"
 
 export const PLAINTEXT_PROVISION_LOCK_FILENAME = ".profiles.lock"
 export const PLAINTEXT_PROVISION_INITIALIZER_PREFIX = ".i"
+
+export type PlaintextProfileWriteGuard =
+    | { kind: CredentialKind; id: string; status: "missing" }
+    | { kind: CredentialKind; id: string; status: "found"; profile: unknown }
+
+export class PlaintextProfilePreconditionError extends CredentialError {
+    constructor(readonly reason: "changed" | "drift") {
+        super("failed")
+        this.name = "PlaintextProfilePreconditionError"
+    }
+}
 
 const path = process.platform === "win32" ? win32 : posix
 const LOCK_WAIT_MS = 30000
@@ -46,6 +61,12 @@ function sanitizeProvisionError(error: unknown): CredentialError {
     try {
         const code = readErrorCode(error)
         if (typeof error === "object" && error !== null && !types.isProxy(error) && error instanceof CredentialError) {
+            if (error instanceof PlaintextProfilePreconditionError) {
+                const reason = Object.getOwnPropertyDescriptor(error, "reason")?.value
+                if (reason === "changed" || reason === "drift") {
+                    return new PlaintextProfilePreconditionError(reason)
+                }
+            }
             switch (code) {
                 case "locked":
                 case "denied":
@@ -115,6 +136,60 @@ function normalizeProfileId(kind: CredentialKind, id: string): string {
     } catch {
         throw new CredentialError("invalid")
     }
+}
+
+type PreparedPlaintextGuard = { status: "missing" } | { status: "found"; record: string }
+
+function canonicalProfile(kind: CredentialKind, profile: unknown): string {
+    const validation = validateCredentialProfile(kind, profile)
+    if (validation.status !== "found") {
+        throw new CredentialError("incomplete")
+    }
+    const fields = validation.profile as unknown as Record<string, string>
+    return JSON.stringify(Object.keys(fields).sort().map((key: string): [string, string] => [key, fields[key]]))
+}
+
+function preparePlaintextGuard(kind: CredentialKind, id: string, guard: PlaintextProfileWriteGuard | undefined): PreparedPlaintextGuard | undefined {
+    if (guard === undefined) return undefined
+    if (typeof guard !== "object" || guard === null || Array.isArray(guard) || types.isProxy(guard)) {
+        throw new CredentialError("invalid")
+    }
+    const prototype: unknown = Object.getPrototypeOf(guard)
+    if (prototype !== Object.prototype && prototype !== null) throw new CredentialError("invalid")
+    const values: Record<string, unknown> = Object.create(null)
+    for (const key of Reflect.ownKeys(guard)) {
+        if (typeof key !== "string" || !["kind", "id", "status", "profile"].includes(key)) throw new CredentialError("invalid")
+        const descriptor = Object.getOwnPropertyDescriptor(guard, key)
+        if (descriptor === undefined || !descriptor.enumerable || !Object.hasOwn(descriptor, "value")) throw new CredentialError("invalid")
+        values[key] = descriptor.value
+    }
+    if (values.kind !== kind || values.id !== id) throw new CredentialError("invalid")
+    if (values.status === "missing" && !Object.hasOwn(values, "profile")) return { status: "missing" }
+    if (values.status === "found" && Object.hasOwn(values, "profile")) {
+        return { status: "found", record: canonicalProfile(kind, values.profile) }
+    }
+    throw new CredentialError("invalid")
+}
+
+function checkPlaintextGuard(kind: CredentialKind, id: string, profiles: Record<string, unknown>, guard: PreparedPlaintextGuard): void {
+    for (const storedId of Object.keys(profiles)) {
+        if (storedId !== id && normalizeProfileId(kind, storedId) === id) {
+            throw new PlaintextProfilePreconditionError("drift")
+        }
+    }
+    const exists = Object.hasOwn(profiles, id)
+    if (guard.status === "missing") {
+        if (exists) throw new PlaintextProfilePreconditionError("changed")
+        return
+    }
+    if (!exists) throw new PlaintextProfilePreconditionError("changed")
+    let record: string
+    try {
+        record = canonicalProfile(kind, profiles[id])
+    } catch {
+        throw new PlaintextProfilePreconditionError("drift")
+    }
+    if (record !== guard.record) throw new PlaintextProfilePreconditionError("changed")
 }
 
 async function withProvisionGate(storePath: string, operation: () => Promise<void>): Promise<void> {
@@ -255,11 +330,116 @@ async function writePrivatePosixStore(storePath: string, contents: string): Prom
     }
 }
 
+async function inspectGuardedPosixFile(storePath: string, uid: number): Promise<BigIntStats | undefined> {
+    const ancestors: string[] = []
+    let current = storePath
+    for (;;) {
+        ancestors.push(current)
+        const parent = path.dirname(current)
+        if (parent === current) break
+        current = parent
+    }
+    for (const entry of ancestors.reverse()) {
+        let metadata: BigIntStats
+        try {
+            metadata = await lstat(entry, { bigint: true })
+        } catch (error: unknown) {
+            if (entry === storePath && readErrorCode(error) === "ENOENT") return undefined
+            throw error
+        }
+        if (metadata.isSymbolicLink() || (entry !== storePath && !metadata.isDirectory())) throw new CredentialError("denied")
+        if (entry === path.dirname(storePath)
+            && (metadata.uid !== BigInt(uid) || (metadata.mode & BigInt(PERMISSION_MASK)) !== BigInt(PRIVATE_DIRECTORY_MODE))) {
+            throw new CredentialError("denied")
+        }
+        if (entry === storePath) {
+            if (!metadata.isFile() || metadata.uid !== BigInt(uid) || metadata.nlink !== 1n
+                || (metadata.mode & BigInt(PERMISSION_MASK)) !== BigInt(PRIVATE_FILE_MODE)) throw new CredentialError("denied")
+            return metadata
+        }
+    }
+    throw new CredentialError("failed")
+}
+
+function sameGuardedFile(left: BigIntStats, right: BigIntStats): boolean {
+    return left.dev === right.dev && left.ino === right.ino && left.size === right.size
+        && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs
+        && left.uid === right.uid && left.mode === right.mode && left.nlink === right.nlink
+}
+
+async function readGuardedPosixFile(storePath: string): Promise<SecureWindowsFileReadResult> {
+    if (typeof process.getuid !== "function") throw new CredentialError("unsupported")
+    const uid = process.getuid()
+    const before = await inspectGuardedPosixFile(storePath, uid)
+    if (before === undefined) return { status: "missing" }
+    if (before.size > BigInt(MAX_PLAINTEXT_STORE_BYTES)) throw new CredentialError("too_large")
+    const file = await open(storePath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0))
+    try {
+        const opened = await file.stat({ bigint: true })
+        if (!sameGuardedFile(before, opened)) throw new CredentialError("denied")
+        const bytes = Buffer.alloc(MAX_PLAINTEXT_STORE_BYTES + 1)
+        let length = 0
+        while (length < bytes.length) {
+            const result = await file.read(bytes, length, bytes.length - length, length)
+            if (result.bytesRead === 0) break
+            length += result.bytesRead
+        }
+        if (length > MAX_PLAINTEXT_STORE_BYTES) throw new CredentialError("too_large")
+        const after = await inspectGuardedPosixFile(storePath, uid)
+        const finalHandle = await file.stat({ bigint: true })
+        if (after === undefined || !sameGuardedFile(opened, after) || !sameGuardedFile(opened, finalHandle)
+            || BigInt(length) !== opened.size) throw new CredentialError("denied")
+        return { status: "found", contents: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, length)) }
+    } finally {
+        await file.close()
+    }
+}
+
+function assertUnambiguousJson(contents: string): void {
+    const errors: ParseError[] = []
+    const root = parseTree(contents, errors, { disallowComments: true, allowTrailingComma: false })
+    if (root === undefined || errors.length !== 0) throw new CredentialError("invalid")
+    const pending: Node[] = [root]
+    while (pending.length !== 0) {
+        const node = pending.pop()
+        if (node === undefined) throw new CredentialError("invalid")
+        if (node.type === "object") {
+            const keys = new Set<string>()
+            for (const property of node.children ?? []) {
+                const key = property.children?.[0]
+                if (property.type !== "property" || property.children?.length !== 2
+                    || key?.type !== "string" || typeof key.value !== "string" || keys.has(key.value)) {
+                    throw new CredentialError("invalid")
+                }
+                keys.add(key.value)
+            }
+        }
+        if (node.children !== undefined) {
+            for (const child of node.children) pending.push(child)
+        }
+    }
+}
+
+async function readGuardedPlaintextStore(options: PlaintextCredentialOptions): Promise<PlaintextCredentialStoreReadResult> {
+    try {
+        const storePath = await resolvePlaintextCredentialStorePath(options)
+        const raw = process.platform === "win32"
+            ? await readSecureWindowsFile(storePath, MAX_PLAINTEXT_STORE_BYTES, { expectedSid: options.expectedSid })
+            : await readGuardedPosixFile(storePath)
+        if (raw.status === "missing") return raw
+        assertUnambiguousJson(raw.contents)
+        return { status: "found", store: parsePlaintextCredentialStore(raw.contents) }
+    } catch {
+        throw new PlaintextProfilePreconditionError("drift")
+    }
+}
+
 export async function writePlaintextProfile<K extends CredentialKind>(
     kind: K,
     id: string,
     profile: unknown,
     options?: PlaintextCredentialOptions,
+    guard?: PlaintextProfileWriteGuard,
 ): Promise<void> {
     try {
         const normalizedId = normalizeProfileId(kind, id)
@@ -268,6 +448,7 @@ export async function writePlaintextProfile<K extends CredentialKind>(
             throw new CredentialError("incomplete")
         }
         const settings = copyProvisionOptions(options)
+        const precondition = preparePlaintextGuard(kind, normalizedId, guard)
         const storePath = await resolvePlaintextCredentialStorePath(settings)
         const parent = path.dirname(storePath)
         const pinnedOptions: PlaintextCredentialOptions = {
@@ -300,11 +481,14 @@ export async function writePlaintextProfile<K extends CredentialKind>(
             const lock = await acquireProvisionLock(lockPath)
             let failure: CredentialError | undefined
             try {
-                const result = await readPlaintextCredentialStore(pinnedOptions)
+                const result = precondition === undefined
+                    ? await readPlaintextCredentialStore(pinnedOptions)
+                    : await readGuardedPlaintextStore(pinnedOptions)
                 const store: PlaintextCredentialStore = result.status === "missing"
                     ? { version: 1, profiles: Object.create(null) }
                     : result.store
                 const profiles: Record<string, unknown> = store.profiles[kind] ?? Object.create(null)
+                if (precondition !== undefined) checkPlaintextGuard(kind, normalizedId, profiles, precondition)
                 profiles[normalizedId] = validation.profile
                 Object.defineProperty(store.profiles, kind, {
                     value: profiles,

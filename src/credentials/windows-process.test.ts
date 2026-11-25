@@ -1,16 +1,13 @@
 import { Buffer } from "node:buffer"
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
+import type { ChildProcessWithoutNullStreams } from "node:child_process"
 import { EventEmitter } from "node:events"
 import { readFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { createInterface } from "node:readline"
 import { fileURLToPath } from "node:url"
 import { CredentialError, WINDOWS_CREDENTIAL_MAX_BYTES, type CredentialErrorCode } from "./types"
 import {
     createWindowsCredentialOperation,
     readWindowsCredentialFailureDiagnostics,
     runBoundedCredentialChild,
-    runWindowsCredentialOperation,
     withWindowsCredentialHelperTrace,
     WindowsCredentialProcessError,
     type CredentialChildDependencies,
@@ -23,354 +20,18 @@ import {
 
 const POWERSHELL_PATH = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 const SYSTEM_DIRECTORY = "C:\\Windows\\System32"
-const TEMP_ROOT = tmpdir()
 const HELPER_PATH = fileURLToPath(new URL("./windows-credentials.ps1", import.meta.url))
-const WORKER_ARGUMENT = "--autocode-windows-credentials-worker"
 const TEST_TIMEOUT_MS = 180000
-const FIXTURE_TIMEOUT_MS = 120000
 const MAX_FRAME_BYTES = 8388608
 const MAX_FILE_BYTES = 1048576
-const NAN_MARKER = "autocode-windows-credentials-fixture-NaN"
 const EXPECTED_ERROR_MESSAGES: Partial<Record<CredentialErrorCode, string>> = {
     invalid: "Invalid credential profile, storage, or ID.",
     too_large: "Credential exceeds the supported size limit.",
     failed: "Credential read failed.",
     denied: "Credential access denied.",
 }
-const DIAGNOSTIC_MARKERS = ["CategoryInfo", "FullyQualifiedErrorId", "At line:", "Exception calling", "ParserError", "Add-Type", "System.Management.Automation", "windows-credentials.ps1"]
 
-interface FixtureCommand {
-    request: WindowsCredentialRequest
-    options?: WindowsCredentialProcessOptions
-    expectedPayload?: string
-    forbidden: string[]
-}
-
-interface OperationResult {
-    kind: "operation"
-    status?: WindowsCredentialResponse["status"]
-    sid?: string
-    payloadMatches?: boolean
-    error?: {
-        isProcessError: boolean
-        isCredentialError: boolean
-        code?: CredentialErrorCode
-        fixedMessage: boolean
-        safeText: boolean
-        noCause: boolean
-        nativeCodeHidden: boolean
-    }
-}
-
-interface HelperProcess {
-    pid: number
-    parent: number
-    executable: string
-    commandLine: string
-}
-
-interface Snapshot {
-    kind: "snapshot"
-    tag: string
-    helpers: HelperProcess[]
-}
-
-interface OwnedCredential {
-    id: string
-    target: string
-    payload: string
-    path: string
-}
-
-// A dedicated API caller makes helper ownership unambiguous even with parallel test files.
-async function runFixtureWorker(): Promise<void> {
-    const input = createInterface({ input: process.stdin, crlfDelay: Infinity })
-    process.stdout.write(`${JSON.stringify({ kind: "ready", pid: process.pid })}\n`)
-    try {
-        for await (const line of input) {
-            if (line === "stop") break
-            // Preserve NaN across fixture IPC so validation receives the actual non-finite number.
-            const command = JSON.parse(line, (_key: string, value: unknown): unknown => value === NAN_MARKER ? NaN : value) as FixtureCommand
-            const result = await runWindowsCredentialOperation(command.request, command.options).then(
-                (response: WindowsCredentialResponse): OperationResult => ({
-                    kind: "operation",
-                    status: response.status,
-                    sid: response.status === "ok" ? response.identity?.sid : undefined,
-                    payloadMatches: response.status === "ok" && response.payload === command.expectedPayload,
-                }),
-                (error: unknown): OperationResult => {
-                    const credentialError = error instanceof CredentialError ? error : undefined
-                    const text = error instanceof Error ? `${error.message}\n${error.stack ?? ""}\n${JSON.stringify(error)}` : ""
-                    return {
-                        kind: "operation",
-                        error: {
-                            isProcessError: error instanceof WindowsCredentialProcessError,
-                            isCredentialError: credentialError !== undefined,
-                            code: credentialError?.code,
-                            fixedMessage: credentialError !== undefined && credentialError.message === EXPECTED_ERROR_MESSAGES[credentialError.code],
-                            safeText: [...command.forbidden, ...DIAGNOSTIC_MARKERS].every((value: string): boolean => !text.includes(value)),
-                            noCause: error instanceof Error && !Object.hasOwn(error, "cause"),
-                            nativeCodeHidden: error instanceof Error && !Object.keys(error).includes("nativeCode") && !JSON.stringify(error).includes("nativeCode"),
-                        },
-                    }
-                },
-            )
-            process.stdout.write(`${JSON.stringify(result)}\n`)
-        }
-    } catch {
-        process.exitCode = 1
-    } finally {
-        input.close()
-    }
-}
-
-class JsonFixtureProcess {
-    readonly child: ChildProcessWithoutNullStreams
-    private readonly closed: Promise<void>
-    private readonly messages: Record<string, unknown>[] = []
-    private pending?: { resolve: (message: Record<string, unknown>) => void; reject: (error: Error) => void }
-    private ended = false
-    private failed = false
-    private exitCode: number | null = null
-
-    constructor(executable: string, args: string[]) {
-        this.child = spawn(executable, args, {
-            cwd: SYSTEM_DIRECTORY,
-            env: { SystemRoot: "C:\\Windows", WINDIR: "C:\\Windows", TEMP: TEMP_ROOT, TMP: TEMP_ROOT },
-            stdio: ["pipe", "pipe", "pipe"],
-            windowsHide: true,
-            shell: false,
-        })
-        let buffered = ""
-        let bytes = 0
-        const timeout = setTimeout((): void => {
-            this.failed = true
-            this.kill()
-        }, FIXTURE_TIMEOUT_MS)
-        this.closed = new Promise((resolve: () => void): void => {
-            this.child.once("close", (code: number | null): void => {
-                clearTimeout(timeout)
-                this.ended = true
-                this.exitCode = code
-                if (buffered.length !== 0) this.failed = true
-                this.pending?.reject(new Error("Windows credential fixture closed before its response."))
-                this.pending = undefined
-                resolve()
-            })
-        })
-        const onError = (): void => {
-            this.failed = true
-            this.kill()
-        }
-        this.child.on("error", onError)
-        this.child.stdin.on("error", onError)
-        this.child.stdout.on("error", onError)
-        this.child.stderr.on("error", onError)
-        this.child.stderr.on("data", onError)
-        this.child.stdout.on("data", (chunk: Buffer): void => {
-            bytes += chunk.byteLength
-            if (bytes > MAX_FRAME_BYTES) {
-                onError()
-                return
-            }
-            buffered += chunk.toString("utf8")
-            let newline = buffered.indexOf("\n")
-            while (newline !== -1) {
-                const line = buffered.slice(0, newline).replace(/\r$/, "")
-                buffered = buffered.slice(newline + 1)
-                try {
-                    const message: unknown = JSON.parse(line)
-                    if (typeof message !== "object" || message === null || Array.isArray(message)) throw new Error()
-                    const fields = message as Record<string, unknown>
-                    if (this.pending !== undefined) {
-                        this.pending.resolve(fields)
-                        this.pending = undefined
-                    } else {
-                        this.messages.push(fields)
-                    }
-                } catch {
-                    onError()
-                }
-                newline = buffered.indexOf("\n")
-            }
-        })
-    }
-
-    send(line: string): void {
-        try {
-            this.child.stdin.write(`${line}\n`)
-        } catch {
-            throw new Error("Windows credential fixture input failed.")
-        }
-    }
-
-    async next(): Promise<Record<string, unknown>> {
-        if (this.failed) throw new Error("Windows credential fixture failed.")
-        const message = this.messages.shift()
-        if (message !== undefined) return message
-        if (this.ended || this.pending !== undefined) throw new Error("Windows credential fixture response unavailable.")
-        return new Promise((resolve: (value: Record<string, unknown>) => void, reject: (error: Error) => void): void => {
-            this.pending = { resolve, reject }
-        })
-    }
-
-    async finish(): Promise<boolean> {
-        this.child.stdin.end()
-        const timeout = setTimeout((): void => {
-            this.failed = true
-            this.kill()
-        }, 5000)
-        try {
-            await this.closed
-            return !this.failed && this.exitCode === 0
-        } finally {
-            clearTimeout(timeout)
-        }
-    }
-
-    async dispose(): Promise<void> {
-        this.kill()
-        await this.closed
-    }
-
-    private kill(): void {
-        if (this.ended) return
-        try { this.child.kill("SIGKILL") } catch { }
-    }
-}
-
-function escapeRegex(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-function observerScript(parentPid: number): string {
-    const helper = HELPER_PATH.replace(/'/g, "''")
-    return `
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
-$helper = '${helper}'
-$pattern = '(?i)(?:^|\\s)-File\\s+(?:"' + [regex]::Escape($helper) + '"|' + [regex]::Escape($helper) + ')(?=\\s|$)'
-function Write-Snapshot([string] $tag) {
-    $helpers = @(Get-CimInstance -ClassName Win32_Process -Filter 'ParentProcessId = ${parentPid}' | Where-Object {
-        $_.Name -ieq 'powershell.exe' -and [regex]::IsMatch([string] $_.CommandLine, $pattern)
-    } | ForEach-Object {
-        @{ pid = [int] $_.ProcessId; parent = [int] $_.ParentProcessId; executable = [string] $_.ExecutablePath; commandLine = [string] $_.CommandLine }
-    })
-    [Console]::Out.WriteLine((@{ kind = 'snapshot'; tag = $tag; helpers = @($helpers) } | ConvertTo-Json -Depth 4 -Compress))
-    [Console]::Out.Flush()
-}
-try {
-    Write-Snapshot 'ready'
-    $stdin = [Console]::OpenStandardInput()
-    $buffer = New-Object byte[] 256
-    $pending = ''
-    $read = $stdin.ReadAsync($buffer, 0, $buffer.Length)
-    $clock = [Diagnostics.Stopwatch]::StartNew()
-    :observe while ($clock.ElapsedMilliseconds -lt 90000) {
-        if ($read.IsCompleted) {
-            $count = $read.GetAwaiter().GetResult()
-            if ($count -eq 0) { break }
-            $pending += [Text.Encoding]::UTF8.GetString($buffer, 0, $count)
-            while (($newline = $pending.IndexOf([char] 10)) -ge 0) {
-                $line = $pending.Substring(0, $newline).TrimEnd([char] 13)
-                $pending = $pending.Substring($newline + 1)
-                if ($line -eq 'stop') { break observe }
-                Write-Snapshot $line
-            }
-            $read = $stdin.ReadAsync($buffer, 0, $buffer.Length)
-        } else {
-            Write-Snapshot 'poll'
-            Start-Sleep -Milliseconds 20
-        }
-    }
-} catch {
-    exit 1
-}
-`
-}
-
-class WindowsProcessSession {
-    readonly samples: Snapshot[] = []
-    private sequence = 0
-
-    private constructor(readonly worker: JsonFixtureProcess, private readonly observer: JsonFixtureProcess) { }
-
-    static async open(): Promise<WindowsProcessSession> {
-        const worker = new JsonFixtureProcess(process.execPath, [fileURLToPath(import.meta.url), WORKER_ARGUMENT])
-        let observer: JsonFixtureProcess | undefined
-        try {
-            const ready = await worker.next()
-            if (ready.kind !== "ready" || ready.pid !== worker.child.pid || typeof ready.pid !== "number") {
-                throw new Error("Windows credential API caller did not become ready.")
-            }
-            const script = Buffer.from(observerScript(ready.pid), "utf16le").toString("base64")
-            observer = new JsonFixtureProcess(POWERSHELL_PATH, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", script])
-            const session = new WindowsProcessSession(worker, observer)
-            const snapshot = await session.receiveSnapshot()
-            if (snapshot.tag !== "ready" || snapshot.helpers.length !== 0) throw new Error("Windows credential observer did not become ready.")
-            return session
-        } catch {
-            await worker.dispose()
-            await observer?.dispose()
-            throw new Error("Windows credential lifecycle fixtures failed to start.")
-        }
-    }
-
-    async snapshot(): Promise<Snapshot> {
-        const tag = `snapshot-${++this.sequence}`
-        this.observer.send(tag)
-        for (;;) {
-            const snapshot = await this.receiveSnapshot()
-            if (snapshot.tag === tag) return snapshot
-        }
-    }
-
-    async operation(request: unknown, owned: OwnedCredential, options?: unknown, expectedPayload?: string): Promise<{ result: OperationResult; after: Snapshot }> {
-        const forbidden = [owned.payload, owned.payload.split("\r\n")[0], owned.target, owned.id]
-        this.worker.send(JSON.stringify({ request, options, expectedPayload, forbidden }, (_key: string, value: unknown): unknown => {
-            return typeof value === "number" && Number.isNaN(value) ? NAN_MARKER : value
-        }))
-        const message = await this.worker.next()
-        // Request a fresh CIM snapshot before inspecting settlement, without waiting for another helper or cleanup.
-        const after = await this.snapshot()
-        if (message.kind !== "operation") throw new Error("Windows credential API caller returned an invalid result.")
-        return { result: message as unknown as OperationResult, after }
-    }
-
-    async close(): Promise<boolean> {
-        try {
-            this.worker.send("stop")
-            this.observer.send("stop")
-            const results = await Promise.all([this.worker.finish(), this.observer.finish()])
-            return results.every((result: boolean): boolean => result)
-        } finally {
-            await Promise.all([this.worker.dispose(), this.observer.dispose()])
-        }
-    }
-
-    private async receiveSnapshot(): Promise<Snapshot> {
-        const message = await this.observer.next()
-        if (message.kind !== "snapshot" || typeof message.tag !== "string" || !Array.isArray(message.helpers)) {
-            throw new Error("Windows credential observer returned an invalid snapshot.")
-        }
-        for (const helper of message.helpers as unknown[]) {
-            if (typeof helper !== "object" || helper === null || !("pid" in helper) || typeof helper.pid !== "number"
-                || !("parent" in helper) || typeof helper.parent !== "number"
-                || !("executable" in helper) || typeof helper.executable !== "string"
-                || !("commandLine" in helper) || typeof helper.commandLine !== "string") {
-                throw new Error("Windows credential observer returned invalid process metadata.")
-            }
-        }
-        const snapshot = message as unknown as Snapshot
-        this.samples.push(snapshot)
-        return snapshot
-    }
-}
-
-if (import.meta.main && process.argv[2] === WORKER_ARGUMENT) {
-    await runFixtureWorker()
-} else {
+{
     const { describe, expect, test } = await import("bun:test")
     const LIFECYCLE_TIMEOUT_MS = 1000
     const LIFECYCLE_DRAIN_MS = 100
@@ -747,6 +408,33 @@ if (import.meta.main && process.argv[2] === WORKER_ARGUMENT) {
     })
 
     describe.skipIf(process.platform !== "win32")("bounded credential transport lifecycle", (): void => {
+        
+        test("sends synthetic payload and SID through stdin, never argv", async (): Promise<void> => {
+            const clock = new LifecycleClock()
+            const child = new LifecycleChild()
+            let launch: Parameters<CredentialChildDependencies["spawn"]> | undefined
+            const operation = createWindowsCredentialOperation({
+                spawn(...args: Parameters<CredentialChildDependencies["spawn"]>): ChildProcessWithoutNullStreams {
+                    launch = args
+                    return child as unknown as ChildProcessWithoutNullStreams
+                },
+                now: (): number => clock.time,
+                setTimer: (callback: () => void, milliseconds: number): ReturnType<typeof setTimeout> => clock.setTimer(callback, milliseconds),
+                clearTimer: (timer: ReturnType<typeof setTimeout>): void => clock.clearTimer(timer),
+            })
+            const target = "AutoCode/v1/ssh/SYNTHETIC"
+            const payload = "synthetic-secret\r\n漢字 😀"
+            const sid = "S-1-5-21-123"
+            const pending = operation({ operation: "write", target, payload }, { expectedSid: sid })
+            expect(JSON.parse(child.stdin.frame!.toString("utf8"))).toEqual({ version: 1, operation: "write", target, payload, expectedSid: sid })
+            expect(launch?.[1]).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-File", HELPER_PATH])
+            for (const value of [target, payload, sid]) expect(JSON.stringify(launch?.[1])).not.toContain(value)
+            completeLifecycleOutput(child)
+            child.emit("close", 0, null)
+            expect(await pending).toEqual({ version: 1, status: "ok" })
+            expect(child.stdin.frame?.every((byte: number): boolean => byte === 0)).toBe(true)
+        })
+
         test("settles at timeout plus 500ms when kill succeeds but close and EOF never arrive", async (): Promise<void> => {
             const fixture = boundedOperation()
             const { child, clock, settlement } = fixture
@@ -1069,67 +757,7 @@ if (import.meta.main && process.argv[2] === WORKER_ARGUMENT) {
         }
     })
 
-    function createOwnedCredential(): OwnedCredential {
-        const id = `AUTOCODE_WINDOWS_TEST_${crypto.randomUUID().replace(/-/g, "").toUpperCase()}`
-        const prefix = `synthetic-secret-${crypto.randomUUID()}\r\n\"'; Write-Output synthetic-only; $env:AUTOCODE_TEST; 😀`
-        const remaining = WINDOWS_CREDENTIAL_MAX_BYTES - Buffer.byteLength(prefix, "utf8")
-        return {
-            id,
-            target: `AutoCode/v1/ssh/${id}`,
-            payload: prefix + "é".repeat(Math.floor(remaining / 2)) + "a".repeat(remaining % 2),
-            path: `${TEMP_ROOT}\\autocode-windows-credentials-${crypto.randomUUID()}.json`,
-        }
-    }
-
-    function expectSafeError(result: OperationResult, code: CredentialErrorCode): void {
-        expect(result.status).toBeUndefined()
-        expect(result.error).toEqual({
-            isProcessError: true,
-            isCredentialError: true,
-            code,
-            fixedMessage: true,
-            safeText: true,
-            noCause: true,
-            nativeCodeHidden: true,
-        })
-    }
-
-    function expectSafeArgv(session: WindowsProcessSession, owned: OwnedCredential): void {
-        const helpers = session.samples.flatMap((sample: Snapshot): HelperProcess[] => sample.helpers)
-        const executable = escapeRegex(POWERSHELL_PATH)
-        const helper = escapeRegex(HELPER_PATH)
-        const command = new RegExp(`^(?:"${executable}"|${executable}) -NoLogo -NoProfile -NonInteractive -File (?:"${helper}"|${helper})$`, "i")
-        expect(new Set(helpers.map((process: HelperProcess): number => process.pid)).size).toBeGreaterThan(0)
-        for (const process of helpers) {
-            expect(process.parent === session.worker.child.pid).toBe(true)
-            expect(process.executable.toLowerCase() === POWERSHELL_PATH.toLowerCase()).toBe(true)
-            expect(command.test(process.commandLine)).toBe(true)
-            expect([owned.payload, owned.payload.split("\r\n")[0], owned.target, owned.id].every((value: string): boolean => !process.commandLine.includes(value))).toBe(true)
-        }
-    }
-
-    async function withOwnedSession(action: (session: WindowsProcessSession, owned: OwnedCredential) => Promise<void>): Promise<void> {
-        const owned = createOwnedCredential()
-        const session = await WindowsProcessSession.open()
-        let cleaned = false
-        let closed = false
-        try {
-            await action(session, owned)
-        } finally {
-            try {
-                const deleted = await session.operation({ operation: "delete", target: owned.target }, owned)
-                const missing = await session.operation({ operation: "read", target: owned.target }, owned)
-                cleaned = (deleted.result.status === "ok" || deleted.result.status === "missing") && missing.result.status === "missing"
-            } finally {
-                closed = await session.close()
-                process.stdout.write(`Windows credential cleanup: count=${cleaned ? 1 : 0}; IDs=${owned.id}\n`)
-            }
-            expect(cleaned).toBe(true)
-            expect(closed).toBe(true)
-        }
-    }
-
-    describe.skipIf(process.platform !== "win32")("real Windows credential helper lifecycle and transport", (): void => {
+    describe.skipIf(process.platform !== "win32")("Windows credential helper launch security", (): void => {
         test("reviews restricted environment and fixed launch settings (source only, not live environment proof)", async (): Promise<void> => {
             const source = (await readFile(new URL("./windows-process.ts", import.meta.url), "utf8")).replace(/\r\n/g, "\n")
             const environment = source.slice(source.indexOf("function processEnvironment()"), source.indexOf("function nativeCodeFrom("))
@@ -1172,93 +800,5 @@ if (import.meta.main && process.argv[2] === WORKER_ARGUMENT) {
             expect(Object.hasOwn(new WindowsCredentialProcessError("failed"), "nativeCode")).toBe(false)
         }, TEST_TIMEOUT_MS)
 
-        // Measured slow tests are skipped from the fast suite; retained for future opt-in/slow testing.
-        test.skip("rejects malformed options and requests before spawning any helper", async (): Promise<void> => {
-            await withOwnedSession(async (session: WindowsProcessSession, owned: OwnedCredential): Promise<void> => {
-                const control = await session.operation({ operation: "identity" }, owned)
-                expect(control.result.status).toBe("ok")
-                expectSafeArgv(session, owned)
-                expect((await session.snapshot()).helpers.length).toBe(0)
-                session.samples.length = 0
-                const cases: { request: unknown; options?: unknown; code: CredentialErrorCode }[] = []
-                for (const timeoutMs of [0, 60001, 1.5, NaN]) {
-                    cases.push({ request: { operation: "identity" }, options: { timeoutMs }, code: "invalid" })
-                }
-                for (const expectedSid of ["s-1-5-18", "S-1-05-18", "S-1-5-4294967296", "S-1-281474976710656", "S-1-5-18\n"]) {
-                    cases.push({ request: { operation: "identity" }, options: { expectedSid }, code: "invalid" })
-                }
-                for (const request of [
-                    null, [], {}, { operation: "enumerate" }, { operation: "read" },
-                    { version: 1, operation: "identity" }, { operation: "identity", target: owned.target },
-                    { operation: "write", target: owned.target, payload: "\ud800" },
-                ]) cases.push({ request, code: "invalid" })
-                for (const target of [owned.target.toLowerCase(), `${owned.target}\n`, "Other/v1/ssh/ID", "AutoCode/v1/ftp/ID", `${owned.target}/EXTRA`]) {
-                    cases.push({ request: { operation: "read", target }, code: "invalid" })
-                }
-                for (const path of ["relative.json", "C:relative.json", `${owned.path}\0`, "C:/invalid.json", `C:\\${"a".repeat(260)}`]) {
-                    cases.push({ request: { operation: "file-read", path }, code: "invalid" })
-                }
-                for (const maxBytes of [0, MAX_FILE_BYTES + 1, 1.5, NaN]) {
-                    cases.push({ request: { operation: "file-read", path: owned.path, maxBytes }, code: "invalid" })
-                }
-                const oversizedRequest = "a".repeat(MAX_FRAME_BYTES + 1)
-                expect(Buffer.byteLength(oversizedRequest, "utf8") > MAX_FRAME_BYTES).toBe(true)
-                // Public payload limits reject this request before the frame-size guard is reachable.
-                cases.push(
-                    { request: { operation: "write", target: owned.target, payload: "é".repeat(WINDOWS_CREDENTIAL_MAX_BYTES / 2 + 1) }, code: "too_large" },
-                    { request: { operation: "file-write", path: owned.path, payload: "é".repeat(MAX_FILE_BYTES / 2 + 1) }, code: "too_large" },
-                    { request: { operation: "file-write", path: owned.path, maxBytes: 1, payload: "é" }, code: "too_large" },
-                    { request: { operation: "file-write", path: owned.path, payload: oversizedRequest }, code: "too_large" },
-                )
-                for (const entry of cases) {
-                    const { result, after } = await session.operation(entry.request, owned, entry.options)
-                    expectSafeError(result, entry.code)
-                    expect(after.helpers.length).toBe(0)
-                }
-                expect(cases.length).toBe(35)
-                expect(session.samples.every((sample: Snapshot): boolean => sample.helpers.length === 0)).toBe(true)
-            })
-        }, TEST_TIMEOUT_MS)
-
-        test.skip("observes fixed helper argv and round-trips synthetic UTF-8 only through stdin/stdout", async (): Promise<void> => {
-            await withOwnedSession(async (session: WindowsProcessSession, owned: OwnedCredential): Promise<void> => {
-                expect(Buffer.byteLength(owned.payload, "utf8")).toBe(WINDOWS_CREDENTIAL_MAX_BYTES)
-                const written = await session.operation({ operation: "write", target: owned.target, payload: owned.payload }, owned)
-                expect(written.result.status).toBe("ok")
-                expect(written.after.helpers.length).toBe(0)
-                const read = await session.operation({ operation: "read", target: owned.target }, owned, { timeoutMs: 60000 }, owned.payload)
-                expect(read.result.status).toBe("ok")
-                expect(read.result.payloadMatches).toBe(true)
-                expect(read.after.helpers.length).toBe(0)
-                expectSafeArgv(session, owned)
-            })
-        }, TEST_TIMEOUT_MS)
-
-        // Measured at 5.320s; retain body for slower/opt-in runs.
-        test.skip("settles a real 1ms write timeout only after helper exit with a fixed safe error", async (): Promise<void> => {
-            await withOwnedSession(async (session: WindowsProcessSession, owned: OwnedCredential): Promise<void> => {
-                // A 1ms child may escape polling; the fresh snapshot still checks its isolated parent.
-                const { result, after } = await session.operation({ operation: "write", target: owned.target, payload: owned.payload }, owned, { timeoutMs: 1 })
-                expect(after.helpers.length).toBe(0)
-                expectSafeError(result, "failed")
-            })
-        }, TEST_TIMEOUT_MS)
-
-        test.skip("exits on expectedSid mismatch before writing the exact owned target", async (): Promise<void> => {
-            await withOwnedSession(async (session: WindowsProcessSession, owned: OwnedCredential): Promise<void> => {
-                const identity = await session.operation({ operation: "identity" }, owned)
-                expect(identity.result.status).toBe("ok")
-                expect(typeof identity.result.sid).toBe("string")
-                const expectedSid = identity.result.sid === "S-1-0-0" ? "S-1-5-18" : "S-1-0-0"
-                const { result, after } = await session.operation(
-                    { operation: "write", target: owned.target, payload: owned.payload }, owned, { expectedSid },
-                )
-                expect(after.helpers.length).toBe(0)
-                expectSafeError(result, "denied")
-                const missing = await session.operation({ operation: "read", target: owned.target }, owned)
-                expect(missing.result.status).toBe("missing")
-                expectSafeArgv(session, owned)
-            })
-        }, TEST_TIMEOUT_MS)
     })
 }

@@ -1,28 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Buffer } from "node:buffer"
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { lstat, mkdir, open, rm, symlink, unlink, type FileHandle } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { Readable } from "node:stream"
 import { fileURLToPath } from "node:url"
-import { createPlaintextCredentialProvider } from "./credentials/plaintext"
 import {
     CredentialError,
-    MAX_CREDENTIAL_ENVELOPE_BYTES,
-    WINDOWS_CREDENTIAL_MAX_BYTES,
     type CredentialErrorCode,
     type CredentialKind,
-    type CredentialProfileInput,
-    type CredentialReadResult,
 } from "./credentials/types"
-import {
-    createWindowsCredentialProvider,
-    deleteWindowsProfile,
-    getWindowsCredentialIdentity,
-    type WindowsCredentialIdentity,
-} from "./credentials/windows"
 import {
     readWindowsCredentialFailureDiagnostics,
     runBoundedCredentialChild,
@@ -40,20 +30,11 @@ const WINDOWS_ROOT = "C:\\Windows"
 const CHILD_TIMEOUT_MS = 20_000
 const TEST_TIMEOUT_MS = 120_000
 const MAX_OUTPUT_BYTES = 65_536
-const ID_PREFIX = "AUTOCODE_CLI_INTEGRATION_"
 const PROVIDERS = ["plaintext", "windows-credential-manager"] as const
-const KINDS = ["ssh", "db", "rest"] as const
 const METHODS = ["set", "import-env"] as const
-const CONTEXT_WARNING = "Warning: Run under the actual OpenCode service logon context; matching SID alone does not prove the same logon session."
-const PLAINTEXT_WARNING = "Warning: Plaintext credentials are stored unencrypted at the fixed global credential path."
 const SAVED_MESSAGE = "Credential profile saved.\n"
 const ERRORS = {
     usage: "Invalid credentials command or options. Use --help.",
-    denied: "Credential access or identity assertion denied.",
-    invalid: "Invalid credential profile or ID.",
-    incomplete: "Credential profile is incomplete.",
-    too_large: "Credential input exceeds the supported size limit.",
-    tty: "Hidden input requires stdin and prompt output TTYs with working raw-mode support. Use --stdin instead.",
 } as const
 const IMPORT_MARKER = "credentials-cli-import-safe\n"
 const IMPORT_SOURCE = `
@@ -67,8 +48,6 @@ queueMicrotask(() => process.stdout.write("credentials-cli-import-safe\\n"));
 type WriteProvider = (typeof PROVIDERS)[number]
 type ProvisionMethod = (typeof METHODS)[number]
 type ChildResult = { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
-type Fixture = { root: string; provider: WriteProvider; kind: CredentialKind; id: string; sid: string }
-type InputFailure = "malformed JSON" | "malformed UTF-8" | "incomplete profile" | "general input limit"
 type OwnedOperationPhase = ProvisionMethod | "fixture" | "native-read" | "profile-cleanup" | "root-cleanup"
 type OwnedRecord = {
     phase: string
@@ -135,14 +114,7 @@ interface SafeIntegrationSummary {
 }
 
 const integrationFailures = new WeakMap<object, { stage: IntegrationStage; summaries: readonly string[] }>()
-const sentinels = new Set<string>()
-let identityPromise: Promise<WindowsCredentialIdentity> | undefined
-
-function sentinel(field: string): string {
-    const value = `cli-${field}-${randomUUID()}-é漢🧪`
-    sentinels.add(value)
-    return value
-}
+const sentinels = new Set<string>(["synthetic-cli-environment-secret"])
 
 function ownDataValue(value: unknown, key: string): unknown {
     if (typeof value !== "object" || value === null) return undefined
@@ -294,15 +266,6 @@ async function appendDiagnosticRecord(owner: OwnedRoot, record: OwnedRecord): Pr
     }
 }
 
-function saltedContextFingerprint(ownershipToken: string, sid: string): string {
-    return createHash("sha256").update(ownershipToken).update("\0").update(sid).digest("hex")
-}
-
-function matchesOwnedContext(owner: OwnedRoot, sid: string): boolean {
-    return owner.contextFingerprint !== undefined
-        && saltedContextFingerprint(owner.ownershipToken, sid) === owner.contextFingerprint
-}
-
 function retainOwnedHelperTrace(
     traces: Readonly<WindowsCredentialHelperTrace>[],
     trace: Readonly<WindowsCredentialHelperTrace>,
@@ -403,12 +366,6 @@ function queueChildPID(owner: OwnedRoot, child: ChildProcessWithoutNullStreams):
     })
 }
 
-function actualIdentity(): Promise<WindowsCredentialIdentity> {
-    identityPromise ??= safely("identity", (): Promise<WindowsCredentialIdentity> =>
-        getWindowsCredentialIdentity({ timeoutMs: CHILD_TIMEOUT_MS }), "precheck")
-    return identityPromise
-}
-
 function childEnvironment(root: string, selected: Readonly<Record<string, string>>): NodeJS.ProcessEnv {
     return {
         SystemRoot: WINDOWS_ROOT,
@@ -490,17 +447,6 @@ function expectPrivateOutput(result: ChildResult): void {
     }
 }
 
-async function runCli(
-    root: string,
-    args: readonly string[],
-    input: Buffer = Buffer.alloc(0),
-    selected: Readonly<Record<string, string>> = {},
-): Promise<ChildResult> {
-    const result = await spawnSource(root, [SOURCE, ...args], input, selected)
-    expectPrivateOutput(result)
-    return result
-}
-
 async function withTemporaryRoot(action: (root: string) => Promise<void>): Promise<void> {
     const owner = await safely("temporary-root", createOwnedRoot, "precheck")
     const root = owner.root
@@ -527,97 +473,6 @@ async function withTemporaryRoot(action: (root: string) => Promise<void>): Promi
     )
 }
 
-async function readNative(fixture: Fixture, phase: IntegrationPhase = "test-body"): Promise<CredentialReadResult> {
-    const action = (): Promise<CredentialReadResult> =>
-        createWindowsCredentialProvider({ timeoutMs: CHILD_TIMEOUT_MS, expectedSid: fixture.sid })
-            .read(fixture.kind, fixture.id)
-    const owner = ownedRoots.get(fixture.root)
-    return safely("native-read", (): Promise<CredentialReadResult> => owner === undefined ? action()
-        : runOwnedOperation(owner, "native-read", action, phase === "cleanup" ? "cleanup" : "primary"), phase)
-}
-
-async function readPlaintext(fixture: Fixture): Promise<CredentialReadResult> {
-    return safely("plaintext-read", (): Promise<CredentialReadResult> =>
-        createPlaintextCredentialProvider({ globalConfigRoot: fixture.root, expectedSid: fixture.sid })
-            .read(fixture.kind, fixture.id))
-}
-
-async function withProfile(
-    provider: WriteProvider,
-    kind: CredentialKind,
-    action: (fixture: Fixture) => Promise<void>,
-): Promise<void> {
-    await withTemporaryRoot(async (root: string): Promise<void> => {
-        const owner = ownedRoots.get(root)
-        if (owner === undefined) throw new Error("Credential CLI fixture root ownership is unavailable.")
-        const nativeUUID = randomUUID()
-        const id = `${ID_PREFIX}${nativeUUID.replaceAll("-", "").toUpperCase()}`
-        const exactNativeTarget = `AutoCode/v1/${kind}/${id}`
-        await appendOwnedRecord(owner, {
-            phase: "fixture-registered", provider, kind, id, nativeUUID, exactNativeTarget,
-            ...(provider === "plaintext" ? { plaintextStorePath: join(root, "credentials", "profiles.json") } : {}),
-        })
-        owner.nativeTargets.add(exactNativeTarget)
-        const identity = await runOwnedOperation(owner, "fixture", actualIdentity)
-        const contextFingerprint = saltedContextFingerprint(owner.ownershipToken, identity.sid)
-        owner.contextFingerprint = contextFingerprint
-        const contextMatches = matchesOwnedContext(owner, identity.sid)
-        await appendOwnedRecord(owner, {
-            phase: "expected-context-recorded", contextRecorded: true, contextMatches,
-        }, { contextFingerprint })
-        const fixture = { root, provider, kind, id, sid: identity.sid }
-        await withSafeCleanup(
-            (): Promise<void> => runOwnedOperation(owner, "fixture", (): Promise<void> => action(fixture)),
-            async (): Promise<void> => {
-                await flushOwnedRecords(owner)
-                await runOwnedOperation(owner, "profile-cleanup", async (): Promise<void> => {
-                    await safely("native-cleanup", (): Promise<boolean> =>
-                        deleteWindowsProfile(kind, fixture.id, { timeoutMs: CHILD_TIMEOUT_MS, expectedSid: identity.sid }), "cleanup")
-                    expect((await readNative(fixture, "cleanup")).status === "missing").toBe(true)
-                    await appendOwnedRecord(owner, {
-                        phase: "cleanup-verified", provider, kind, id, nativeUUID, exactNativeTarget,
-                        cleanupVerified: true,
-                    })
-                    owner.nativeTargets.delete(exactNativeTarget)
-                    await appendOwnedRecord(owner, {
-                        phase: "owned-map-closed", ownershipMapClosed: owner.nativeTargets.size === 0,
-                        nativeTargetsRemaining: owner.nativeTargets.size,
-                    })
-                }, "cleanup")
-            },
-            "profile-action", "profile-cleanup",
-        )
-    })
-}
-
-function commandArgs(
-    fixture: Fixture,
-    method: ProvisionMethod,
-    options: { expectedSid?: string; stdin?: boolean } = {},
-): string[] {
-    const key = fixture.kind === "ssh" ? fixture.id.toLowerCase().replaceAll("_", "-") : fixture.id
-    const args = [method, "--provider", fixture.provider, "--kind", fixture.kind, "--key", key,
-        "--expected-sid", options.expectedSid ?? fixture.sid]
-    if (method === "set" && options.stdin !== false) args.push("--stdin")
-    return args
-}
-
-function warnings(provider: WriteProvider): string {
-    return `${CONTEXT_WARNING}\n${provider === "plaintext" ? `${PLAINTEXT_WARNING}\n` : ""}`
-}
-
-function expectSuccess(result: ChildResult, provider: WriteProvider): void {
-    expect(result.code === 0 && result.signal === null).toBe(true)
-    expect(result.stdout === SAVED_MESSAGE).toBe(true)
-    expect(result.stderr === warnings(provider)).toBe(true)
-}
-
-function expectFailure(result: ChildResult, message: string, warningText: string): void {
-    expect(result.code === 1 && result.signal === null).toBe(true)
-    expect(result.stdout === "").toBe(true)
-    expect(result.stderr === `${warningText}${message}\n`).toBe(true)
-}
-
 async function plaintextFileExists(root: string): Promise<boolean> {
     return safely("plaintext-file-check", async (): Promise<boolean> => {
         try {
@@ -628,67 +483,6 @@ async function plaintextFileExists(root: string): Promise<boolean> {
             throw new Error("Plaintext file check failed.")
         }
     })
-}
-
-async function expectNothingWritten(fixture: Fixture, phase: IntegrationPhase = "test-body"): Promise<void> {
-    expect((await readNative(fixture, phase)).status === "missing").toBe(true)
-    expect((await readPlaintext(fixture)).status === "missing").toBe(true)
-    expect(await plaintextFileExists(fixture.root)).toBe(false)
-}
-
-function roundtripProfile(kind: CredentialKind, method: ProvisionMethod): CredentialProfileInput<CredentialKind> {
-    const emptyOptionals = method === "import-env"
-    if (kind === "ssh") {
-        return {
-            host: sentinel("host"),
-            username: emptyOptionals ? "" : sentinel("ssh-username"),
-            port: emptyOptionals ? "" : sentinel("port"),
-            keyfile: sentinel("keyfile"),
-            agent: emptyOptionals ? sentinel("agent") : "",
-            password: sentinel("ssh-password"),
-            keypass: emptyOptionals ? "" : sentinel("keypass"),
-        }
-    }
-    if (kind === "db") {
-        return {
-            connection: sentinel("connection"),
-            username: emptyOptionals ? "" : sentinel("db-username"),
-            password: emptyOptionals ? sentinel("db-password") : "",
-        }
-    }
-    return emptyOptionals
-        ? { username: sentinel("rest-username"), password: "" }
-        : { authorization: sentinel("authorization"), username: "", password: sentinel("rest-password") }
-}
-
-function selectedEnvironment(fixture: Fixture, profile: CredentialProfileInput<CredentialKind>): Record<string, string> {
-    const environment: Record<string, string> = {}
-    for (const [field, value] of Object.entries(profile)) {
-        environment[`AUTOCODE_${fixture.kind.toUpperCase()}_${fixture.id}_${field.toUpperCase()}`] = value
-    }
-    return environment
-}
-
-function profilesEqual(actual: unknown, expected: CredentialProfileInput<CredentialKind>): boolean {
-    if (typeof actual !== "object" || actual === null || Array.isArray(actual)) return false
-    const entries = Object.entries(expected)
-    return Object.keys(actual).length === entries.length
-        && entries.every(([key, value]: [string, string]): boolean =>
-            Object.hasOwn(actual, key) && Object.getOwnPropertyDescriptor(actual, key)?.value === value)
-}
-
-function failureInput(scenario: InputFailure): Buffer {
-    const value = sentinel("rejected-input")
-    switch (scenario) {
-        case "malformed JSON":
-            return Buffer.from(`{"authorization":${JSON.stringify(value)}`, "utf8")
-        case "malformed UTF-8":
-            return Buffer.concat([Buffer.from(`{"authorization":"${value}`, "utf8"), Buffer.from([0xc3, 0x28]), Buffer.from('"}')])
-        case "incomplete profile":
-            return Buffer.from(JSON.stringify({ password: value }), "utf8")
-        case "general input limit":
-            return Buffer.from(JSON.stringify({ authorization: value + "x".repeat(MAX_CREDENTIAL_ENVELOPE_BYTES) }), "utf8")
-    }
 }
 
 const CLI_LIFECYCLE_DRAIN_MS = 100
@@ -765,7 +559,7 @@ interface CliLifecycleSettlement {
     error?: unknown
 }
 
-function boundedCli(killResult: boolean | "throw" = true, spawnThrows = false): {
+function boundedCli(killResult: boolean | "throw" = true, spawnThrows = false, args: readonly string[] = [SOURCE, "--help"]): {
     clock: CliLifecycleClock
     child: CliLifecycleChild
     settlement: CliLifecycleSettlement
@@ -792,7 +586,7 @@ function boundedCli(killResult: boolean | "throw" = true, spawnThrows = false): 
     }
     const input = Buffer.from("synthetic-cli-input")
     const settlement: CliLifecycleSettlement = { count: 0 }
-    void spawnSource(TEMP_ROOT, [SOURCE, "--help"], input, { AUTOCODE_TEST_SELECTED: "synthetic-selected" }, dependencies).then(
+    void spawnSource(TEMP_ROOT, args, input, { AUTOCODE_TEST_SELECTED: "synthetic-selected" }, dependencies).then(
         (value: ChildResult): void => { settlement.count++; settlement.value = value },
         (error: unknown): void => { settlement.count++; settlement.error = error },
     )
@@ -1070,7 +864,54 @@ describe("native-read safe diagnostics", (): void => {
     })
 })
 
+describe("synthetic SID preflight", (): void => {
+    for (const provider of ["plaintext", "windows-credential-manager"] as const) {
+        test(`${provider} rejects mismatched SID without invoking either writer`, async (): Promise<void> => {
+            const { runCredentialsCli } = await import("./credentials-cli")
+            const identityRequests: unknown[] = []
+            let writes = 0
+            let stdout = ""
+            let stderr = ""
+            const status = await runCredentialsCli([
+                "set", "--provider", provider, "--kind", "rest", "--key", "SYNTHETIC",
+                "--expected-sid", "S-1-5-18", "--stdin",
+            ], {
+                platform: "win32",
+                stdin: Readable.from([]),
+                stdout: { write(text: string): void { stdout += text } },
+                stderr: { write(text: string): void { stderr += text } },
+                getWindowsCredentialIdentity: async (options): Promise<{ sid: string; account: string }> => {
+                    identityRequests.push(options)
+                    return { sid: "S-1-5-19", account: "synthetic-account" }
+                },
+                writeWindowsProfile: async (): Promise<void> => { writes++ },
+                writePlaintextProfile: async (): Promise<void> => { writes++ },
+            })
+            expect(status).toBe(1)
+            expect(identityRequests).toEqual([{ expectedSid: "S-1-5-18" }])
+            expect(writes).toBe(0)
+            expect(stdout).toBe("")
+            expect(stderr).toContain("Credential access or identity assertion denied.")
+        })
+    }
+})
+
 describe.skipIf(process.platform !== "win32")("bounded credential CLI child lifecycle", (): void => {
+    test("passes synthetic expected SID and profile arguments only to fake child", async (): Promise<void> => {
+        const args = [SOURCE, "set", "--provider", "windows-credential-manager", "--kind", "rest",
+            "--key", "SYNTHETIC", "--expected-sid", "S-1-5-18", "--stdin"]
+        const fixture = boundedCli(true, false, args)
+        expect(fixture.launch.args?.[1]).toEqual(args)
+        fixture.child.stdout.emit("end")
+        fixture.child.stderr.emit("end")
+        fixture.child.exitCode = 1
+        fixture.child.emit("exit", 1, null)
+        fixture.child.emit("close", 1, null)
+        await flushCliLifecycle()
+        expect(fixture.settlement.value).toEqual({ code: 1, signal: null, stdout: "", stderr: "" })
+        expectCliLifecycleReleased(fixture)
+    })
+
     test("settles at 20s plus 500ms without close or EOF after killing the direct child", async (): Promise<void> => {
         const fixture = boundedCli()
         const { child, clock, settlement } = fixture
@@ -1245,24 +1086,11 @@ describe.skipIf(process.platform !== "win32")("bounded credential CLI child life
 
 // Slow Windows CLI and fixture subprocess integration emits JSON diagnostic events.
 describe.skip("Windows source credentials CLI integration", (): void => {
-    test("identity reports actual SID/account and service-logon warning without profile output", async (): Promise<void> => {
-        await withTemporaryRoot(async (root: string): Promise<void> => {
-            const identity = await actualIdentity()
-            expect(/^S-1-[0-9]+(?:-[0-9]+)*$/.test(identity.sid)).toBe(true)
-            expect(identity.account.trim().length > 0).toBe(true)
-            const id = `${ID_PREFIX}${randomUUID().replaceAll("-", "").toUpperCase()}`
-            const selected = { [`AUTOCODE_REST_${id}_AUTHORIZATION`]: sentinel("identity-environment") }
-            const result = await runCli(root, ["identity"], Buffer.alloc(0), selected)
-            expect(result.code === 0 && result.signal === null).toBe(true)
-            expect(result.stdout === `SID: ${identity.sid}\nAccount: ${identity.account}\n${CONTEXT_WARNING}\n`).toBe(true)
-            expect(result.stderr === "").toBe(true)
-            expect(await plaintextFileExists(root)).toBe(false)
-        })
-    }, TEST_TIMEOUT_MS)
-
     test("importing source neither runs CLI nor exits or changes exitCode", async (): Promise<void> => {
         await withTemporaryRoot(async (root: string): Promise<void> => {
-            const result = await spawnSource(root, ["--eval", IMPORT_SOURCE])
+            const result = await spawnSource(root, ["--eval", IMPORT_SOURCE], Buffer.alloc(0), {
+                AUTOCODE_TEST_SECRET: "synthetic-cli-environment-secret",
+            })
             expectPrivateOutput(result)
             expect(result.code === 0 && result.signal === null).toBe(true)
             expect(result.stdout === IMPORT_MARKER && result.stderr === "").toBe(true)
@@ -1288,78 +1116,4 @@ describe.skip("Windows source credentials CLI integration", (): void => {
         })
     }, TEST_TIMEOUT_MS)
 
-    for (const provider of PROVIDERS) {
-        for (const kind of KINDS) {
-            for (const method of METHODS) {
-                test(`${provider} ${kind} ${method} roundtrips exact fields without output exposure`, async (): Promise<void> => {
-                    await withProfile(provider, kind, async (fixture: Fixture): Promise<void> => {
-                        await expectNothingWritten(fixture, "precheck")
-                        const profile = roundtripProfile(kind, method)
-                        const input = method === "set" ? Buffer.from(JSON.stringify(profile), "utf8") : Buffer.alloc(0)
-                        const selected = method === "import-env" ? selectedEnvironment(fixture, profile) : {}
-                        const result = await runCli(fixture.root, commandArgs(fixture, method), input, selected)
-                        expectSuccess(result, provider)
-                        const stored = provider === "plaintext" ? await readPlaintext(fixture) : await readNative(fixture)
-                        expect(stored.status === "found" && profilesEqual(stored.profile, profile)).toBe(true)
-                        expect(await plaintextFileExists(fixture.root)).toBe(provider === "plaintext")
-                        if (provider === "plaintext") expect((await readNative(fixture)).status === "missing").toBe(true)
-                    })
-                }, TEST_TIMEOUT_MS)
-            }
-        }
-
-        test(`${provider} rejects actual SID mismatch before any write`, async (): Promise<void> => {
-            await withProfile(provider, "rest", async (fixture: Fixture): Promise<void> => {
-                const wrongSid = fixture.sid === "S-1-5-18" ? "S-1-5-19" : "S-1-5-18"
-                expect(wrongSid !== fixture.sid).toBe(true)
-                const input = Buffer.from(JSON.stringify({ authorization: sentinel("wrong-sid") }), "utf8")
-                const result = await runCli(fixture.root, commandArgs(fixture, "set", { expectedSid: wrongSid }), input)
-                expectFailure(result, ERRORS.denied, `${CONTEXT_WARNING}\n`)
-                await expectNothingWritten(fixture)
-            })
-        }, TEST_TIMEOUT_MS)
-
-        test(`${provider} rejects unknown options with fixed diagnostics`, async (): Promise<void> => {
-            await withProfile(provider, "rest", async (fixture: Fixture): Promise<void> => {
-                const input = Buffer.from(JSON.stringify({ authorization: sentinel("unknown-option") }), "utf8")
-                const result = await runCli(fixture.root, [...commandArgs(fixture, "set"), "--unexpected-option"], input)
-                expectFailure(result, ERRORS.usage, "")
-                await expectNothingWritten(fixture)
-            })
-        }, TEST_TIMEOUT_MS)
-
-        const failures: readonly InputFailure[] = ["malformed JSON", "malformed UTF-8", "incomplete profile", "general input limit"]
-        for (const scenario of failures) {
-            test(`${provider} rejects ${scenario} without exposing input`, async (): Promise<void> => {
-                await withProfile(provider, "rest", async (fixture: Fixture): Promise<void> => {
-                    const input = failureInput(scenario)
-                    const result = await runCli(fixture.root, commandArgs(fixture, "set"), input)
-                    const message = scenario === "general input limit" ? ERRORS.too_large
-                        : scenario === "incomplete profile" ? ERRORS.incomplete : ERRORS.invalid
-                    expectFailure(result, message, warnings(provider))
-                    await expectNothingWritten(fixture)
-                })
-            }, TEST_TIMEOUT_MS)
-        }
-
-        test(`${provider} refuses piped input without explicit --stdin`, async (): Promise<void> => {
-            await withProfile(provider, "rest", async (fixture: Fixture): Promise<void> => {
-                const input = Buffer.from(JSON.stringify({ authorization: sentinel("non-tty") }), "utf8")
-                const result = await runCli(fixture.root, commandArgs(fixture, "set", { stdin: false }), input)
-                expectFailure(result, ERRORS.tty, warnings(provider))
-                await expectNothingWritten(fixture, "test-body")
-            })
-        }, TEST_TIMEOUT_MS)
-    }
-
-    test("native size overflow rejects without plaintext fallback", async (): Promise<void> => {
-        await withProfile("windows-credential-manager", "rest", async (fixture: Fixture): Promise<void> => {
-            const authorization = sentinel("native-oversize") + "x".repeat(WINDOWS_CREDENTIAL_MAX_BYTES)
-            const input = Buffer.from(JSON.stringify({ authorization }), "utf8")
-            expect(input.byteLength > WINDOWS_CREDENTIAL_MAX_BYTES && input.byteLength < MAX_CREDENTIAL_ENVELOPE_BYTES).toBe(true)
-            const result = await runCli(fixture.root, commandArgs(fixture, "set"), input)
-            expectFailure(result, ERRORS.too_large, warnings(fixture.provider))
-            await expectNothingWritten(fixture, "test-body")
-        })
-    }, TEST_TIMEOUT_MS)
 })

@@ -45,7 +45,6 @@ import { querySshPrompt } from "./prompts/query_ssh";
 import { executeSshPrompt } from "./prompts/execute_ssh";
 import { executeConfigPrompt } from "./prompts/execute_config";
 import { queryConfigPrompt } from "./prompts/query_config";
-import { queryFigmaPrompt } from "./prompts/query_figma";
 import { buildLearnMemoryPrompt } from "./prompts/learn_memory";
 import { buildQueryMemoryPrompt } from "./prompts/query_memory";
 
@@ -72,7 +71,7 @@ const sandboxCopyTargetPermission: PermissionTargetRules = {
 
 const sandboxToolPermissionKeys = ["autocode_sandbox_create", "autocode_sandbox_cli", "autocode_sandbox_delete", "autocode_sandbox_edit", "autocode_sandbox_glob", "autocode_sandbox_grep", "autocode_sandbox_read", "autocode_sandbox_copy", "autocode_sandbox_config_edit", "autocode_sandbox_config_read", "autocode_sandbox_config_remove"] as const
 const sandboxLinuxCapabilities: PlatformCapabilities = { isWindows: false, commandEnvironment: "linux" }
-const optionalOpenChamberContextPolicy = "OpenChamber knowledge notes and saved plans are optional context. Consult them only when the user explicitly asks for or activates them; activation does not make them mandatory. They do not replace any required memory librarian recall."
+const optionalOpenChamberContextPolicy = "OpenChamber knowledge notes and saved plans are optional context. Consult them only when user explicitly asks for or activates them."
 
 function createBaseAgents(capabilities: PlatformCapabilities, projectContext: AgentProjectContext = { projectDirectory: process.cwd() }): AgentMap {
 
@@ -601,7 +600,7 @@ function createBaseAgents(capabilities: PlatformCapabilities, projectContext: Ag
         // Execute workers
 
         "execute-author": {
-            description: "Use execute-author subagent to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); It NEVER edit source code, program scripts or system config; NEVER review md content yourself.",
+            description: "You NEVER review md content yourself. Use execute-author subagent to create/edit/review/revise md (Markdown) content (like articles, documents, faqs, tutorials); execute-author NEVER edit source code, program scripts, system config or memories.",
             mode: "subagent",
             permission: {
                 "*": "deny",
